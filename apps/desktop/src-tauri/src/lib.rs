@@ -1791,7 +1791,9 @@ fn read_external_plugin_file(dir: String, name: String) -> Result<String, String
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
-const PLUGIN_EXEC_MAX_OUTPUT: usize = 64 * 1024;
+/// Large enough for `glab api graphql` MR overviews (~90 KB with busy review
+/// threads); still bounds what a runaway command can push over IPC.
+const PLUGIN_EXEC_MAX_OUTPUT: usize = 1024 * 1024;
 
 /// Upper bound for a plugin_exec child — only reaps hung processes, so it is
 /// generous: dev-workflow `run-in: headless` actions and git-inspect
