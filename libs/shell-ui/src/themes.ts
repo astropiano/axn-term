@@ -77,6 +77,12 @@ export interface AppSettings {
   terminalRenderer?: 'auto' | 'webgl' | 'canvas' | 'dom';
   /** UI language — one of the locales bundled in libs/shell-ui (`en`, `ko`). */
   language?: 'en' | 'ko';
+  /**
+   * Extra directories (absolute or `~/…`) the desktop file views — axn-edit,
+   * axn-browse, axn-preview — may read and write, on top of `$HOME`. Applied
+   * live when added; a removed root stays allowed until the app restarts.
+   */
+  fileAccessRoots?: string[];
 }
 
 export const defaultSettings: AppSettings = {

@@ -2026,6 +2026,28 @@ fn read_config() -> Result<Option<String>, String> {
     }
 }
 
+/// Widen the fs plugin scope by the user's `fileAccessRoots` setting — the
+/// static capability only covers `$HOME`. Grants are additive: the fs scope
+/// cannot revoke an allow without a permanent forbid, so a root removed from
+/// the setting stays readable until restart.
+#[tauri::command]
+fn allow_file_roots(app: tauri::AppHandle, roots: Vec<String>) -> Result<(), String> {
+    let scope = app.fs_scope();
+    for root in roots {
+        let root = root.trim();
+        let path = match root.strip_prefix("~/") {
+            Some(rest) => dirs::home_dir().ok_or("no home directory")?.join(rest),
+            None if root == "~" => dirs::home_dir().ok_or("no home directory")?,
+            None => PathBuf::from(root),
+        };
+        if !path.is_absolute() {
+            return Err(format!("fileAccessRoots entry must be absolute: {}", root));
+        }
+        scope.allow_directory(&path, true).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn write_config(content: String) -> Result<(), String> {
     let dir = state_dir().map_err(|e| {
@@ -2468,6 +2490,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            allow_file_roots,
             get_default_shell,
             create_session,
             write_session,
