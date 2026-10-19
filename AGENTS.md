@@ -30,7 +30,11 @@
   `plugins.fs.requireLiteralLeadingDot: false` because the Unix default
   (`true`) makes `*`/`**` never match dot components — `.env`, `~/.config`,
   `~/.axn-term` would all be `forbidden path` errors for `axn-edit`/
-  `axn-browse`/`axn-preview` and friends.
+  `axn-browse`/`axn-preview` and friends. Paths outside `$HOME` (e.g. repos
+  on an external volume) are granted at runtime from the `fileAccessRoots`
+  list in `config.yaml` — desktop `App.tsx` passes it to the
+  `allow_file_roots` command, which widens the fs scope; grants are
+  additive, so a removed root stays allowed until restart.
   Web-capability gaps
   are expressed as absent optional methods — don't stub them with no-ops.
 - `@axn-term/session-backend/remote` — `RemoteBackend`, a `SessionBackend` over
