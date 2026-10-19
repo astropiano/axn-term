@@ -355,6 +355,12 @@ export function mergeMine(
 
 let refreshInFlight: Promise<void> | null = null;
 
+const EXEC_TRUNCATED_MARKER = '[axn-term: output truncated';
+
+/** Auth hint only fits errors glab itself raised, not output-size ones. */
+const isAuthHintRelevant = (error?: string) =>
+  !(error ?? '').startsWith('glab output too large');
+
 export function refreshMrOverview(settings?: {
   hostname?: unknown;
 }): Promise<void> {
@@ -373,6 +379,11 @@ export function refreshMrOverview(settings?: {
       const out = await rt.exec(
         `glab api graphql${hostname} -f query=${JSON.stringify(query)}`,
       );
+      // plugin_exec caps output and appends a marker; JSON.parse would only
+      // report "Expected '}'" — name the real cause instead.
+      if (out.includes(EXEC_TRUNCATED_MARKER)) {
+        throw new Error(`glab output too large: ${out.slice(out.lastIndexOf('[axn-term:'))}`);
+      }
       const parsed = JSON.parse(out) as {
         data?: {
           currentUser?: {
@@ -528,7 +539,7 @@ function GlabMrRail({
 
   const title =
     data.status === 'error'
-      ? `merge requests unavailable\nglab: ${data.error ?? 'unknown error'}\nCheck \`glab auth status\` in a shell.`
+      ? `merge requests unavailable\nglab: ${data.error ?? 'unknown error'}${isAuthHintRelevant(data.error) ? '\nCheck `glab auth status` in a shell.' : ''}`
       : [
           `${mineAction}/${data.mine.length} assigned/authored MRs need action (open threads, conflicts, failing pipeline or approved)`,
           `${reviewWaiting}/${data.review.length} review requests waiting for you`,
@@ -754,9 +765,11 @@ function GlabMrView({ close, env }: { close: () => void; env: MrRowEnv }) {
           <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
             <div className="mb-1 font-semibold text-red-500">failed to load merge requests</div>
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
-            <div className="text-[var(--text-secondary)]">
-              Check <code className="text-[var(--accent)]">glab auth status</code> in a shell.
-            </div>
+            {isAuthHintRelevant(data.error) && (
+              <div className="text-[var(--text-secondary)]">
+                Check <code className="text-[var(--accent)]">glab auth status</code> in a shell.
+              </div>
+            )}
           </div>
         ) : (
           <>

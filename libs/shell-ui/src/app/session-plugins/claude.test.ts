@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SessionAttention, ShellSession } from '../../types';
 import type { SessionViewContext, PluginApi } from './plugin';
-import { claudePlugin, parseClaudeTodos } from './claude';
+import { claudePlugin, parseClaudeResumeHint, parseClaudeTodos } from './claude';
 import { claudeEventFile } from './claudeHooks';
 import {
   dispatchClose,
@@ -415,5 +415,75 @@ describe('claude hook bridge', () => {
       ]);
     });
     dispatchClose(claudePlugin, h.ctx);
+  });
+});
+
+describe('parseClaudeResumeHint', () => {
+  it('reads the id from the exit hint', () => {
+    const out = '\n\x1b[2m\nResume this session with:\nclaude --resume 3f2a9c1e-7b4d-4e2a-9c1e-7b4d4e2a9c1e\n\x1b[22m';
+    expect(parseClaudeResumeHint(out)).toEqual({ id: '3f2a9c1e-7b4d-4e2a-9c1e-7b4d4e2a9c1e' });
+  });
+
+  it('keeps the worktree of a worktree hint, long and short form', () => {
+    expect(parseClaudeResumeHint('Resume this session with:\r\nclaude --worktree "feat-x" --resume abc-1\r\n'))
+      .toEqual({ id: 'abc-1', worktree: 'feat-x' });
+    expect(parseClaudeResumeHint('Resume this session with:\nclaude -w "feat-x" -r abc-1\n'))
+      .toEqual({ id: 'abc-1', worktree: 'feat-x' });
+  });
+
+  it('takes the newest hint and ignores an incomplete line', () => {
+    const out = 'Resume this session with:\nclaude --resume old-1\n…\nResume this session with:\nclaude --resume new-2\n';
+    expect(parseClaudeResumeHint(out)).toEqual({ id: 'new-2' });
+    expect(parseClaudeResumeHint('Resume this session with:\nclaude --resume new-')).toBeUndefined();
+  });
+
+  it('rejects ids that are not plain words', () => {
+    expect(parseClaudeResumeHint('Resume this session with:\nclaude --resume $(rm -rf ~)\n')).toBeUndefined();
+  });
+});
+
+describe('claude restore only when claude ran at close', () => {
+  const RESTORE = { restoreSession: true };
+
+  it('declares a restore only while claudeActive', () => {
+    const active = makeHarness({}, { claudeSeen: true, claudeActive: true, claudeResumeId: 'abc-1' }, RESTORE);
+    expect(claudePlugin.pendingRestore?.(active.ctx)).toBe("claude session 'abc-1'");
+    const idle = makeHarness({}, { claudeSeen: true, claudeActive: false, claudeResumeId: 'abc-1' }, RESTORE);
+    expect(claudePlugin.pendingRestore?.(idle.ctx)).toBeUndefined();
+    // Sessions persisted before the flag existed never restore.
+    const legacy = makeHarness({}, { claudeSeen: true, claudeResumeId: 'abc-1' }, RESTORE);
+    expect(claudePlugin.pendingRestore?.(legacy.ctx)).toBeUndefined();
+  });
+
+  it('marks claude active on output and clears it when claude exits on its own', () => {
+    const h = makeHarness({ cwd: '/work' }, {}, RESTORE);
+    claudePlugin.onOutput?.(h.ctx, 'hello');
+    expect(h.store.claude).toMatchObject({ claudeSeen: true, claudeActive: true });
+    h.session.process = 'zsh';
+    claudePlugin.onProcessEnd?.(h.ctx);
+    expect(h.store.claude).toMatchObject({ claudeActive: false });
+  });
+
+  it('keeps claude active when the app close stops it', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = makeHarness({ cwd: '/work' }, { claudeSeen: true, claudeActive: true }, RESTORE);
+      const closing = claudePlugin.onClose?.(h.ctx);
+      // The close-driven Ctrl-C pair ends claude; its exit must not count.
+      h.session.process = 'zsh';
+      claudePlugin.onProcessEnd?.(h.ctx);
+      claudePlugin.onOutput?.(h.ctx, 'Resume this session with:\nclaude --resume abc-2\n');
+      await vi.runAllTimersAsync();
+      await closing;
+      expect(h.store.claude).toMatchObject({ claudeActive: true, claudeResumeId: 'abc-2' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears claudeActive when the session closes at a plain shell prompt', async () => {
+    const h = makeHarness({ process: 'zsh' }, { claudeSeen: true, claudeActive: true }, RESTORE);
+    await claudePlugin.onClose?.(h.ctx);
+    expect(h.store.claude).toMatchObject({ claudeActive: false });
   });
 });

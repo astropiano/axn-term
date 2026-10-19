@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { msg } from '@lingui/core/macro';
 import type { MessageDescriptor } from '@lingui/core';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { Sun, Moon, Monitor, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Sun, Moon, Monitor, Pencil, Plus, Minus, Trash2 } from 'lucide-react';
 import { IconButton } from './IconButton';
 import { SessionIconGlyph } from './SessionPanel';
 import { useSettings, settingsFromYaml, settingsToYaml } from '../SettingsProvider';
@@ -160,6 +160,68 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           {tab === 'general' ? <GeneralTab /> : <PluginsTab />}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Font-size field with explicit −/+ buttons that move exactly one step per
+ * click. The native number spinner auto-repeats while the button is held,
+ * and every step re-fonts all terminals — a slow main thread delays the
+ * mouse-up, so one click ran several steps (14 → 7). Native spinners are
+ * hidden; arrow keys still step one at a time.
+ */
+function FontSizeInput({
+  value,
+  fallback,
+  min,
+  max,
+  onChange,
+}: {
+  value: number | undefined;
+  /** Effective size while unset — the base the buttons step from. */
+  fallback: number;
+  min: number;
+  max: number;
+  onChange: (next: number | undefined) => void;
+}) {
+  const { t } = useLingui();
+  const step = (delta: number) =>
+    onChange(Math.min(max, Math.max(min, (value ?? fallback) + delta)));
+  const buttonClass =
+    'flex h-6 w-5 shrink-0 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40';
+  return (
+    <div className="flex shrink-0 items-center gap-0.5" data-tip={t`Font size (px)`}>
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={() => step(-1)}
+        disabled={(value ?? fallback) <= min}
+        aria-label={t`Decrease font size`}
+      >
+        <Minus className="h-3 w-3" />
+      </button>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={1}
+        value={value ?? ''}
+        onChange={(e) =>
+          onChange(e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))
+        }
+        placeholder={String(fallback)}
+        className="w-10 rounded border border-[var(--border)] bg-[var(--bg)] px-1 py-1 text-center text-xs text-[var(--text-primary)] outline-none [appearance:textfield] focus:border-[var(--accent)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={() => step(1)}
+        disabled={(value ?? fallback) >= max}
+        aria-label={t`Increase font size`}
+      >
+        <Plus className="h-3 w-3" />
+      </button>
     </div>
   );
 }
@@ -326,21 +388,12 @@ function GeneralTab() {
             placeholder='"Monaspace Neon Var", Fira Code, …'
             className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
           />
-          <input
-            type="number"
+          <FontSizeInput
+            value={settings.shellFontSize}
+            fallback={14}
             min={6}
             max={40}
-            step={1}
-            value={settings.shellFontSize ?? ''}
-            onChange={(e) =>
-              updateSettings({
-                shellFontSize:
-                  e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
-              })
-            }
-            placeholder="14"
-            data-tip={t`Font size (px)`}
-            className="w-16 shrink-0 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            onChange={(shellFontSize) => updateSettings({ shellFontSize })}
           />
         </div>
         <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
@@ -358,21 +411,12 @@ function GeneralTab() {
             placeholder="Inter, system-ui, …"
             className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
           />
-          <input
-            type="number"
+          <FontSizeInput
+            value={settings.panelFontSize}
+            fallback={12}
             min={6}
             max={30}
-            step={1}
-            value={settings.panelFontSize ?? ''}
-            onChange={(e) =>
-              updateSettings({
-                panelFontSize:
-                  e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
-              })
-            }
-            placeholder="12"
-            data-tip={t`Font size (px)`}
-            className="w-16 shrink-0 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            onChange={(panelFontSize) => updateSettings({ panelFontSize })}
           />
         </div>
         <p className="mt-1 text-[10px] text-[var(--text-secondary)]">

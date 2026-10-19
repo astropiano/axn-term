@@ -2,12 +2,12 @@ msgid ""
 msgstr ""
 "Language: ko\n"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:800
+#: libs/shell-ui/src/app/SettingsModal.tsx:844
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "Lucide 아이콘 이름(예: <0>GitFork</0>) 또는 인라인 SVG 태그(예: <1>{SVG_HINT_EXAMPLE}</1>)"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:825
-#: libs/shell-ui/src/app/SettingsModal.tsx:827
+#: libs/shell-ui/src/app/SettingsModal.tsx:869
+#: libs/shell-ui/src/app/SettingsModal.tsx:871
 msgid "Add icon"
 msgstr "아이콘 추가"
 
@@ -15,7 +15,7 @@ msgstr "아이콘 추가"
 msgid "Auto"
 msgstr "자동"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:422
+#: libs/shell-ui/src/app/SettingsModal.tsx:466
 msgid "Auto (WebGL → canvas → DOM)"
 msgstr "자동 (WebGL → 캔버스 → DOM)"
 
@@ -23,15 +23,15 @@ msgstr "자동 (WebGL → 캔버스 → DOM)"
 msgid "Binary file"
 msgstr "바이너리 파일"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:811
+#: libs/shell-ui/src/app/SettingsModal.tsx:855
 msgid "Cancel"
 msgstr "취소"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:428
+#: libs/shell-ui/src/app/SettingsModal.tsx:472
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "터미널의 셀 렌더러입니다. 자동은 GPU(WebGL)를 사용하고 자동으로 폴백합니다. 렌더링 문제가 있으면 캔버스/DOM으로 고정하세요."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:447
+#: libs/shell-ui/src/app/SettingsModal.tsx:491
 msgid "Config file"
 msgstr "설정 파일"
 
@@ -53,7 +53,7 @@ msgstr "선택 영역 복사"
 msgid "Copy URL"
 msgstr "URL 복사"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:189
+#: libs/shell-ui/src/app/SettingsModal.tsx:251
 msgid "Could not parse the file as YAML."
 msgstr "파일을 YAML로 파싱할 수 없습니다."
 
@@ -61,11 +61,15 @@ msgstr "파일을 YAML로 파싱할 수 없습니다."
 msgid "Dark"
 msgstr "다크"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:264
+#: libs/shell-ui/src/app/SettingsModal.tsx:326
 msgid "Dark theme"
 msgstr "다크 테마"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:292
+#: libs/shell-ui/src/app/SettingsModal.tsx:200
+msgid "Decrease font size"
+msgstr "글꼴 크기 줄이기"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:354
 msgid "Default shell"
 msgstr "기본 셸"
 
@@ -73,7 +77,7 @@ msgstr "기본 셸"
 msgid "Directory"
 msgstr "디렉터리"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:549
+#: libs/shell-ui/src/app/SettingsModal.tsx:593
 msgid "disabled"
 msgstr "비활성화됨"
 
@@ -81,45 +85,44 @@ msgstr "비활성화됨"
 msgid "Edit"
 msgstr "편집"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:754
+#: libs/shell-ui/src/app/SettingsModal.tsx:798
 msgid "Edit icon"
 msgstr "아이콘 편집"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:392
+#: libs/shell-ui/src/app/SettingsModal.tsx:436
 msgid "Enable devin task parser"
 msgstr "Devin 작업 파서 활성화"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:549
-#: libs/shell-ui/src/app/SettingsModal.tsx:596
+#: libs/shell-ui/src/app/SettingsModal.tsx:593
+#: libs/shell-ui/src/app/SettingsModal.tsx:640
 msgid "enabled"
 msgstr "활성화됨"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:200
+#: libs/shell-ui/src/app/SettingsModal.tsx:262
 msgid "Export failed."
 msgstr "보내기에 실패했습니다."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:462
+#: libs/shell-ui/src/app/SettingsModal.tsx:506
 msgid "Export…"
 msgstr "보내기…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:198
+#: libs/shell-ui/src/app/SettingsModal.tsx:260
 msgid "Exported."
 msgstr "보냈습니다."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:566
+#: libs/shell-ui/src/app/SettingsModal.tsx:610
 msgid "file preview"
 msgstr "파일 미리보기"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:497
+#: libs/shell-ui/src/app/SettingsModal.tsx:541
 msgid "File previews"
 msgstr "파일 미리보기"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:379
+#: libs/shell-ui/src/app/SettingsModal.tsx:423
 msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
 msgstr "세션/워크스페이스 패널의 글꼴입니다. 크기는 기본 12px 기준으로 배율이 적용됩니다."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:342
-#: libs/shell-ui/src/app/SettingsModal.tsx:374
+#: libs/shell-ui/src/app/SettingsModal.tsx:194
 msgid "Font size (px)"
 msgstr "글꼴 크기 (px)"
 
@@ -127,23 +130,27 @@ msgstr "글꼴 크기 (px)"
 msgid "General"
 msgstr "일반"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:470
+#: libs/shell-ui/src/app/SettingsModal.tsx:514
 msgid "Import replaces all settings with the picked config.yaml."
 msgstr "가져오기는 모든 설정을 선택한 config.yaml로 대체합니다."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:455
+#: libs/shell-ui/src/app/SettingsModal.tsx:499
 msgid "Import…"
 msgstr "가져오기…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:187
+#: libs/shell-ui/src/app/SettingsModal.tsx:249
 msgid "Imported."
 msgstr "가져왔습니다."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:276
+#: libs/shell-ui/src/app/SettingsModal.tsx:221
+msgid "Increase font size"
+msgstr "글꼴 크기 늘리기"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:338
 msgid "Language"
 msgstr "언어"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:315
+#: libs/shell-ui/src/app/SettingsModal.tsx:377
 msgid "Leave empty to use the system $SHELL."
 msgstr "비워 두면 시스템 $SHELL을 사용합니다."
 
@@ -151,7 +158,7 @@ msgstr "비워 두면 시스템 $SHELL을 사용합니다."
 msgid "Light"
 msgstr "라이트"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:256
+#: libs/shell-ui/src/app/SettingsModal.tsx:318
 msgid "Light theme"
 msgstr "라이트 테마"
 
@@ -159,11 +166,11 @@ msgstr "라이트 테마"
 msgid "Loading…"
 msgstr "불러오는 중…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:441
+#: libs/shell-ui/src/app/SettingsModal.tsx:485
 msgid "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
 msgstr "실행 파일 이름을 Lucide 아이콘(예: Bot, SquareTerminal) 또는 SVG 태그에 매핑합니다."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:764
+#: libs/shell-ui/src/app/SettingsModal.tsx:808
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "설정된 아이콘이 없습니다 — 모든 세션에 기본 터미널 아이콘이 표시됩니다."
 
@@ -171,7 +178,7 @@ msgstr "설정된 아이콘이 없습니다 — 모든 세션에 기본 터미�
 msgid "no workspaces"
 msgstr "워크스페이스 없음"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:183
+#: libs/shell-ui/src/app/SettingsModal.tsx:245
 msgid "Not a valid config.yaml — expected a YAML mapping."
 msgstr "유효한 config.yaml이 아닙니다 — YAML 매핑이어야 합니다."
 
@@ -188,7 +195,7 @@ msgstr "워크스페이스에서 열기"
 msgid "Open preview in a tab"
 msgstr "탭에서 미리보기 열기"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:352
+#: libs/shell-ui/src/app/SettingsModal.tsx:405
 msgid "Panel font"
 msgstr "패널 글꼴"
 
@@ -204,37 +211,37 @@ msgstr "미리보기"
 msgid "Preview unavailable"
 msgstr "미리보기를 사용할 수 없음"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:773
+#: libs/shell-ui/src/app/SettingsModal.tsx:817
 msgid "Process"
 msgstr "프로세스"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:757
+#: libs/shell-ui/src/app/SettingsModal.tsx:801
 msgid "Remove icon"
 msgstr "아이콘 제거"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:405
+#: libs/shell-ui/src/app/SettingsModal.tsx:449
 msgid "Render session summaries (set via axn-session-summary)"
 msgstr "세션 요약 표시 (axn-session-summary로 설정)"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
-#: libs/shell-ui/src/app/SettingsModal.tsx:582
+#: libs/shell-ui/src/app/SettingsModal.tsx:626
 msgid "requires {0}{1}"
 msgstr "{0}{1} 필요"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:819
+#: libs/shell-ui/src/app/SettingsModal.tsx:863
 msgid "Save"
 msgstr "저장"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:437
+#: libs/shell-ui/src/app/SettingsModal.tsx:481
 msgid "Session icons"
 msgstr "세션 아이콘"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:566
+#: libs/shell-ui/src/app/SettingsModal.tsx:610
 msgid "session plugin"
 msgstr "세션 플러그인"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:491
+#: libs/shell-ui/src/app/SettingsModal.tsx:535
 msgid "Session plugins"
 msgstr "세션 플러그인"
 
@@ -242,19 +249,19 @@ msgstr "세션 플러그인"
 msgid "Settings"
 msgstr "설정"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:320
+#: libs/shell-ui/src/app/SettingsModal.tsx:382
 msgid "Shell font"
 msgstr "셸 글꼴"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:474
+#: libs/shell-ui/src/app/SettingsModal.tsx:518
 msgid "Stored in ~/.axn-term/config.yaml"
 msgstr "~/.axn-term/config.yaml에 저장됨"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:625
+#: libs/shell-ui/src/app/SettingsModal.tsx:669
 msgid "Stored in ~/.axn-term/plugins.yaml"
 msgstr "~/.axn-term/plugins.yaml에 저장됨"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:475
+#: libs/shell-ui/src/app/SettingsModal.tsx:519
 msgid "Stored in browser localStorage"
 msgstr "브라우저 localStorage에 저장됨"
 
@@ -264,19 +271,19 @@ msgstr "브라우저 localStorage에 저장됨"
 msgid "Switch to {0}"
 msgstr "{0}(으)로 전환"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:347
+#: libs/shell-ui/src/app/SettingsModal.tsx:400
 msgid "Terminal font family and size in px. Empty uses the built-in monospace stack at 14px."
 msgstr "터미널 글꼴 패밀리와 px 단위 크기입니다. 비워 두면 내장 모노스페이스 스택(14px)을 사용합니다."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:411
+#: libs/shell-ui/src/app/SettingsModal.tsx:455
 msgid "Terminal renderer"
 msgstr "터미널 렌더러"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:233
+#: libs/shell-ui/src/app/SettingsModal.tsx:295
 msgid "Theme"
 msgstr "테마"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:620
+#: libs/shell-ui/src/app/SettingsModal.tsx:664
 msgid "This plugin declares no settings."
 msgstr "이 플러그인은 설정을 선언하지 않았습니다."
 
@@ -285,10 +292,10 @@ msgstr "이 플러그인은 설정을 선언하지 않았습니다."
 msgid "Unable to read file"
 msgstr "파일을 읽을 수 없음"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:583
+#: libs/shell-ui/src/app/SettingsModal.tsx:627
 msgid "unmet, plugin disabled"
 msgstr "충족되지 않음, 플러그인 비활성화됨"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:308
+#: libs/shell-ui/src/app/SettingsModal.tsx:370
 msgid "Use system default"
 msgstr "시스템 기본값 사용"

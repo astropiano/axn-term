@@ -1008,13 +1008,15 @@ function actionPromptSource(action: WorkflowAction): {
   };
 }
 
-/** Display label for an action — the name, or the generic label for the anonymous sugar form. */
+/**
+ * Display label for an action — the name, or for the anonymous sugar form
+ * `Run <agent>` (persona name, else cli) so several agent steps stay
+ * distinguishable.
+ */
 export function actionLabel(action: WorkflowAction): string {
-  return action.name === ANONYMOUS_ACTION
-    ? action.agent
-      ? 'Run agent'
-      : 'Run step'
-    : action.name;
+  if (action.name !== ANONYMOUS_ACTION) return action.name;
+  if (!action.agent) return 'Run step';
+  return `Run ${action.agent.profile ?? action.agent.cli ?? 'agent'}`;
 }
 
 /**
@@ -1051,7 +1053,7 @@ export function actionRunInfo(
     }
     return {
       kind: 'prompt',
-      label: 'Send prompt',
+      label,
       tip: tip(`send '${action.name}'s prompt to the running '${process}'`),
     };
   }
