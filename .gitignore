@@ -2,9 +2,8 @@
 node_modules/
 .pnpm-debug.log*
 
-# Rust / Cargo
+# Rust / Cargo (Cargo.lock is committed — app builds must be reproducible)
 target/
-Cargo.lock
 
 # Build outputs
 dist/
@@ -36,6 +35,9 @@ obj/
 
 # Local scenario overrides (see scenarios/*/.env.example)
 scenarios/**/.env
+.env
+.env.local
+*.pem
 
 # Scenario bind-mount target (scenarios/axn-term-online mounts its own
 # plugins.seed.yaml over this path inside the container; keep it empty).
