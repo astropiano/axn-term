@@ -240,6 +240,13 @@ interface DevinPluginState {
   devinOutputStart?: number;
   /** Whether devin was active the last time output changed. */
   devinWasActive?: boolean;
+  /**
+   * Devin was running when the session last went away: set while devin is
+   * foreground, cleared when it exits on its own — but kept when the app's
+   * close (onClose) or a crash stops it. Restore requires it, so a shell
+   * that once ran devin but sat at its prompt on close reopens as a shell.
+   */
+  devinActive?: boolean;
   /** "Needs attention" flag raised by ctx.setAttention — cleared on output. */
   attention?: SessionAttention | null;
   /** Banner strip raised by ctx.setBanner — e.g. a failed session restore. */
@@ -329,6 +336,10 @@ interface PendingRestore {
 const RESTORE_FAILED_RE = /no session found matching/i;
 const RESTORE_CONFIRM_TIMEOUT_MS = 20_000;
 const pendingRestores = new Map<string, PendingRestore>();
+
+// Sessions whose devin is being stopped by onClose — that exit must not
+// clear devinActive, it is exactly the state restore should resume.
+const closingSessions = new Set<string>();
 
 function finishRestore(ctx: SessionViewContext & PluginApi, outcome: 'ok' | 'gone' | 'timeout') {
   const id = ctx.session.id;
@@ -694,7 +705,7 @@ export const devinPlugin: SessionViewPlugin = {
   // injected line. Cleared in finishRestore (ok/gone/timeout) and on every
   // onSessionOpen path that ends up not restoring.
   pendingRestore: (ctx) => {
-    if (!getDevinSettings(ctx).restoreSession) return undefined;
+    if (!getDevinSettings(ctx).restoreSession || !getDevinState(ctx).devinActive) return undefined;
     const remembered = rememberedDevinSession(ctx);
     return remembered ? `devin session '${remembered.name}'` : undefined;
   },
@@ -714,7 +725,13 @@ export const devinPlugin: SessionViewPlugin = {
     selSeen.delete(ctx.session.id);
     workSeen.delete(ctx.session.id);
     quietScans.delete(ctx.session.id);
-    ctx.updatePluginState({ devinOutputStart: undefined, attention: undefined });
+    ctx.updatePluginState({
+      devinOutputStart: undefined,
+      attention: undefined,
+      // Devin ended while the session lives on — the user is back at the
+      // shell, so a later reopen must not resume devin.
+      ...(closingSessions.has(ctx.session.id) ? {} : { devinActive: false }),
+    });
     // Capture the cwd one last time when devin exits — if the resume line was
     // missed or truncated, this still records where the session actually ran.
     void recordSessionCwd(ctx);
@@ -761,6 +778,7 @@ export const devinPlugin: SessionViewPlugin = {
     // The marker lets onProcessEnd/onClose search only the output produced
     // during this process, so stale resume lines from an earlier run cannot
     // be picked up.
+    if (isActive && !state.devinActive) patch.devinActive = true;
     if (isActive && !state.devinWasActive) {
       patch.devinOutputStart = Math.max(0, output.length - text.length);
       patch.devinWasActive = true;
@@ -913,6 +931,8 @@ export const devinPlugin: SessionViewPlugin = {
     }
     const live = ctx.getSession();
     if (!isDevinSession(live)) {
+      // Not running at close — nothing to resume next time.
+      if (getDevinState(ctx).devinActive) ctx.updatePluginState({ devinActive: false });
       const state = getDevinState(ctx).devinSessionName;
       if (state) {
         axnLog('warn', 'devin-close', `session ${ctx.session.id} has remembered '${state}' but no devin process detected; not interrupting`);
@@ -920,6 +940,7 @@ export const devinPlugin: SessionViewPlugin = {
       return;
     }
 
+    closingSessions.add(ctx.session.id);
     // Arm the post-interrupt capture BEFORE the first Ctrl-C. Retained
     // scrollback is capped at 200,000 characters, so an offset into it cannot
     // be used as a cursor for output printed after the interrupts — only the
@@ -947,6 +968,7 @@ export const devinPlugin: SessionViewPlugin = {
     clearIdleTimer(ctx.session.id);
     lastScreenScan.delete(ctx.session.id);
     cancelPendingRestore(ctx.session.id);
+    closingSessions.delete(ctx.session.id);
     // A freshly spawned session cannot have devin running — any persisted task
     // list/progress belongs to a dead process and must not linger.
     const state = getDevinState(ctx);
@@ -989,7 +1011,10 @@ export const devinPlugin: SessionViewPlugin = {
       ctx.setRestoring(null);
       return;
     }
-    if (!remembered) {
+    if (!remembered || !state.devinActive) {
+      if (remembered) {
+        axnLog('debug', 'devin-restore', `devin was not running at close; not restoring '${remembered.name}' for session ${ctx.session.id}`);
+      }
       ctx.setRestoring(null);
       return;
     }
