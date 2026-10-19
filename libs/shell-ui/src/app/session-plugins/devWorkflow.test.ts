@@ -795,7 +795,7 @@ describe('commands', () => {
       expect(banner.actions?.map((a) => a.id)).toEqual(['prev', 'next']);
       expect(banner.actions?.[0].disabled).toBe(true); // 'plan' is the first state
       expect(banner.actions?.[1].disabled).toBe(false); // plan → plan-review allowed
-      expect(banner.trailingActions?.[0]).toMatchObject({ id: 'run:default', label: 'Run agent' });
+      expect(banner.trailingActions?.[0]).toMatchObject({ id: 'run:default', label: 'Run devin' });
     });
 
     it('shows the state description as the banner detail', async () => {
@@ -899,7 +899,7 @@ describe('commands', () => {
 
     it('sends the prompt when the action agent already owns the terminal', () => {
       const info = actionRunInfo(shellAction, 'devin', 'plan');
-      expect(info).toMatchObject({ kind: 'prompt', label: 'Send prompt' });
+      expect(info).toMatchObject({ kind: 'prompt', label: 'Run devin' });
     });
 
     it('blocks with a reason while another process runs', () => {
@@ -935,7 +935,10 @@ describe('commands', () => {
       ).toBe('Run step');
       expect(
         actionRunInfo({ name: 'default', agent: { cli: 'devin' } }, undefined, 'x').label,
-      ).toBe('Run agent');
+      ).toBe('Run devin');
+      expect(
+        actionRunInfo({ name: 'default', agent: { cli: 'claude', profile: 'analyzer' } }, undefined, 'x').label,
+      ).toBe('Run analyzer');
     });
   });
 
