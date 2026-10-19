@@ -141,6 +141,7 @@ describe('devin plugin session restore — 3 workspaces × 2 sessions', () => {
           devin: {
             devinSessionName: `sess-${ws}`,
             devinSessionCwd: `/home/user/proj-${i + 1}`,
+            devinActive: true,
           },
         },
       }),
@@ -177,7 +178,7 @@ describe('devin plugin session restore — 3 workspaces × 2 sessions', () => {
       id: 'devin-no-cwd',
       workspaceId: 'w1',
       cwd: '/home/user',
-      pluginState: { devin: { devinSessionName: 'orphan-name' } },
+      pluginState: { devin: { devinSessionName: 'orphan-name', devinActive: true } },
     });
     const store = { ...(s.pluginState ?? {}) } as Record<string, unknown>;
     const h = makeCtx(s, store);
@@ -233,7 +234,7 @@ describe('devin plugin session restore — 3 workspaces × 2 sessions', () => {
       cwd: '/home/user',
       realCwd: '/work/a',
       output: RESUME('name-a'),
-      pluginState: { devin: { devinSessionName: 'name-a', devinSessionCwd: '/work/a' } },
+      pluginState: { devin: { devinSessionName: 'name-a', devinSessionCwd: '/work/a', devinActive: true } },
     });
     const b = makeSession({
       id: 'devin-b',
@@ -241,7 +242,7 @@ describe('devin plugin session restore — 3 workspaces × 2 sessions', () => {
       cwd: '/home/user',
       realCwd: '/work/b',
       output: RESUME('name-b'),
-      pluginState: { devin: { devinSessionName: 'name-b', devinSessionCwd: '/work/b' } },
+      pluginState: { devin: { devinSessionName: 'name-b', devinSessionCwd: '/work/b', devinActive: true } },
     });
     const writesById = new Map<string, string[]>();
     for (const s of [a, b]) {
@@ -272,6 +273,7 @@ describe('devin restore failure banner', () => {
         devin: {
           devinSessionName: 'sess-gone',
           devinSessionCwd: '/work/proj',
+          devinActive: true,
           ...pluginState,
         },
       },
@@ -348,13 +350,16 @@ describe('devin pendingRestore overlay', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  function rememberedSession(settings: Record<string, unknown> = { restoreSession: true }) {
+  function rememberedSession(
+    settings: Record<string, unknown> = { restoreSession: true },
+    devinActive = true,
+  ) {
     const s = makeSession({
       id: 'devin-overlay',
       workspaceId: 'w1',
       cwd: '/home/user',
       pluginState: {
-        devin: { devinSessionName: 'sess-x', devinSessionCwd: '/work/proj' },
+        devin: { devinSessionName: 'sess-x', devinSessionCwd: '/work/proj', devinActive },
       },
     });
     const store = { ...(s.pluginState ?? {}) } as Record<string, unknown>;
@@ -370,6 +375,16 @@ describe('devin pendingRestore overlay', () => {
     // No remembered name → nothing declared
     const plain = makeCtx(makeSession({ id: 'plain', workspaceId: 'w1' }), {});
     expect(devinPlugin.pendingRestore?.(plain.ctx)).toBeUndefined();
+    // devin was not running at close → nothing declared, nothing injected
+    const idle = rememberedSession({ restoreSession: true }, false);
+    expect(devinPlugin.pendingRestore?.(idle.h.ctx)).toBeUndefined();
+  });
+
+  it('does not restore when devin had exited before the session closed', async () => {
+    const { h } = rememberedSession({ restoreSession: true }, false);
+    devinPlugin.onSessionOpen?.(h.ctx);
+    await flushRestoreWrites();
+    expect(h.writes).toEqual([]);
   });
 
   it('clears the overlay once devin is confirmed running', async () => {
@@ -1098,5 +1113,32 @@ describe('devin session status badge', () => {
       sessionId: s.id,
       patch: { tasks: [], progress: 0, status: 'idle' },
     });
+  });
+});
+
+describe('devin restore only when devin ran at close', () => {
+  it('clears devinActive when devin exits on its own', () => {
+    const s = makeSession({
+      id: 'devin-exit',
+      process: 'zsh',
+      pluginState: { devin: { devinSessionName: 'kept', devinActive: true } },
+    });
+    const store = { ...(s.pluginState ?? {}) } as Record<string, unknown>;
+    const h = makeCtx(s, store);
+    devinPlugin.onProcessEnd?.(h.ctx);
+    // The name stays for axn-devin-resume; only the auto-restore is off.
+    expect(store.devin).toMatchObject({ devinSessionName: 'kept', devinActive: false });
+  });
+
+  it('clears devinActive when the session closes at a plain shell prompt', async () => {
+    const s = makeSession({
+      id: 'devin-idle-close',
+      process: 'zsh',
+      pluginState: { devin: { devinSessionName: 'kept', devinActive: true } },
+    });
+    const store = { ...(s.pluginState ?? {}) } as Record<string, unknown>;
+    const h = makeCtx(s, store);
+    await devinPlugin.onClose?.(h.ctx);
+    expect(store.devin).toMatchObject({ devinActive: false });
   });
 });
