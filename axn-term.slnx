@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/apps/" />
+  <Folder Name="/apps/gateway/">
+    <Project Path="apps/gateway/AxnTerm.Gateway.csproj" />
+  </Folder>
+  <Folder Name="/apps/session-host/">
+    <Project Path="apps/session-host/AxnTerm.SessionHost.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AxnTerm.Gateway.Tests/AxnTerm.Gateway.Tests.csproj" />
+    <Project Path="tests/AxnTerm.SessionHost.Tests/AxnTerm.SessionHost.Tests.csproj" />
+  </Folder>
+</Solution>

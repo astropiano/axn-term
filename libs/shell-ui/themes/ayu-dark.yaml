@@ -1,0 +1,29 @@
+id: ayu-dark
+name: Ayu Dark
+mode: dark
+
+colors:
+  background: '#0b0e14'
+  foreground: '#b3b1ad'
+  cursor: '#e6b450'
+  cursorAccent: '#0b0e14'
+  selectionBackground: '#273747'
+  selectionForeground: '#b3b1ad'
+
+  black: '#01060e'
+  red: '#ea6c73'
+  green: '#91b362'
+  yellow: '#f9af4f'
+  blue: '#53bdfa'
+  magenta: '#fae994'
+  cyan: '#90e1c6'
+  white: '#c7c7c7'
+
+  brightBlack: '#686868'
+  brightRed: '#f07178'
+  brightGreen: '#c2d94c'
+  brightYellow: '#ffb454'
+  brightBlue: '#59c2ff'
+  brightMagenta: '#ffee99'
+  brightCyan: '#95e6cb'
+  brightWhite: '#ffffff'

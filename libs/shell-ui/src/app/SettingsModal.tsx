@@ -1,0 +1,833 @@
+import { useEffect, useState, type ReactNode } from 'react';
+import { msg } from '@lingui/core/macro';
+import type { MessageDescriptor } from '@lingui/core';
+import { Trans, useLingui } from '@lingui/react/macro';
+import { Sun, Moon, Monitor, Pencil, Plus, Trash2 } from 'lucide-react';
+import { IconButton } from './IconButton';
+import { SessionIconGlyph } from './SessionPanel';
+import { useSettings, settingsFromYaml, settingsToYaml } from '../SettingsProvider';
+import { usePluginSettings } from './PluginSettingsProvider';
+import type { AppSettings, ThemeMode } from '../themes';
+import { themeDefinitions } from '../themes';
+import { useSessionBackend, useShellPlatform } from '../services';
+import { getSessionViewPlugins, isPluginEnabled, pluginDependencies } from './session-plugins';
+import type { PluginSettingField, SessionViewPlugin } from './session-plugins';
+import { getFilePreviewPlugins, isFilePreviewEnabled } from './preview-plugins';
+import type { FilePreviewPlugin } from './preview-plugins';
+
+const cycle: Record<ThemeMode, ThemeMode> = {
+  light: 'dark',
+  dark: 'auto',
+  auto: 'light',
+};
+
+const themeIcon: Record<ThemeMode, ReactNode> = {
+  light: <Sun className="h-4 w-4" />,
+  dark: <Moon className="h-4 w-4" />,
+  auto: <Monitor className="h-4 w-4" />,
+};
+
+function ThemeToggle() {
+  const { t } = useLingui();
+  const { settings, setTheme } = useSettings();
+  const next = cycle[settings.theme];
+
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(next)}
+      data-tip={t`Switch to ${t(modeMessages[next])}`}
+      aria-label={t`Switch to ${t(modeMessages[next])}`}
+      className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg)] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
+    >
+      {themeIcon[settings.theme]}
+    </button>
+  );
+}
+
+interface SettingsModalProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+const modeMessages: Record<ThemeMode, MessageDescriptor> = {
+  light: msg`Light`,
+  dark: msg`Dark`,
+  auto: msg`Auto`,
+};
+
+const modeOptions: { value: ThemeMode }[] = [
+  { value: 'light' },
+  { value: 'dark' },
+  { value: 'auto' },
+];
+
+const lightThemes = themeDefinitions.filter((t) => t.mode === 'light');
+const darkThemes = themeDefinitions.filter((t) => t.mode === 'dark');
+
+function ThemeSelect({
+  label,
+  value,
+  onChange,
+  themes,
+}: {
+  label: string;
+  value: string | undefined;
+  onChange: (id: string) => void;
+  themes: typeof themeDefinitions;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs text-[var(--text-secondary)]">{label}</label>
+      <select
+        value={value ?? themes[0]?.id ?? ''}
+        onChange={(e) => onChange(e.currentTarget.value)}
+        className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+      >
+        {themes.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+type SettingsTab = 'general' | 'plugins';
+
+const tabs: { id: SettingsTab; label: MessageDescriptor }[] = [
+  { id: 'general', label: msg`General` },
+  { id: 'plugins', label: msg`Plugins` },
+];
+
+export function SettingsModal({ open, onClose }: SettingsModalProps) {
+  const { t } = useLingui();
+  const [tab, setTab] = useState<SettingsTab>('general');
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="flex h-[480px] w-[620px] max-w-[92vw] flex-col rounded border border-[var(--border)] bg-[var(--surface)] shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 pt-3">
+          <div className="flex items-end gap-3">
+            <h2 className="pb-2 text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)]">
+              <Trans>Settings</Trans>
+            </h2>
+            <div className="flex gap-1">
+              {tabs.map((tabItem) => (
+                <button
+                  key={tabItem.id}
+                  type="button"
+                  onClick={() => setTab(tabItem.id)}
+                  className={`rounded-t px-3 py-2 text-xs transition ${
+                    tab === tabItem.id
+                      ? 'bg-[var(--bg)] font-semibold text-[var(--accent)]'
+                      : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  {t(tabItem.label)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="pb-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          >
+            esc
+          </button>
+        </div>
+
+        <div className="flex min-h-0 flex-1">
+          {tab === 'general' ? <GeneralTab /> : <PluginsTab />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GeneralTab() {
+  const { t } = useLingui();
+  const { settings, setTheme, updateSettings, replaceSettings } = useSettings();
+  const platform = useShellPlatform();
+  const [defaultShell, setDefaultShell] = useState(settings.defaultShell ?? '');
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [configNote, setConfigNote] = useState<string | null>(null);
+
+  async function importConfig() {
+    setConfigError(null);
+    setConfigNote(null);
+    const text = await platform.configFileStorage.load().catch(() => null);
+    if (text === null) return;
+    try {
+      const parsed = settingsFromYaml(text);
+      if (!parsed) {
+        setConfigError(t`Not a valid config.yaml — expected a YAML mapping.`);
+        return;
+      }
+      replaceSettings(parsed);
+      setConfigNote(t`Imported.`);
+    } catch {
+      setConfigError(t`Could not parse the file as YAML.`);
+    }
+  }
+
+  async function exportConfig() {
+    setConfigError(null);
+    setConfigNote(null);
+    try {
+      await platform.configFileStorage.save(settingsToYaml(settings), 'config.yaml');
+      setConfigNote(t`Exported.`);
+    } catch {
+      setConfigError(t`Export failed.`);
+    }
+  }
+
+  useEffect(() => {
+    setDefaultShell(settings.defaultShell ?? '');
+  }, [settings.defaultShell]);
+
+  const backend = useSessionBackend();
+  useEffect(() => {
+    if (settings.defaultShell) return;
+    backend.getDefaultShell?.()
+      .then((shell) => setDefaultShell(shell))
+      .catch(() => {});
+  }, [settings.defaultShell, backend]);
+
+  const showLightPicker = settings.theme === 'light' || settings.theme === 'auto';
+  const showDarkPicker = settings.theme === 'dark' || settings.theme === 'auto';
+
+  async function setSystemShell() {
+    try {
+      const shell = (await backend.getDefaultShell?.()) ?? '';
+      setDefaultShell(shell);
+      updateSettings({ defaultShell: shell });
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="mb-4">
+        <div className="mb-1 flex items-center justify-between">
+          <label className="text-xs text-[var(--text-secondary)]"><Trans>Theme</Trans></label>
+          <ThemeToggle />
+        </div>
+        <div className="flex gap-1">
+          {modeOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setTheme(opt.value)}
+              className={`rounded px-2 py-1.5 text-left text-xs transition ${
+                settings.theme === opt.value
+                  ? 'bg-[var(--accent)] text-[var(--text-inverted)]'
+                  : 'hover:bg-[var(--surface-hover)] text-[var(--text-primary)]'
+              }`}
+            >
+              {t(modeMessages[opt.value])}
+            </button>
+          ))}
+        </div>
+        {(showLightPicker || showDarkPicker) && (
+          <div className="mt-3 flex flex-col gap-3">
+            {showLightPicker && (
+              <ThemeSelect
+                label={t`Light theme`}
+                value={settings.lightTheme}
+                onChange={(id) => updateSettings({ lightTheme: id })}
+                themes={lightThemes}
+              />
+            )}
+            {showDarkPicker && (
+              <ThemeSelect
+                label={t`Dark theme`}
+                value={settings.darkTheme}
+                onChange={(id) => updateSettings({ darkTheme: id })}
+                themes={darkThemes}
+              />
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+          <Trans>Language</Trans>
+        </label>
+        <select
+          value={settings.language ?? 'en'}
+          onChange={(e) =>
+            updateSettings({ language: e.currentTarget.value as AppSettings['language'] })
+          }
+          className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+        >
+          <option value="en">English</option>
+          <option value="ko">한국어</option>
+        </select>
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+          <Trans>Default shell</Trans>
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={defaultShell}
+            onChange={(e) => {
+              setDefaultShell(e.currentTarget.value);
+              updateSettings({ defaultShell: e.currentTarget.value });
+            }}
+            placeholder="/bin/bash"
+            className="flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          />
+          <button
+            type="button"
+            onClick={setSystemShell}
+            data-tip={t`Use system default`}
+            className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+          >
+            auto
+          </button>
+        </div>
+        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+          <Trans>Leave empty to use the system $SHELL.</Trans>
+        </p>
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Shell font</Trans></label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={settings.shellFontFamily ?? ''}
+            onChange={(e) => updateSettings({ shellFontFamily: e.currentTarget.value })}
+            placeholder='"Monaspace Neon Var", Fira Code, …'
+            className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          />
+          <input
+            type="number"
+            min={6}
+            max={40}
+            step={1}
+            value={settings.shellFontSize ?? ''}
+            onChange={(e) =>
+              updateSettings({
+                shellFontSize:
+                  e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+              })
+            }
+            placeholder="14"
+            data-tip={t`Font size (px)`}
+            className="w-16 shrink-0 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          />
+        </div>
+        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+          <Trans>Terminal font family and size in px. Empty uses the built-in monospace stack at 14px.</Trans>
+        </p>
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Panel font</Trans></label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={settings.panelFontFamily ?? ''}
+            onChange={(e) => updateSettings({ panelFontFamily: e.currentTarget.value })}
+            placeholder="Inter, system-ui, …"
+            className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          />
+          <input
+            type="number"
+            min={6}
+            max={30}
+            step={1}
+            value={settings.panelFontSize ?? ''}
+            onChange={(e) =>
+              updateSettings({
+                panelFontSize:
+                  e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+              })
+            }
+            placeholder="12"
+            data-tip={t`Font size (px)`}
+            className="w-16 shrink-0 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          />
+        </div>
+        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+          <Trans>Font for the session/workspace panel. Size scales it relative to the 12px default.</Trans>
+        </p>
+      </div>
+
+      <div className="mb-4 flex items-center gap-2">
+        <input
+          id="devin-task-parser"
+          type="checkbox"
+          checked={settings.devinTaskParserEnabled ?? false}
+          onChange={(e) => updateSettings({ devinTaskParserEnabled: e.currentTarget.checked })}
+          className="h-4 w-4 accent-[var(--accent)]"
+        />
+        <label htmlFor="devin-task-parser" className="text-xs text-[var(--text-primary)]">
+          <Trans>Enable devin task parser</Trans>
+        </label>
+      </div>
+
+      <div className="mb-4 flex items-center gap-2">
+        <input
+          id="session-summaries"
+          type="checkbox"
+          checked={settings.sessionSummaries ?? true}
+          onChange={(e) => updateSettings({ sessionSummaries: e.currentTarget.checked })}
+          className="h-4 w-4 accent-[var(--accent)]"
+        />
+        <label htmlFor="session-summaries" className="text-xs text-[var(--text-primary)]">
+          <Trans>Render session summaries (set via axn-session-summary)</Trans>
+        </label>
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+          <Trans>Terminal renderer</Trans>
+        </label>
+        <select
+          value={settings.terminalRenderer ?? 'auto'}
+          onChange={(e) =>
+            updateSettings({
+              terminalRenderer: e.currentTarget.value as AppSettings['terminalRenderer'],
+            })
+          }
+          className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+        >
+          <option value="auto">{t`Auto (WebGL → canvas → DOM)`}</option>
+          <option value="webgl">WebGL</option>
+          <option value="canvas">Canvas</option>
+          <option value="dom">DOM</option>
+        </select>
+        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+          <Trans>
+            Cell renderer for terminals. Auto uses GPU (WebGL) and falls back
+            automatically. Force canvas/DOM if you hit rendering glitches.
+          </Trans>
+        </p>
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+          <Trans>Session icons</Trans>
+        </label>
+        <SessionIconEditor sessionIcons={settings.sessionIcons} updateSettings={updateSettings} />
+        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+          <Trans>Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag.</Trans>
+        </p>
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+          <Trans>Config file</Trans>
+        </label>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void importConfig()}
+            className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+          >
+            <Trans>Import…</Trans>
+          </button>
+          <button
+            type="button"
+            onClick={() => void exportConfig()}
+            className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+          >
+            <Trans>Export…</Trans>
+          </button>
+          {configNote && (
+            <span className="text-[10px] text-[var(--text-secondary)]">{configNote}</span>
+          )}
+        </div>
+        {configError && <p className="mt-1 text-[10px] text-[var(--red)]">{configError}</p>}
+        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+          <Trans>Import replaces all settings with the picked config.yaml.</Trans>
+        </p>
+        <p className="mt-1 font-mono text-[10px] text-[var(--text-secondary)]">
+          {platform.configStore
+            ? t`Stored in ~/.axn-term/config.yaml`
+            : t`Stored in browser localStorage`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+type PluginEntry =
+  | { kind: 'session'; plugin: SessionViewPlugin }
+  | { kind: 'preview'; plugin: FilePreviewPlugin };
+
+function PluginsTab() {
+  const { t } = useLingui();
+  const { pluginSettings, updatePluginSection } = usePluginSettings();
+  const groups: { label: string; entries: PluginEntry[] }[] = [
+    {
+      label: t`Session plugins`,
+      entries: getSessionViewPlugins().map(
+        (plugin): PluginEntry => ({ kind: 'session', plugin }),
+      ),
+    },
+    {
+      label: t`File previews`,
+      entries: getFilePreviewPlugins().map(
+        (plugin): PluginEntry => ({ kind: 'preview', plugin }),
+      ),
+    },
+  ];
+  const entries = groups.flatMap((g) => g.entries);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = entries.find((e) => e.plugin.id === selectedId) ?? entries[0];
+
+  function enabled(entry: PluginEntry): boolean {
+    const all = getSessionViewPlugins();
+    return entry.kind === 'session'
+      ? isPluginEnabled(entry.plugin, pluginSettings, all)
+      : isFilePreviewEnabled(entry.plugin, pluginSettings);
+  }
+
+  const settingsKey = selected ? (selected.plugin.settingsKey ?? selected.plugin.id) : '';
+  const section = pluginSettings[settingsKey] ?? {};
+  const deps =
+    selected?.kind === 'session'
+      ? pluginDependencies(selected.plugin, pluginSettings, getSessionViewPlugins())
+      : [];
+
+  return (
+    <>
+      <div className="w-44 shrink-0 overflow-y-auto border-r border-[var(--border)] py-1">
+        {groups.map((group) => (
+          <div key={group.label}>
+            <div className="px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+              {group.label}
+            </div>
+            {group.entries.map((entry) => {
+              const isSelected = selected?.plugin.id === entry.plugin.id;
+              return (
+                <button
+                  key={`${entry.kind}:${entry.plugin.id}`}
+                  type="button"
+                  onClick={() => setSelectedId(entry.plugin.id)}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition ${
+                    isSelected
+                      ? 'bg-[var(--bg)] text-[var(--accent)]'
+                      : 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{entry.plugin.title}</span>
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      enabled(entry)
+                        ? 'bg-[var(--accent)]'
+                        : 'bg-[var(--text-secondary)] opacity-40'
+                    }`}
+                    data-tip={enabled(entry) ? t`enabled` : t`disabled`}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {selected && (
+        <div className="min-w-0 flex-1 overflow-y-auto p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-[var(--text-primary)]">
+                {selected.plugin.title}
+              </div>
+              <div className="text-[10px] text-[var(--text-secondary)]">
+                {selected.kind === 'session' ? t`session plugin` : t`file preview`} ·{' '}
+                <span className="font-mono">{settingsKey}</span>
+                {selected.plugin.version && (
+                  <>
+                    {' · v'}
+                    <span className="font-mono">{selected.plugin.version}</span>
+                  </>
+                )}
+              </div>
+              {deps.map(({ dep, met }) => (
+                <div
+                  key={dep.id}
+                  className={`text-[10px] ${
+                    met ? 'text-[var(--text-secondary)]' : 'text-[var(--orange)]'
+                  }`}
+                >
+                  {t`requires ${dep.id}${dep.version ? ` ${dep.version}` : ''}`}
+                  {met ? '' : ` — ${t`unmet, plugin disabled`}`}
+                </div>
+              ))}
+            </div>
+            <label className="flex shrink-0 items-center gap-2 text-xs text-[var(--text-primary)]">
+              <input
+                type="checkbox"
+                checked={enabled(selected)}
+                onChange={(e) =>
+                  updatePluginSection(settingsKey, { enabled: e.currentTarget.checked })
+                }
+                className="h-4 w-4 accent-[var(--accent)]"
+              />
+              <Trans>enabled</Trans>
+            </label>
+          </div>
+
+          {selected.kind === 'session' &&
+            selected.plugin.settings?.map((field) => (
+              <PluginSettingRow
+                key={field.key}
+                field={field}
+                section={section}
+                onChange={(value) => updatePluginSection(settingsKey, { [field.key]: value })}
+              />
+            ))}
+
+          {selected.kind === 'session' &&
+            selected.plugin.renderSettings?.({
+              settings: section,
+              update: (patch) => updatePluginSection(settingsKey, patch),
+            })}
+
+          {selected.kind === 'session' &&
+            !selected.plugin.settings?.length &&
+            !selected.plugin.renderSettings && (
+              <p className="text-[10px] text-[var(--text-secondary)]">
+                <Trans>This plugin declares no settings.</Trans>
+              </p>
+            )}
+
+          <p className="mt-4 text-[10px] text-[var(--text-secondary)]">
+            <Trans>Stored in ~/.axn-term/plugins.yaml</Trans>
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+function PluginSettingRow({
+  field,
+  section,
+  onChange,
+}: {
+  field: PluginSettingField;
+  section: Record<string, unknown>;
+  onChange: (value: boolean | number | string) => void;
+}) {
+  const value = section[field.key] ?? field.default;
+
+  return (
+    <div className="mb-3">
+      {field.type === 'boolean' ? (
+        <label className="flex items-center gap-2 text-xs text-[var(--text-primary)]">
+          <input
+            type="checkbox"
+            checked={value !== false}
+            onChange={(e) => onChange(e.currentTarget.checked)}
+            className="h-4 w-4 accent-[var(--accent)]"
+          />
+          {field.label}
+        </label>
+      ) : (
+        <>
+          <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+            {field.label}
+          </label>
+          {field.options ? (
+            <select
+              value={typeof value === 'string' ? value : ''}
+              onChange={(e) => onChange(e.currentTarget.value)}
+              className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            >
+              {field.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type={field.type}
+              value={typeof value === 'number' || typeof value === 'string' ? value : ''}
+              onChange={(e) =>
+                onChange(
+                  field.type === 'number'
+                    ? Number(e.currentTarget.value)
+                    : e.currentTarget.value,
+                )
+              }
+              className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            />
+          )}
+        </>
+      )}
+      {field.description && (
+        <p className="mt-0.5 text-[10px] text-[var(--text-secondary)]">{field.description}</p>
+      )}
+    </div>
+  );
+}
+
+const SVG_HINT_EXAMPLE =
+  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2l12 6-12 6z"/></svg>';
+
+function SessionIconEditor({
+  sessionIcons,
+  updateSettings,
+}: {
+  sessionIcons?: Record<string, string>;
+  updateSettings: (patch: Partial<AppSettings>) => void;
+}) {
+  const { t } = useLingui();
+  const icons = sessionIcons ?? {};
+  const keys = Object.keys(icons).sort((a, b) => a.localeCompare(b));
+  const [editing, setEditing] = useState<{ key: string; isNew: boolean } | null>(null);
+  const [draftKey, setDraftKey] = useState('');
+  const [draftValue, setDraftValue] = useState('');
+
+  function openAdd() {
+    setEditing({ key: '', isNew: true });
+    setDraftKey('');
+    setDraftValue('');
+  }
+
+  function openEdit(key: string) {
+    setEditing({ key, isNew: false });
+    setDraftKey(key);
+    setDraftValue(icons[key] ?? '');
+  }
+
+  function remove(key: string) {
+    const next = { ...icons };
+    delete next[key];
+    updateSettings({ sessionIcons: next });
+    if (editing?.key === key) setEditing(null);
+  }
+
+  function save() {
+    const key = draftKey.trim().toLowerCase();
+    if (!key || !editing) return;
+    const next = { ...icons };
+    if (!editing.isNew && key !== editing.key) delete next[editing.key];
+    next[key] = draftValue;
+    updateSettings({ sessionIcons: next });
+    setEditing(null);
+  }
+
+  return (
+    <div>
+      <div className="rounded border border-[var(--border)]">
+        {keys.map((key) => (
+          <div
+            key={key}
+            className="flex items-center gap-2 border-b border-[var(--border)] px-2 py-1 last:border-b-0"
+          >
+            <SessionIconGlyph value={icons[key]} className="h-4 w-4 shrink-0" />
+            <span className="flex-1 truncate font-mono text-xs text-[var(--text-primary)]" data-tip={key}>
+              {key}
+            </span>
+            <IconButton title={t`Edit icon`} size="sm" onClick={() => openEdit(key)}>
+              <Pencil className="h-3 w-3" />
+            </IconButton>
+            <IconButton title={t`Remove icon`} size="sm" danger onClick={() => remove(key)}>
+              <Trash2 className="h-3 w-3" />
+            </IconButton>
+          </div>
+        ))}
+        {keys.length === 0 && (
+          <div className="px-2 py-1.5 text-[10px] text-[var(--text-secondary)]">
+            <Trans>No icons configured — every session shows the default terminal icon.</Trans>
+          </div>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="mt-2 space-y-1.5 rounded border border-[var(--border)] p-2">
+          <div className="flex items-center gap-2">
+            <label className="w-14 shrink-0 text-[10px] text-[var(--text-secondary)]">
+              <Trans>Process</Trans>
+            </label>
+            <input
+              value={draftKey}
+              onChange={(e) => setDraftKey(e.currentTarget.value)}
+              placeholder="e.g. claude"
+              autoFocus={editing.isNew}
+              className="flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            />
+          </div>
+          <div className="flex gap-2">
+            <textarea
+              value={draftValue}
+              onChange={(e) => setDraftValue(e.currentTarget.value)}
+              rows={3}
+              placeholder="GitFork"
+              autoFocus={!editing.isNew}
+              className="flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-[10px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            />
+            <div className="flex w-14 shrink-0 flex-col items-center justify-center gap-1 rounded border border-[var(--border)] bg-[var(--bg)]">
+              <SessionIconGlyph
+                value={draftValue.trim() || 'SquareTerminal'}
+                className="h-5 w-5"
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-[var(--text-secondary)]">
+            <Trans>
+              A Lucide icon name (e.g. <code>GitFork</code>) or an inline SVG
+              tag, e.g. <code className="break-all">{SVG_HINT_EXAMPLE}</code>
+            </Trans>
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(null)}
+              className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+            >
+              <Trans>Cancel</Trans>
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={!draftKey.trim()}
+              className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--accent)] transition hover:bg-[var(--surface-hover)] disabled:opacity-40"
+            >
+              <Trans>Save</Trans>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2">
+          <IconButton title={t`Add icon`} size="auto" onClick={openAdd}>
+            <Plus className="h-3 w-3" />
+            <span className="ml-1 text-[10px]"><Trans>Add icon</Trans></span>
+          </IconButton>
+        </div>
+      )}
+    </div>
+  );
+}

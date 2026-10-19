@@ -1,0 +1,45 @@
+# Node / pnpm
+node_modules/
+.pnpm-debug.log*
+
+# Rust / Cargo
+target/
+Cargo.lock
+
+# Build outputs
+dist/
+artifacts/
+*.log
+
+# Flow test reports
+flow-reports/
+
+# IDE
+.vscode/
+.idea/
+
+# Local test/tool artifacts
+.playwright-cli/
+
+# macOS
+.DS_Store
+
+# .NET
+bin/
+obj/
+
+# Nx
+.nx/
+
+# pnpm store (created when node_modules is a docker volume)
+.pnpm-store/
+
+# Local scenario overrides (see scenarios/*/.env.example)
+scenarios/**/.env
+
+# Scenario bind-mount target (scenarios/axn-term-online mounts its own
+# plugins.seed.yaml over this path inside the container; keep it empty).
+apps/web/public/plugins.seed.yaml
+
+# Devin CLI local config (machine-specific permissions)
+.devin/*.local.json

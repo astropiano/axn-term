@@ -1,0 +1,41 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "bundler",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "es2022",
+    "module": "esnext",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@axn-term/session-backend/tauri": ["libs/session-backend/src/tauri.ts"],
+      "@axn-term/session-backend/remote": ["libs/session-backend/src/remote.ts"],
+      "@axn-term/session-backend": ["libs/session-backend/src/index.ts"],
+      "@axn-term/shell-ui": ["libs/shell-ui/src/index.ts"],
+      "@axn-term/plugin-sdk": ["libs/plugin-sdk/src/index.ts"],
+      // Sibling checkout: ../ramphastos (astropiano layout); in
+      // containers the same tree mounts at /ramphastos.
+      // Points at the built dist entry — rebuild the client package
+      // there when its sources change.
+      "@astropiano/ramphastos-client": ["../ramphastos/src/client/ramphastos-client/dist/index.js"]
+    },
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true
+  },
+  "exclude": ["node_modules", "tmp"]
+}

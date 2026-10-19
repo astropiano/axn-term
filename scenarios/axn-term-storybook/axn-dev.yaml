@@ -1,0 +1,10 @@
+description: "axn-term Storybook: desktop UI component catalog (session rows, attention indicators, ...)"
+frontend:
+  - storybook
+frontend-services:
+  storybook: "http://localhost:${SCENARIO_PORT:-8098}"
+env:
+  SCENARIO_PORT: "8098"
+links:
+  - label: "Storybook"
+    url: "http://localhost:${SCENARIO_PORT:-8098}"

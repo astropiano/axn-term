@@ -1,0 +1,200 @@
+export interface Task {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
+export type SessionStatus = 'idle' | 'running' | 'blocked' | 'completed';
+
+export type AttentionLevel = 'warning' | 'critical';
+
+/**
+ * A "needs attention" flag raised by a session-view plugin. Stored in the
+ * plugin's pluginState under the reserved key `attention`, so several plugins
+ * can flag the same session independently.
+ */
+export interface SessionAttention {
+  /** Short reason shown in the indicator tooltip. */
+  message?: string;
+  /** critical (default): red pulsing dot; warning: orange. */
+  level?: AttentionLevel;
+}
+
+export type BannerLevel = 'info' | 'warning' | 'error';
+
+/**
+ * A button declared on a session banner. Clicks are routed back to the
+ * owning plugin's `onBannerAction` with the action's `id` — the data stays
+ * JSON-serializable so it can live in pluginState.
+ */
+export interface SessionBannerAction {
+  id: string;
+  /** Built-in icon name; when absent `label` is rendered as text. */
+  icon?: 'chevron-left' | 'chevron-right' | 'play' | 'trash';
+  /** Optional text rendered after the icon. */
+  label?: string;
+  title?: string;
+  /** Rendered but not clickable (e.g. a move action at a workflow's edge). */
+  disabled?: boolean;
+}
+
+/**
+ * A banner message raised by a session-view plugin. Stored in the plugin's
+ * pluginState under the reserved key `banner`, so several plugins can show
+ * one on the same session. Rendered as a strip on top of the session view.
+ */
+export interface SessionBanner {
+  message: string;
+  /**
+   * Secondary text rendered after the message in a lighter tone —
+   * truncates with an ellipsis, the tooltip shows it in full.
+   */
+  detail?: string;
+  /** info (default): accent; warning: orange; error: red. */
+  level?: BannerLevel;
+  /** Default true. When false no ✕ is shown — the plugin clears the banner. */
+  dismissible?: boolean;
+  /** Optional buttons rendered before the message (leading slot). */
+  actions?: SessionBannerAction[];
+  /** Optional buttons rendered at the right end of the banner. */
+  trailingActions?: SessionBannerAction[];
+}
+
+export interface RepoInfo {
+  name: string;
+  group?: string;
+  branch: string | null;
+  ahead: number;
+  behind: number;
+  dirty: boolean;
+  untracked: number;
+  remoteBranchMissing: boolean;
+  root: string;
+  remote?: string;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  collapsed?: boolean;
+  /**
+   * The workspace's anchor directory — new sessions created via "+" start
+   * here instead of the default cwd, and plugins (e.g. worktrees) resolve
+   * the workspace's repository from it. Set/cleared from the workspace
+   * context menu.
+   */
+  defaultFolder?: string;
+}
+
+/** Agent CLIs whose conversations a sub-shell tab can host and resume. */
+export type AgentCli = 'devin' | 'claude' | 'gemini' | 'codex';
+
+export interface EditorTab {
+  id: string;
+  path: string;
+  dirty?: boolean;
+  /**
+   * 'browser' is a directory tree, 'shell' a sub-shell PTY, 'preview' a
+   * read-only file preview rendered by a preview plugin, 'git' the repo
+   * inspect view (`path` is the repo root); default is a file editor.
+   */
+  kind?: 'editor' | 'browser' | 'shell' | 'preview' | 'git';
+  /** For kind 'shell': the `sh -c` command; absent means an interactive sub-shell. */
+  command?: string;
+  /**
+   * For kind 'shell': agent whose conversation this tab hosts (git-inspect
+   * "talk" tabs, workflow `agent:` sub-shells). Once the tab has run,
+   * re-spawns resume the conversation instead of re-running the seed
+   * `command`.
+   */
+  agent?: AgentCli;
+  /**
+   * For kind 'shell': command run in place of `command` on every spawn after
+   * the first — the agent resume line (`devin -r <name>` once the session
+   * name was captured, `devin -c`/`claude -c`/`gemini --resume`/
+   * `codex resume --last` before that).
+   */
+  resumeCommand?: string;
+  /** For kind 'shell': working directory override; defaults to the session's live cwd. */
+  cwd?: string;
+  /** For kind 'shell': custom tab label; absent falls back to the command/dir default. */
+  label?: string;
+  /**
+   * For kind 'git': compare ref — the inspect view adds a "Changes vs
+   * `<base>`" section diffing merge-base(base, HEAD) against HEAD (three-dot
+   * semantics), e.g. `origin/develop` for a merge-request review worktree.
+   */
+  base?: string;
+}
+
+/**
+ * Tabs hosted by a plugin's full-area view (plugins declaring `hostsTabs`).
+ * `activeTab` is a hosted EditorTab id, or unset/'view' for the plugin's own
+ * renderView (the pinned first tab).
+ */
+export interface PluginTabSet {
+  editors: EditorTab[];
+  activeTab?: string;
+}
+
+export interface ShellSession {
+  id: string;
+  workspaceId: string;
+  /**
+   * Backend PTY backing the pinned "shell" view when it differs from `id` —
+   * set when a sub-shell was promoted to the session's main shell (the
+   * demoted main shell keeps its own PTY as a `kind: 'shell'` editor tab).
+   * All PTY-bound operations (writes, cwd/foreground polling, plugin
+   * `writeToSession`/`getCwd`) target this id; session identity — names,
+   * pluginState, accumulated output — stays on `id`.
+   */
+  mainPtyId?: string;
+  name: string;
+  customName?: string;
+  autoName?: string;
+  topic: string;
+  summary: string;
+  status?: SessionStatus;
+  tasks: Task[];
+  progress: number;
+  output: string;
+  cwd?: string;
+  devinActive?: boolean;
+  process?: string;
+  repo?: RepoInfo;
+  editors?: EditorTab[];
+  activeTab?: string;
+  pluginState?: Record<string, unknown>;
+}
+
+/** The backend PTY id that currently serves as the session's main shell. */
+export function ptyIdOf(session: ShellSession): string {
+  return session.mainPtyId ?? session.id;
+}
+
+export interface WindowState {
+  id: string;
+  name?: string;
+  workspaces: Workspace[];
+  sessions: ShellSession[];
+  selectedWorkspaceId?: string;
+  selectedSessionId?: string;
+  /**
+   * Set by the backend when state.json was unreadable and the last-good
+   * backup (state.json.bak) was loaded instead.
+   */
+  restoredFromBackup?: boolean;
+  /** Name of the preserved failed state file, when one exists. */
+  failedStateFile?: string;
+  /**
+   * Detached sub-view tabs hosted by plugin views, keyed by plugin id. Only
+   * plugins declaring `hostsTabs` collect entries; sub-shell tabs are never
+   * hosted (their PTY stays bound to the owning session).
+   */
+  pluginTabs?: Record<string, PluginTabSet>;
+  /**
+   * App-level persisted plugin data keyed by settingsKey — the plugin-view
+   * counterpart of per-session `pluginState` (e.g. awesome-list bookmarks).
+   */
+  pluginData?: Record<string, unknown>;
+}

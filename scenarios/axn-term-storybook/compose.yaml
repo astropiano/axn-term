@@ -1,0 +1,40 @@
+# axn-term Storybook scenario
+#
+# Runs the desktop app's Storybook (apps/desktop) in a container. The repo is
+# bind-mounted so component edits hot-reload; node_modules is masked by
+# anonymous volumes so the container always uses its own (musl) installs.
+#
+# Usage:
+#   axn-dev start -s axn-term-storybook
+#   axn-dev stop -s axn-term-storybook
+#
+# Open http://localhost:8098 (or the printed SCENARIO_PORT)
+
+services:
+  storybook:
+    build:
+      context: ../../
+      dockerfile: scenarios/axn-term-storybook/Dockerfile
+    container_name: axn-term-storybook
+    restart: unless-stopped
+    working_dir: /app/apps/desktop
+    command: >
+      /app/apps/desktop/node_modules/.bin/storybook dev -p 6006 --host 0.0.0.0 --ci --no-open
+    environment:
+      NODE_ENV: "development"
+      CHOKIDAR_USEPOLLING: "true"
+      # Storybook's viteFinal maps this to vite's hmr.clientPort so the HMR
+      # websocket reaches the container through the published port.
+      SCENARIO_PORT: "${SCENARIO_PORT:-8098}"
+    volumes:
+      - ../../:/app:cached
+      - /app/node_modules
+      - /app/apps/desktop/node_modules
+    ports:
+      - "${SCENARIO_PORT:-8098}:6006"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6006/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s

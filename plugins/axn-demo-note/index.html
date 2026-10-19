@@ -1,0 +1,46 @@
+<!--
+  Sandboxed plugin view — a plain HTML document rendered in the plugin's
+  full-area view (activated via the rail puzzle button). Any stack works:
+  this one is dependency-free; `window.axn` is injected before it runs.
+  Theme CSS vars (--bg, --text-primary, --accent, …) are applied to :root and
+  updated live on theme switches.
+-->
+<style>
+  .wrap { padding: 16px; font-family: inherit; }
+  h1 { font-size: 14px; margin: 0 0 12px; }
+  table { border-collapse: collapse; width: 100%; }
+  td { padding: 4px 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
+  tr:hover td { background: var(--surface-hover); cursor: pointer; }
+  .note { color: var(--orange); font-family: var(--font-mono, monospace); }
+  .dim { color: var(--text-secondary); }
+</style>
+<div class="wrap">
+  <h1>Session notes <span class="dim" id="count"></span></h1>
+  <table id="sessions"></table>
+</div>
+<script>
+  var table = document.getElementById('sessions');
+  var count = document.getElementById('count');
+
+  function render(sessions) {
+    count.textContent = '(' + sessions.length + ')';
+    table.innerHTML = sessions.map(function (s) {
+      var note = s.state && typeof s.state.note === 'string' ? s.state.note : '';
+      return '<tr data-id="' + s.id + '">' +
+        '<td>' + (s.name || s.id) + '</td>' +
+        '<td class="dim">' + (s.cwd || '') + '</td>' +
+        '<td class="note">' + note + '</td>' +
+      '</tr>';
+    }).join('');
+    table.querySelectorAll('tr[data-id]').forEach(function (row) {
+      row.addEventListener('click', function () {
+        // Jumps to the session and leaves this view.
+        axn.selectSession(row.getAttribute('data-id'));
+      });
+    });
+  }
+
+  // Live session list pushed by the host; also available via axn.getSessions().
+  axn.on('sessions', render);
+  render(axn.sessions);
+</script>

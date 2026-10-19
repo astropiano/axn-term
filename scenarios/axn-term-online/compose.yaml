@@ -1,0 +1,212 @@
+name: axn-term-online
+
+# axn-term online scenario — remote shell sessions through the server.
+#   - keycloak is a dedicated Keycloak for this stack.
+#   - shell serves the xterm.js web frontend (apps/web).
+#   - gateway is the .NET WebSocket gateway (apps/gateway) — validates JWTs and
+#     spawns a per-user session host
+#     container on demand, then proxies /ws and /tasks to it.
+#   - session-host is the image used for the per-user containers (built here,
+#     not started — the gateway starts it via docker.sock). It runs the .NET
+#     apps/session-host SessionHost. podman-compose skips building scale-0
+#     services: run ./build-session-host.sh once on a fresh machine.
+#   - caddy fronts everything on a single host port using subdomains.
+#
+# Access (defaults):
+#   http://axn-term.localhost:8092          - axn-term web UI
+#   http://axn-term-gateway.localhost:8092  - WebSocket gateway
+#   http://axn-term-keycloak.localhost:8092 - Keycloak
+#
+# DATA_MOUNT: host directory bind-mounted into every agent container at the
+# same path (writable). When set, shells land there by default and task state
+# is written under <DATA_MOUNT>. Leave empty for /tmp.
+
+services:
+  keycloak:
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26}
+    container_name: axn-term-online-keycloak
+    restart: unless-stopped
+    command: ["start-dev", "--http-port", "8082", "--import-realm"]
+    environment:
+      KC_HOSTNAME: ${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  shell:
+    image: node:22-alpine
+    container_name: axn-term-online-shell
+    working_dir: /app
+    user: "0:0"
+    # The nx dev server dies when a host nx command touches the shared .nx
+    # workspace dir; bring it back instead of leaving the UI down.
+    restart: unless-stopped
+    command:
+      [
+        "sh",
+        "-c",
+        "corepack pnpm install --frozen-lockfile && corepack pnpm exec nx serve web --host=0.0.0.0"
+      ]
+    volumes:
+      - ${AXN_TERM_ROOT:-../..}:/app
+      - axn-term-online-node_modules:/app/node_modules
+      # Sibling ramphastos checkout at /ramphastos — the vite alias
+      # (../../../ramphastos/...) resolves there inside the container.
+      - ${AXN_LIBS_ROOT:-../../..}/ramphastos:/ramphastos:ro
+      # plugins.yaml seed for first load (VITE_PLUGINS_YAML_SEED, web platform.ts).
+      # Nested over the /app bind — apps/web/public/plugins.seed.yaml must exist
+      # in the repo (empty placeholder, .gitignored) or this mount breaks.
+      - ./plugins.seed.yaml:/app/apps/web/public/plugins.seed.yaml:ro
+    environment:
+      # The repo (and its .nx dir) is bind-mounted from the host: a daemon
+      # here races the host's nx daemon over the same socket/workspace data.
+      - NX_DAEMON=false
+      - VITE_PORT=5176
+      # passed to vite server.allowedHosts so the proxied host is accepted
+      - AXN_DOMAIN=${AXN_DOMAIN:-localhost}
+      - AXN_LAN_IP=${AXN_LAN_IP:-}
+      - VITE_PLUGINS_YAML_SEED=/plugins.seed.yaml
+      - VITE_SHELL_WS_URL=${AXN_GATEWAY_URL:-${AXN_WS_SCHEME:-ws}://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/ws
+      - VITE_KEYCLOAK_URL=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}
+      - VITE_SHELL_WS_URL=ws://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}/ws
+      # Set to ws://<gateway>/ramphastos to run terminals over the Ramphastos
+      # hub (multiplexed streams) instead of per-PTY /ws sockets.
+      - VITE_RAMPHASTOS_URL=${VITE_RAMPHASTOS_URL:-}
+      - VITE_KEYCLOAK_URL=http://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}
+      - VITE_KEYCLOAK_REALM=${KEYCLOAK_REALM:-axn-term}
+      - VITE_KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-axn-term}
+    depends_on:
+      - gateway
+      - keycloak
+
+  gateway:
+    build:
+      context: ${AXN_TERM_ROOT:-../..}
+      additional_contexts:
+        # Sibling checkouts — ramphastos sources + package feeds land at
+        # /<repo> inside the build (matching the nuget.config paths).
+        libraries: ${AXN_LIBS_ROOT:-../../..}
+      dockerfile: apps/gateway/Dockerfile
+    image: axn-term-gateway:latest
+    container_name: axn-term-online-gateway
+    user: "0:0"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - Authentication__Authority=http://keycloak:8082/realms/${KEYCLOAK_REALM:-axn-term}
+      - Authentication__ValidIssuer=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/realms/${KEYCLOAK_REALM:-axn-term}
+      - Authentication__ValidIssuers=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/realms/${KEYCLOAK_REALM:-axn-term},http://keycloak.localhost:8082/realms/${KEYCLOAK_REALM:-axn-term}
+      - Authentication__JwksUri=http://keycloak:8082/realms/${KEYCLOAK_REALM:-axn-term}/protocol/openid-connect/certs
+      # Only tokens issued to the web client (azp) open shells.
+      - Authentication__ClientId=${KEYCLOAK_CLIENT_ID:-axn-term}
+      - SESSION_HOST_IMAGE=axn-term-host
+      # axn-dev namespaces the compose project (repo-branch-port), so the
+      # session-host network is derived from COMPOSE_PROJECT_NAME.
+      - SESSION_HOST_NETWORK=${COMPOSE_PROJECT_NAME:-axn-term-online}_default
+      - SESSION_HOST_PORT=7682
+      # /remote auth: hellos carry a user JWT; mirrored sessions are bound
+      # to the account that published them (authority JWT sub = owner, the
+      # same sub on another device can attach). AllowAnonymous opens the
+      # endpoint for local dev — scenario default, set 0/false in prod.
+      - RemoteAuthority__AllowAnonymous=${REMOTE_AUTHORITY_ANON:-true}
+      - DEFAULT_USER=dev
+      - DATA_MOUNT=${DATA_MOUNT:-}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - PTY_CWD=${PTY_CWD:-${DATA_MOUNT:-/tmp}}
+      - SESSION_HOST_HOME=${SESSION_HOST_HOME:-${DATA_MOUNT:-/tmp}}
+      - AXN_STATE_DIR=${AXN_STATE_DIR:-${DATA_MOUNT:-/tmp}/.axn-term}
+      # OCI runtime / isolation for the per-user session hosts. Set
+      # SESSION_HOST_RUNTIME=kata to run every session in its own
+      # KVM-backed VM; pair with DIND=1 + USER=0:0 to enable the inner
+      # dockerd (docker scenarios inside the session). Note: do NOT use
+      # SESSION_HOST_PRIVILEGED with kata — host device passthrough into
+      # the VM fails; DIND grants the needed caps inside the guest. The
+      # gateway refuses DIND/PRIVILEGED without kata unless
+      # SESSION_HOST_ALLOW_UNSAFE_RUNC=1 (users get the host kernel).
+      - SESSION_HOST_RUNTIME=${SESSION_HOST_RUNTIME:-}
+      - SESSION_HOST_DIND=${SESSION_HOST_DIND:-}
+      - SESSION_HOST_PRIVILEGED=${SESSION_HOST_PRIVILEGED:-}
+      - SESSION_HOST_ALLOW_UNSAFE_RUNC=${SESSION_HOST_ALLOW_UNSAFE_RUNC:-}
+      - SESSION_HOST_USER=${SESSION_HOST_USER:-}
+      # Per-session-host limits (empty = gateway defaults: 4g / 4096 / 2;
+      # "0" lifts a limit).
+      - SESSION_HOST_MEMORY=${SESSION_HOST_MEMORY:-}
+      - SESSION_HOST_PIDS=${SESSION_HOST_PIDS:-}
+      - SESSION_HOST_CPUS=${SESSION_HOST_CPUS:-}
+      # SESSION_HOST_PREFIX overrides the session-host container name prefix
+      # (default axn-term-host) — e.g. to isolate a second scenario's hosts.
+      # A single line only: a second SESSION_HOST_PREFIX entry would win and
+      # resolve to "", producing invalid container names like "-<user>".
+      - SESSION_HOST_PREFIX=${SESSION_HOST_PREFIX:-axn-term-host}
+      # SESSION_HOST_HOME_VOLUME names a per-user volume prefix: the gateway
+      # mounts "<prefix>-<user>" at /home/<user>, so everything under $HOME
+      # survives session-host recreation. Requires SESSION_HOST_USER=0:0 (the
+      # entrypoint must own the mount point before handing it to the user).
+      - SESSION_HOST_HOME_VOLUME=${SESSION_HOST_HOME_VOLUME:-}
+      # SESSION_HOST_NIX_VOLUME does the same for the nix store at /nix —
+      # each user gets a private, persistent store seeded from the image.
+      - SESSION_HOST_NIX_VOLUME=${SESSION_HOST_NIX_VOLUME:-}
+      # AXN_NIX_FLAKE is an optional deployment-wide home-manager flake ref
+      # applied on spawn (a user's own nix-flake file wins).
+      - AXN_NIX_FLAKE=${AXN_NIX_FLAKE:-}
+    volumes:
+      # Rootless podman: point DOCKER_SOCK at the user socket (see .env.example).
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    # SELinux denies container_t access to the docker/podman socket.
+    security_opt:
+      - label=disable
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  session-host:
+    build:
+      context: ./session-host
+      additional_contexts:
+        axn-term: ${AXN_TERM_ROOT:-../..}
+        # Sibling checkouts — ramphastos sources + package feeds land at
+        # /<repo> inside the build (matching the nuget.config paths).
+        libraries: ${AXN_LIBS_ROOT:-../../..}
+      dockerfile: Dockerfile
+    image: axn-term-host
+    scale: 0
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: axn-term-online-caddy
+    ports:
+      - ${SCENARIO_PORT:-8092}:${SCENARIO_PORT:-8092}
+      # raw-IP LAN routes (no DNS): keycloak + gateway get their own ports
+      - ${AXN_KC_PORT:-18093}:${AXN_KC_PORT:-18093}
+      - ${AXN_GW_PORT:-18094}:${AXN_GW_PORT:-18094}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # persist /data so the internal CA (and issued certs) survive
+      # container recreation — otherwise every client must re-trust the CA
+      - axn-term-online-caddy-data:/data
+    environment:
+      - SCENARIO_PORT=${SCENARIO_PORT:-8092}
+      - AXN_DOMAIN=${AXN_DOMAIN:-localhost}
+      - AXN_TLS=${AXN_TLS:-off}
+      - AXN_AUTO_HTTPS=${AXN_AUTO_HTTPS:-off}
+      - AXN_LAN_IP=${AXN_LAN_IP:-}
+      - AXN_KC_PORT=${AXN_KC_PORT:-18093}
+      - AXN_GW_PORT=${AXN_GW_PORT:-18094}
+    depends_on:
+      - shell
+      - gateway
+      - keycloak
+
+volumes:
+  axn-term-online-node_modules:
+  axn-term-online-caddy-data:

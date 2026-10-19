@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - Session, workspace switching and devin resume"
+        orchestrator="orchestrators/playwright.ts">
+    <description>
+      Start the axn-term scenario and use Playwright to create and switch
+      between sessions and workspaces, then exercise the devin resume hidden
+      command and verify it is rewritten to the remembered devin session.
+    </description>
+    <scenarios>
+      <!-- Project scenario scenarios/axn-term-online: axn-dev resolves global
+           (integration-repo) scenarios first and falls back to the current
+           repo's scenarios/, so run from inside this checkout. "shell" is the
+           named frontend-service (http://axn-term.<domain>:<port>) — Caddy
+           routes by host, so the bare caddy port would not reach the app. -->
+      <scenario name="axn-term-online" service="shell" adapter="tsAdapter">
+        <readiness service="shell" path="/" expected="200" />
+      </scenario>
+    </scenarios>
+    <setup>
+      <env>
+        <var name="TEST_USER" value="demo" />
+        <var name="TEST_PASSWORD" value="changeme" />
+      </env>
+    </setup>
+    <steps>
+      <step src="steps/login.ts"
+            description="Open the shell UI, log in with Keycloak, and wait for the container terminal prompt" />
+      <step src="steps/shortcuts.ts"
+            description="Create a new workspace and session, switch between them, then type axn-devin-resume and verify the rewritten command" />
+      <assertions>
+        <assert that="exitCode" value="0" />
+        <assert that="contains" value="Workspace and session switching verified" />
+        <assert that="contains" value="Devin resume command verified" />
+      </assertions>
+    </steps>
+  </flow>
+</flows>

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- Porta.Pty only ships a net10.0 assembly. -->
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <RootNamespace>Astropiano.AxnTerm.SessionHost</RootNamespace>
+    <AssemblyName>Astropiano.AxnTerm.SessionHost</AssemblyName>
+    <PackageId>Astropiano.AxnTerm.SessionHost</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>axn-term</Authors>
+    <Company>axn-term</Company>
+    <Description>Per-user session host for axn-term — owns shell PTYs and bridges them to WebSockets</Description>
+    <GenerateOpenApiDocuments>false</GenerateOpenApiDocuments>
+    <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Porta.Pty" Version="2.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Sibling checkout: ../ramphastos, astropiano layout (see nuget.config
+         feeds). In the session-host Dockerfile the same tree lands at /ramphastos. -->
+    <ProjectReference Include="../../../ramphastos/src/Astropiano.Ramphastos.Server/Astropiano.Ramphastos.Server.csproj" />
+  </ItemGroup>
+
+</Project>

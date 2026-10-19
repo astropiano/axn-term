@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* Ensure Tailwind scans this shared UI lib's components for class usage. */
+@source "../**/*.{ts,tsx}";

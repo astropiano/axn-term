@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - devin restore with extra window"
+        description="Verify devin session restore is not broken when a second window is also open on restore.">
+    <tags>
+      <tag>axn-term</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="multi-window" />
+      </env>
+    </setup>
+    <steps>
+      <script adapter="axn-term" action="prepare" description="Create temp state with an extra window" />
+      <assertions description="The test harness is ready">
+        <assert that="contains" value="state dir prepared" />
+      </assertions>
+
+      <script adapter="axn-term" action="start" description="Launch axn-term" />
+      <assertions description="The app started">
+        <assert that="contains" value="app started" />
+      </assertions>
+
+      <script adapter="axn-term" action="runDevin" description="Run the devin session in the main window" />
+      <assertions description="devin is running">
+        <assert that="contains" value="devin running" />
+      </assertions>
+
+      <script adapter="axn-term" action="close" description="Close axn-term so both windows are persisted" />
+      <assertions description="The app closed and saved state">
+        <assert that="contains" value="app closed" />
+      </assertions>
+
+      <script adapter="axn-term" action="reopen" description="Reopen and verify both windows come back with the correct session" />
+      <assertions description="The correct devin session is restored with both windows">
+        <assert that="contains" value="gray-party" />
+        <assert that="contains" value="windows: 2" />
+      </assertions>
+    </steps>
+  </flow>
+</flows>

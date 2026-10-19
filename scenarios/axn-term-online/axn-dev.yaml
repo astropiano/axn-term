@@ -1,0 +1,58 @@
+description: "axn-term online — web frontend (apps/web) + .NET gateway/session host + per-user kata session hosts behind Caddy on one port"
+env:
+  SCENARIO_PORT: "18092"
+  # bare :26 is not a published tag — pin a real one (26.0 is usually cached)
+  KEYCLOAK_IMAGE: "quay.io/keycloak/keycloak:26.0"
+  # LAN serving via raw IP — no DNS involved at all: shell on
+  # https://<lan-ip>:18092, keycloak :18093, gateway :18094 (all
+  # self-signed via Caddy internal CA — required because the Keycloak
+  # client enforces PKCE S256, and crypto.subtle only exists in secure
+  # contexts). Clients must accept the cert once (or trust the CA from
+  # `docker exec axn-term-online-caddy cat /data/caddy/pki/authorities/local/root.crt`).
+  # Set these to your LAN box before deploying; empty falls back to
+  # localhost defaults in compose.yaml.
+  AXN_LAN_IP: ""
+  AXN_KC_PORT: "18093"
+  AXN_GW_PORT: "18094"
+  AXN_KEYCLOAK_URL: ""
+  AXN_GATEWAY_URL: ""
+  # ramphastos hub instead of per-PTY /ws sockets
+  VITE_RAMPHASTOS_URL: ""
+  # ramphastos sources for the session-host build + vite alias
+  # (dir containing the astropiano sibling checkouts)
+  AXN_LIBS_ROOT: "/libraries"
+  AXN_TLS: "internal"
+  # disable_redirects: cert automation on (tls internal needs it), no :80
+  # http→https redirect listener
+  AXN_AUTO_HTTPS: "disable_redirects"
+  AXN_DOMAIN: "localhost"
+  KEYCLOAK_REALM: "axn-term"
+  KEYCLOAK_CLIENT_ID: "axn-term"
+  # bind-mounted into every session host at the same path; shells land
+  # there and axn state goes to <DATA_MOUNT>/.axn-term. This dev box keeps
+  # it on the extended drive so real development survives (root fs is
+  # nearly full).
+  DATA_MOUNT: "/mnt/extended/axn-term"
+  # kata only when the Docker host has the kata runtime installed; this dev
+  # box runs plain runc, and inner dockerd is disabled with it.
+  SESSION_HOST_RUNTIME: ""
+  SESSION_HOST_DIND: "0"
+  # 0:0 root mode: the entrypoint creates a real account named after the
+  # keycloak user, pinned to PUID/PGID (host uid) so the DATA_MOUNT bind
+  # stays writable and files belong to the host user.
+  SESSION_HOST_USER: "0:0"
+  # per-user named volume at /home/<user> — persistent home, physically on
+  # the extended drive too (docker data-root lives there).
+  SESSION_HOST_HOME_VOLUME: "axn-term-home"
+  # disabled: no kata → no per-user nix volume (the multi-GB nixpkgs seed
+  # copy also blew the Docker VM's disk budget on this box)
+  SESSION_HOST_NIX_VOLUME: ""
+  PUID: "1000"
+  PGID: "1000"
+frontend-services:
+  shell: "${AXN_SCHEME:-http}://${AXN_LAN_IP:+${AXN_LAN_IP}}${AXN_LAN_IP:-axn-term.${AXN_DOMAIN:-localhost}}:${SCENARIO_PORT:-8092}"
+backend-services:
+  gateway: "${AXN_GATEWAY_URL:-${AXN_WS_SCHEME:-ws}://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}"
+  keycloak: "${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}"
+frontend:
+  - shell

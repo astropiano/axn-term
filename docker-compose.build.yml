@@ -1,0 +1,62 @@
+name: axn-term-build
+
+# Reproducible builders for the axn-term repo.
+#
+# Usage:
+#   docker compose -f docker-compose.build.yml build              # build desktop builder once
+#   docker compose -f docker-compose.build.yml run --rm desktop-build
+#   docker compose -f docker-compose.build.yml --profile server build gateway-image session-host-image
+#   ./build/build-all.sh                                          # desktop artifacts + server images
+#
+# The online server (.NET apps/gateway + apps/session-host) ships as container
+# images, not host binaries: the `server` profile builds the same images the
+# axn-term-online scenario runs (same tags, so the scenario picks them up).
+
+services:
+  desktop-build:
+    build:
+      context: ./build/desktop
+      dockerfile: Dockerfile
+    image: axn-term-desktop-builder:latest
+    volumes:
+      - .:/src:ro
+      # Sibling ramphastos checkout — the ramphastos-client vite alias
+      # (../../../ramphastos/...) resolves to /ramphastos inside the container.
+      - ${AXN_LIBS_ROOT:-..}/ramphastos:/ramphastos:ro
+      - desktop-cargo-cache:/cache/cargo
+      - desktop-pnpm-cache:/cache/pnpm
+      - desktop-vite-cache:/cache/vite
+      - ./artifacts:/output
+    environment:
+      - CARGO_HOME=/cache/cargo
+      - HOST_UID=${HOST_UID:-1000}
+      - HOST_GID=${HOST_GID:-1000}
+    command: /src/build/scripts/build-desktop.sh
+
+  # WebSocket gateway — validates JWTs and spawns per-user session hosts.
+  gateway-image:
+    profiles: [server]
+    build:
+      context: .
+      additional_contexts:
+        # Sibling checkouts — land at /<repo> inside the build.
+        libraries: ${AXN_LIBS_ROOT:-..}
+      dockerfile: apps/gateway/Dockerfile
+    image: axn-term-gateway:latest
+
+  # Per-user session host — the image the gateway spawns via the docker socket.
+  session-host-image:
+    profiles: [server]
+    build:
+      context: ./scenarios/axn-term-online/session-host
+      additional_contexts:
+        axn-term: .
+        # Sibling checkouts — land at /<repo> inside the build.
+        libraries: ${AXN_LIBS_ROOT:-..}
+      dockerfile: Dockerfile
+    image: axn-term-host:latest
+
+volumes:
+  desktop-cargo-cache:
+  desktop-pnpm-cache:
+  desktop-vite-cache:

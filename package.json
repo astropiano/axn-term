@@ -1,0 +1,37 @@
+{
+  "name": "axn-term",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.5.2",
+  "description": "Extensible terminal workspace \u2014 desktop application and remote shell session server.",
+  "scripts": {
+    "dev:desktop": "pnpm --filter @axn-term/desktop tauri dev",
+    "build:desktop": "pnpm --filter @axn-term/desktop tauri build --bundles app && ./build/scripts/make-dmg.sh",
+    "build:desktop:docker": "./build/build-desktop.sh",
+    "serve:web": "nx serve web",
+    "dev:gateway": "dotnet run --project apps/gateway -f net10.0",
+    "build:dotnet": "dotnet build axn-term.slnx",
+    "tauri": "pnpm --filter @axn-term/desktop tauri",
+    "i18n:extract": "lingui extract",
+    "i18n:compile": "lingui compile --typescript"
+  },
+  "devDependencies": {
+    "@lingui/cli": "6.9.0",
+    "@nx/vite": "22.5.2",
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "nx": "22.5.2",
+    "playwright-core": "^1.63.0",
+    "tailwindcss": "^4.2.1",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.0",
+    "vitest": "^4.0.0"
+  },
+  "dependencies": {
+    "lucide-react": "^0.400.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

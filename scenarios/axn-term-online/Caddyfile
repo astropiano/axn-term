@@ -1,0 +1,58 @@
+{
+	# "off" for plain-http .localhost dev; "disable_redirects" for LAN mode —
+	# cert automation (needed by `tls internal`) stays on, but no :80
+	# http→https redirect listener is created.
+	auto_https {$AXN_AUTO_HTTPS:-off}
+	admin off
+	# Clients connecting to a bare IP send no SNI — treat them as if SNI was
+	# the LAN IP so the internal CA's IP cert gets selected.
+	default_sni {$AXN_LAN_IP:-localhost}
+}
+
+# Hostname routing for local dev and DNS-based LAN access
+# (axn-term.* / axn-term-gateway.* / axn-term-keycloak.*). Site addresses
+# carry the names so `tls internal` can provision certs for them.
+axn-term.{$AXN_DOMAIN:localhost}:{$SCENARIO_PORT:8092}, axn-term-gateway.{$AXN_DOMAIN:localhost}:{$SCENARIO_PORT:8092}, axn-term-keycloak.{$AXN_DOMAIN:localhost}:{$SCENARIO_PORT:8092} {
+	tls {$AXN_TLS:-off}
+
+	@shell host axn-term.{$AXN_DOMAIN:localhost}
+	handle @shell {
+		reverse_proxy shell:5176
+	}
+
+	@gateway host axn-term-gateway.{$AXN_DOMAIN:localhost}
+	handle @gateway {
+		reverse_proxy gateway:8080
+	}
+
+	@keycloak host axn-term-keycloak.{$AXN_DOMAIN:localhost}
+	handle @keycloak {
+		reverse_proxy keycloak:8082 {
+			header_up Host {http.request.hostport}
+		}
+	}
+
+	handle {
+		reverse_proxy shell:5176
+	}
+}
+
+# Raw-IP access: no DNS at all — one port per service on the LAN IP.
+# `tls internal` provisions certs with the IP as SAN, so
+# https://<ip>:<port> is a secure context (PKCE) everywhere.
+{$AXN_LAN_IP:-127.0.0.1}:{$SCENARIO_PORT:8092} {
+	tls {$AXN_TLS:-off}
+	reverse_proxy shell:5176
+}
+
+{$AXN_LAN_IP:-127.0.0.1}:{$AXN_KC_PORT:-18093} {
+	tls {$AXN_TLS:-off}
+	reverse_proxy keycloak:8082 {
+		header_up Host {http.request.hostport}
+	}
+}
+
+{$AXN_LAN_IP:-127.0.0.1}:{$AXN_GW_PORT:-18094} {
+	tls {$AXN_TLS:-off}
+	reverse_proxy gateway:8080
+}

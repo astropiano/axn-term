@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Mock devin CLI for end-to-end parser validation.
+# Run from a shell and then type /exit (or q) to print the resume line
+# and a sample todo list, then exit.
+
+prompt() {
+  printf '%s ' 'devin>'
+  if ! IFS= read -r cmd; then
+    # EOF: still emit the resume line so non-interactive piping works.
+    cmd=/exit
+  fi
+
+  if [ "$cmd" = "/exit" ] || [ "$cmd" = "q" ] || [ "$cmd" = "quit" ]; then
+    echo ""
+    echo "⏺ Updated todo list (3 items)"
+    echo "│ ✓ 1. Ensure resume line is captured"
+    echo "│ ◔ 2. Verify task parser"
+    echo "│ ○ 3. Validate session name"
+    echo ""
+    echo " devin -r green-aurora"
+    echo " resumes this session · devin -r lists recent sessions"
+    echo ""
+  else
+    echo "devin: unknown command: $cmd (type /exit to finish)"
+    prompt
+  fi
+}
+
+prompt
