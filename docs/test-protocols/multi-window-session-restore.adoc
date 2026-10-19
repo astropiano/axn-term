@@ -1,0 +1,133 @@
+= Multi-Window Session Restore — Acceptance Test Protocol
+:toc: left
+:toclevels: 2
+:state-file: ~/.axn-term/state.json
+
+== Purpose
+
+Validate that `axn-term` restores all open windows, their workspaces, and their sessions when the application is closed and reopened.
+
+== Definitions
+
+* **Window** — a top-level Tauri window. Each window is identified by a unique `windowId` and contains its own set of workspaces and sessions.
+* **Workspace** — a named container for sessions inside a window.
+* **Session** — a running or saved shell terminal pane inside a workspace.
+* **State file** — the persisted JSON that stores all open windows, their workspaces, and their sessions.
+
+== Preconditions for every test
+
+. Remove or back up `{state-file}` unless the test explicitly starts from an existing state.
+. The application is not running.
+. The latest build is installed.
+
+== Test 1 — Single default window on first launch
+
+*Scenario:* a clean launch with no prior state.
+
+[cols="1,2,5", options="header"]
+|===
+| Step | Action | Expected result
+
+| 1 | Open the application. | Exactly one window opens.
+| 2 | Inspect the sidebar. | One workspace named `workspace-1` is visible.
+| 3 | Inspect the sessions. | One session named `session-1` is present and selected.
+|===
+
+== Test 2 — Single window with multiple workspaces and sessions is restored
+
+*Scenario:* the user creates a few workspaces and sessions, then closes and reopens the app.
+
+[cols="1,2,5", options="header"]
+|===
+| Step | Action | Expected result
+
+| 1 | Open the application. | One window opens with a default workspace and session.
+| 2 | Create a second workspace named `workspace-2`. | `workspace-2` appears in the sidebar.
+| 3 | Add a session to `workspace-1` named `session-a`. | `session-a` appears under `workspace-1`.
+| 4 | Add a session to `workspace-2` named `session-b`. | `session-b` appears under `workspace-2`.
+| 5 | Select `session-b`. | The terminal switches to `session-b`.
+| 6 | Close the window with the red X button. | The window closes.
+| 7 | Reopen the application. | One window opens.
+| 8 | Verify workspaces. | `workspace-1` and `workspace-2` are present with their original names.
+| 9 | Verify sessions. | `session-a` and `session-b` are present under the correct workspaces.
+| 10 | Verify selection. | `session-b` is selected and its terminal is visible.
+|===
+
+== Test 3 — Multiple windows are restored with their own sessions
+
+*Scenario:* the user opens a second window and gives each window distinct content.
+
+[cols="1,2,5", options="header"]
+|===
+| Step | Action | Expected result
+
+| 1 | Open the application. | Window `A` opens with a default session.
+| 2 | Create `workspace-alpha` and `session-A1` in window `A`. | Content is visible in window `A`.
+| 3 | Open a new window. | A second window (`B`) opens with its own default workspace and session.
+| 4 | Create `workspace-beta` and `session-B1` in window `B`. | Content is visible in window `B` only.
+| 5 | Close all windows. | All windows close.
+| 6 | Reopen the application. | Both window `A` and window `B` reopen.
+| 7 | Verify window `A`. | `workspace-alpha` and `session-A1` are restored.
+| 8 | Verify window `B`. | `workspace-beta` and `session-B1` are restored.
+| 9 | Verify isolation. | Window `A` does not contain `workspace-beta` or `session-B1`, and vice versa.
+|===
+
+== Test 4 — New window starts with its own default session
+
+*Scenario:* the user opens an additional window from an existing one.
+
+[cols="1,2,5", options="header"]
+|===
+| Step | Action | Expected result
+
+| 1 | Open the application. | One window opens.
+| 2 | Open a new window. | A second window opens.
+| 3 | Inspect the second window. | It contains one default workspace and one default session, not a duplicate of the first window.
+|===
+
+== Test 5 — Closing the last session closes the window and restores a default session on relaunch
+
+*Scenario:* the user types `exit` in the only session.
+
+[cols="1,2,5", options="header"]
+|===
+| Step | Action | Expected result
+
+| 1 | Open the application. | One window with one session opens.
+| 2 | In the terminal, type `exit` and press Enter. | The session closes, the window saves its state, and the window closes.
+| 3 | Reopen the application. | One window opens.
+| 4 | Inspect the restored window. | The previously open workspaces are restored, and at least one default session is available so the window is usable.
+|===
+
+== Test 6 — Reopen from a fully-closed app restores all windows
+
+*Scenario:* the app is quit from the menu or Dock rather than closing individual windows.
+
+[cols="1,2,5", options="header"]
+|===
+| Step | Action | Expected result
+
+| 1 | Open the application. | One window opens.
+| 2 | Open two additional windows and create distinct sessions in each. | Three windows are open with distinct content.
+| 3 | Quit the application (`Cmd+Q` / menu). | The application closes.
+| 4 | Reopen the application. | All three windows reopen in their previous positions with their content restored.
+|===
+
+== Test 7 — State file is updated after each window close
+
+*Scenario:* the tester wants to confirm that state is flushed before the window is destroyed.
+
+[cols="1,2,5", options="header"]
+|===
+| Step | Action | Expected result
+
+| 1 | Open the application and create a few sessions and workspaces. | Content is visible.
+| 2 | Close one window. | The application is still running or other windows remain open.
+| 3 | Inspect `{state-file}`. | The closed window's workspaces, sessions, and selected items are recorded in the file.
+|===
+
+== Notes for the tester
+
+* The exact window position/geometry is a nice-to-have; the acceptance criteria focus on content (workspaces, sessions, selection).
+* If a window was closed with zero sessions, the relaunch must not break; it should restore the workspaces and create a default session.
+* The state file should be human-readable JSON so the tester can inspect it directly.

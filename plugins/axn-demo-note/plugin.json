@@ -1,0 +1,18 @@
+{
+  "id": "axn-demo-note",
+  "title": "Sandboxed demo: session notes",
+  "version": "0.1.0",
+  "description": "Example sandboxed plugin — a per-session note strip plus a sessions board view. Copy this directory to ~/.axn-term/plugins/ and set `axn-demo-note.enabled: true` in plugins.yaml.",
+  "view": "index.html",
+  "commands": [
+    { "name": "axn-note", "takesArg": true }
+  ],
+  "settings": [
+    {
+      "key": "compactRow",
+      "label": "Show note in session row",
+      "type": "boolean",
+      "default": false
+    }
+  ]
+}

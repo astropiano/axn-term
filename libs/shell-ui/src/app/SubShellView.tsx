@@ -1,0 +1,343 @@
+import { useEffect, useRef } from 'react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { useSessionBackend } from '../services';
+import { useSettings } from '../SettingsProvider';
+import { getXtermColors, resolveShellFont } from '../themes';
+import { takePtyKeepAlive } from '../terminalRegistry';
+import { DEVIN_PROCESS_RE } from '../processPatterns';
+import { createHiddenCommandInput } from './hiddenCommands';
+import { createOsc8LeakGuard, OSC8_CLOSE } from '../terminalLinks';
+import { applyTerminalRenderer } from '../terminalRenderer';
+import { acquirePty } from '../ptyLifetime';
+import { parseDevinSessionName } from './session-plugins/devinTasks';
+import { talkResumeCommand } from './gitReview';
+import { isAppNavigationShortcut } from './shortcuts';
+import type { EditorTab, ShellSession } from '../types';
+
+/**
+ * A sub-shell sub-view: a child PTY of the session spawned via
+ * `create_subshell` — `sh -c <command>` for one-shot commands, or the default
+ * shell when `tab.command` is unset. Runs in the session's live cwd. After the
+ * child exits the tab holds its output: Enter re-runs, Esc closes the tab.
+ */
+export function SubShellView({
+  session,
+  tab,
+  isVisible,
+  onClose,
+  onRename,
+  onUpdateTab,
+  onEditorRequest,
+  onBrowserRequest,
+  onPreviewRequest,
+  onSessionCommand,
+  onCompleteInput,
+}: {
+  session: ShellSession;
+  tab: EditorTab;
+  isVisible: boolean;
+  onClose: () => void;
+  /** Rename this tab (`axn-rename`); empty label resets to the default. */
+  onRename?: (label: string) => void;
+  /** Persist a patch onto this tab (agent tabs store their resumeCommand). */
+  onUpdateTab?: (patch: Partial<EditorTab>) => void;
+  onEditorRequest?: (sessionId: string, path: string, ptyId?: string) => void;
+  onBrowserRequest?: (sessionId: string, path: string, ptyId?: string) => void;
+  onPreviewRequest?: (sessionId: string, path: string, ptyId?: string) => void;
+  onSessionCommand?: (
+    sessionId: string,
+    line: string,
+    ptyId?: string,
+  ) => string | false | undefined | Promise<string | false | undefined>;
+  onCompleteInput?: (sessionId: string, line: string, ptyId?: string) => Promise<string[]>;
+}) {
+  const backend = useSessionBackend();
+  const terminalRef = useRef<HTMLDivElement | null>(null);
+  const term = useRef<Terminal | null>(null);
+  const fitAddon = useRef<FitAddon | null>(null);
+  const spawnedRef = useRef(false);
+  const exitedRef = useRef(false);
+  const spawnRef = useRef<() => void>(() => {});
+  // Foreground process of this sub-shell's PTY — gates axn-* interception.
+  const foregroundRef = useRef<string | null>(null);
+  const shellNameRef = useRef('');
+  const isVisibleRef = useRef(isVisible);
+  const onCloseRef = useRef(onClose);
+  const onRenameRef = useRef(onRename);
+  const onUpdateTabRef = useRef(onUpdateTab);
+  const sessionRef = useRef(session);
+  const tabRef = useRef(tab);
+  const onEditorRequestRef = useRef(onEditorRequest);
+  const onBrowserRequestRef = useRef(onBrowserRequest);
+  const onPreviewRequestRef = useRef(onPreviewRequest);
+  const onSessionCommandRef = useRef(onSessionCommand);
+  const onCompleteInputRef = useRef(onCompleteInput);
+  isVisibleRef.current = isVisible;
+  onCloseRef.current = onClose;
+  onRenameRef.current = onRename;
+  onUpdateTabRef.current = onUpdateTab;
+  sessionRef.current = session;
+  tabRef.current = tab;
+  onEditorRequestRef.current = onEditorRequest;
+  onBrowserRequestRef.current = onBrowserRequest;
+  onPreviewRequestRef.current = onPreviewRequest;
+  onSessionCommandRef.current = onSessionCommand;
+  onCompleteInputRef.current = onCompleteInput;
+  const { activeTheme, settings } = useSettings();
+  // Disposes the active GPU renderer addon when the setting hot-swaps.
+  const rendererCleanupRef = useRef<(() => void) | null>(null);
+  const rendererMountedRef = useRef(false);
+
+  useEffect(() => {
+    if (!terminalRef.current) return;
+
+    const shellFont = resolveShellFont(settings);
+    const t = new Terminal({
+      cursorBlink: true,
+      fontSize: shellFont.size,
+      fontFamily: shellFont.family,
+      allowProposedApi: true,
+      theme: getXtermColors(activeTheme),
+    });
+    const fit = new FitAddon();
+    t.loadAddon(fit);
+    t.open(terminalRef.current);
+    // App navigation shortcuts must bubble to ShellApp's window listener
+    // instead of becoming escape sequences.
+    t.attachCustomKeyEventHandler((event) => !isAppNavigationShortcut(event));
+    term.current = t;
+    fitAddon.current = fit;
+    rendererCleanupRef.current = applyTerminalRenderer(
+      t,
+      settings.terminalRenderer,
+    ).dispose;
+
+    const fitWindow = () => {
+      if (isVisibleRef.current) fit.fit();
+    };
+    window.addEventListener('resize', fitWindow);
+
+    let resizeObserver: ResizeObserver | undefined;
+    const termEl = terminalRef.current;
+    if ('ResizeObserver' in window && termEl) {
+      resizeObserver = new ResizeObserver(fitWindow);
+      resizeObserver.observe(termEl);
+    }
+
+    let active = true;
+    const pty = acquirePty(backend, tab.id, () => {
+      const current = tabRef.current;
+      return backend.createSubshell?.(current.id, {
+        // Parent resolves the cwd — the session's current main PTY, which may
+        // be a promoted sub-shell.
+        parentId: sessionRef.current.mainPtyId ?? sessionRef.current.id,
+        // Agent tabs resume their conversation once the tab has run; the
+        // seed `command` only ever runs on the very first spawn.
+        command: current.resumeCommand ?? current.command ?? undefined,
+        cwd: current.cwd ?? undefined,
+        cols: t.cols,
+        rows: t.rows,
+      }) ?? Promise.resolve(false);
+    });
+    const spawn = (initial = false) => {
+      exitedRef.current = false;
+      (initial ? pty.start() : pty.restart()).then(() => {
+        if (!active) return;
+        // The seed ran at least once — store the fallback resume line so a
+        // respawn (restart, Enter re-run) continues the agent conversation
+        // even when no session name was captured.
+        const spawned = tabRef.current;
+        if (spawned.agent && !spawned.resumeCommand) {
+          onUpdateTabRef.current?.({ resumeCommand: talkResumeCommand(spawned.agent) });
+        }
+        // The pre-spawn fit can run before the just-unhidden container is
+        // laid out; push the live size once more so the PTY never stays at
+        // the clamped 2 cols.
+        if (exitedRef.current) return;
+        if (isVisibleRef.current) fit.fit();
+        backend.resize(tab.id, t.cols, t.rows);
+      }).catch((e) => {
+        if (!active) return;
+        exitedRef.current = true;
+        t.writeln(`\r\nFailed to start sub-shell: ${String(e)}`);
+      });
+    };
+    spawnRef.current = () => spawn(true);
+
+    // Same hidden-command interception as the main terminal: axn-rename is
+    // handled locally (it renames this tab, never the session); all other
+    // axn-* commands delegate to the session-level dispatch. Interception is
+    // gated on the sub-shell's own foreground process so input typed into a
+    // running program (vim, devin, …) is never stolen.
+    const hiddenInput = createHiddenCommandInput({
+      write: (d) => backend.write(tab.id, d),
+      mode: () => {
+        const fg = foregroundRef.current;
+        if (!fg) return 'full';
+        return DEVIN_PROCESS_RE.test(fg) ? 'devin' : 'off';
+      },
+      onLocalCommand: (line) => {
+        const m = /^\s*axn-rename(?:\s+(.*?))?\s*$/.exec(line);
+        if (!m) return false;
+        // Clear the typed line and rename the tab instead of executing
+        // anything in the sub-shell.
+        backend.write(tab.id, '\x15');
+        onRenameRef.current?.(m[1]?.trim().replace(/^["']+|["']+$/g, '') ?? '');
+        return true;
+      },
+      onEditorRequest: (path) =>
+        onEditorRequestRef.current?.(sessionRef.current.id, path, tab.id),
+      onBrowserRequest: (path) =>
+        onBrowserRequestRef.current?.(sessionRef.current.id, path, tab.id),
+      onPreviewRequest: (path) =>
+        onPreviewRequestRef.current?.(sessionRef.current.id, path, tab.id),
+      onSessionCommand: (line) => {
+        // `/exit` inside a sub-shell must not reach session-level dispatch:
+        // the devin plugin's exit capture is bound to the session's main PTY
+        // and would clear the session's remembered name while never seeing
+        // this tab's resume line (plugin onOutput gets main-PTY output only).
+        if (line.trim() === '/exit') return undefined;
+        return onSessionCommandRef.current?.(sessionRef.current.id, line, tab.id);
+      },
+      onCompleteInput: (line) =>
+        onCompleteInputRef.current?.(sessionRef.current.id, line, tab.id) ??
+        Promise.resolve([]),
+    });
+    const onData = t.onData((data) => {
+      if (!exitedRef.current) {
+        if (hiddenInput(data)) return;
+        backend.write(tab.id, data);
+        return;
+      }
+      if (data === '\r') {
+        t.reset();
+        spawn();
+      } else if (data === '\x1b') {
+        onCloseRef.current?.();
+      }
+    });
+
+    const onResize = t.onResize(({ cols, rows }) => {
+      backend.resize(tab.id, cols, rows);
+    });
+
+    // Poll the sub-shell's foreground process — hidden commands are only
+    // intercepted at a bare shell prompt (same rule as the main terminal).
+    let fgPoll: ReturnType<typeof setInterval> | null = null;
+    if (backend.getForegroundProcess) {
+      void backend
+        .getDefaultShell?.()
+        .then((s) => {
+          shellNameRef.current = (s.split(/[/\\]/).pop() ?? s).toLowerCase();
+        })
+        .catch(() => {});
+      fgPoll = setInterval(() => {
+        void backend
+          .getForegroundProcess?.(tab.id)
+          .then((p) => {
+            const name = p?.toLowerCase() ?? '';
+            const isShell = !name || name === shellNameRef.current;
+            foregroundRef.current = isShell ? null : p;
+          })
+          .catch(() => {});
+      }, 1000);
+    }
+
+    // An unclosed OSC 8 hyperlink underlines every subsequent cell; the
+    // guard injects a link-closer into the parser once the leak is big
+    // enough to be certain it wasn't a merely long legitimate link.
+    const outputDecoder = new TextDecoder();
+    const osc8Guard = createOsc8LeakGuard(() => t.write(OSC8_CLOSE));
+    let outputTail = '';
+    const unlistenOut = backend.onOutput(tab.id, (data) => {
+      t.write(data);
+      const text = outputDecoder.decode(data, { stream: true });
+      osc8Guard(text);
+      const current = tabRef.current;
+      if (current.agent !== 'devin') return;
+      outputTail = (outputTail + text).slice(-16_384);
+      const name = parseDevinSessionName(outputTail, true);
+      if (!name) return;
+      const resumeCommand = talkResumeCommand('devin', name);
+      if (current.resumeCommand !== resumeCommand) {
+        onUpdateTabRef.current?.({ resumeCommand });
+      }
+    });
+    const unlistenExit = backend.onSubshellExit?.((ptyId, exitCode) => {
+      if (ptyId !== tab.id) return;
+      exitedRef.current = true;
+      t.writeln(
+        `\r\n\x1b[2m[process exited${exitCode != null ? ` (${exitCode})` : ''} — Enter to re-run, Esc to close]\x1b[0m`,
+      );
+    });
+
+    // A StrictMode replay retains the lazy-start flag, so the replacement
+    // view must attach its completion handler to the shared pending spawn.
+    if (spawnedRef.current) spawn(true);
+
+    return () => {
+      active = false;
+      unlistenOut?.();
+      unlistenExit?.();
+      if (fgPoll) clearInterval(fgPoll);
+      onData.dispose();
+      onResize.dispose();
+      window.removeEventListener('resize', fitWindow);
+      resizeObserver?.disconnect();
+      // Keep-alive PTYs survive the unmount: a promoted sub-shell becomes the
+      // session's main view, a demoted main re-shows here, and "turn into
+      // workspace" tabs reattach as standalone sessions.
+      pty.release(takePtyKeepAlive(tab.id));
+      t.dispose();
+      term.current = null;
+      fitAddon.current = null;
+    };
+  }, [tab.id, session.id, tab.command]);
+
+  useEffect(() => {
+    if (!term.current) return;
+    const shellFont = resolveShellFont(settings);
+    term.current.options.theme = getXtermColors(activeTheme);
+    term.current.options.fontFamily = shellFont.family;
+    term.current.options.fontSize = shellFont.size;
+    if (isVisibleRef.current) fitAddon.current?.fit();
+  }, [activeTheme, settings.shellFontFamily, settings.shellFontSize]);
+
+  // Renderer changes hot-swap the addon on the live terminal — recreating the
+  // PTY would kill the sub-shell. Skipped on mount; the PTY effect applies
+  // the initial choice.
+  useEffect(() => {
+    if (!rendererMountedRef.current) {
+      rendererMountedRef.current = true;
+      return;
+    }
+    rendererCleanupRef.current?.();
+    rendererCleanupRef.current = term.current
+      ? applyTerminalRenderer(term.current, settings.terminalRenderer).dispose
+      : null;
+  }, [settings.terminalRenderer]);
+
+  // Spawn lazily on first activation so restored tabs don't all fork at once.
+  useEffect(() => {
+    if (!isVisible || spawnedRef.current) return;
+    spawnedRef.current = true;
+    fitAddon.current?.fit();
+    spawnRef.current();
+  }, [isVisible]);
+
+  useEffect(() => {
+    if (!isVisible || !term.current) return;
+    fitAddon.current?.fit();
+    // Same as ShellTerminal: the webview may drop the accelerated canvas'
+    // backing while display:none, and nothing marks rows dirty — force a
+    // repaint so the view doesn't stay blank until the next click.
+    term.current.refresh(0, term.current.rows - 1);
+  }, [isVisible]);
+
+  return (
+    <div className="relative h-full w-full bg-[var(--terminal-bg)] p-1.5">
+      <div ref={terminalRef} className="h-full w-full" />
+    </div>
+  );
+}

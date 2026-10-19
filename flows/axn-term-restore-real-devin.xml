@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - real devin session restore"
+        description="Set AXN_TERM_DEVIN_SESSION to an available real session. Start axn-term, close it, and verify the exact session is restored.">
+    <tags>
+      <tag>axn-term</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_USE_REAL_DEVIN" value="true" />
+        <var name="AXN_TERM_DEVIN_WAIT_FOR" value="Devin CLI" />
+        <var name="AXN_TERM_TEST_VARIANT" value="second-workspace" />
+        <var name="AXN_TERM_DEVIN_CWD" value="/home/dev/axn-term" />
+      </env>
+    </setup>
+    <steps>
+      <script adapter="axn-term" action="prepare" description="Create temp state dir and do not install the fake devin binary" />
+      <assertions description="The test harness is ready">
+        <assert that="contains" value="state dir prepared" />
+      </assertions>
+
+      <script adapter="axn-term" action="start" description="Launch axn-term with the temp state dir" />
+      <assertions description="The app started">
+        <assert that="contains" value="app started" />
+      </assertions>
+
+      <script adapter="axn-term" action="runDevin" description="Wait for the real devin session to start" />
+      <assertions description="devin is running">
+        <assert that="contains" value="devin running" />
+      </assertions>
+
+      <script adapter="axn-term" action="close" description="Close axn-term so state is persisted" />
+      <assertions description="The app closed and saved state">
+        <assert that="contains" value="app closed" />
+      </assertions>
+
+      <script adapter="axn-term" action="reopen" description="Reopen axn-term and verify the restored session" />
+      <assertions description="The same real devin session is restored and only one window exists">
+        <assert that="contains" value="restored:" />
+        <assert that="contains" value="single window" />
+      </assertions>
+    </steps>
+  </flow>
+</flows>

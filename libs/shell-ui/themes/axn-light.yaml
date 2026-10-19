@@ -1,0 +1,42 @@
+id: axn-light
+name: Axn Light
+mode: light
+
+colors:
+  background: '#FFFFFF'
+  foreground: '#0F0B0A'
+  cursor: '#1E6F9A'
+  cursorAccent: '#FFFFFF'
+  selectionBackground: '#A2D7D7'
+  selectionForeground: '#0F0B0A'
+
+  black: '#EBEBEB'
+  red: '#F45B69'
+  green: '#1AAC5E'
+  yellow: '#D9A036'
+  blue: '#1E6F9A'
+  magenta: '#82333A'
+  cyan: '#3C99AF'
+  white: '#3A3A3A'
+
+  brightBlack: '#B0B0B0'
+  brightRed: '#F0A3AA'
+  brightGreen: '#41CA65'
+  brightYellow: '#E3B341'
+  brightBlue: '#59C3C3'
+  brightMagenta: '#F45B69'
+  brightCyan: '#59C3C3'
+  brightWhite: '#0F0B0A'
+
+ui:
+  bg: '#EBEBEB'
+  bgSecondary: '#FFFFFF'
+  surface: '#FFFFFF'
+  surfaceHover: '#EBEBEB'
+  text: '#0F0B0A'
+  textSecondary: '#3A3A3A'
+  textInverted: '#EBEBEB'
+  border: '#A2D7D7'
+  accent: '#1E6F9A'
+  accentHover: '#3C99AF'
+  cursor: '#1E6F9A'

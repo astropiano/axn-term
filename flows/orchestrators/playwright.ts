@@ -1,0 +1,73 @@
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+
+function findChromium(): string | undefined {
+  const cache = process.env.PLAYWRIGHT_BROWSERS_PATH || join(homedir(), '.cache', 'ms-playwright');
+  if (!existsSync(cache)) return undefined;
+
+  // Newest build first: playwright-core only drives the browser revision it
+  // ships with (or newer), and a lexical sort picked the oldest cached build —
+  // with several builds cached the app never finished loading
+  // (net::ERR_INSUFFICIENT_RESOURCES on Vite's dep chunks).
+  const build = (name: string) => Number(name.slice('chromium-'.length)) || 0;
+  const versions = readdirSync(cache)
+    .filter((name) => name.startsWith('chromium-') && !name.includes('headless'))
+    .sort((a, b) => build(b) - build(a));
+
+  for (const v of versions) {
+    const exe = join(cache, v, 'chrome-linux64', 'chrome');
+    if (existsSync(exe)) return exe;
+  }
+
+  return undefined;
+}
+
+export class PlaywrightOrchestrator {
+  private browser?: Browser;
+  private context?: BrowserContext;
+  private page?: Page;
+  private baseUrl: string = '';
+
+  async start(baseUrl: string, env: Record<string, string>): Promise<void> {
+    this.baseUrl = baseUrl;
+
+    const executablePath = env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || findChromium();
+    if (!executablePath) {
+      throw new Error(
+        'Could not find a Playwright Chromium executable. ' +
+          'Set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or ensure the default cache exists.'
+      );
+    }
+
+    this.browser = await chromium.launch({ executablePath, headless: true });
+    this.context = await this.browser.newContext({ viewport: { width: 1280, height: 720 } });
+    this.page = await this.context.newPage();
+    await this.page.goto(baseUrl, { waitUntil: 'networkidle' });
+  }
+
+  async run(steps: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+    if (!this.page) throw new Error('Orchestrator has not been started');
+
+    const outputs: string[] = [];
+    for (const stepPath of steps) {
+      const mod = await import(stepPath);
+      const step = mod.default;
+      if (typeof step !== 'function') {
+        throw new Error(`Step at ${stepPath} does not export a default function`);
+      }
+      const out = await step(this.page, this.baseUrl);
+      if (out) outputs.push(String(out));
+    }
+
+    return { exitCode: 0, stdout: outputs.join('\n'), stderr: '' };
+  }
+
+  async stop(): Promise<void> {
+    await this.context?.close();
+    await this.browser?.close();
+  }
+}
+
+export default new PlaywrightOrchestrator();

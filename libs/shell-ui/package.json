@@ -1,0 +1,30 @@
+{
+  "name": "@axn-term/shell-ui",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@lingui/core": "6.9.0",
+    "@lingui/react": "6.9.0",
+    "@xterm/addon-canvas": "^0.7.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "^6.0.0",
+    "asciidoctor": "^4.1.0",
+    "dompurify": "^3.4.15",
+    "js-yaml": "^5.4.1",
+    "lucide-react": "^0.400.0 || ^1.0.0",
+    "marked": "^18.0.14",
+    "mermaid": "^12.0.0",
+    "monaco-editor": "^0.56.0",
+    "react": "^19.0.0",
+    "vite-plugin-monaco-editor-esm": "^2.0.3"
+  },
+  "devDependencies": {
+    "@lingui/babel-plugin-lingui-macro": "6.9.0",
+    "@types/react": "^19.0.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "happy-dom": "^20.14.5",
+    "jsdom": "30.1.1",
+    "vitest": "^4.0.0 || ^5.0.0"
+  }
+}

@@ -1,0 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&display=swap');
+@import "../../../libs/ui/src/styles/theme.css";
+@import "../../../libs/shell-ui/src/styles.css";
+
+/* Tailwind v4 auto-detection only scans this app's tree — the shared shell
+   components live in libs/, outside it. */
+@source "../../../libs/shell-ui/src/**/*.{ts,tsx}";
+@source "../../../libs/session-backend/src/**/*.{ts,tsx}";

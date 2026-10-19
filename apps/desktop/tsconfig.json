@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "paths": {
+      "monaco-editor/esm/*": ["./node_modules/monaco-editor/esm/*"],
+      "@axn-term/session-backend": ["../../libs/session-backend/src/index.ts"],
+      "@axn-term/session-backend/tauri": ["../../libs/session-backend/src/tauri.ts"],
+      "@axn-term/session-backend/remote": ["../../libs/session-backend/src/remote.ts"],
+      // Sibling checkout: ../ramphastos (astropiano layout); containers
+      // mount it at /ramphastos (same relative depth).
+      "@astropiano/ramphastos-client": ["../../../ramphastos/src/client/ramphastos-client"],
+      "@axn-term/shell-ui": ["../../libs/shell-ui/src/index.ts"],
+      "@axn-term/plugin-sdk": ["../../libs/plugin-sdk/src/index.ts"]
+    },
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}

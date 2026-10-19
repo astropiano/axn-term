@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - Keycloak login and WebSocket shell"
+        orchestrator="orchestrators/playwright.ts">
+    <description>
+      Start the axn-term scenario and use Playwright to verify that a user
+      can log in through Keycloak and land in a working WebShell backed by
+      the .NET gateway.
+    </description>
+    <scenarios>
+      <!-- Project scenario scenarios/axn-term-online: axn-dev resolves global
+           (integration-repo) scenarios first and falls back to the current
+           repo's scenarios/, so run from inside this checkout. "shell" is the
+           named frontend-service (http://axn-term.<domain>:<port>) — Caddy
+           routes by host, so the bare caddy port would not reach the app. -->
+      <scenario name="axn-term-online" service="shell" adapter="tsAdapter">
+        <readiness service="shell" path="/" expected="200" />
+      </scenario>
+    </scenarios>
+    <setup>
+      <env>
+        <var name="TEST_USER" value="demo" />
+        <var name="TEST_PASSWORD" value="changeme" />
+      </env>
+    </setup>
+    <steps>
+      <step src="steps/login.ts"
+            description="Open the shell UI, log in with Keycloak, and wait for the container terminal prompt" />
+      <assertions description="The user is authenticated and the container shell prompt is visible">
+        <assert that="exitCode" value="0" description="Playwright step exits successfully" />
+        <assert that="contains"
+                value="Shell login and WebSocket connection verified"
+                description="Step reports a successful login and WebSocket shell connection" />
+      </assertions>
+    </steps>
+  </flow>
+</flows>

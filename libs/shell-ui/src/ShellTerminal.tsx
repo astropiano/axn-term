@@ -1,0 +1,762 @@
+import { useEffect, useRef, useState } from 'react';
+import { Terminal, type ILink, type ILinkProvider } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import type { PathStat, SessionBackend, Unsubscribe } from '@axn-term/session-backend';
+import { PathActionMenu } from './PathActionMenu';
+import type { ShellSession } from './types';
+import { useSettings } from './SettingsProvider';
+import { getXtermColors, resolveShellFont } from './themes';
+import { registerTerminal, takePtyKeepAlive, unregisterTerminal } from './terminalRegistry';
+import { applyTerminalRenderer } from './terminalRenderer';
+import { acquirePty } from './ptyLifetime';
+import { foregroundStatusPatch } from './foregroundStatus';
+import {
+  createLookupCache,
+  createOsc8LeakGuard,
+  OSC8_CLOSE,
+  extractLinkTokens,
+  extendWrappedUrl,
+  findWrappedUrlThrough,
+  URL_START_RE,
+  type GetLinkLine,
+} from './terminalLinks';
+import { DEVIN_PROCESS_RE } from './processPatterns';
+import { createHiddenCommandInput } from './app/hiddenCommands';
+import { isAppNavigationShortcut } from './app/shortcuts';
+import { useShellServices } from './services';
+
+import '@xterm/xterm/css/xterm.css';
+
+interface ShellTerminalProps {
+  session: ShellSession;
+  /** Environment backend — Tauri invoke/events on desktop, gateway WS online. */
+  backend: SessionBackend;
+  onSessionNameChange?: (sessionId: string, name: string) => void;
+  onSessionOutput?: (sessionId: string, text: string) => void;
+  onEditorRequest?: (sessionId: string, path: string) => void;
+  onBrowserRequest?: (sessionId: string, path: string) => void;
+  onPreviewRequest?: (sessionId: string, path: string) => void;
+  onSessionCommand?: (
+    sessionId: string,
+    line: string,
+  ) => string | false | undefined | Promise<string | false | undefined>;
+  /**
+   * Tab-completion for `axn-*` hidden commands. Given the current input line,
+   * resolves the full-line candidates; the terminal applies a unique match or
+   * the longest common prefix.
+   */
+  onCompleteInput?: (sessionId: string, line: string) => Promise<string[]>;
+  updateSession?: (sessionId: string, patch: Partial<ShellSession>) => void;
+  isVisible?: boolean;
+  onSessionReady?: (session: ShellSession) => void;
+}
+
+interface HoverCardState {
+  x: number;
+  y: number;
+  /** Absolute file path — or the URL itself when `isUrl` is set. */
+  resolvedPath: string;
+  isDir: boolean;
+  isUrl?: boolean;
+  copyOnly?: boolean;
+}
+
+const URL_TOKEN = /^https?:\/\/\S+$/i;
+const FILE_URL_TOKEN = /^file:\/\/\S+$/i;
+
+const HOVER_DELAY_MS = 500;
+const HOVER_HIDE_MS = 250;
+
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(
+    /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|][^\x07]*(?:\x07|\x1B\\)|\([A-Za-z0-9]|\)[A-Za-z0-9])/g,
+    '',
+  );
+}
+
+export function ShellTerminal({
+  session,
+  backend,
+  onSessionNameChange,
+  onSessionOutput,
+  onEditorRequest,
+  onBrowserRequest,
+  onPreviewRequest,
+  onSessionCommand,
+  onCompleteInput,
+  updateSession,
+  isVisible,
+  onSessionReady,
+}: ShellTerminalProps) {
+  const terminalRef = useRef<HTMLDivElement | null>(null);
+  const terminal = useRef<Terminal | null>(null);
+  const fitAddon = useRef<FitAddon | null>(null);
+  const devinActiveRef = useRef(session.devinActive ?? false);
+  const shellNameRef = useRef('');
+  const cwdRef = useRef(session.cwd ?? '');
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const isVisibleRef = useRef(isVisible);
+  const onEditorRequestRef = useRef(onEditorRequest);
+  onEditorRequestRef.current = onEditorRequest;
+  const onBrowserRequestRef = useRef(onBrowserRequest);
+  onBrowserRequestRef.current = onBrowserRequest;
+  const onPreviewRequestRef = useRef(onPreviewRequest);
+  onPreviewRequestRef.current = onPreviewRequest;
+  const onSessionCommandRef = useRef(onSessionCommand);
+  onSessionCommandRef.current = onSessionCommand;
+  const onCompleteInputRef = useRef(onCompleteInput);
+  onCompleteInputRef.current = onCompleteInput;
+  const onSessionReadyRef = useRef(onSessionReady);
+  onSessionReadyRef.current = onSessionReady;
+  const { activeTheme, settings } = useSettings();
+  const { services } = useShellServices();
+  // Disposes the active GPU renderer addon when the setting hot-swaps; the
+  // addon itself is also disposed by term.dispose() on teardown.
+  const rendererCleanupRef = useRef<(() => void) | null>(null);
+  const rendererMountedRef = useRef(false);
+  const [hoverCard, setHoverCard] = useState<HoverCardState | null>(null);
+  const hoverCardRef = useRef<HoverCardState | null>(null);
+  const hoverCardElRef = useRef<HTMLDivElement | null>(null);
+  const lastHoverPathRef = useRef<string | null>(null);
+  const hoverShowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearHoverTimers = () => {
+    if (hoverShowTimer.current) {
+      clearTimeout(hoverShowTimer.current);
+      hoverShowTimer.current = null;
+    }
+    if (hoverHideTimer.current) {
+      clearTimeout(hoverHideTimer.current);
+      hoverHideTimer.current = null;
+    }
+  };
+
+  useEffect(() => {
+    clearHoverTimers();
+    setHoverCard(null);
+  }, [session.id]);
+
+  useEffect(() => {
+    hoverCardRef.current = hoverCard;
+  }, [hoverCard]);
+
+  const showHoverCard = (
+    event: MouseEvent,
+    stat: PathStat,
+    isUrl = false,
+    delay = HOVER_DELAY_MS,
+    copyOnly = false,
+  ) => {
+    clearHoverTimers();
+    hoverShowTimer.current = setTimeout(() => {
+      const rect = terminalRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = 384;
+      const x = Math.min(Math.max(event.clientX - rect.left, 4), Math.max(rect.width - width - 8, 4));
+      const y = Math.min(event.clientY - rect.top + 14, Math.max(rect.height - 120, 4));
+      setHoverCard({ x, y, resolvedPath: stat.path, isDir: stat.isDir, isUrl, copyOnly });
+    }, delay);
+  };
+
+  const armHoverHide = (delay: number) => {
+    if (hoverHideTimer.current) clearTimeout(hoverHideTimer.current);
+    hoverHideTimer.current = setTimeout(() => {
+      // Never hide while the pointer is over the card. `mouseenter` can be
+      // missed entirely when the card materializes under a stationary cursor
+      // (the y position is clamped near the bottom edge), and xterm re-fires
+      // `leave` on every viewport re-render.
+      if (hoverCardElRef.current?.matches(':hover')) return;
+      setHoverCard(null);
+    }, delay);
+  };
+
+  const scheduleHideHoverCard = (delay = HOVER_HIDE_MS) => {
+    if (hoverShowTimer.current) {
+      clearTimeout(hoverShowTimer.current);
+      hoverShowTimer.current = null;
+    }
+    armHoverHide(delay);
+  };
+
+  const cancelHideHoverCard = () => {
+    if (hoverHideTimer.current) {
+      clearTimeout(hoverHideTimer.current);
+      hoverHideTimer.current = null;
+    }
+  };
+
+  useEffect(() => {
+    cwdRef.current = session.cwd ?? '';
+  }, [session.cwd]);
+
+  useEffect(() => {
+    isVisibleRef.current = isVisible;
+  }, [isVisible]);
+
+  useEffect(() => {
+    devinActiveRef.current = session.devinActive ?? false;
+  }, [session.devinActive]);
+
+  useEffect(() => {
+    if (!terminalRef.current) return;
+
+    const shellFont = resolveShellFont(settings);
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: shellFont.size,
+      fontFamily: shellFont.family,
+      allowProposedApi: true,
+      theme: getXtermColors(activeTheme),
+    });
+
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(terminalRef.current);
+    registerTerminal(session.id, term);
+    rendererCleanupRef.current = applyTerminalRenderer(
+      term,
+      settings.terminalRenderer,
+    ).dispose;
+
+    const fitWindow = () => {
+      if (isVisibleRef.current) fit.fit();
+    };
+    window.addEventListener('resize', fitWindow);
+
+    let resizeObserver: ResizeObserver | undefined;
+    if ('ResizeObserver' in window) {
+      resizeObserver = new ResizeObserver(() => {
+        if (isVisibleRef.current) fit.fit();
+      });
+      resizeObserver.observe(terminalRef.current);
+    }
+
+    // Copy / paste support. Handled via the DOM clipboard events in the
+    // capture phase so the webview's native paste (Ctrl+V, Ctrl+Shift+V,
+    // Cmd+V, context menu, …) and xterm's own paste listener are both
+    // preempted — handling it in a keydown handler as well would paste twice.
+    const termEl = terminalRef.current;
+    const onCopy = (e: ClipboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const selection = term.getSelection();
+      if (!selection) return;
+      if (e.clipboardData) {
+        e.clipboardData.setData('text/plain', selection);
+      }
+      void Promise.resolve(services.copyText(selection)).catch(() => {});
+      term.clearSelection();
+    };
+    const onPaste = (e: ClipboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      if (text) {
+        term.paste(text);
+      } else {
+        services
+          .pasteText?.()
+          .then((clip) => {
+            if (clip) term.paste(clip);
+          })
+          .catch(() => {});
+      }
+    };
+    termEl?.addEventListener('copy', onCopy, true);
+    termEl?.addEventListener('paste', onPaste, true);
+
+    let onData: { dispose: () => void } | null = null;
+    let onResize: { dispose: () => void } | null = null;
+    let onTitleChange: { dispose: () => void } | null = null;
+    let linkProviderDisposable: { dispose: () => void } | null = null;
+    let onSelectionMouseUp: ((event: MouseEvent) => void) | null = null;
+    let unlisten: Unsubscribe | null = null;
+    let processInterval: ReturnType<typeof setInterval> | null = null;
+    let cwdInterval: ReturnType<typeof setInterval> | null = null;
+    let enterPollTimeout: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
+    const decoder = new TextDecoder();
+
+    const sessionId = session.id;
+    // Backend PTY this view is bound to — normally the session itself, but a
+    // promoted sub-shell takes over the pinned shell view while keeping its
+    // own PTY id.
+    const ptyId = session.mainPtyId ?? session.id;
+    const shell = settings.defaultShell?.trim() || undefined;
+    const pty = acquirePty(backend, ptyId, () => {
+      const dims = isVisibleRef.current
+        ? (fit.fit(), fit.proposeDimensions())
+        : undefined;
+      return backend.createSession(ptyId, {
+        shell,
+        cwd: session.cwd,
+        cols: dims?.cols ?? term.cols,
+        rows: dims?.rows ?? term.rows,
+      });
+    });
+
+    (async () => {
+      try {
+        // Attach the title listener and shell-output listener before creating the
+        // session so that early OSC title sequences (e.g. from devin)
+        // are not lost while the PTY starts up.
+        onTitleChange = term.onTitleChange((title) => {
+          if (title && onSessionNameChange) {
+            onSessionNameChange(sessionId, title);
+          }
+
+          // Heuristic: devin sets the terminal title while it runs, so use it as a
+          // per-session signal to enable the devin task parser.
+          const devinActive = /devin/i.test(title);
+          if (devinActive && !devinActiveRef.current && updateSession) {
+            devinActiveRef.current = true;
+            updateSession(sessionId, { devinActive: true });
+          }
+        });
+
+        // An unclosed OSC 8 hyperlink underlines every subsequent cell; the
+        // guard injects a link-closer into the parser once the leak is big
+        // enough to be certain it wasn't a merely long legitimate link.
+        const osc8Guard = createOsc8LeakGuard(() => term.write(OSC8_CLOSE));
+        unlisten = backend.onOutput(ptyId, (bytes) => {
+          term.write(bytes);
+
+          const raw = decoder.decode(bytes, { stream: true });
+          osc8Guard(raw);
+          const text = stripAnsi(raw);
+          if (text && onSessionOutput) {
+            onSessionOutput(sessionId, text);
+          }
+        });
+        if (!active) return;
+
+        // Spawn the PTY at the terminal's real size instead of the 80x24
+        // default, so full-screen programs started right away (e.g. devin)
+        // already see the correct width without needing a window resize.
+        // Fit first so xterm has measured the container; otherwise proposeDimensions
+        // may be undefined and term.cols/rows can be 0. Skip when the
+        // container is hidden (display:none — restored background sessions
+        // mount that way): there is no size to measure, proposeDimensions
+        // would clamp to 2 cols, and the post-spawn resize below corrects
+        // the size once visible anyway.
+        // `false` = attached to an already-running PTY (promoted sub-shell or
+        // adopted session) — not a fresh spawn, so plugin onSessionOpen hooks
+        // must not fire (they assume an empty shell and e.g. inject restore
+        // commands).
+        const spawned = await pty.start();
+        if (!active) return;
+
+        if (spawned) onSessionReadyRef.current?.(sessionRef.current);
+
+        const resolvedShell = shell || (await backend.getDefaultShell?.()) || 'sh';
+        if (!active) return;
+        shellNameRef.current = resolvedShell.split(/[/\\]/).pop() ?? resolvedShell;
+
+        const pollCwd = async () => {
+          try {
+            const cwd = (await backend.getCwd?.(ptyId)) ?? null;
+            if (!active) return;
+            if (cwd && cwd !== cwdRef.current) {
+              cwdRef.current = cwd;
+              // A cwd patch is structural — updateSession saves it eagerly.
+              updateSession?.(sessionId, { cwd });
+            }
+          } catch {
+            // ignore
+          }
+        };
+
+        onResize = term.onResize(({ cols, rows }) => {
+          backend.resize(ptyId, cols, rows);
+        });
+
+        // The spawn-time fit can run on a hidden (display:none) or not yet
+        // laid-out container — restored background sessions mount that way —
+        // and proposeDimensions then clamps to 2 cols, so the PTY was spawned
+        // nearly column-less ("text staffed to the left"). Re-fit now and push
+        // the live size once, so the PTY converges on the real dimensions even
+        // if an early onResize event was missed before the handler bound.
+        if (isVisibleRef.current) fit.fit();
+        backend.resize(ptyId, term.cols, term.rows);
+
+        // Turn path-like tokens in the buffer into hoverable links. When the
+        // mouse dwells on a resolved file, a preview card with an Edit button
+        // appears; clicking the link opens the editor directly. URLs split
+        // across a line break (soft wrap, or a wrapped table cell) are
+        // reconstructed across the fragment rows so the full link opens.
+        const getLinkLine: GetLinkLine = (index) => {
+          const l = term.buffer.active.getLine(index);
+          return l
+            ? { text: l.translateToString(true), isWrapped: l.isWrapped }
+            : undefined;
+        };
+        // Keyed by cwd + token; hits are kept (bounded), misses re-checked
+        // after a few seconds so newly created files become links.
+        const statCached = createLookupCache<PathStat>(async (key) => {
+          const sep = key.indexOf('\n');
+          return (await backend.statPath?.(ptyId, key.slice(0, sep), key.slice(sep + 1))) ?? null;
+        });
+        const statToken = (token: string): Promise<PathStat | null> =>
+          statCached(`${cwdRef.current}\n${token}`);
+
+        /** Resolve a raw token to a path stat, http(s) URL, or null. */
+        const resolveToken = async (
+          token: string,
+        ): Promise<{ stat: PathStat; isUrl: boolean } | null> => {
+          if (URL_TOKEN.test(token)) {
+            return { stat: { path: token, isFile: false, isDir: false }, isUrl: true };
+          }
+          // file:///abs/path — stat the underlying path so it behaves
+          // like any other discovered file/directory.
+          let t = token;
+          if (FILE_URL_TOKEN.test(t)) {
+            const stripped = t.replace(/^file:\/\/[^/]*/i, '');
+            try {
+              t = decodeURIComponent(stripped) || stripped;
+            } catch {
+              t = stripped;
+            }
+          }
+          const stat = await statToken(t);
+          return stat ? { stat, isUrl: false } : null;
+        };
+
+        const linkProvider: ILinkProvider = {
+          provideLinks: (bufferLineNumber, callback) => {
+            const lineIndex = bufferLineNumber - 1;
+            const text = getLinkLine(lineIndex)?.text ?? '';
+            const candidates = extractLinkTokens(text, 32, 2);
+            if (candidates.length === 0) {
+              callback(undefined);
+              return;
+            }
+            void (async () => {
+              const links: ILink[] = [];
+              for (const c of candidates) {
+                const end = c.start + c.token.length;
+                // A scheme token may continue onto the rows below; a plain
+                // fragment may be the tail of a URL starting on a row above.
+                const wrapped = URL_START_RE.test(c.token)
+                  ? extendWrappedUrl(getLinkLine, lineIndex, c.start, end)
+                  : findWrappedUrlThrough(getLinkLine, lineIndex, c.start, end);
+                const resolved = await resolveToken(wrapped?.url ?? c.token);
+                if (!resolved) continue;
+                const { stat, isUrl } = resolved;
+                const last = wrapped?.segments[wrapped.segments.length - 1];
+                const link: ILink = {
+                  range:
+                    wrapped && last
+                      ? {
+                          start: {
+                            x: wrapped.segments[0].start + 1,
+                            y: wrapped.segments[0].line + 1,
+                          },
+                          end: { x: last.end, y: last.line + 1 },
+                        }
+                      : {
+                          start: { x: c.start + 1, y: bufferLineNumber },
+                          end: { x: end, y: bufferLineNumber },
+                        },
+                  text: wrapped?.url ?? c.token,
+                  activate: isUrl
+                    ? () => {
+                        services.openExternal(stat.path);
+                      }
+                    : () => {},
+                  decorations: { pointerCursor: true, underline: true },
+                };
+                // Files always get the preview card; a reconstructed URL gets
+                // one too so the joined link can be seen and copied before
+                // opening it.
+                if (!isUrl || wrapped) {
+                  link.hover = (event: MouseEvent) => {
+                    // xterm 6 clears the hovered link and re-fires
+                    // leave+hover on every viewport re-render (output,
+                    // scroll) and on resize — restarting the 500ms show
+                    // delay each time would starve it forever. Once the
+                    // card is visible just keep it alive — retarget only to
+                    // a different path, since re-showing the same card at the
+                    // latest event position makes it chase the cursor (or
+                    // jump under it) while the user moves to click a button.
+                    // While a show is already pending, only cancel the
+                    // pending hide. After a synthetic leave ate the pending
+                    // show, a re-hover of the same target shows instantly.
+                    if (hoverCardRef.current) {
+                      cancelHideHoverCard();
+                      if (hoverCardRef.current.resolvedPath !== stat.path) {
+                        showHoverCard(event, stat, isUrl, 0);
+                      }
+                    } else if (hoverShowTimer.current) {
+                      cancelHideHoverCard();
+                    } else {
+                      const reHover = lastHoverPathRef.current === stat.path;
+                      lastHoverPathRef.current = stat.path;
+                      showHoverCard(event, stat, isUrl, reHover ? 0 : undefined);
+                    }
+                  };
+                  link.leave = () => scheduleHideHoverCard();
+                }
+                links.push(link);
+              }
+              callback(links.length > 0 ? links : undefined);
+            })();
+          },
+        };
+        linkProviderDisposable = term.registerLinkProvider(linkProvider);
+
+        // Selected text gets the same path detection: after a mouse selection
+        // ends, check whether the selection is a path/URL itself or contains
+        // one, and show the action card at the cursor position right away.
+        onSelectionMouseUp = (event: MouseEvent) => {
+          if (event.button !== 0) return;
+          const selection = term.getSelection().trim();
+          if (selection.length < 2) return;
+          void (async () => {
+            const strip = (t: string) =>
+              t
+                .replace(/^[.,;:'"()[\]{}<>*]+/, '')
+                .replace(/[.,;:'"()[\]{}<>*@|=]+$/, '');
+            const tokens = selection.split(/\s+/).filter(Boolean);
+            if (tokens.length === 1) {
+              const resolved = await resolveToken(strip(tokens[0]));
+              if (resolved && active) {
+                showHoverCard(event, resolved.stat, resolved.isUrl, 0);
+              }
+            } else if (active) {
+              // Multi-token selection: don't try to pick a path out of it;
+              // just offer a copy of the whole selected text.
+              showHoverCard(
+                event,
+                { path: selection, isFile: false, isDir: false },
+                false,
+                0,
+                true,
+              );
+            }
+            // No link `leave` fires for a selection-triggered card — hide it
+            // after a while unless the pointer moves onto the card (which
+            // cancels the hide timer via onMouseEnter). armHoverHide, not
+            // scheduleHideHoverCard: the 0ms show timer above hasn't fired
+            // yet and must not be cleared.
+            armHoverHide(4000);
+          })();
+        };
+        termEl?.addEventListener('mouseup', onSelectionMouseUp);
+
+        // Track the current input line so "hidden commands" (axn-edit)
+        // can be intercepted before they are submitted to the shell.
+        // Devin input is tracked only to notify plugins before a manual /exit.
+        const hiddenInput = createHiddenCommandInput({
+          write: (d) => backend.write(ptyId, d),
+          mode: () =>
+            DEVIN_PROCESS_RE.test(sessionRef.current.process ?? '')
+              ? 'devin'
+              : !sessionRef.current.process
+                ? 'full'
+                : 'off',
+          onEditorRequest: (path) => onEditorRequestRef.current?.(sessionId, path),
+          onBrowserRequest: (path) => onBrowserRequestRef.current?.(sessionId, path),
+          onPreviewRequest: (path) => onPreviewRequestRef.current?.(sessionId, path),
+          onSessionCommand: (line) => onSessionCommandRef.current?.(sessionId, line),
+          onCompleteInput: (line) =>
+            active ? (onCompleteInputRef.current?.(sessionId, line) ?? Promise.resolve([])) : Promise.resolve([]),
+        });
+
+        // xterm.js sends a bare \r for both Enter and Shift+Enter, so the
+        // shell/TUI cannot tell them apart. Intercept Shift+Enter and inject a
+        // bracketed-paste wrapped newline (\x1b[200~\n\x1b[201~). Most modern
+        // line editors (readline 8.1+, prompt_toolkit, Claude Code, etc.) treat
+        // this as a literal newline insert instead of a submit. We suppress the
+        // keydown *and* keypress/keyup paths so xterm.js never emits the bare
+        // \r for Shift+Enter.
+        term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+          // App navigation shortcuts must bubble to ShellApp's window
+          // listener instead of becoming escape sequences.
+          if (isAppNavigationShortcut(event)) return false;
+          const isShiftEnter =
+            event.key === 'Enter' &&
+            event.shiftKey &&
+            !event.ctrlKey &&
+            !event.altKey &&
+            !event.metaKey;
+          if (isShiftEnter) {
+            if (event.type === 'keydown') {
+              backend.write(ptyId, '\x1b[200~\n\x1b[201~');
+            }
+            return false;
+          }
+          return true;
+        });
+
+        onData = term.onData((data) => {
+          if (hiddenInput(data)) return;
+
+          backend.write(ptyId, data);
+          // Poll cwd shortly after the user presses Enter so cd changes are
+          // persisted quickly instead of waiting for the next interval.
+          if (data.includes('\r') || data.includes('\n')) {
+            if (enterPollTimeout) clearTimeout(enterPollTimeout);
+            enterPollTimeout = setTimeout(() => {
+              if (active) void pollCwd();
+            }, 120);
+          }
+        });
+
+        if (isVisibleRef.current) fit.fit();
+        // onResize only fires on a size *change*; push the current size
+        // unconditionally so the PTY is never left at the spawn dimensions.
+        backend.resize(ptyId, term.cols, term.rows);
+
+        processInterval = setInterval(async () => {
+          try {
+            const process = (await backend.getForegroundProcess?.(ptyId)) ?? null;
+            if (!active) return;
+
+            const processName = process?.toLowerCase() ?? '';
+            const shellName = shellNameRef.current.toLowerCase();
+            const isShell = !processName || processName === shellName;
+            const isTaskRunner = DEVIN_PROCESS_RE.test(processName);
+
+            const processDisplay = isShell ? undefined : (process ?? undefined);
+            const patch = foregroundStatusPatch(sessionRef.current, processDisplay);
+
+            if (isTaskRunner && !devinActiveRef.current) {
+              devinActiveRef.current = true;
+              patch.devinActive = true;
+            } else if (!isTaskRunner && devinActiveRef.current) {
+              devinActiveRef.current = false;
+              patch.devinActive = false;
+            }
+
+            if (Object.keys(patch).length > 0) {
+              updateSession?.(sessionId, patch);
+            }
+          } catch {
+            // ignore
+          }
+        }, 1000);
+
+        // Poll cwd for every session — a hidden session's cwd is still needed
+        // (e.g. plugins record where devin actually ran; relying on persisted
+        // cwd breaks restore for non-visible sessions). Only when the backend
+        // can answer cwd queries.
+        if (backend.getCwd) {
+          void pollCwd();
+          cwdInterval = setInterval(pollCwd, 1000);
+        }
+        // Foreground-process polling is a desktop capability; skip when the
+        // backend can't report it (e.g. the WS gateway).
+        if (!backend.getForegroundProcess && processInterval) {
+          clearInterval(processInterval);
+          processInterval = null;
+        }
+      } catch {
+        if (!active) return;
+        term.writeln(`\r\nFailed to start shell session "${session.name}".`);
+      }
+    })();
+
+    terminal.current = term;
+    fitAddon.current = fit;
+
+    return () => {
+      active = false;
+      if (processInterval) clearInterval(processInterval);
+      if (cwdInterval) clearInterval(cwdInterval);
+      if (enterPollTimeout) clearTimeout(enterPollTimeout);
+      clearHoverTimers();
+      setHoverCard(null);
+      linkProviderDisposable?.dispose();
+      termEl?.removeEventListener('copy', onCopy, true);
+      termEl?.removeEventListener('paste', onPaste, true);
+      if (onSelectionMouseUp) termEl?.removeEventListener('mouseup', onSelectionMouseUp);
+      window.removeEventListener('resize', fitWindow);
+      resizeObserver?.disconnect();
+      onResize?.dispose();
+      onData?.dispose();
+      onTitleChange?.dispose();
+      unlisten?.();
+      // A PTY flagged keep-alive survives this unmount — it reattaches in a
+      // different view (sub-shell promoted to main, demoted main re-shown as
+      // a sub-shell tab).
+      pty.release(takePtyKeepAlive(ptyId));
+      unregisterTerminal(sessionId, term);
+      term.dispose();
+      terminal.current = null;
+      fitAddon.current = null;
+    };
+  }, [
+    session.id,
+    session.mainPtyId,
+    backend,
+    services,
+    settings.defaultShell,
+    onSessionNameChange,
+    onSessionOutput,
+    updateSession,
+  ]);
+
+  useEffect(() => {
+    if (!terminal.current) return;
+    const shellFont = resolveShellFont(settings);
+    terminal.current.options.theme = getXtermColors(activeTheme);
+    terminal.current.options.fontFamily = shellFont.family;
+    terminal.current.options.fontSize = shellFont.size;
+    if (isVisibleRef.current) fitAddon.current?.fit();
+  }, [activeTheme, settings.shellFontFamily, settings.shellFontSize]);
+
+  // Renderer changes hot-swap the addon on the live terminal — the PTY effect
+  // above can't react (its teardown would kill the session). Skipped on mount:
+  // the PTY effect applies the initial choice.
+  useEffect(() => {
+    if (!rendererMountedRef.current) {
+      rendererMountedRef.current = true;
+      return;
+    }
+    rendererCleanupRef.current?.();
+    rendererCleanupRef.current = terminal.current
+      ? applyTerminalRenderer(terminal.current, settings.terminalRenderer).dispose
+      : null;
+  }, [settings.terminalRenderer]);
+
+  useEffect(() => {
+    if (!isVisible || !terminal.current || !fitAddon.current) return;
+    fitAddon.current.fit();
+    // A display:none terminal pauses xterm's renderer (IntersectionObserver),
+    // and the webview can drop the accelerated canvas' backing meanwhile. When
+    // no output arrived while hidden and fit() didn't resize, nothing marks
+    // rows dirty and the canvas stays blank until the next focus/click —
+    // force a repaint of the viewport.
+    terminal.current.refresh(0, terminal.current.rows - 1);
+  }, [isVisible]);
+
+  return (
+    <div className="relative h-full w-full bg-[var(--terminal-bg)] p-1.5">
+      <div ref={terminalRef} className="h-full w-full" />
+      {hoverCard && (
+        <div
+          ref={hoverCardElRef}
+          className="absolute z-50 w-96 rounded-md border border-[var(--border)] bg-[var(--bg-secondary)] shadow-xl"
+          style={{ left: hoverCard.x, top: hoverCard.y }}
+          onMouseEnter={cancelHideHoverCard}
+          onMouseMove={cancelHideHoverCard}
+          onMouseLeave={() => scheduleHideHoverCard()}
+        >
+          <PathActionMenu
+            resolvedPath={hoverCard.resolvedPath}
+            isDir={hoverCard.isDir}
+            isUrl={hoverCard.isUrl}
+            sessionId={session.id}
+            copyOnly={hoverCard.copyOnly}
+            onEdit={(p) => onEditorRequestRef.current?.(session.id, p)}
+            onPreview={(p) => onPreviewRequestRef.current?.(session.id, p)}
+            onDismiss={() => setHoverCard(null)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

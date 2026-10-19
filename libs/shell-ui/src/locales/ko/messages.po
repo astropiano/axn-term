@@ -1,0 +1,294 @@
+msgid ""
+msgstr ""
+"Language: ko\n"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:800
+msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
+msgstr "Lucide 아이콘 이름(예: <0>GitFork</0>) 또는 인라인 SVG 태그(예: <1>{SVG_HINT_EXAMPLE}</1>)"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:825
+#: libs/shell-ui/src/app/SettingsModal.tsx:827
+msgid "Add icon"
+msgstr "아이콘 추가"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:56
+msgid "Auto"
+msgstr "자동"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:422
+msgid "Auto (WebGL → canvas → DOM)"
+msgstr "자동 (WebGL → 캔버스 → DOM)"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:82
+msgid "Binary file"
+msgstr "바이너리 파일"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:811
+msgid "Cancel"
+msgstr "취소"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:428
+msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
+msgstr "터미널의 셀 렌더러입니다. 자동은 GPU(WebGL)를 사용하고 자동으로 폴백합니다. 렌더링 문제가 있으면 캔버스/DOM으로 고정하세요."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:447
+msgid "Config file"
+msgstr "설정 파일"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:215
+msgid "Copy"
+msgstr "복사"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:284
+#: libs/shell-ui/src/PathActionMenu.tsx:288
+msgid "Copy Path"
+msgstr "경로 복사"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:211
+msgid "Copy selection"
+msgstr "선택 영역 복사"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:284
+#: libs/shell-ui/src/PathActionMenu.tsx:288
+msgid "Copy URL"
+msgstr "URL 복사"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:189
+msgid "Could not parse the file as YAML."
+msgstr "파일을 YAML로 파싱할 수 없습니다."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:55
+msgid "Dark"
+msgstr "다크"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:264
+msgid "Dark theme"
+msgstr "다크 테마"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:292
+msgid "Default shell"
+msgstr "기본 셸"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:42
+msgid "Directory"
+msgstr "디렉터리"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:549
+msgid "disabled"
+msgstr "비활성화됨"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:256
+msgid "Edit"
+msgstr "편집"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:754
+msgid "Edit icon"
+msgstr "아이콘 편집"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:392
+msgid "Enable devin task parser"
+msgstr "Devin 작업 파서 활성화"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:549
+#: libs/shell-ui/src/app/SettingsModal.tsx:596
+msgid "enabled"
+msgstr "활성화됨"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:200
+msgid "Export failed."
+msgstr "보내기에 실패했습니다."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:462
+msgid "Export…"
+msgstr "보내기…"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:198
+msgid "Exported."
+msgstr "보냈습니다."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:566
+msgid "file preview"
+msgstr "파일 미리보기"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:497
+msgid "File previews"
+msgstr "파일 미리보기"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:379
+msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
+msgstr "세션/워크스페이스 패널의 글꼴입니다. 크기는 기본 12px 기준으로 배율이 적용됩니다."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:342
+#: libs/shell-ui/src/app/SettingsModal.tsx:374
+msgid "Font size (px)"
+msgstr "글꼴 크기 (px)"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:100
+msgid "General"
+msgstr "일반"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:470
+msgid "Import replaces all settings with the picked config.yaml."
+msgstr "가져오기는 모든 설정을 선택한 config.yaml로 대체합니다."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:455
+msgid "Import…"
+msgstr "가져오기…"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:187
+msgid "Imported."
+msgstr "가져왔습니다."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:276
+msgid "Language"
+msgstr "언어"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:315
+msgid "Leave empty to use the system $SHELL."
+msgstr "비워 두면 시스템 $SHELL을 사용합니다."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:54
+msgid "Light"
+msgstr "라이트"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:256
+msgid "Light theme"
+msgstr "라이트 테마"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:125
+msgid "Loading…"
+msgstr "불러오는 중…"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:441
+msgid "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
+msgstr "실행 파일 이름을 Lucide 아이콘(예: Bot, SquareTerminal) 또는 SVG 태그에 매핑합니다."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:764
+msgid "No icons configured — every session shows the default terminal icon."
+msgstr "설정된 아이콘이 없습니다 — 모든 세션에 기본 터미널 아이콘이 표시됩니다."
+
+#: libs/shell-ui/src/WorkspacePicker.tsx:51
+msgid "no workspaces"
+msgstr "워크스페이스 없음"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:183
+msgid "Not a valid config.yaml — expected a YAML mapping."
+msgstr "유효한 config.yaml이 아닙니다 — YAML 매핑이어야 합니다."
+
+#: libs/shell-ui/src/PathActionMenu.tsx:229
+#: libs/shell-ui/src/PathActionMenu.tsx:242
+msgid "Open"
+msgstr "열기"
+
+#: libs/shell-ui/src/WorkspacePicker.tsx:33
+msgid "Open in workspace"
+msgstr "워크스페이스에서 열기"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:115
+msgid "Open preview in a tab"
+msgstr "탭에서 미리보기 열기"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:352
+msgid "Panel font"
+msgstr "패널 글꼴"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:101
+msgid "Plugins"
+msgstr "플러그인"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:263
+msgid "Preview"
+msgstr "미리보기"
+
+#: libs/shell-ui/src/PathActionMenu.tsx:48
+msgid "Preview unavailable"
+msgstr "미리보기를 사용할 수 없음"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:773
+msgid "Process"
+msgstr "프로세스"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:757
+msgid "Remove icon"
+msgstr "아이콘 제거"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:405
+msgid "Render session summaries (set via axn-session-summary)"
+msgstr "세션 요약 표시 (axn-session-summary로 설정)"
+
+#. placeholder {0}: dep.id
+#. placeholder {1}: dep.version ? ` ${dep.version}` : ''
+#: libs/shell-ui/src/app/SettingsModal.tsx:582
+msgid "requires {0}{1}"
+msgstr "{0}{1} 필요"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:819
+msgid "Save"
+msgstr "저장"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:437
+msgid "Session icons"
+msgstr "세션 아이콘"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:566
+msgid "session plugin"
+msgstr "세션 플러그인"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:491
+msgid "Session plugins"
+msgstr "세션 플러그인"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:131
+msgid "Settings"
+msgstr "설정"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:320
+msgid "Shell font"
+msgstr "셸 글꼴"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:474
+msgid "Stored in ~/.axn-term/config.yaml"
+msgstr "~/.axn-term/config.yaml에 저장됨"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:625
+msgid "Stored in ~/.axn-term/plugins.yaml"
+msgstr "~/.axn-term/plugins.yaml에 저장됨"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:475
+msgid "Stored in browser localStorage"
+msgstr "브라우저 localStorage에 저장됨"
+
+#. placeholder {0}: t(modeMessages[next])
+#: libs/shell-ui/src/app/SettingsModal.tsx:39
+#: libs/shell-ui/src/app/SettingsModal.tsx:40
+msgid "Switch to {0}"
+msgstr "{0}(으)로 전환"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:347
+msgid "Terminal font family and size in px. Empty uses the built-in monospace stack at 14px."
+msgstr "터미널 글꼴 패밀리와 px 단위 크기입니다. 비워 두면 내장 모노스페이스 스택(14px)을 사용합니다."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:411
+msgid "Terminal renderer"
+msgstr "터미널 렌더러"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:233
+msgid "Theme"
+msgstr "테마"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:620
+msgid "This plugin declares no settings."
+msgstr "이 플러그인은 설정을 선언하지 않았습니다."
+
+#: libs/shell-ui/src/PathActionMenu.tsx:67
+#: libs/shell-ui/src/PathActionMenu.tsx:92
+msgid "Unable to read file"
+msgstr "파일을 읽을 수 없음"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:583
+msgid "unmet, plugin disabled"
+msgstr "충족되지 않음, 플러그인 비활성화됨"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:308
+msgid "Use system default"
+msgstr "시스템 기본값 사용"

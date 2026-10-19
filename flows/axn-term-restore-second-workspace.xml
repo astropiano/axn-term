@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - devin restore in second workspace"
+        description="Verify devin session restore in the second workspace's first session.">
+    <tags>
+      <tag>axn-term</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="second-workspace" />
+      </env>
+    </setup>
+    <steps>
+      <script adapter="axn-term" action="prepare" description="Create temp state with the devin session in the second workspace" />
+      <assertions description="The test harness is ready">
+        <assert that="contains" value="state dir prepared" />
+      </assertions>
+
+      <script adapter="axn-term" action="start" description="Launch axn-term" />
+      <assertions description="The app started">
+        <assert that="contains" value="app started" />
+      </assertions>
+
+      <script adapter="axn-term" action="runDevin" description="Run the initial devin -r command in the second workspace" />
+      <assertions description="devin is running in the second workspace">
+        <assert that="contains" value="devin running" />
+      </assertions>
+
+      <script adapter="axn-term" action="close" description="Close axn-term so state is persisted" />
+      <assertions description="The app closed and saved state">
+        <assert that="contains" value="app closed" />
+      </assertions>
+
+      <script adapter="axn-term" action="reopen" description="Reopen and verify the restored session in the second workspace" />
+      <assertions description="The correct devin session is restored and only one window exists">
+        <assert that="contains" value="gray-party" />
+        <assert that="contains" value="single window" />
+      </assertions>
+    </steps>
+  </flow>
+</flows>

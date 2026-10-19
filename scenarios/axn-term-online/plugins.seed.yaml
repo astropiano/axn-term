@@ -1,0 +1,49 @@
+# plugins.yaml seed for the axn-term-online scenario — fetched by the web app
+# on first load (VITE_PLUGINS_YAML_SEED) until the user writes their own
+# settings. Enables dev-workflow with two demo workflows.
+
+claude:
+  enabled: true
+
+dev-workflow:
+  enabled: true
+  workflows:
+    speckit:
+      title: Speckit
+      tracking:
+        file: .axn/workflow.yaml
+        format: yaml
+      states: [plan, plan-review, implement, review, qa]
+      start: plan
+      transitions:
+        plan: [plan-review]
+        plan-review: [implement, plan]
+      steps:
+        plan:
+          draft:
+            agent:
+              cli: devin
+              model: opus
+            prompt: >-
+              Draft plan.md, specs.md and tasks.md for this repository, then set
+              state to plan-review in .axn/workflow.yaml.
+          spec-lint:
+            command: test -f plan.md && echo "plan.md present"
+            run-in: headless
+        implement:
+          agent:
+            cli: claude
+            model: sonnet
+          prompt: >-
+            Implement the approved plan in plan.md / specs.md / tasks.md. When
+            done, set state to review in .axn/workflow.yaml.
+        qa:
+          command: echo "qa gate for {{workflow}} reached state {{state}}"
+    simple:
+      title: Simple demo
+      states: [start, doing, done]
+      start: start
+      steps:
+        doing:
+          announce: echo "simple workflow {{workflow}} now in state {{state}} (cwd {{cwd}})"
+          dry-check: git status --porcelain | head -5

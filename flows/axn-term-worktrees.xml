@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - worktree session creation and isolation nudge"
+        description="worktrees plugin: axn-worktree must create a git worktree + branch and open a session in it; launching an agent in the main checkout must raise the isolation banner.">
+    <tags>
+      <tag>axn-term</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="worktrees" />
+        <var name="AXN_TERM_WORKTREE_NAME" value="flowtest" />
+      </env>
+    </setup>
+    <steps>
+      <script adapter="axn-term" action="prepare" description="Create temp state with a git repo, a shell session inside it and worktrees.enabled" />
+      <assertions description="The test harness is ready">
+        <assert that="contains" value="state dir prepared" />
+      </assertions>
+
+      <script adapter="axn-term" action="start" description="Launch axn-term" />
+      <assertions description="The app started">
+        <assert that="contains" value="app started" />
+      </assertions>
+
+      <script adapter="axn-term" action="createWorktree" description="Submit axn-worktree flowtest through the remote command dispatch" />
+      <assertions description="The plugin created worktree, branch and session">
+        <assert that="contains" value="worktree created" />
+        <assert that="contains" value="wt/flowtest" />
+      </assertions>
+
+      <script adapter="axn-term" action="nudgeWorktree" description="Run fake devin in the main-checkout session — the plugin must warn" />
+      <assertions description="The isolation banner appeared">
+        <assert that="contains" value="isolation banner" />
+        <assert that="contains" value="main checkout" />
+      </assertions>
+
+      <script adapter="axn-term" action="close" description="Close axn-term so state is persisted" />
+      <assertions description="The app closed and saved state">
+        <assert that="contains" value="app closed" />
+      </assertions>
+    </steps>
+  </flow>
+</flows>

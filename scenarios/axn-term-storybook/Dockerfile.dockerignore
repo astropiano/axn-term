@@ -1,0 +1,8 @@
+.git
+**/node_modules
+**/target
+**/dist
+**/storybook-static
+apps/desktop/src-tauri
+flows
+docker-compose.build.yml
