@@ -8,6 +8,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const procs = new Map();
+// Conversation id the fake claude prints in its exit hint.
+const FAKE_CLAUDE_ID = "7f3c2a10-5b9e-4d21-8c6f-0a1b2c3d4e5f";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -322,6 +324,8 @@ function buildInitialState(stateDir, cwd, variant, devinSessionName) {
       devin: {
         devinSessionName: devinSessionName ?? "green-aurora",
         devinSessionCwd: cwd,
+        // devin was running when the app last closed — restore requires it.
+        devinActive: true,
       },
     },
   };
@@ -334,6 +338,21 @@ function buildInitialState(stateDir, cwd, variant, devinSessionName) {
     devinSession.topic = "main";
     devinSession.pluginState = undefined;
     devinSession.output = "";
+  }
+
+  if (variant === "claude") {
+    // A plain shell session that previously ran claude in another
+    // conversation — the flow launches a fresh `claude`, which must
+    // invalidate the stale id, and the close-time capture must record the
+    // new one. The retained scrollback carries a stale hint that must never
+    // be picked up.
+    devinSession.name = "claude";
+    devinSession.topic = "claude";
+    devinSession.output =
+      "Resume this session with:\nclaude --resume historical-claude-id\n" + "x".repeat(200_000);
+    devinSession.pluginState = {
+      claude: { claudeSeen: true, claudeCwd: cwd, claudeResumeId: "historical-claude-id" },
+    };
   }
 
   if (variant === "talk-tab") {
@@ -401,6 +420,15 @@ async function prepare(env) {
     throw new Error("Set AXN_TERM_DEVIN_SESSION to an available real Devin session before running this flow");
   }
   const variant = env.AXN_TERM_TEST_VARIANT ?? "single";
+  // A flow run inside axn-term inherits the app's own AXN_TERM_STATE_DIR
+  // (~/.axn-term) — writing the test state.json/plugins.yaml there would
+  // clobber the user's real config. An explicit state dir must be new.
+  if (env.AXN_TERM_STATE_DIR && existsSync(env.AXN_TERM_STATE_DIR)) {
+    throw new Error(
+      `AXN_TERM_STATE_DIR=${env.AXN_TERM_STATE_DIR} already exists — refusing to overwrite it ` +
+        "(unset it, e.g. `env -u AXN_TERM_STATE_DIR axn-dev flow …`, to use a temp dir)",
+    );
+  }
   const stateDir = env.AXN_TERM_STATE_DIR ?? mkdtempSync(join("/tmp", "axn-term-restore-"));
   if (env.AXN_TERM_STATE_DIR) mkdirSync(stateDir, { recursive: true });
   env.AXN_TERM_STATE_DIR = stateDir;
@@ -448,6 +476,35 @@ trap stop INT
 while IFS= read -r line; do
   [ "$(printf '%s' "$line" | tr -d '\\r')" = "/exit" ] && stop
 done
+`,
+      { mode: 0o755 },
+    );
+  }
+
+  if (variant === "claude" && !env.AXN_TERM_CLAUDE_SESSION) {
+    // Fake Claude Code. Real claude exits on the SECOND Ctrl-C ("Press
+    // Ctrl-C again to exit") and only then prints its resume hint — the
+    // exact shape below was captured from claude 2.1.303 in a PTY. A
+    // /bin/sh script so foreground detection reports "claude".
+    writeFileSync(
+      join(binDir, "claude"),
+      `#!/bin/sh
+case "$1" in
+  --resume|-r) echo "Resuming claude conversation: \${2:-unknown}" ;;
+  -c|--continue) echo "Continuing claude conversation" ;;
+  *) echo "claude interactive" ;;
+esac
+presses=0
+interrupt() {
+  presses=$((presses + 1))
+  if [ "$presses" -ge 2 ]; then
+    printf '\nResume this session with:\nclaude --resume ${FAKE_CLAUDE_ID}\n'
+    exit 0
+  fi
+  echo "Press Ctrl-C again to exit"
+}
+trap interrupt INT
+while :; do sleep 1; done
 `,
       { mode: 0o755 },
     );
@@ -518,6 +575,12 @@ fi
           diff:
             command: "axn-git origin/main"
             auto: true
+`;
+  }
+  if (variant === "claude") {
+    plugins += `claude:
+  enabled: true
+  restore-session: true
 `;
   }
   writeFileSync(join(stateDir, "plugins.yaml"), plugins);
@@ -891,6 +954,71 @@ export async function run(step, env) {
       }
       const { summary } = await readRestoredState(env);
       return summary;
+    }
+
+    // Launch a fresh fake `claude` in the session and wait until the app
+    // sees it as the foreground process — onClose only drives the graceful
+    // exit while claude is foreground.
+    case "runClaude": {
+      const id = env.AXN_TERM_SESSION_ID;
+      // Real claude (AXN_TERM_CLAUDE_SESSION): resume an existing
+      // conversation — a fresh one has no transcript, so claude would print
+      // no resume hint on exit — and no prompt is sent, so no model call.
+      const real = env.AXN_TERM_CLAUDE_SESSION;
+      try {
+        await writeToSession(env, id, real ? `claude --resume ${real}\r` : "claude\r");
+        if (!real) await waitForOutput(env, id, (s) => s.includes("claude interactive"));
+        await waitForState(env, (state) =>
+          /claude/i.test(
+            (state.windows ?? [])
+              .flatMap((w) => w.sessions ?? [])
+              .find((s) => s.id === id)?.process ?? "",
+          ),
+          15000,
+        );
+      } catch (error) {
+        await closeApp(env);
+        throw error;
+      }
+      return "claude running";
+    }
+
+    // After close: the saved state must carry the conversation id claude
+    // printed on exit (not the stale one); reopening must resume exactly it.
+    case "reopenClaude": {
+      const session = (readStateFile(env).windows ?? [])
+        .flatMap((w) => w.sessions ?? [])
+        .find((s) => s.id === env.AXN_TERM_SESSION_ID);
+      const expected = env.AXN_TERM_CLAUDE_SESSION ?? FAKE_CLAUDE_ID;
+      const captured = session?.pluginState?.claude?.claudeResumeId ?? "none";
+      if (captured !== expected) {
+        throw new Error(`expected captured claude id ${expected}, got ${captured} ${logTail(env)}`);
+      }
+      await startApp(env);
+      try {
+        // Real claude: the injected restore line itself is the evidence,
+        // plus claude becoming the foreground process again.
+        await waitForOutput(
+          env,
+          env.AXN_TERM_SESSION_ID,
+          (s) => s.includes(env.AXN_TERM_CLAUDE_SESSION
+            ? `claude --resume ${expected}`
+            : `Resuming claude conversation: ${expected}`),
+        );
+        if (env.AXN_TERM_CLAUDE_SESSION) {
+          await waitForState(env, (state) =>
+            /claude/i.test(
+              (state.windows ?? [])
+                .flatMap((w) => w.sessions ?? [])
+                .find((s) => s.id === env.AXN_TERM_SESSION_ID)?.process ?? "",
+            ),
+            20000,
+          );
+        }
+      } finally {
+        await closeApp(env);
+      }
+      return `claude restored: ${captured}`;
     }
 
     default:
