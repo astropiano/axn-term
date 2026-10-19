@@ -6,6 +6,7 @@ import {
   parseProgressLine,
   screenProgress,
   isProcessExcluded,
+  isProcessIncluded,
   DEBOUNCE_MS,
   SCAN_DELAY_MS,
 } from './progress';
@@ -242,5 +243,27 @@ describe('progress plugin screen tracking', () => {
     await output(h);
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
     expect(h.session.progress).toBe(20);
+  });
+});
+
+describe('isProcessIncluded', () => {
+  it('defaults to the built-in allowlist', () => {
+    expect(isProcessIncluded('wget', undefined)).toBe(true);
+    expect(isProcessIncluded('pacman', undefined)).toBe(true);
+    expect(isProcessIncluded('brew', undefined)).toBe(false);
+    expect(isProcessIncluded(undefined, undefined)).toBe(false);
+  });
+
+  it('matches names exactly, case-insensitively, ignoring an extension', () => {
+    expect(isProcessIncluded('lazygit', undefined)).toBe(false);
+    expect(isProcessIncluded('Git', undefined)).toBe(true);
+    expect(isProcessIncluded('mytool.sh', ['mytool'])).toBe(true);
+  });
+
+  it('a user list replaces the defaults; * includes everything', () => {
+    expect(isProcessIncluded('brew', ['brew'])).toBe(true);
+    expect(isProcessIncluded('wget', ['brew'])).toBe(false);
+    expect(isProcessIncluded('anything', ['*'])).toBe(true);
+    expect(isProcessIncluded('wget', [])).toBe(false);
   });
 });

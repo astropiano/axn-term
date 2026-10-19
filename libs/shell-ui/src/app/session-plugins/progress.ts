@@ -20,8 +20,14 @@ import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin'
  *     so commands whose bars flash by (a quick `docker pull`) never surface.
  *   - When no indicator remains on screen, the reported value is withdrawn
  *     instead of freezing on the last percentage.
- *   - Processes listed in plugins.yaml under `progress.exclude-processes`
- *     (case-insensitive substrings) are never tracked.
+ *   - Only allowlisted programs are tracked: `progress.include-processes`
+ *     in plugins.yaml (exact, case-insensitive names; `'*'` tracks every
+ *     program), defaulting to DEFAULT_INCLUDED_PROCESSES. Percent-like
+ *     screen noise from anything else (brew's counters, build logs) is not
+ *     progress.
+ *   - Processes listed under `progress.exclude-processes` (case-insensitive
+ *     substrings) and BUILTIN_EXCLUDED_PROCESSES are never tracked — even
+ *     with `'*'`.
  *
  * Precedence: task-based providers (e.g. the devin plugin) own
  * `session.progress` whenever the session has a task list — this plugin stays
@@ -49,8 +55,24 @@ interface ProgressPluginState {
 }
 
 interface ProgressPluginSettings {
+  includeProcesses?: unknown;
   excludeProcesses?: unknown;
 }
+
+/**
+ * Programs whose on-screen bars/percentages are real progress — tracked
+ * when `progress.include-processes` is not set. Matched exactly against the
+ * foreground process name, so `git` does not pull in `lazygit`.
+ */
+export const DEFAULT_INCLUDED_PROCESSES = [
+  // Transfers
+  'curl', 'wget', 'rsync', 'scp', 'pv', 'dd',
+  // Package managers that draw honest bars
+  'pacman', 'apt', 'apt-get', 'dnf', 'pip', 'pip3', 'uv', 'cargo',
+  'npm', 'pnpm', 'yarn', 'bun',
+  // Others
+  'git', 'ffmpeg',
+];
 
 /**
  * Programs whose screens permanently carry percent/bar-like noise that is not
@@ -201,6 +223,24 @@ export function isProcessExcluded(
   );
 }
 
+/**
+ * Whether `process` is on the allowlist: the user's `include-processes`
+ * when it is a list, else DEFAULT_INCLUDED_PROCESSES. Entries match the
+ * process name exactly (case-insensitive, also without an extension); `'*'`
+ * includes everything.
+ */
+export function isProcessIncluded(process: string | undefined, includeProcesses: unknown): boolean {
+  if (!process) return false;
+  const proc = process.toLowerCase();
+  const base = proc.split('.')[0];
+  const list = Array.isArray(includeProcesses) ? includeProcesses : DEFAULT_INCLUDED_PROCESSES;
+  return list.some((entry) => {
+    if (typeof entry !== 'string') return false;
+    const name = entry.trim().toLowerCase();
+    return name === '*' || (name !== '' && (name === proc || name === base));
+  });
+}
+
 function scheduleScan(ctx: SessionViewContext & PluginApi, rt: ProgressRuntime, delay: number): void {
   if (rt.scanTimer !== undefined) return;
   rt.scanTimer = setTimeout(() => {
@@ -233,9 +273,11 @@ function scan(ctx: SessionViewContext & PluginApi): void {
   const settings = ctx.pluginSettings as ProgressPluginSettings | undefined;
 
   // Hard stops: no foreground process (a leftover final frame must not
-  // re-report), an excluded program, or a task provider owning the progress.
+  // re-report), a program off the allowlist or excluded, or a task provider
+  // owning the progress.
   if (
     !session.process ||
+    !isProcessIncluded(session.process, settings?.includeProcesses) ||
     isProcessExcluded(session.process, settings?.excludeProcesses) ||
     ctx.isProgressHandled()
   ) {
