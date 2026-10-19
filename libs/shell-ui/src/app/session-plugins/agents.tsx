@@ -2,6 +2,8 @@ import { Bot, Play } from 'lucide-react';
 import type { ShellSession, Workspace } from '../../types';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import { axnLog } from '../log';
+import { SessionIconGlyph } from '../SessionPanel';
+import { useSettings } from '../../SettingsProvider';
 import { agentLaunchLine } from './devWorkflow';
 import {
   listPersonas,
@@ -81,6 +83,16 @@ function sessionsFor(persona: AgentPersona, sessions: ShellSession[]): ShellSess
 // Persona card view
 // ---------------------------------------------------------------------------
 
+/**
+ * The CLI's configured `sessionIcons` glyph (the icon its sessions show in
+ * the panel — e.g. a claude persona gets claude's icon), Bot otherwise.
+ */
+function AgentIcon({ cli, className }: { cli?: string; className: string }) {
+  const { settings } = useSettings();
+  const value = (cli && settings.sessionIcons?.[cli.toLowerCase()]) || 'Bot';
+  return <SessionIconGlyph value={value} className={`${className} text-[var(--accent)]`} />;
+}
+
 function PersonaCard({
   persona,
   running,
@@ -103,7 +115,7 @@ function PersonaCard({
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
       <div className="flex items-center gap-1.5">
-        <Bot className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+        <AgentIcon cli={persona.cli} className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[var(--text-primary)]">
           {persona.name}
         </span>
@@ -203,7 +215,7 @@ function RunningSessionRow({
       onClick={onSelect}
       className="flex items-center gap-2 rounded border border-[var(--border)] px-2 py-1 text-left text-[10px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
     >
-      <Bot className="h-3 w-3 shrink-0 text-[var(--accent)]" />
+      <AgentIcon cli={session.process} className="h-3 w-3 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{session.name ?? session.id}</span>
       <span className="shrink-0 text-[9px] text-[var(--text-secondary)]">
         {personaOf(session) ?? session.process}
