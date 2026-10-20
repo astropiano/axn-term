@@ -433,12 +433,17 @@ export function dropHookSpec(plugin: HookSpecPlugin, ctx: Ctx): void {
   ctx.setAttention(null);
 }
 
-/** Enabled plugins declaring `hookSpec` — kept by `syncHookSpecPlugins` for sub-shell tabs. */
-let enabledHookPlugins: readonly HookSpecPlugin[] = [];
+/** Enabled plugins — kept by `syncHookSpecPlugins` for sub-shell tabs. */
+let enabledPlugins: readonly SessionViewPlugin[] = [];
 
 /** The enabled hook-bridged plugin whose process pattern matches `process`. */
 export function hookPluginFor(process: string): HookSpecPlugin | undefined {
-  return enabledHookPlugins.find((p) => p.processPattern?.test(process));
+  return enabledPlugins.find((p) => p.hookSpec && p.processPattern?.test(process));
+}
+
+/** The enabled plugin parsing on-screen tasks for `process`, if any. */
+export function screenTaskPluginFor(process: string): SessionViewPlugin | undefined {
+  return enabledPlugins.find((p) => p.screenTasks && p.processPattern?.test(process));
 }
 
 /** Reconcile enabled plugins without treating a settings change as process exit. */
@@ -447,7 +452,7 @@ export function syncHookSpecPlugins(
   enabled: readonly SessionViewPlugin[],
   contexts: (plugin: SessionViewPlugin) => Iterable<Ctx>,
 ): void {
-  enabledHookPlugins = enabled.filter((plugin) => plugin.hookSpec);
+  enabledPlugins = enabled;
   const enabledIds = new Set(enabled.map((plugin) => plugin.id));
   const previousIds = new Set(previous.map((plugin) => plugin.id));
   for (const plugin of previous) {

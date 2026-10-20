@@ -350,6 +350,10 @@ export const claudePlugin: SessionViewPlugin = {
   // installHooks, polls the tty-keyed event file, and owns session.status
   // once an event lands.
   hookSpec: claudeHookSpec,
+  screenTasks: (lines) => {
+    const tasks = parseClaudeTodos(lines);
+    return tasks ? toTasks(tasks) : undefined;
+  },
 
   onProcessEnd: (ctx) => {
     const timer = scanTimers.get(ctx.session.id);

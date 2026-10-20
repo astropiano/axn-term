@@ -189,6 +189,16 @@ const SCREEN_TASK_HEADER = /(updated|current)\s+(?:todo|task)s?\s*list/i;
 /** Lines allowed between the header and the first task row on screen. */
 const HEADER_GAP = 3;
 
+/** The on-screen todo block, accepted only under its visible header. */
+function screenTaskBlock(lines: string[]): DevinTask[] | undefined {
+  const { tasks, startLine } = collectTaskBlock(lines);
+  if (tasks.length === 0) return undefined;
+  const headed = lines
+    .slice(Math.max(0, startLine - HEADER_GAP), startLine)
+    .some((l) => SCREEN_TASK_HEADER.test(l));
+  return headed ? tasks : undefined;
+}
+
 function scanScreenTasks(ctx: SessionViewContext & PluginApi) {
   const lines = ctx.getScreenLines();
   if (lines.length === 0) return;
@@ -657,6 +667,10 @@ export const devinPlugin: SessionViewPlugin = {
   settingsKey: 'devin',
   processPattern: DEVIN_PROCESS_RE,
   handlesProgress: true,
+  screenTasks: (lines) => {
+    const tasks = screenTaskBlock(lines);
+    return tasks?.length ? toTasks(tasks) : undefined;
+  },
   settings: [
     {
       key: 'restoreSession',

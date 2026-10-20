@@ -541,6 +541,9 @@ printf '{"hook_event_name":"UserPromptSubmit"}' | "$hook" claude UserPromptSubmi
 sleep 4
 printf '{"hook_event_name":"PermissionRequest","tool_name":"Bash"}' | "$hook" claude PermissionRequest
 printf '{"hook_event_name":"Notification","message":"Claude needs your permission to use Bash"}' | "$hook" claude Notification
+echo "⏺ Update Todos"
+echo "  ☒ write the parser"
+echo "  ☐ wire the tab"
 echo "fake claude waiting for approval"
 while :; do sleep 1; done
 `,
@@ -1016,11 +1019,13 @@ export async function run(step, env) {
         const s = session(st);
         const tab = (s?.editors ?? []).find((e) => e.id === "hook-tab");
         return s?.status === "blocked" && s?.pluginState?.claude?.attention?.level === "critical" &&
-          tab?.hookStatus === "blocked" && tab?.hookAttention?.level === "critical";
+          tab?.hookStatus === "blocked" && tab?.hookAttention?.level === "critical" &&
+          (tab?.tasks?.length ?? 0) > 0;
       }, 45000);
       const s = session(state);
       const tab = s.editors.find((e) => e.id === "hook-tab");
-      return `hooks: session ${s.status}/${s.pluginState.claude.attention.level}, tab ${tab.hookStatus}/${tab.hookAttention.level}`;
+      const done = tab.tasks.filter((t) => t.done).length;
+      return `hooks: session ${s.status}/${s.pluginState.claude.attention.level}, tab ${tab.hookStatus}/${tab.hookAttention.level}, tab tasks ${done}/${tab.tasks.length} (${tab.progress}%)`;
     }
 
     case "close": {

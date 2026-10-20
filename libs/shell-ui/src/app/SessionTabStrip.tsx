@@ -6,7 +6,8 @@ import { defaultTabLabel } from './subshellPromote';
 /**
  * A session's tab strip: `shell` pinned leftmost, then its sub-view tabs —
  * drag-and-drop reorderable, right-click for the tab menu. A sub-shell tab
- * whose agent reports hook status shows it as a dot (red pulsing: blocked).
+ * whose agent reports hook status shows it as a dot (red pulsing: blocked),
+ * and its on-screen task list as done/total (the list in the tooltip).
  */
 export function SessionTabStrip({
   editors,
@@ -110,7 +111,15 @@ export function SessionTabStrip({
             {ed.dirty && (
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--orange)]" />
             )}
-            {ed.kind === 'shell' && ed.hookStatus && ed.hookStatus !== 'idle' && (
+            {ed.kind === 'shell' && (ed.tasks?.length ?? 0) > 0 && (
+            <span
+              data-tip={ed.tasks!.map((t) => `${t.done ? '✓' : '•'} ${t.title}`).join('\n')}
+              className="font-mono text-[10px] text-[var(--text-secondary)]"
+            >
+              {ed.tasks!.filter((t) => t.done).length}/{ed.tasks!.length}
+            </span>
+          )}
+          {ed.kind === 'shell' && ed.hookStatus && ed.hookStatus !== 'idle' && (
               <span
                 data-tip={ed.hookAttention?.message ?? ed.hookStatus}
                 className={`h-1.5 w-1.5 rounded-full ${
