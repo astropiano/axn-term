@@ -232,7 +232,25 @@ async function pollEventFile(ctx: Ctx, spec: AgentHookSpec, stateKey: string, fi
     if (last?.status === 'completed' && !ctx.getSession().process) applyHookEffect(ctx, stateKey, last, rt);
     return;
   }
-  for (const effect of effects) applyHookEffect(ctx, stateKey, effect, rt);
+  if (effects.length === 0) return;
+  // Fold the batch into one effect: the host commits plugin state
+  // asynchronously, so applying them one by one would let each read the
+  // flag from before the previous one (a Notification would then downgrade
+  // the PermissionRequest it follows).
+  let attention = (
+    ctx.getSession().pluginState?.[stateKey] as { attention?: SessionAttention | null } | undefined
+  )?.attention;
+  let attentionChanged = false;
+  let status: AgentHookEffect['status'];
+  for (const effect of effects) {
+    if (effect.status !== undefined) status = effect.status;
+    const next = nextHookAttention(attention, effect.attention);
+    if (next !== undefined) {
+      attention = next;
+      attentionChanged = true;
+    }
+  }
+  applyHookEffect(ctx, stateKey, { status, ...(attentionChanged ? { attention } : {}) }, rt);
 }
 
 /**

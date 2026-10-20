@@ -795,6 +795,21 @@ describe('commands', () => {
       expect(h.stateStore['dev-workflow']).toMatchObject({ state: 'implement' });
     });
 
+    it('keeps a marker move when the host commits plugin state asynchronously', async () => {
+      // build and verify offer different actions, so the stale state's Run
+      // affordance differs from the moved-to one
+      const h = makeCtx({ session: makeSession({ id: 's-m7' }), execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : '') });
+      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
+      // The real host's live session lags behind updatePluginState until
+      // React commits — freeze it at the pre-marker binding.
+      const committed = { ...h.ctx.session, pluginState: { 'dev-workflow': { ...(h.stateStore['dev-workflow'] as object) } } };
+      h.ctx.getSession = () => committed;
+      devWorkflowPlugin.onOutput?.(h.ctx, `axn-workflow-state[${TOKEN}]: verify\n`);
+      // the prompt redraw right after, still before the host committed
+      devWorkflowPlugin.onOutput?.(h.ctx, '$ ');
+      expect(h.stateStore['dev-workflow']).toMatchObject({ state: 'verify' });
+    });
+
     it('ignores markers without the binding token — text that merely scrolls past', async () => {
       const h = makeCtx({
         session: makeSession({ id: 's-m5' }),
