@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - hardening: workflow tokens, control socket, sandbox permissions, hook log"
+        description="Token-gated dev-workflow markers, `axn-term session` over the control socket, sandboxed plugin permissions, and hook events (main shell + sub-shell tab) that must not lose a permission request.">
+    <tags>
+      <tag>axn-term</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="hardening" />
+      </env>
+    </setup>
+    <steps>
+      <script adapter="axn-term" action="prepare" description="Temp state: shell + sub-shell tab, fake hook-emitting claude, two sandboxed plugins, a workflow" />
+      <assertions description="The test harness is ready">
+        <assert that="contains" value="state dir prepared" />
+      </assertions>
+
+      <script adapter="axn-term" action="start" description="Launch axn-term" />
+      <assertions description="The app started">
+        <assert that="contains" value="app started" />
+      </assertions>
+
+      <script adapter="axn-term" action="hardenSandbox" description="Both sandboxed plugins try exec on sessionOpen" />
+      <assertions description="Only the plugin declaring exec may run it">
+        <assert that="contains" value="perm-none: err:exec needs the 'exec' permission" />
+        <assert that="contains" value="perm-exec: ok:hi" />
+      </assertions>
+
+      <script adapter="axn-term" action="hardenWorkflow" description="Start a workflow, check the token env, print tokenless and tokened markers" />
+      <assertions description="Only the tokened marker moved the workflow">
+        <assert that="contains" value="tokenless marker ignored" />
+        <assert that="contains" value="tokened marker moved to review" />
+      </assertions>
+
+      <script adapter="axn-term" action="hardenControl" description="Run axn-term session from inside the terminal" />
+      <assertions description="The control socket authenticates the terminal">
+        <assert that="contains" value="summary set (rc 0)" />
+        <assert that="contains" value="bad secret refused (rc 1)" />
+        <assert that="contains" value="non-axn command refused (rc 2)" />
+      </assertions>
+
+      <script adapter="axn-term" action="hardenHooks" description="Fake claude fires PermissionRequest + Notification back to back, in the shell and in the tab" />
+      <assertions description="The permission request survives in both">
+        <assert that="contains" value="session blocked/critical" />
+        <assert that="contains" value="tab blocked/critical" />
+      </assertions>
+
+      <script adapter="axn-term" action="close" description="Close axn-term" />
+      <assertions description="The app closed">
+        <assert that="contains" value="app closed" />
+      </assertions>
+    </steps>
+  </flow>
+</flows>

@@ -224,6 +224,8 @@ async function startApp(env) {
       AXN_TERM_REMOTE_CONTROL_TOKEN: env.AXN_TERM_REMOTE_CONTROL_TOKEN,
       LOG_LEVEL: "debug",
       PATH: `${binDir}:${process.env.PATH}`,
+      // Agent hook installs write here instead of the user's ~/.claude etc.
+      ...(env.AXN_TERM_AGENT_CONFIG_ROOT ? { AXN_TERM_AGENT_CONFIG_ROOT: env.AXN_TERM_AGENT_CONFIG_ROOT } : {}),
       ...(existsSync(shellShim) ? { SHELL: shellShim } : {}),
     },
     stdio: ["ignore", logFd, logFd],
@@ -353,6 +355,17 @@ function buildInitialState(stateDir, cwd, variant, devinSessionName) {
     devinSession.pluginState = {
       claude: { claudeSeen: true, claudeCwd: cwd, claudeResumeId: "historical-claude-id" },
     };
+  }
+
+  if (variant === "hardening") {
+    // A plain shell plus an interactive sub-shell tab (active, so it spawns
+    // at start) — both later run the fake hook-emitting claude.
+    devinSession.name = "harden";
+    devinSession.topic = "harden";
+    devinSession.pluginState = undefined;
+    devinSession.output = "";
+    devinSession.editors = [{ id: "hook-tab", path: "", kind: "shell", cwd, label: "tab agent" }];
+    devinSession.activeTab = "hook-tab";
   }
 
   if (variant === "talk-tab") {
@@ -510,6 +523,51 @@ while :; do sleep 1; done
     );
   }
 
+  if (variant === "hardening") {
+    // Fake Claude Code that fires real hooks through the installed
+    // agent-hook.sh: a permission request immediately followed by a
+    // "needs your permission" notification — one poll window apart at most.
+    const configRoot = join(stateDir, "home");
+    mkdirSync(configRoot, { recursive: true });
+    env.AXN_TERM_AGENT_CONFIG_ROOT = configRoot;
+    writeFileSync(
+      join(binDir, "claude"),
+      `#!/bin/sh
+hook="$AXN_TERM_AGENT_CONFIG_ROOT/.axn-term/agent-hook.sh"
+i=0
+while [ ! -x "$hook" ] && [ $i -lt 150 ]; do sleep 0.1; i=$((i+1)); done
+echo "fake claude up (hook: $hook)"
+printf '{"hook_event_name":"UserPromptSubmit"}' | "$hook" claude UserPromptSubmit
+sleep 4
+printf '{"hook_event_name":"PermissionRequest","tool_name":"Bash"}' | "$hook" claude PermissionRequest
+printf '{"hook_event_name":"Notification","message":"Claude needs your permission to use Bash"}' | "$hook" claude Notification
+echo "fake claude waiting for approval"
+while :; do sleep 1; done
+`,
+      { mode: 0o755 },
+    );
+    // Two sandboxed plugins trying the same exec — only the one declaring
+    // the permission may run it.
+    for (const [id, permissions] of [["perm-none", undefined], ["perm-exec", ["exec"]]]) {
+      const dir = join(stateDir, "plugins", id);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, "plugin.json"),
+        JSON.stringify({ id, title: id, version: "0.1.0", ...(permissions ? { permissions } : {}) }),
+      );
+      writeFileSync(
+        join(dir, "plugin.mjs"),
+        `axn.on('sessionOpen', async ({ sessionId }) => {
+  let result;
+  try { result = 'ok:' + String(await axn.session(sessionId).exec('echo hi')).trim(); }
+  catch (e) { result = 'err:' + ((e && e.message) || e); }
+  await axn.session(sessionId).updateState({ result });
+});
+`,
+      );
+    }
+  }
+
   // A $SHELL shim: command sub-shells (`sh -c <command>`) run with the
   // PATH captured by login_shell_path() — `$SHELL -l -i -c env` — not the
   // app's own env PATH, so the fake `devin` would otherwise be invisible.
@@ -581,6 +639,27 @@ fi
     plugins += `claude:
   enabled: true
   restore-session: true
+`;
+  }
+  if (variant === "hardening") {
+    plugins += `claude:
+  enabled: true
+  install-hooks: true
+perm-none:
+  enabled: true
+perm-exec:
+  enabled: true
+dev-workflow:
+  enabled: true
+  workflows:
+    harden:
+      title: Harden
+      start: build
+      states: [build, review]
+      steps:
+        build:
+          token-env:
+            command: "sh -c 'echo token-env=$AXN_WORKFLOW_TOKEN'"
 `;
   }
   writeFileSync(join(stateDir, "plugins.yaml"), plugins);
@@ -873,6 +952,75 @@ export async function run(step, env) {
         );
       }
       return `review session ${sess.id} in ${wt.path} (${wt.branch}), vars mr_iid=${vars.mr_iid} mr_url=${vars.mr_url}, probe ok, compare tab ok`;
+    }
+
+    // dev-workflow markers need the binding token: a tokenless marker
+    // printed by anything in the terminal must not move the workflow.
+    case "hardenWorkflow": {
+      const id = env.AXN_TERM_SESSION_ID;
+      const binding = () =>
+        (readStateFile(env).windows ?? []).flatMap((w) => w.sessions ?? [])
+          .find((s) => s.id === id)?.pluginState?.["dev-workflow"] ?? {};
+      await sendCommand(env, id, "axn-workflow-start harden");
+      await waitForState(env, () => binding().state === "build" && /^[0-9a-f]{16}$/.test(binding().token ?? ""));
+      const token = binding().token;
+      await sendCommand(env, id, "axn-workflow-run token-env");
+      await waitForOutput(env, id, (out) => out.includes(`token-env=${token}`));
+      // leading \n: the shell's title escape precedes the command's output
+      await writeToSession(env, id, "printf '\\naxn-workflow-state: review\\n'\r");
+      await waitForOutput(env, id, (out) => /\naxn-workflow-state: review\r?\n/.test(out));
+      await sleep(3000);
+      if (binding().state !== "build") throw new Error(`tokenless marker moved the workflow to ${binding().state}`);
+      await writeToSession(env, id, `printf '\\naxn-workflow-state[%s]: review\\n' ${token}\r`);
+      await waitForState(env, () => binding().state === "review");
+      return `workflow token ${token}: env ok, tokenless marker ignored, tokened marker moved to review`;
+    }
+
+    // `axn-term session …` from inside the terminal reaches the app over
+    // the control socket; a wrong secret and non-axn commands are refused.
+    case "hardenControl": {
+      const id = env.AXN_TERM_SESSION_ID;
+      await writeToSession(env, id, `"$AXN_TERM_CLI" session summary 'set over the control socket'; echo okrc=$?\r`);
+      await waitForState(env, (state) =>
+        (state.windows ?? []).flatMap((w) => w.sessions ?? [])
+          .find((s) => s.id === id)?.summary === "set over the control socket");
+      await waitForOutput(env, id, (out) => out.includes("okrc=0"));
+      await writeToSession(env, id, `AXN_TERM_PTY_SECRET=bad "$AXN_TERM_CLI" session summary nope; echo badrc=$?\r`);
+      await waitForOutput(env, id, (out) => out.includes("badrc=1"));
+      await writeToSession(env, id, `"$AXN_TERM_CLI" session command rm -rf x; echo cmdrc=$?\r`);
+      await waitForOutput(env, id, (out) => out.includes("cmdrc=2"));
+      return "control socket: summary set (rc 0), bad secret refused (rc 1), non-axn command refused (rc 2)";
+    }
+
+    case "hardenSandbox": {
+      const id = env.AXN_TERM_SESSION_ID;
+      let none;
+      let exec;
+      await waitForState(env, (state) => {
+        const ps = (state.windows ?? []).flatMap((w) => w.sessions ?? []).find((s) => s.id === id)?.pluginState ?? {};
+        none = ps["perm-none"]?.result;
+        exec = ps["perm-exec"]?.result;
+        return none !== undefined && exec !== undefined;
+      });
+      return `sandbox perm-none: ${none}; perm-exec: ${exec}`;
+    }
+
+    // Hook events fired back to back must not lose the permission request —
+    // in the main shell and in a sub-shell tab.
+    case "hardenHooks": {
+      const id = env.AXN_TERM_SESSION_ID;
+      const session = (state) => (state.windows ?? []).flatMap((w) => w.sessions ?? []).find((s) => s.id === id);
+      await writeToSession(env, id, "claude\r");
+      await writeToSession(env, "hook-tab", "claude\r");
+      const state = await waitForState(env, (st) => {
+        const s = session(st);
+        const tab = (s?.editors ?? []).find((e) => e.id === "hook-tab");
+        return s?.status === "blocked" && s?.pluginState?.claude?.attention?.level === "critical" &&
+          tab?.hookStatus === "blocked" && tab?.hookAttention?.level === "critical";
+      }, 45000);
+      const s = session(state);
+      const tab = s.editors.find((e) => e.id === "hook-tab");
+      return `hooks: session ${s.status}/${s.pluginState.claude.attention.level}, tab ${tab.hookStatus}/${tab.hookAttention.level}`;
     }
 
     case "close": {
