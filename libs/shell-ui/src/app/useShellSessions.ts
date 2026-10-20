@@ -20,7 +20,7 @@ const RUNTIME_SESSION_PATCH_KEYS = new Set<keyof ShellSession>([
   'tasks',
   'progress',
   'output',
-  'devinActive',
+  'agentInput',
   'process',
   'repo',
   'pluginState',
@@ -274,7 +274,7 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
           status: 'idle' as const,
           progress: 0,
           tasks: [],
-          devinActive: false,
+          agentInput: undefined,
         }));
 
         if (saved?.restoredFromBackup) {
@@ -656,7 +656,7 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
         progress: 0,
         status: 'idle',
         process: undefined,
-        devinActive: false,
+        agentInput: undefined,
         pluginState: {},
         editors: [],
         activeTab: 'shell',
@@ -790,7 +790,7 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
         status: 'idle' as const,
         progress: 0,
         tasks: [],
-        devinActive: false,
+        agentInput: undefined,
       }));
       const fallbackSession = sanitized[0].id;
       const selectedSessionId =

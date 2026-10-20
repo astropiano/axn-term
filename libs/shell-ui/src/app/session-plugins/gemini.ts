@@ -85,7 +85,7 @@ export const geminiPlugin: SessionViewPlugin = {
     },
   ],
   // Bound to the gemini process.
-  processPattern: /gemini/i,
+  processPattern: /^gemini/i,
   // Declarative agent-hook bridge — the host installs hook entries per
   // installHooks, polls the tty-keyed event file, and releases it when the
   // process ends.
