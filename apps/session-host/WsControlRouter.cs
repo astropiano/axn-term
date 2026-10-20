@@ -25,11 +25,13 @@ public sealed class WsControlRouter
     }
 
     private readonly PtyHost _host;
+    private readonly ControlBroker _control;
     private readonly ILogger<WsControlRouter> _logger;
 
-    public WsControlRouter(PtyHost host, ILogger<WsControlRouter> logger)
+    public WsControlRouter(PtyHost host, ControlBroker control, ILogger<WsControlRouter> logger)
     {
         _host = host;
+        _control = control;
         _logger = logger;
     }
 
@@ -102,6 +104,13 @@ public sealed class WsControlRouter
                     () => Task.FromResult(new System.Text.Json.Nodes.JsonObject
                         { ["ok"] = true, ["process"] = _host.ForegroundProcess(pty) }),
                     "fg-process-result", requestId8!, cancellationToken));
+                return true;
+
+            // The browser's answer to a forwarded `axn-term session …` line.
+            case "control-reply"
+                when TryGetString(msg, "requestId", out var controlRequestId):
+                _control.Reply(controlRequestId!, ControlReply.FromJson(
+                    System.Text.Json.Nodes.JsonNode.Parse(msg.GetRawText())));
                 return true;
 
             case "exec"

@@ -46,7 +46,10 @@ interface ClaudeTask {
  */
 const CLAUDE_TASK_RE =
   /^\s*[⎿│├└─]*\s*(☒|✔|✓|☐|○|◐|▶|●)\s+(.+?)\s*$/u;
-const CLAUDE_TODO_MARKER_RE = /\bupdate\s+todos?\b|\btodo(?:write|s)?\b/i;
+/** The claude CLI as `session.process` reports it (argv-derived basename). */
+export const CLAUDE_PROCESS_RE = /^claude/i;
+
+const CLAUDE_TODO_MARKER_RE =/\bupdate\s+todos?\b|\btodo(?:write|s)?\b/i;
 
 function claudeTaskStatus(symbol: string): ClaudeTaskStatus {
   if (symbol === '☒' || symbol === '✔' || symbol === '✓') return 'completed';
@@ -344,12 +347,16 @@ export const claudePlugin: SessionViewPlugin = {
   ],
   // Bound to the claude process: its rendered todo list drives
   // session.tasks/progress, so generic screen-guessed bars stay out of the way.
-  processPattern: /claude/i,
+  processPattern: CLAUDE_PROCESS_RE,
   handlesProgress: true,
   // Declarative agent-hook bridge — the host installs hook entries per
   // installHooks, polls the tty-keyed event file, and owns session.status
   // once an event lands.
   hookSpec: claudeHookSpec,
+  screenTasks: (lines) => {
+    const tasks = parseClaudeTodos(lines);
+    return tasks ? toTasks(tasks) : undefined;
+  },
 
   onProcessEnd: (ctx) => {
     const timer = scanTimers.get(ctx.session.id);

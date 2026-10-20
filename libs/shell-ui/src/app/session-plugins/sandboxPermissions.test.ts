@@ -18,10 +18,14 @@ describe('sandbox permissions', () => {
     expect(methodPermission('writeFile')).toBe('fs-write');
     expect(methodPermission('mkdir')).toBe('fs-write');
     expect(methodPermission('openSession')).toBe('sessions');
+    expect(methodPermission('openTab')).toBe('sessions');
+    expect(methodPermission('openBrowser')).toBe('sessions');
+    // the restoring overlay steals the terminal's input
+    expect(methodPermission('setRestoring')).toBe('terminal-input');
   });
 
   it('leaves the plugin its own state and UI surfaces', () => {
-    for (const m of ['updatePluginState', 'setBanner', 'setAttention', 'getSession', 'openTab']) {
+    for (const m of ['updatePluginState', 'setBanner', 'setAttention', 'getSession', 'isProgressHandled']) {
       expect(methodPermission(m)).toBeUndefined();
     }
   });

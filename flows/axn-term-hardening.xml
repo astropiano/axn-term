@@ -45,6 +45,7 @@
       <assertions description="The permission request survives in both">
         <assert that="contains" value="session blocked/critical" />
         <assert that="contains" value="tab blocked/critical" />
+        <assert that="contains" value="tab tasks 1/2 (50%)" />
       </assertions>
 
       <script adapter="axn-term" action="close" description="Close axn-term" />
