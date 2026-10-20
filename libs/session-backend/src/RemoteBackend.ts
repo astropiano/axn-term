@@ -1,5 +1,7 @@
 import { RamphastosSession, RamphastosStream } from '@astropiano/ramphastos-client';
+import { answerControl } from './types.ts';
 import type {
+  ControlCommandHandler,
   DirEntry,
   FsResult,
   PathStat,
@@ -132,6 +134,10 @@ export class RemoteBackend implements SessionBackend {
   // ---- stream bookkeeping ----
 
   private handleStreamAnnounce(stream: RamphastosStream): void {
+    if (stream.name === 'control') {
+      this.adoptControlStream(stream);
+      return;
+    }
     const id = ptyIdOf(stream.name);
     if (id === undefined) return;
 
@@ -140,6 +146,39 @@ export class RemoteBackend implements SessionBackend {
       return;
     }
     this.adoptStream(id, stream);
+  }
+
+  // `axn-term session …` (host ControlBroker): requests arrive as JSON on
+  // the duplex `control` stream, answers go back the same way.
+  private controlHandlers = new Set<ControlCommandHandler>();
+  private controlStream?: RamphastosStream;
+
+  onControlCommand(cb: ControlCommandHandler): Unsubscribe {
+    this.controlHandlers.add(cb);
+    return () => this.controlHandlers.delete(cb);
+  }
+
+  private adoptControlStream(stream: RamphastosStream): void {
+    if (this.controlStream === stream || stream.closed) return;
+    this.controlStream = stream;
+    const decoder = new TextDecoder();
+    const encoder = new TextEncoder();
+    stream.onData((data) => {
+      let req: { requestId?: unknown; ptyId?: unknown; line?: unknown };
+      try {
+        req = JSON.parse(decoder.decode(data));
+      } catch {
+        return;
+      }
+      const { requestId, ptyId, line } = req;
+      if (typeof requestId !== 'string' || typeof ptyId !== 'string' || typeof line !== 'string') return;
+      void answerControl(this.controlHandlers, { ptyId, line }).then((reply) =>
+        stream.write(encoder.encode(JSON.stringify({ requestId, ...reply }))),
+      );
+    });
+    stream.onClose(() => {
+      if (this.controlStream === stream) this.controlStream = undefined;
+    });
   }
 
   private adoptStream(id: string, stream: RamphastosStream): void {

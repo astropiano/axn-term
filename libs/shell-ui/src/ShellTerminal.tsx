@@ -7,7 +7,7 @@ import { placeHoverCard } from './hoverCardPlacement';
 import type { ShellSession } from './types';
 import { useSettings } from './SettingsProvider';
 import { getXtermColors, resolveShellFont } from './themes';
-import { registerTerminal, takePtyKeepAlive, unregisterTerminal, registerTerminalElement } from './terminalRegistry';
+import { registerTerminal, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites } from './terminalRegistry';
 import { applyTerminalRenderer, repaintTerminal, safely } from './terminalRenderer';
 import { acquirePty } from './ptyLifetime';
 import { foregroundStatusPatch } from './foregroundStatus';
@@ -215,6 +215,9 @@ export function ShellTerminal({
       fontSize: shellFont.size,
       fontFamily: shellFont.family,
       allowProposedApi: true,
+      // macOS defaults this on: a right-click would replace the selection
+      // with the word under the pointer before the context menu's Copy.
+      rightClickSelectsWord: false,
       theme: getXtermColors(activeTheme),
     });
 
@@ -222,6 +225,10 @@ export function ShellTerminal({
     term.loadAddon(fit);
     term.open(terminalRef.current);
     const unregisterElement = registerTerminalElement(terminalRef.current, term);
+    // OSC 52: TUIs with their own mouse selection (Claude Code) copy this way
+    const clipboardWrites = handleClipboardWrites(term, (text) => {
+      void Promise.resolve(services.copyText(text)).catch(() => {});
+    });
     registerTerminal(session.id, term);
     rendererCleanupRef.current = applyTerminalRenderer(
       term,
@@ -249,7 +256,7 @@ export function ShellTerminal({
     const onCopy = (e: ClipboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const selection = term.getSelection();
+      const selection = terminalSelection(term);
       if (!selection) return;
       if (e.clipboardData) {
         e.clipboardData.setData('text/plain', selection);
@@ -707,6 +714,7 @@ export function ShellTerminal({
       safely('PTY release', () => pty.release(takePtyKeepAlive(ptyId)));
       unregisterTerminal(sessionId, term);
       unregisterElement();
+      safely('OSC 52 handler', () => clipboardWrites.dispose());
       // Dispose the renderer addon first: disposing an xterm with a live
       // WebGL addon can throw.
       safely('renderer', () => rendererCleanupRef.current?.());

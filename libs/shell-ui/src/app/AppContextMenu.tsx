@@ -3,10 +3,12 @@ import { Trans } from '@lingui/react/macro';
 import { ClipboardPaste, Copy, RotateCw, Scissors, TextSelect } from 'lucide-react';
 import type { ShellServices } from '@axn-term/session-backend';
 import { ContextMenu, menuDividerClass, menuItemClass } from '../ContextMenu';
+import { terminalSelection } from '../terminalRegistry';
 
 /** What the right-click landed on. */
 export type AppMenuTarget =
-  | { kind: 'terminal'; term: Terminal }
+  /** `selection` is captured as the menu opens — before anything can change it. */
+  | { kind: 'terminal'; term: Terminal; selection: string }
   | { kind: 'editable'; el: HTMLInputElement | HTMLTextAreaElement }
   | { kind: 'other'; selection: string };
 
@@ -16,7 +18,7 @@ export function appMenuTarget(
   terminalAt: (target: EventTarget | null) => Terminal | undefined,
 ): AppMenuTarget {
   const term = terminalAt(target);
-  if (term) return { kind: 'terminal', term };
+  if (term) return { kind: 'terminal', term, selection: terminalSelection(term) };
   if (
     target instanceof HTMLTextAreaElement ||
     (target instanceof HTMLInputElement && /^(text|search|url|email|password|number|)$/.test(target.type))
@@ -75,9 +77,9 @@ export function AppContextMenu({
 
   let rows: React.ReactNode[] = [];
   if (target.kind === 'terminal') {
-    const { term } = target;
+    const { term, selection } = target;
     rows = [
-      row('copy', <Copy className={icon} />, <Trans>Copy</Trans>, () => services.copyText(term.getSelection()), !term.hasSelection()),
+      row('copy', <Copy className={icon} />, <Trans>Copy</Trans>, () => services.copyText(selection), !selection),
       paste &&
         row('paste', <ClipboardPaste className={icon} />, <Trans>Paste</Trans>, async () => {
           const text = await paste();

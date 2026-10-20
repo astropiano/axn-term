@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
-import type { SessionBackend } from '@axn-term/session-backend';
+import type { ControlCommandHandler, SessionBackend } from '@axn-term/session-backend';
 import type { ShellPlatform } from '../platform';
 import { ptyIdOf, type ShellSession, type Workspace } from '../types';
 import { axnLog } from './log';
@@ -277,7 +277,7 @@ export function useSessionCommands(input: SessionCommandDeps) {
   // socket): the line runs through the same dispatch, for the PTY it came
   // from — never typed into it (an agent owns the foreground).
   useEffect(() => {
-    const unlisten = platform.onControlCommand?.(async ({ ptyId, line }) => {
+    const answer: ControlCommandHandler = async ({ ptyId, line }) => {
       const session = sessionForPty(deps.current.sessionsRef.current, ptyId);
       if (!session) return null;
       try {
@@ -285,8 +285,10 @@ export function useSessionCommands(input: SessionCommandDeps) {
       } catch (e) {
         return { ok: false, error: String(e) };
       }
-    });
-    return () => unlisten?.();
+    };
+    // desktop: the app's control socket; web: forwarded by the session host
+    const unlisten = [platform.onControlCommand?.(answer), backend.onControlCommand?.(answer)];
+    return () => unlisten.forEach((u) => u?.());
   }, [platform, backend, handleSessionCommand]);
 
   // Tab-completion for axn-* hidden commands: completes the command word, a

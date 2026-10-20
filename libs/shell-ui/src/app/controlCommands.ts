@@ -1,16 +1,14 @@
+import type { ControlReply } from '@axn-term/session-backend';
 import { ptyIdOf, type ShellSession } from '../types';
 
+export type { ControlReply };
+
 /**
- * `axn-term session …` requests from programs inside a terminal (desktop
- * control socket, `src-tauri/src/control.rs`): the session a PTY belongs to,
+ * `axn-term session …` requests from programs inside a terminal (desktop:
+ * control socket, `src-tauri/src/control.rs`; web: the session host's
+ * ControlBroker via the backend): the session a PTY belongs to,
  * and how a dispatch result becomes the CLI's answer.
  */
-
-export interface ControlReply {
-  ok: boolean;
-  message?: string;
-  error?: string;
-}
 
 /** The session owning a PTY — its main shell (incl. a promoted one) or a sub-shell tab. */
 export function sessionForPty(sessions: readonly ShellSession[], ptyId: string): ShellSession | undefined {

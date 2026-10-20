@@ -67,7 +67,12 @@
   tab menus; any right-click no view handles itself opens `AppContextMenu`
   instead of the webview's native menu — Copy/Paste/Select all for the
   terminal under the pointer (`terminalAt`, `registerTerminalElement` in
-  `terminalRegistry.ts`; paste goes through `term.paste`), Cut/Copy/Paste/
+  `terminalRegistry.ts`; paste goes through `term.paste`; Copy reads
+  `terminalSelection` — xterm's live selection, else the user's last one,
+  forgotten on a left click or typing — and terminals honour OSC 52 clipboard
+  writes via `handleClipboardWrites`, because TUIs with their own mouse
+  selection such as Claude Code copy that way and leave xterm with no
+  selection; reads (`?`) are refused), Cut/Copy/Paste/
   Select all for text fields, plus "Reload window" (also `⌘⇧R`/`Ctrl+Shift+R`,
   `isReloadShortcut` — terminals let it through; it saves state first and,
   running no React cleanup, keeps the PTYs, which the reloaded window
@@ -471,6 +476,18 @@ PTY and emits `control-command`; the window owning the PTY
 (`sessionForPty` in `app/controlCommands.ts`) runs the line through
 `handleSessionCommand` and answers via `control_reply` (`controlReply`: swallowed
 → ok, `echo "<msg>"` → message, any other replacement → refused, 5 s timeout);
+on the web the session host plays the app's part: `ControlListener`
+(`apps/session-host`, its own minimal Kestrel app on
+`$AXN_STATE_DIR/control.sock` — 0600, chowned to the PTY user — never the
+gateway-facing listener) checks `X-Axn-Pty`/`X-Axn-Pty-Secret` (PTYs get
+`AXN_TERM_PTY_SECRET`, `AXN_TERM_CONTROL_SOCKET` and `AXN_TERM_CLI` =
+the host-written `sh` + `curl` script `$AXN_STATE_DIR/bin/axn-term`; the id is
+the existing `AXN_SESSION_ID` — `AXN_TERM_PTY_ID` stays unset so hook event
+files keep their names), and `ControlBroker` delivers the line to exactly one
+browser channel — the PTY's /ws connection (`control-command` frame →
+`control-reply`) or else the most recently attached Ramphastos session (duplex
+`control` stream) — where `SessionBackend.onControlCommand` hands it to the same
+dispatch (`tests/control-e2e.mjs` covers both transports);
 `axn-term install`/`uninstall` copy the bundled
 agent skills (embedded via `include_str!` from `src-tauri/skills/<name>/`) into
 agent skill dirs — same scheme as `axn-dev install` (`--skills`, `--skill`,
