@@ -3,6 +3,7 @@ import type { SessionAttention, ShellSession } from '../../types';
 import type { SessionViewContext, PluginApi } from './plugin';
 import { claudePlugin, parseClaudeResumeHint, parseClaudeTodos } from './claude';
 import { claudeEventFile } from './claudeHooks';
+import { noteSessionSelected } from '../attention';
 import {
   dispatchClose,
   dispatchOutput,
@@ -313,6 +314,39 @@ describe('claude hook bridge', () => {
       patch: { status: 'running' },
     });
     expect(h.attentionCalls.at(-1)).toBeNull();
+    dispatchClose(claudePlugin, h.ctx);
+  });
+
+  it('Notification after Stop flags without leaving completed; selecting the session acknowledges it', async () => {
+    const h = makeHarness();
+    writeEvent(h, { hook_event_name: 'Stop' });
+    await startClaude(h);
+    await vi.advanceTimersByTimeAsync(1600);
+    writeEvent(h, { hook_event_name: 'Notification', message: 'Claude is waiting for your input' });
+    await vi.advanceTimersByTimeAsync(1600);
+    const statusPatches = h.updateSessionCalls.map((c) => c.patch.status).filter(Boolean);
+    expect(statusPatches).toEqual(['completed']);
+    expect(h.attentionCalls.at(-1)).toEqual({
+      level: 'warning',
+      message: 'Claude is waiting for your input',
+    });
+    // The user looks at the session → the next poll drops the warning.
+    vi.advanceTimersByTime(10);
+    noteSessionSelected(h.session.id);
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(h.attentionCalls.at(-1)).toBeNull();
+    dispatchClose(claudePlugin, h.ctx);
+  });
+
+  it('keeps a critical permission flag when the session is selected', async () => {
+    const h = makeHarness();
+    writeEvent(h, { hook_event_name: 'PermissionRequest', tool_name: 'Bash' });
+    await startClaude(h);
+    await vi.advanceTimersByTimeAsync(1600);
+    vi.advanceTimersByTime(10);
+    noteSessionSelected(h.session.id);
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(h.attentionCalls.at(-1)).toMatchObject({ level: 'critical' });
     dispatchClose(claudePlugin, h.ctx);
   });
 

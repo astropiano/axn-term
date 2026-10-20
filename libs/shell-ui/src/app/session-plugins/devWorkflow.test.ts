@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import { pickFromList } from '../pickerHost';
+
+vi.mock('../pickerHost', () => ({ pickFromList: vi.fn(async () => null) }));
 import type { ShellSession } from '../../types';
 import type { SessionViewContext, PluginApi } from './plugin';
 import { pluginCommands } from './plugin';
@@ -26,6 +29,7 @@ import {
   shellLine,
   shellTokens,
   mrReviewLaunch,
+  mrStartWorkflows,
   mrWorkspace,
   startMrReview,
   transitionAllowed,
@@ -650,10 +654,16 @@ describe('commands', () => {
   });
 
   describe('sessionMenuItems', () => {
-    it('offers a start row per workflow when unbound', () => {
+    it('offers one start row opening a workflow picker when unbound', () => {
       const h = makeCtx();
-      const labels = (devWorkflowPlugin.sessionMenuItems?.(h.ctx) ?? []).map((i) => i.label);
-      expect(labels).toEqual(['Start workflow: Speckit', 'Start workflow: offices', 'Start workflow: multi']);
+      const items = devWorkflowPlugin.sessionMenuItems?.(h.ctx) ?? [];
+      expect(items.map((i) => i.label)).toEqual(['Start workflow…']);
+      items[0].onClick();
+      expect(vi.mocked(pickFromList).mock.calls.at(-1)?.[0].items.map((i) => i.label)).toEqual([
+        'Speckit',
+        'offices',
+        'multi',
+      ]);
     });
 
     it('offers a run row per action of the current state', async () => {
@@ -1659,5 +1669,35 @@ describe('startMrReview', () => {
       level: 'warning',
       message: expect.stringContaining('mr-review'),
     });
+  });
+});
+
+describe('mrStartWorkflows', () => {
+  const settings = {
+    enabled: true,
+    workflows: {
+      development: {
+        title: 'Development',
+        states: ['triage', 'done'],
+        vars: { ticket: { required: true }, mr: { kind: 'mr', label: 'Merge request' } },
+      },
+      'mr-review': {
+        title: 'MR review',
+        states: ['inspect', 'verdict'],
+        vars: { mr: { kind: 'mr', required: true } },
+      },
+      plain: { states: ['a'], vars: { mr: { required: true } } },
+    },
+  };
+
+  it('offers only workflows with a required kind: mr var, by title', () => {
+    expect(mrStartWorkflows(settings).map((d) => [d.id, d.title])).toEqual([
+      ['mr-review', 'MR review'],
+    ]);
+  });
+
+  it('offers nothing while dev-workflow is disabled', () => {
+    expect(mrStartWorkflows({ ...settings, enabled: false })).toEqual([]);
+    expect(mrStartWorkflows(undefined)).toEqual([]);
   });
 });

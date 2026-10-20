@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAppNavigationShortcut } from './shortcuts';
+import { isAppNavigationShortcut, isReloadShortcut } from './shortcuts';
 
 const key = (k: string, mods: Partial<Record<'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey', boolean>> = {}) => ({
   key: k,
@@ -31,5 +31,21 @@ describe('isAppNavigationShortcut', () => {
     expect(isAppNavigationShortcut(key('b', { altKey: true }))).toBe(false);
     expect(isAppNavigationShortcut(key('b', { ctrlKey: true, altKey: true }))).toBe(false);
     expect(isAppNavigationShortcut(key('ArrowUp'))).toBe(false);
+  });
+});
+
+describe('isReloadShortcut', () => {
+  const key = (k: string, mods: Partial<KeyboardEvent>) =>
+    ({ key: k, altKey: false, ctrlKey: false, metaKey: false, shiftKey: false, ...mods }) as KeyboardEvent;
+
+  it('matches ⌘⇧R and Ctrl+Shift+R', () => {
+    expect(isReloadShortcut(key('R', { metaKey: true, shiftKey: true }))).toBe(true);
+    expect(isReloadShortcut(key('r', { ctrlKey: true, shiftKey: true }))).toBe(true);
+  });
+
+  it('leaves the shell’s Ctrl+R and a plain ⌘R alone', () => {
+    expect(isReloadShortcut(key('r', { ctrlKey: true }))).toBe(false);
+    expect(isReloadShortcut(key('r', { metaKey: true }))).toBe(false);
+    expect(isReloadShortcut(key('r', { metaKey: true, shiftKey: true, altKey: true }))).toBe(false);
   });
 });

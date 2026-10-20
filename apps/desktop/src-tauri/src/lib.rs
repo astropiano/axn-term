@@ -2402,6 +2402,33 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
+        // Default menu, but "About axn-term" (macOS app menu) also shows the
+        // build time: "Version 0.1.0 (built 2026-10-20 17:30 UTC)".
+        .menu(|handle| {
+            let menu = tauri::menu::Menu::default(handle)?;
+            #[cfg(target_os = "macos")]
+            if let Some(tauri::menu::MenuItemKind::Submenu(app_menu)) =
+                menu.items()?.into_iter().next()
+            {
+                let info = handle.package_info();
+                let config = handle.config();
+                let about = tauri::menu::PredefinedMenuItem::about(
+                    handle,
+                    None,
+                    Some(tauri::menu::AboutMetadata {
+                        name: Some(info.name.clone()),
+                        // macOS shows "Version {short_version} ({version})".
+                        short_version: Some(info.version.to_string()),
+                        version: Some(format!("built {}", env!("AXN_BUILD_DATE"))),
+                        copyright: config.bundle.copyright.clone(),
+                        ..Default::default()
+                    }),
+                )?;
+                app_menu.remove_at(0)?;
+                app_menu.insert(&about, 0)?;
+            }
+            Ok(menu)
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())

@@ -50,10 +50,28 @@
   and `tests/remote-backend-e2e.mjs` (backend surface; run with
   `node --experimental-strip-types`), both against a locally running
   session-host (`SESSION_HOST_PORT=7682 dotnet run --project apps/session-host`).
-- `libs/shell-ui` — protocol-agnostic UI: `ShellTerminal`, `ContextMenu`
-  (shared fixed-position popup: measured viewport clamping, outside-mousedown
-  /Escape dismissal, `menuItemClass`/`menuDividerClass` row styles — the shell
-  every right-click menu in the app wraps its items in), `PathActionMenu` /
+- `libs/shell-ui` — protocol-agnostic UI: `SearchPickerModal` (the shared
+  searchable list picker — grouped, disabled/badged rows, optional create
+  row; behind "Move to workspace…", and behind `pickFromList()` from
+  `app/pickerHost.tsx`, which in-process plugins await from a menu row to
+  pick a persona/workflow — `PickerHost` is mounted once in `ShellApp`),
+  `ShellTerminal`, `ContextMenu`
+  (shared fixed-position popup portalled into `document.body` — so the
+  panel's CSS `zoom` and ancestor overflow cannot offset or clip it —
+  placed by `placeMenu`: opens at the click, flips up/left near the
+  bottom/right window edge, clamps otherwise, re-placed via ResizeObserver
+  when its content grows, capped to the window height with scrolling;
+  outside-mousedown/Escape dismissal, optional `className` for the surface,
+  `menuItemClass`/`menuDividerClass` row styles — the shell every right-click
+  menu in the app wraps its items in, including the workspace, session and
+  tab menus; any right-click no view handles itself opens `AppContextMenu`
+  instead of the webview's native menu — Copy/Paste/Select all for the
+  terminal under the pointer (`terminalAt`, `registerTerminalElement` in
+  `terminalRegistry.ts`; paste goes through `term.paste`), Cut/Copy/Paste/
+  Select all for text fields, plus "Reload window" (also `⌘⇧R`/`Ctrl+Shift+R`,
+  `isReloadShortcut` — terminals let it through; it saves state first and,
+  running no React cleanup, keeps the PTYs, which the reloaded window
+  reattaches)), `PathActionMenu` /
   `FileHoverPreview`, themes, `SettingsProvider`, session types, terminal
   links/registry, platform labels. Tooltips are the shared `TooltipHost`
   (`app/Tooltip.tsx`, mounted once in `ShellApp`): put `data-tip="..."` on an
@@ -63,7 +81,14 @@
   disabled (`IconButton` does this internally). Components must never import
   Tauri APIs directly; everything platform-specific goes through the
   backend/services seam (desktop-only actions like Reveal simply disappear
-  when the service is absent).
+  when the service is absent). Errors are contained by `ErrorBoundary`
+  (`app/ErrorBoundary.tsx`): one per session sub-view tab (error panel with
+  Reload view / Close tab) and a root one in `ShellApp` (Reload window —
+  a page reload runs no React cleanup, so PTYs survive and reattach).
+  Terminal unmount cleanups (`ShellTerminal`, `SubShellView`) wrap every
+  teardown step in `safely()` (`terminalRenderer.ts`) and dispose the
+  renderer addon before the xterm — an exception escaping an effect
+  cleanup would otherwise blank the whole window.
 
 ## Repository vs. application name
 
@@ -165,7 +190,20 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   relative path starts it there (validated via `stat_path`, echoes an error
   otherwise).
 - `axn-session-mv <workspace>` — move the current session to another
-  workspace, creating the workspace if it does not exist.
+  workspace, creating the workspace if it does not exist. The session
+  context menu's "Move to workspace…" opens `MoveToWorkspaceModal`: every
+  workspace of every open window, grouped by window ("This window", "Main
+  window", "Window N" — numbered globally by window id, `windowPeers.ts`),
+  searchable, with a "New workspace '<query>'" row. Windows exchange their
+  workspace lists over `platform.peers` (desktop: Tauri app-wide events,
+  `useWorkspaceDirectory`; absent on web). Picking another window's
+  workspace hands the session over (`requestAdopt` → `axn:adopt-session`):
+  the source keeps its PTYs alive (`keepPtyAlive` for the main shell and
+  every sub-shell tab), the target `adoptSession`s the full record (tabs,
+  pluginState, scrollback) and acks; only then the source drops the session
+  — output is broadcast to every window, so the target's terminals simply
+  reattach. No ack within 3 s → the move is undone and an error banner
+  shows.
 - `axn-session-up` / `axn-session-down` — reorder the current session within
   its workspace.
 - `axn-workspace-up` / `axn-workspace-down` — reorder the current workspace.
@@ -226,7 +264,23 @@ Enter re-run — runs `resumeCommand` instead of the seed `command` (`devin -r
 output — plugin `onOutput` only sees the main PTY — else `devin -c` /
 `claude -c`), so the conversation is continued rather than re-seeded.
 `/exit` typed inside a sub-shell never reaches session-level dispatch — the
-devin plugin's exit capture is bound to the session's main PTY.
+devin plugin's exit capture is bound to the session's main PTY. Instead the
+tab captures its agent itself (`app/subShellAgents.ts`): the exit hint of
+claude (`claude --resume <id>`) or devin (`devin -r <name>`) is parsed from
+the tab's own output — a talk tab stores it as `resumeCommand`. Plain tabs
+where the user starts an agent follow the sessions' running-at-close rule:
+the 1 s foreground poll records `agentActive` (a fresh start forgets the
+previous `agentResume`; an exit the app did not drive clears it), the exit
+hint lands in `agentResume`, and `subShellSpawnCommand` resumes exactly that
+conversation (fallback `claude -c`/`devin -c`) only when the agent was still
+running when the app went away. On app close `runSubShellClosers` (awaited
+in `ShellApp`'s collect-and-close path) sends each running agent the same
+Ctrl-C pairs as the plugins' `onClose`, so the hint lands before the save.
+The session context menu and a sub-shell tab's context menu offer "Copy path" —
+the live working directory of that shell (`backend.getCwd` on the session's
+`ptyIdOf` / the tab's PTY; it is the shell's cwd, so it works while a program
+runs in the foreground; the recorded cwd is the fallback, and the row is
+absent where the backend cannot read a cwd).
 They carry an optional `label` override (right-click a tab → Rename…, or
 `axn-rename` inside it) — an empty rename clears it back to the default
 command/dir label. Sub-shells intercept the same `axn-*` commands as the
@@ -355,7 +409,10 @@ The `axn-browse` view supports an editable path bar (click the path, type a
 new one with directory autocomplete), back/forward/up navigation buttons
 (the history is in-memory per tab, capped at 20 entries — going back or
 up highlights the folder just left), a "show hidden files" checkbox under
-the path bar, arrow-key/Backspace navigation, and right-click context
+the path bar, an expandable tree (a folder's chevron or →/← expands/
+collapses it in place — expanded listings load on demand and re-list on
+refresh, `app/browserTree.ts` flattens them into rows; double-click/Enter
+still navigates into a folder), arrow-key/Backspace navigation, and right-click context
 menus built on the shared `ContextMenu` (`libs/shell-ui`) — per entry it
 hosts `PathActionMenu` (Open, Edit, Preview, Reveal in the OS file
 manager, Copy Path, and a content preview); on empty space it offers New
@@ -413,7 +470,15 @@ only trusted when the row shares the table's border layout and every other
 cell is blank (single-cell tables additionally need an unmatched `(` before
 the URL — e.g. `!6 (https://…` continuing `merge_requests/6)` below). Hovering a
 reconstructed URL shows the hover card with the joined link (Open / Copy
-URL); plain single-line URLs stay click-only.
+URL); plain single-line URLs stay click-only. Selecting text also opens the
+card: a one-word selection resolves as a path/URL; a selection spanning rows
+is rejoined without its wrap indentation (`wrappedSelectionCandidates` in
+`terminalLinks.ts` — agent TUIs hard-wrap long paths onto an indented
+continuation row) and its longest path/URL-like word that resolves gets the
+card; otherwise a copy-only card. The hover card is placed from
+its measured size (`placeHoverCard` in `hoverCardPlacement.ts`, re-run via
+ResizeObserver as its preview loads): below/right of the pointer, flipped
+above near the bottom edge and to the left near the right edge.
 
 ## Online session hosts (gateway env)
 
@@ -483,6 +548,10 @@ pnpm --filter @axn-term/desktop storybook
 # …or containerized with HMR through the published port:
 axn-dev start -s axn-term-storybook   # http://localhost:8098
 ```
+
+`src-tauri/build.rs` stamps `AXN_BUILD_DATE` (UTC, re-run when `../dist`
+or `src` change); `lib.rs` swaps the default menu's macOS "About axn-term"
+item for one showing "Version <x.y.z> (built <date>)".
 
 Built macOS artifacts:
 
@@ -568,8 +637,12 @@ The rail slot under the hamburger is a permanent `active/total` session
 counter (running processes / open sessions) — when flags are raised the
 pulsing dot + level icon render inside the same fixed-height slot (click
 opens the attention modal), so plugin rail views below never shift.
-Plugin rail icons are drag-and-drop reorderable (same pattern as the tab
-strip): the chosen order persists in window state
+Plugin rail icons are reorderable by dragging — pointer-driven
+(`startRailDrag` in `ShellApp`, `railDropIndexAt` in `app/railOrder.ts`),
+not HTML5 drag-and-drop: rail views are `<button>`s and WebKit starts no
+drag from a button press (macOS only showed a "+" cursor). Press, move 4px,
+release to drop, Esc cancels; the click after a drag is swallowed. The
+chosen order persists in window state
 `pluginData['axn-rail'].order` — a preference list over plugin ids handled
 by `app/railOrder.ts` (unlisted plugins append in registration order,
 disabled ones keep their slot for re-enable).
@@ -709,11 +782,11 @@ and view frames). Sandboxes boot/dispose with the enabled set
 Desktop reads plugin dirs via `list_external_plugin_dirs` /
 `read_external_plugin_file`; web has no plugin dirs (capability absent).
 Example: `plugins/axn-demo-note/`.
-- The built-in `claude` plugin (`session-plugins/claude.ts`) is opt-in (`claude.enabled: true`). It parses Claude Code's rendered `Update Todos` block from the live screen into `session.tasks`/`session.progress` (it owns progress via `handlesProgress` while claude runs), can resume Claude Code (`restore-session: true`) — like devin it captures the conversation id from claude's exit hint (`Resume this session with:` / `claude [--worktree "<name>"] --resume <id>`; `onClose` sends Ctrl-C pairs so claude prints it, `onProcessEnd` reads it from the output tail for exits it did not drive) and restores that exact conversation behind the `pendingRestore` overlay, falling back to `claude -c` when no id was captured or a fresh `claude` launch invalidated it — and optionally bridges Claude Code **hooks** (`claude.install-hooks: true`, adapter `session-plugins/claudeHooks.ts` on the shared bridge below): `UserPromptSubmit`/`PreToolUse`/`SubagentStop` → `running` + flag cleared, `PermissionRequest`/`Notification` → `blocked` + needs-you attention (which OS-notifies for non-selected/unfocused sessions), `Stop` → `completed`, `StopFailure` → `blocked`, `SessionStart` → `idle`, `SessionEnd` clears the flag while process-end reconciliation owns the final badge. Once any hook event lands, hook state owns `session.status` and the screen scan only contributes task content; without hooks the todo-parse fallback still drives tasks/progress/status.
+- The built-in `claude` plugin (`session-plugins/claude.ts`) is opt-in (`claude.enabled: true`). It parses Claude Code's rendered `Update Todos` block from the live screen into `session.tasks`/`session.progress` (it owns progress via `handlesProgress` while claude runs), can resume Claude Code (`restore-session: true`) — like devin it captures the conversation id from claude's exit hint (`Resume this session with:` / `claude [--worktree "<name>"] --resume <id>`; `onClose` sends Ctrl-C pairs so claude prints it, `onProcessEnd` reads it from the output tail for exits it did not drive) and restores that exact conversation behind the `pendingRestore` overlay, falling back to `claude -c` when no id was captured or a fresh `claude` launch invalidated it — and optionally bridges Claude Code **hooks** (`claude.install-hooks: true`, adapter `session-plugins/claudeHooks.ts` on the shared bridge below): `UserPromptSubmit`/`PreToolUse`/`PostToolUse` → `running` + flag cleared (PostToolUse un-blocks an approved permission at once), `PermissionRequest` → `blocked` + critical needs-you attention, `Notification` → a warning flag only — the status stays (claude also sends it when idling after `Stop`) and the bridge drops a hook-raised warning once the session is selected after it (`warningRaisedAt` vs `sessionLastSelectedAt`; critical flags wait for the next event); flags OS-notify for non-selected/unfocused sessions; `SubagentStop` is ignored (background subagents finish after `Stop`), `Stop` → `completed`, `StopFailure` → `blocked`, `SessionStart` → `idle`, `SessionEnd` clears the flag while process-end reconciliation owns the final badge. Once any hook event lands, hook state owns `session.status` and the screen scan only contributes task content; without hooks the todo-parse fallback still drives tasks/progress/status.
 - Agent **hook bridging** is shared and public: the pure, dependency-free half lives in `libs/plugin-sdk` `hooks.ts` (`AgentHookSpec`/`AgentHookEffect`, `agentHookScript`/`agentHookScriptPath`, `agentEventDir`/`agentEventFile`, `mergeHookSettings`/`removeHookSettings`, `parseHookEvent`), the host half in `session-plugins/agentHookBridge.ts` (runtime map, tty resolution + poll loop, config sync, `hookStatusOwned`). A plugin declares `hookSpec` on its `SessionViewPlugin` object — built-in *or* external `.mjs` — and the host drives the bridge for it: on output dispatch `maybeWireHookSpec` syncs the agent's config per the plugin's `installHooks` setting and starts the poll while `processPattern` matches, `releaseHookSpec` on process end stops polling and clears the flag (spec-only plugins get the default terminal badge — 'completed' persists, anything else → idle), `dropHookSpec` on session open/close forgets the runtime (all in `ShellApp`'s dispatch points). Built-ins (`claude`/`codex`/`gemini`) declare `hookSpec` and keep only their extras (todo parsing, resume commands, `<agent>Seen` tracking) — nothing wires the bridge by hand. The spec itself carries the agent id, its event list, config file (`~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/settings.json` — all three use the grouped `hooks.<Event> = [{matcher?, hooks:[{type:'command', command}]}]` schema and a `hook_event_name` stdin payload), and the event→status/attention map; agents with a non-JSON config (e.g. a JS plugin file) provide the spec and a custom `install` via the same contract. The bridge installs one script, `~/.axn-term/agent-hook.sh <agent>`, which writes each hook's stdin JSON to `~/.axn-term/<agent>-events/<tty>.json` (one latest-event file per tty); while the agent is foreground the host resolves the session's tty (`ctx.getTty()` → `get_session_tty`, `ps -o tty=` of the tracked shell pid; desktop-only) and polls the file — hook events then own `session.status`. Install merges axn-term-owned entries into the agent's config (foreign hooks/settings preserved, removed again when disabled — legacy `claude-hook.sh` entries are cleaned up too). The sandboxed manifest tier has no `hookSpec` yet — `mapEvent` is a function and cannot cross the iframe postMessage boundary; a declarative event→effect map in `plugin.json` is the planned bridge. The opt-in `codex` plugin (`session-plugins/codex.ts` + `codexHooks.ts`, `codex.enabled`/`install-hooks`/`restore-session` → `codex resume --last`, `axn-codex-resume`) maps `PreToolUse`/`PostToolUse`/`SubagentStart`/`SubagentStop`/`UserPromptSubmit` → `running`, `PermissionRequest` → `blocked` + critical flag, `Stop` → `completed`, `Interrupt`/`SessionStart` → `idle`; note codex requires new hooks to be trusted once via `/hooks` (trust review). The opt-in `gemini` plugin (`session-plugins/gemini.ts` + `geminiHooks.ts`, same settings, `restore-session` → `gemini --resume`, `axn-gemini-resume`) maps `BeforeAgent`/`BeforeTool`/`AfterTool` → `running`, `AfterAgent` → `completed`, `Notification` → `blocked` + flag (critical for `ToolPermission`), `SessionStart` → `idle`.
 - The built-in `vibe` plugin (`session-plugins/vibe.tsx`, opt-in `vibe.enabled: true`) tracks Mistral Vibe sessions without a hook surface — Vibe has no documented lifecycle hooks, so detection is screen/output parsing like the pre-hook devin path: symbol-based task lines (`[ ]`/`[~]`/`[x]`/`[!]`, `○`/`●`/`✓`/`✗`) plus `Task X/Y` progress markers drive `session.tasks`/`progress`/`status` (parsed in a short window after an "updated todo list" marker), a terminal badge reconciles on process end ('completed' persists, else idle) and clears on a new submitted command, session names matching attention patterns (`? vibe`, "action required", …) raise a warning flag + `renderRow` `!` marker, and the idle timer flags a quiet session as "waiting for input"/"possibly finished" (`idle-timeout-seconds`, default 45). `/exit` inside vibe arms an 8 s exit-capture that reads the post-exit `vibe -r <name>` resume hint into `vibeSessionName` (+cwd), which powers `restore-session` (`pendingRestore` → `vibe -r <name>`) and `axn-vibe-resume` (with a `cd '<cwd>' &&` prefix when the recorded cwd differs). No `hookSpec` — nothing to bridge.
-- The built-in `dev-workflow` plugin (`session-plugins/devWorkflow.tsx`, opt-in `dev-workflow.enabled: true`) is a meta layer above agents: `plugins.yaml` defines workflows (`dev-workflow.workflows.<id>` — `states`, `start`, optional `transitions`, optional `vars` declarations, per-state `steps` as a map of named actions, each with `agent`/`prompt`/`prompt-file`/`command` templates, `run-in: shell|sub-shell|headless` and `auto` to fire on every entry into the step's state (start + later transitions — the on-enter hook); the flat single-action form parses as one anonymous `default` action; every action takes an optional `description` — the reserved `description` key in a named-actions map describes the state itself — shown as the session banner's lighter `detail` text and leading the Run buttons' tooltips). Declared vars are supplied by `axn-workflow-start <wf> [arg|key=value]`, card fields, `axn-workflow-set`, or the `axn-workflow-var:` marker; they substitute into `{{key}}` templates and ride every launched action's env (`KEY=value`, plus `AXN_WORKFLOW`/`AXN_STATE`/`AXN_ACTION`). A `command` action's exit code is recorded as an informational check (`pluginState.checks['<state>:<name>']`, never gating) — via a printed `axn-workflow-check:` trailer for `shell`, the `ctx.exec` result for `headless`, and the `subshell-exited` code for `sub-shell` (`openSubShell` returns the tab id, `onSubShellExit` resolves it). The state of record lives in the session's `pluginState` (persisted in state.json); an optional `tracking.file` (repo-root-relative or absolute, extension picks `.json` vs YAML) mirrors it as an agent-writable surface — agents can also move the workflow by printing a whole line `axn-workflow-state: <state>`, report a check via `axn-workflow-check: <name> <rc>`, or fire a named action via `axn-workflow-run: <name>`, all adopted from PTY output. Commands `axn-workflow-start`/`axn-workflow-set`/`axn-workflow-move`/`axn-workflow-run`/`axn-workflow`/`axn-workflow-stop`, start/move/run rows in the session context menu (`sessionMenuItems`), a banner + under-session state chip, and a rail kanban view whose cards jump to sessions, move states via `sessionApi`, show editable var fields, and stack one run button per action with check badges. A workflow declaring a `kind: mr` var also surfaces a `review` button on glab-mr's MR rows via the `mrActions.ts` contribution registry: click → fetch the MR head ref (`merge-requests/N/head`, GitHub `pull/N/head`), `git worktree add` at the worktrees-plugin location, `openSession` there, bind the workflow with the MR vars pre-filled. See `docs/dev-workflow.md`.
-- The built-in `agents` plugin (`session-plugins/agents.tsx`, on by default — `agents.enabled: false` disables only the UI) owns **agent personas**: reusable `agents.personas.<name>` bundles in plugins.yaml (`cli` — defaults to the persona name, `model`, `args`, `prompt`/`prompt-file` — the first-message kickoff, `instructions`/`instructions-file` — the persistent identity, `description`; a bare string value is `cli` shorthand). On every ctx touch it mirrors the parsed list into the shared `agentRegistry.ts` module (the `mrActions.ts` contribution pattern — always in the bundle, so the schema stays available even when the plugin is disabled). Consumers: dev-workflow's `agent: <name>`/`{profile: <name>, …overrides}` step references (unresolved names degrade to `cli: <name>`). Launch lines are built by each CLI's registered **launcher** — `registerAgentLauncher` in `agentRegistry.ts`, built-in agent plugins register at module scope, `devWorkflow.agentLaunchLine` consults the registry: claude sends instructions via `--append-system-prompt(-file)`, codex via `-c developer_instructions=…`, devin and unregistered CLIs fold them into the seed prompt, and gemini — which has no instructions flag — writes them to a NEW `GEMINI.md` in the launch cwd when its own `gemini.write-gemini-md` setting is on (create-only: an existing `GEMINI.md` aborts the launch with a visible error, content is never merged or overwritten; without the setting instructions fold into the prompt). A launcher's refusal surfaces as session attention. Launch surfaces: `axn-agent <persona>` types the launch line in the current shell (`completeArg` offers persona names), the session and workspace context menus' "New session with <persona>" spawns a persona-named session seeded with the launch line (pending map → `onSessionOpen`, like worktrees; workspace rows use `defaultFolder` as cwd), and the rail bot icon opens a full-area view of persona cards (cli/model/prompt badges, live-session count, Launch button + a "running" session list grouped by workspace in panel order — a non-collapsible tree, so every agent shows where it lives). A launched/typed persona stamps `pluginState.agents.persona`, which drives the `renderRow` bot badge — the persona survives as the session's identity beyond process detection.
+- The built-in `dev-workflow` plugin (`session-plugins/devWorkflow.tsx`, opt-in `dev-workflow.enabled: true`) is a meta layer above agents: `plugins.yaml` defines workflows (`dev-workflow.workflows.<id>` — `states`, `start`, optional `transitions`, optional `vars` declarations, per-state `steps` as a map of named actions, each with `agent`/`prompt`/`prompt-file`/`command` templates, `run-in: shell|sub-shell|headless` and `auto` to fire on every entry into the step's state (start + later transitions — the on-enter hook); the flat single-action form parses as one anonymous `default` action; every action takes an optional `description` — the reserved `description` key in a named-actions map describes the state itself — shown as the session banner's lighter `detail` text and leading the Run buttons' tooltips). Declared vars are supplied by `axn-workflow-start <wf> [arg|key=value]`, card fields, `axn-workflow-set`, or the `axn-workflow-var:` marker; they substitute into `{{key}}` templates and ride every launched action's env (`KEY=value`, plus `AXN_WORKFLOW`/`AXN_STATE`/`AXN_ACTION`). A `command` action's exit code is recorded as an informational check (`pluginState.checks['<state>:<name>']`, never gating) — via a printed `axn-workflow-check:` trailer for `shell`, the `ctx.exec` result for `headless`, and the `subshell-exited` code for `sub-shell` (`openSubShell` returns the tab id, `onSubShellExit` resolves it). The state of record lives in the session's `pluginState` (persisted in state.json); an optional `tracking.file` (repo-root-relative or absolute, extension picks `.json` vs YAML) mirrors it as an agent-writable surface — agents can also move the workflow by printing a whole line `axn-workflow-state: <state>`, report a check via `axn-workflow-check: <name> <rc>`, or fire a named action via `axn-workflow-run: <name>`, all adopted from PTY output. Commands `axn-workflow-start`/`axn-workflow-set`/`axn-workflow-move`/`axn-workflow-run`/`axn-workflow`/`axn-workflow-stop`, start/move/run rows in the session context menu (`sessionMenuItems` — with several workflows a single "Start workflow…" row opens a searchable picker), a banner + under-session state chip, and a rail kanban view whose cards jump to sessions, move states via `sessionApi`, show editable var fields, and stack one run button per action with check badges. A workflow declaring a *required* `kind: mr` var also surfaces a button labelled with the workflow's `title` on glab-mr's MR rows (`mrStartWorkflows`; optional mr vars get none) via the `mrActions.ts` contribution registry: click → fetch the MR head ref (`merge-requests/N/head`, GitHub `pull/N/head`), `git worktree add` at the worktrees-plugin location, `openSession` there, bind the workflow with the MR vars pre-filled. See `docs/dev-workflow.md`.
+- The built-in `agents` plugin (`session-plugins/agents.tsx`, on by default — `agents.enabled: false` disables only the UI) owns **agent personas**: reusable `agents.personas.<name>` bundles in plugins.yaml (`cli` — defaults to the persona name, `model`, `args`, `prompt`/`prompt-file` — the first-message kickoff, `instructions`/`instructions-file` — the persistent identity, `description`; a bare string value is `cli` shorthand). On every ctx touch it mirrors the parsed list into the shared `agentRegistry.ts` module (the `mrActions.ts` contribution pattern — always in the bundle, so the schema stays available even when the plugin is disabled). Consumers: dev-workflow's `agent: <name>`/`{profile: <name>, …overrides}` step references (unresolved names degrade to `cli: <name>`). Launch lines are built by each CLI's registered **launcher** — `registerAgentLauncher` in `agentRegistry.ts`, built-in agent plugins register at module scope, `devWorkflow.agentLaunchLine` consults the registry: claude sends instructions via `--append-system-prompt(-file)`, codex via `-c developer_instructions=…`, devin and unregistered CLIs fold them into the seed prompt, and gemini — which has no instructions flag — writes them to a NEW `GEMINI.md` in the launch cwd when its own `gemini.write-gemini-md` setting is on (create-only: an existing `GEMINI.md` aborts the launch with a visible error, content is never merged or overwritten; without the setting instructions fold into the prompt). A launcher's refusal surfaces as session attention. Launch surfaces: `axn-agent <persona>` types the launch line in the current shell (`completeArg` offers persona names), the session and workspace context menus' single "New session with agent…" row opens a searchable persona picker (`pickFromList`, see below) and spawns a persona-named session seeded with the launch line (pending map → `onSessionOpen`, like worktrees; workspace rows use `defaultFolder` as cwd), and the rail bot icon opens a full-area view of persona cards (cli/model/prompt badges, live-session count, Launch button + a "running" session list grouped by workspace in panel order — a non-collapsible tree, so every agent shows where it lives). A launched/typed persona stamps `pluginState.agents.persona`, which drives the `renderRow` bot badge — the persona survives as the session's identity beyond process detection.
 - `session.process` is the foreground process identity: the process-group leader's argv resolved by `process_identity` (`src-tauri/src/lib.rs`) — argv0 basename, except interpreter launches unwrap to the script (`python3.13 /x/bin/vibe` → `vibe`, `node cli.js` → `cli`, `python -m pkg` → the module). `sessionIcons` keys match this name (lowercased), so script-based tools (uv/pipx CLIs, npm shims) get icons and `processPattern` matches too.
 - The `docker` plugin (`session-plugins/docker.tsx`) is a rail-only indicator: the Docker whale SVG icon, running/stopped container counts, and a RAM-style used/free disk bar. Stats come from one `sh -c` probe via `backend.exec` (`command -v docker` + `docker info` gate, `docker ps -a --format '{{.State}}'` for counts, `docker system df --format '{{.Size}}'` for used bytes, `df -k` of `DockerRootDir` with `/` fallback for free space). The rail is session-less: desktop `plugin_exec` ignores the session id, web execs through the first session's host — the plugin hides when docker or exec is unavailable. `docker.refresh-interval-seconds` (default 15, min 5) sets the poll cadence; `system df` is slow, so polls never overlap. ≥80/≥90 % disk use raises a warning/critical app attention flag.
 - The `axn-dev` plugin (`session-plugins/axnDev.tsx`, Boxes rail icon) is a read-only mirror of `axn-dev list`: a shared `useSyncExternalStore` overview polls `axn-dev list` via `appRuntime().exec` on a `axn-dev.refresh-interval-seconds` cadence (default 30, min 10), parsed by the pure `parseAxnDevList` (global section at indent 2, project sections under `  <repo>:` headers at indent 4, endpoint lines and wrapped descriptions one level deeper — told apart by a URL-ish second token). The rail shows `running/found` (warning triangle when the CLI fails); clicking toggles the plugin view, which lists sections like `axn-dev list` — status dot, name, worktree badge, description, and clickable endpoint links for running scenarios — plus a persisted "running only" filter (`pluginData['axn-dev'].runningOnly`). No start/stop actions; `axn-dev serve` remains the full dashboard. The older external `plugins/axn-dev-scenarios.mjs` (opt-in, per-session row) is unaffected — different plugin id.

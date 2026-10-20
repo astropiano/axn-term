@@ -532,14 +532,13 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
   );
 
   // Adopt a session object as-is — used when a sub-shell PTY is detached into
-  // its own session ("turn into workspace"): the id is the live PTY's backend
-  // session id, so the mounting ShellTerminal reattaches instead of spawning.
+  // its own session ("turn into workspace") and when another window hands a
+  // whole session over (its tabs, plugin state and scrollback ride along):
+  // the id is the live PTY's backend session id, so the mounting
+  // ShellTerminal reattaches instead of spawning.
   const adoptSession = useCallback(
-    (workspaceId: string, init: { id: string; name: string; cwd?: string }) => {
-      const session = createDefaultSession(workspaceId);
-      session.id = init.id;
-      session.name = init.name;
-      if (init.cwd) session.cwd = init.cwd;
+    (workspaceId: string, init: { id: string; name: string; cwd?: string } & Partial<ShellSession>) => {
+      const session: ShellSession = { ...createDefaultSession(workspaceId), ...init, workspaceId };
       setSessionsWithRef((prev) => [...prev, session]);
     },
     [setSessionsWithRef],

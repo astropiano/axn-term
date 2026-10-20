@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { pickFromList } from '../pickerHost';
+
+vi.mock('../pickerHost', () => ({ pickFromList: vi.fn(async () => null) }));
 import { agentsPlugin } from './agents';
 import {
   clearPersonas,
@@ -208,16 +211,18 @@ describe('agents plugin', () => {
     expect(cmd('axn-agent').completeArg!(ctx, '')).toEqual(['reviewer', 'impl', 'quickfix']);
   });
 
-  it('session menu offers a launcher per persona; onSessionOpen seeds it', async () => {
+  it('session menu offers one agent picker row; onSessionOpen seeds the pick', async () => {
     const ctx = makeCtx({ pluginSettings: personasSettings });
     const items = agentsPlugin.sessionMenuItems!(ctx);
-    expect(items.map((i) => i.label)).toEqual([
-      'New session with reviewer',
-      'New session with impl',
-      'New session with quickfix',
+    expect(items.map((i) => i.label)).toEqual(['New session with agent…']);
+    vi.mocked(pickFromList).mockResolvedValueOnce('impl');
+    items[0].onClick();
+    expect(vi.mocked(pickFromList).mock.calls.at(-1)?.[0].items.map((i) => i.key)).toEqual([
+      'reviewer',
+      'impl',
+      'quickfix',
     ]);
-    items[1].onClick();
-    expect(ctx.openSession).toHaveBeenCalledWith('/repo', 'impl');
+    await vi.waitFor(() => expect(ctx.openSession).toHaveBeenCalledWith('/repo', 'impl'));
 
     // the spawned session fires onSessionOpen → stamp + seed launch line
     const writes: string[] = [];

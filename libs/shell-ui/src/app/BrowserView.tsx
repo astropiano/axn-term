@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DirEntry } from '@axn-term/session-backend';
-import { FileText, Folder, ChevronLeft, ChevronRight, ArrowUp, RefreshCw, FilePlus, FolderPlus, Copy, FolderSearch } from 'lucide-react';
+import { FileText, Folder, FolderOpen, ChevronDown, ChevronLeft, ChevronRight, ArrowUp, RefreshCw, FilePlus, FolderPlus, Copy, FolderSearch } from 'lucide-react';
 import { resolvePath } from './fileService';
+import { flattenTree, sortEntries, type ChildListing, type TreeRow } from './browserTree';
 import { appRuntime } from './appRuntime';
 import { ContextMenu, menuDividerClass, menuItemClass } from '../ContextMenu';
 import { PathActionMenu } from '../PathActionMenu';
@@ -46,7 +47,12 @@ export function BrowserView({
   const backend = useSessionBackend();
   const platform = useShellPlatform();
   const sessionId = sessionIdProp ?? appRuntime()?.resolveSessionId() ?? '';
+  // Selection is the selected row's absolute path (rows can repeat names
+  // across expanded folders).
   const [selected, setSelected] = useState<string | null>(null);
+  // Folders expanded in place, and their listings (loaded on expand).
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const [children, setChildren] = useState<ReadonlyMap<string, ChildListing>>(() => new Map());
   const [menu, setMenu] = useState<BrowserMenu | null>(null);
   // Inline "new file/folder" row — Enter creates, Esc cancels.
   const [creating, setCreating] = useState<'file' | 'dir' | null>(null);
@@ -85,12 +91,7 @@ export function BrowserView({
     setError(null);
     backend.listDir(sessionId, currentPath)
       .then((list) => {
-        const typed = list as unknown as DirEntry[];
-        const sorted = typed.slice().sort((a, b) => {
-          if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name);
-          return a.isDirectory ? -1 : 1;
-        });
-        setEntries(sorted);
+        setEntries(sortEntries(list as unknown as DirEntry[]));
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -114,6 +115,43 @@ export function BrowserView({
       unwatch?.();
     };
   }, [currentPath, isVisible]);
+
+  const loadChildren = useCallback(
+    (dir: string) => {
+      if (!backend.listDir) return;
+      backend.listDir(sessionId, dir)
+        .then((list) => ({ entries: sortEntries(list as unknown as DirEntry[]) }))
+        .catch((e) => ({ error: String(e) }))
+        .then((listing: ChildListing) =>
+          setChildren((prev) => new Map(prev).set(dir, listing)),
+        );
+    },
+    [sessionId],
+  );
+
+  // Expansions belong to the directory they were opened in.
+  useEffect(() => {
+    setExpanded(new Set());
+    setChildren(new Map());
+  }, [currentPath]);
+
+  // A refresh (button, watcher, create) re-lists the expanded folders too —
+  // only the current directory itself is watched.
+  useEffect(() => {
+    if (!isVisible) return;
+    for (const dir of expanded) loadChildren(dir);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey, isVisible]);
+
+  const toggleExpanded = (dir: string) => {
+    if (expanded.has(dir)) {
+      // Collapse the subtree too, so re-expanding shows one level.
+      setExpanded((prev) => new Set([...prev].filter((p) => p !== dir && !p.startsWith(`${dir}/`))));
+    } else {
+      setExpanded((prev) => new Set(prev).add(dir));
+      loadChildren(dir);
+    }
+  };
 
   // Keyboard navigation needs focus — grab it when the tab becomes visible.
   useEffect(() => {
@@ -156,7 +194,7 @@ export function BrowserView({
       }
       if (creating === 'dir') {
         await backend.mkdir?.(sessionId, target);
-        setSelected(name);
+        setSelected(target);
       } else {
         if (!backend.writeFile) throw new Error('file writes are not supported');
         await backend.writeFile(sessionId, target, '');
@@ -214,15 +252,12 @@ export function BrowserView({
   const canBack = history.index > 0;
   const canForward = history.index < history.stack.length - 1;
   // Dotfiles are filtered at render time so toggling reuses the same listing.
-  const visibleEntries = showHidden
-    ? entries
-    : entries.filter((e) => !e.name.startsWith('.'));
+  const rows = flattenTree(currentPath, entries, expanded, children, showHidden);
+  const entryRows = rows.filter((r): r is Extract<TreeRow, { kind: 'entry' }> => r.kind === 'entry');
+  const rootEntryCount = rows.filter((r) => r.depth === 0).length;
 
-  const openEntry = (entry: DirEntry) => {
-    const child = resolvePath(
-      undefined,
-      `${currentPath.replace(/\/$/, '')}/${entry.name}`,
-    );
+  const openEntry = (entry: DirEntry, path: string) => {
+    const child = resolvePath(undefined, path);
     if (entry.isDirectory) {
       setSelected(null);
       navigate(child);
@@ -233,7 +268,7 @@ export function BrowserView({
 
   const goUp = () => {
     if (!parent || parent === currentPath) return;
-    const left = currentPath.replace(/\/$/, '').split('/').pop() ?? '';
+    const left = currentPath.replace(/\/$/, '');
     navigate(parent);
     // Highlight the folder we just left — the "current selected folder".
     setSelected(left);
@@ -242,7 +277,7 @@ export function BrowserView({
   const historyStep = (delta: -1 | 1) => {
     const next = history.index + delta;
     if (next < 0 || next >= history.stack.length) return;
-    const left = currentPath.replace(/\/$/, '').split('/').pop() ?? '';
+    const left = currentPath.replace(/\/$/, '');
     setHistory({ stack: history.stack, index: next });
     setCurrentPath(history.stack[next]);
     // Highlight the folder we just left, like goUp does.
@@ -282,18 +317,28 @@ export function BrowserView({
 
   const handleListKeyDown = (e: React.KeyboardEvent) => {
     if (menu) return;
-    const idx = visibleEntries.findIndex((entry) => entry.name === selected);
+    const idx = entryRows.findIndex((r) => r.path === selected);
+    const row = idx >= 0 ? entryRows[idx] : undefined;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelected(
-        visibleEntries[Math.min(idx + 1, visibleEntries.length - 1)]?.name ?? null,
-      );
+      setSelected(entryRows[Math.min(idx + 1, entryRows.length - 1)]?.path ?? null);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setSelected(visibleEntries[Math.max(idx - 1, 0)]?.name ?? null);
+      setSelected(entryRows[Math.max(idx - 1, 0)]?.path ?? null);
+    } else if (e.key === 'ArrowRight') {
+      // Expand a folder in place; on an open one, step into its first child.
+      e.preventDefault();
+      if (!row?.entry.isDirectory) return;
+      if (!row.expanded) toggleExpanded(row.path);
+      else if (entryRows[idx + 1]?.parentPath === row.path) setSelected(entryRows[idx + 1].path);
+    } else if (e.key === 'ArrowLeft') {
+      // Collapse an open folder; otherwise jump to the row's parent folder.
+      e.preventDefault();
+      if (!row) return;
+      if (row.expanded) toggleExpanded(row.path);
+      else if (row.depth > 0) setSelected(row.parentPath);
     } else if (e.key === 'Enter') {
-      const entry = visibleEntries.find((en) => en.name === selected);
-      if (entry) openEntry(entry);
+      if (row) openEntry(row.entry, row.path);
     } else if (e.key === 'Backspace') {
       e.preventDefault();
       goUp();
@@ -415,7 +460,7 @@ export function BrowserView({
           <div className="text-[10px] text-[var(--text-secondary)]">loading...</div>
         )}
         {error && <div className="text-[10px] text-[var(--red)]">{error}</div>}
-        {!loading && !error && visibleEntries.length === 0 && !creating && (
+        {!loading && !error && rootEntryCount === 0 && !creating && (
           <div className="text-[10px] text-[var(--text-secondary)]">empty directory</div>
         )}
         {creating && (
@@ -452,42 +497,76 @@ export function BrowserView({
           </div>
         )}
         <ul className="space-y-0.5">
-          {visibleEntries.map((entry) => (
-            <li key={entry.name}>
-              <button
-                type="button"
-                onClick={() => setSelected(entry.name)}
-                onDoubleClick={() => openEntry(entry)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setSelected(entry.name);
-                  setMenu({
-                    kind: 'entry',
-                    x: e.clientX,
-                    y: e.clientY,
-                    entry,
-                    path: resolvePath(
-                      undefined,
-                      `${currentPath.replace(/\/$/, '')}/${entry.name}`,
-                    ),
-                  });
-                }}
-                className={`flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-[11px] transition hover:bg-[var(--surface)] ${
-                  selected === entry.name
-                    ? 'bg-[var(--surface)] text-[var(--accent)]'
-                    : 'text-[var(--text-primary)]'
-                }`}
+          {rows.map((row) =>
+            row.kind === 'status' ? (
+              <li
+                key={row.path}
+                style={{ paddingLeft: `${row.depth * 14 + 20}px` }}
+                className="truncate py-0.5 text-[10px] text-[var(--text-secondary)]"
               >
-                {entry.isDirectory ? (
-                  <Folder className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                ) : (
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                )}
-                <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-              </button>
-            </li>
-          ))}
+                {row.text}
+              </li>
+            ) : (
+              <li key={row.path} style={{ paddingLeft: `${row.depth * 14}px` }}>
+                <button
+                  type="button"
+                  onClick={() => setSelected(row.path)}
+                  onDoubleClick={() => openEntry(row.entry, row.path)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSelected(row.path);
+                    setMenu({
+                      kind: 'entry',
+                      x: e.clientX,
+                      y: e.clientY,
+                      entry: row.entry,
+                      path: resolvePath(undefined, row.path),
+                    });
+                  }}
+                  className={`flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] transition hover:bg-[var(--surface)] ${
+                    selected === row.path
+                      ? 'bg-[var(--surface)] text-[var(--accent)]'
+                      : 'text-[var(--text-primary)]'
+                  }`}
+                >
+                  {row.entry.isDirectory ? (
+                    <span
+                      role="button"
+                      aria-label={row.expanded ? 'Collapse' : 'Expand'}
+                      onClick={(e) => {
+                        // Expand in place — the row's own click only selects,
+                        // double-click still navigates into the folder.
+                        e.stopPropagation();
+                        setSelected(row.path);
+                        toggleExpanded(row.path);
+                      }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded text-[var(--text-secondary)] hover:text-[var(--accent)]"
+                    >
+                      {row.expanded ? (
+                        <ChevronDown className="h-3 w-3" />
+                      ) : (
+                        <ChevronRight className="h-3 w-3" />
+                      )}
+                    </span>
+                  ) : (
+                    <span className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                  {row.entry.isDirectory ? (
+                    row.expanded ? (
+                      <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                    ) : (
+                      <Folder className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                    )
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
+                  )}
+                  <span className="ml-1 min-w-0 flex-1 truncate">{row.entry.name}</span>
+                </button>
+              </li>
+            ),
+          )}
         </ul>
       </div>
       {menu?.kind === 'entry' && (

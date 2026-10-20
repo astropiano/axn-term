@@ -21,6 +21,7 @@ import type { ITerminalAddon, Terminal } from '@xterm/xterm';
 import {
   applyTerminalRenderer,
   normalizeRendererMode,
+  repaintTerminal,
   type RendererFactories,
 } from './terminalRenderer';
 
@@ -148,5 +149,34 @@ describe('applyTerminalRenderer', () => {
     contextLoss!();
     res.dispose();
     expect(canvas.dispose).toHaveBeenCalled();
+  });
+});
+
+describe('repaintTerminal', () => {
+  it('re-rasterizes glyphs before marking every row dirty', () => {
+    const calls: string[] = [];
+    const term = {
+      rows: 24,
+      clearTextureAtlas: () => calls.push('clear'),
+      refresh: (start: number, end: number) => calls.push(`refresh ${start}-${end}`),
+    };
+    vi.stubGlobal('requestAnimationFrame', (cb: () => void) => { cb(); return 0; });
+    try {
+      repaintTerminal(term);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(calls).toEqual(['clear', 'refresh 0-23']);
+  });
+
+  it('still refreshes a terminal without a texture atlas (DOM renderer)', () => {
+    const refresh = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', (cb: () => void) => { cb(); return 0; });
+    try {
+      repaintTerminal({ rows: 10, refresh });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(refresh).toHaveBeenCalledWith(0, 9);
   });
 });
