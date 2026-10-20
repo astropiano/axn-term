@@ -797,10 +797,12 @@ and view frames). Sandboxes boot/dispose with the enabled set
 `exec`/`openSubShell`/`runCommand`; `terminal-input` — `writeToSession`, the
 `line` hook and replacement lines from owned commands; `terminal-output` —
 `getScreenLines`/`waitForSessionOutput` and the `output` hook; `fs-read`;
-`fs-write`; `sessions` — `openSession`/`selectSession`/`activateTab`). The
+`fs-write`; `sessions` — `openSession`/`selectSession`/`activateTab`/`openTab`/
+`openBrowser`; `setRestoring` counts as `terminal-input` — its overlay takes the
+terminal's input). The
 bridge refuses undeclared calls with an error and never delivers undeclared
 hooks; unknown entries are dropped with a warning at load. Default is none —
-own pluginState, banners/attention, surfaces, tabs and swallowing owned
+own pluginState, banners/attention, surfaces and swallowing owned
 commands need no permission. Settings → Plugins lists the declared set.
 `pendingRestore`/`repoMenuItems`/`sessionMenuItems` and
 `renderSettings` stay in-process-only (sync contracts or trusted DOM).
