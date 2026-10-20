@@ -471,6 +471,18 @@ PTY and emits `control-command`; the window owning the PTY
 (`sessionForPty` in `app/controlCommands.ts`) runs the line through
 `handleSessionCommand` and answers via `control_reply` (`controlReply`: swallowed
 → ok, `echo "<msg>"` → message, any other replacement → refused, 5 s timeout);
+on the web the session host plays the app's part: `ControlListener`
+(`apps/session-host`, its own minimal Kestrel app on
+`$AXN_STATE_DIR/control.sock` — 0600, chowned to the PTY user — never the
+gateway-facing listener) checks `X-Axn-Pty`/`X-Axn-Pty-Secret` (PTYs get
+`AXN_TERM_PTY_SECRET`, `AXN_TERM_CONTROL_SOCKET` and `AXN_TERM_CLI` =
+the host-written `sh` + `curl` script `$AXN_STATE_DIR/bin/axn-term`; the id is
+the existing `AXN_SESSION_ID` — `AXN_TERM_PTY_ID` stays unset so hook event
+files keep their names), and `ControlBroker` delivers the line to exactly one
+browser channel — the PTY's /ws connection (`control-command` frame →
+`control-reply`) or else the most recently attached Ramphastos session (duplex
+`control` stream) — where `SessionBackend.onControlCommand` hands it to the same
+dispatch (`tests/control-e2e.mjs` covers both transports);
 `axn-term install`/`uninstall` copy the bundled
 agent skills (embedded via `include_str!` from `src-tauri/skills/<name>/`) into
 agent skill dirs — same scheme as `axn-dev install` (`--skills`, `--skill`,

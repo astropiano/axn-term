@@ -1,5 +1,4 @@
-import type { ControlReply } from './app/controlCommands';
-import type { Unsubscribe } from '@axn-term/session-backend';
+import type { ControlReply, Unsubscribe } from '@axn-term/session-backend';
 
 export const isMac =
   /mac/i.test(navigator.platform ?? '') ||

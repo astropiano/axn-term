@@ -29,7 +29,9 @@ var sessionSecret = SessionHostAuth.ResolveSecret(
 // in containers the entrypoint passes the secret as a file instead.
 Environment.SetEnvironmentVariable(SessionHostAuth.SecretEnvName, null);
 
+builder.Services.AddSingleton<ControlBroker>();
 builder.Services.AddSingleton<PtyHost>();
+builder.Services.AddHostedService<ControlListener>();
 builder.Services.AddSingleton<SessionHostService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SessionHostService>());
 
@@ -39,6 +41,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<SessionHostService
 builder.Services.AddRamphastos(
     sp => new AxnHostVm(
         sp.GetRequiredService<PtyHost>(),
+        sp.GetRequiredService<ControlBroker>(),
         sp.GetRequiredService<ILogger<AxnHostVm>>()),
     opts => opts.ConfigureSession = session => ((AxnHostVm)session.Root).Attach(session));
 
