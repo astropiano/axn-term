@@ -475,8 +475,11 @@ export function ShellTerminal({
                           end: { x: end, y: bufferLineNumber },
                         },
                   text: wrapped?.url ?? c.token,
+                  // xterm activates a link on mouse-up of any button — a
+                  // right-click opening the context menu must not navigate.
                   activate: isUrl
-                    ? () => {
+                    ? (event: MouseEvent) => {
+                        if (event.button !== 0) return;
                         services.openExternal(stat.path);
                       }
                     : () => {},
