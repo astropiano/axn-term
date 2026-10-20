@@ -207,7 +207,8 @@ export class TauriBackend implements SessionBackend {
 export const tauriBackend = new TauriBackend();
 
 export const tauriServices: ShellServices = {
-  copyText: (text) => writeText(text).catch(() => {}),
+  copyText: (text) =>
+    writeText(text).catch((e: unknown) => console.warn('[clipboard] write failed:', e)),
   pasteText: () => readText().then((t) => t ?? undefined),
   openExternal: (url) => openUrl(url).catch(() => {}),
   openDirectory: (path) => invoke('open_directory', { path }).catch(() => {}),
