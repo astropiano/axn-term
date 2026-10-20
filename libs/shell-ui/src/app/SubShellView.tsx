@@ -6,7 +6,14 @@ import { backendFileService } from './fileService';
 import { createTabHookWatcher } from './subShellHooks';
 import { useSettings } from '../SettingsProvider';
 import { getXtermColors, resolveShellFont } from '../themes';
-import { registerTerminalElement, takePtyKeepAlive } from '../terminalRegistry';
+import {
+  getScreenLines,
+  registerTerminal,
+  registerTerminalElement,
+  takePtyKeepAlive,
+  unregisterTerminal,
+} from '../terminalRegistry';
+import { tabTaskPatch } from './subShellTasks';
 import { DEVIN_PROCESS_RE } from '../processPatterns';
 import { createHiddenCommandInput } from './hiddenCommands';
 import { createOsc8LeakGuard, OSC8_CLOSE } from '../terminalLinks';
@@ -122,6 +129,8 @@ export function SubShellView({
     t.loadAddon(fit);
     t.open(terminalRef.current);
     const unregisterElement = registerTerminalElement(terminalRef.current, t);
+    // keyed by the tab id: screen scans (subShellTasks.ts) read this PTY's view
+    registerTerminal(tab.id, t);
     // App navigation shortcuts must bubble to ShellApp's window listener
     // instead of becoming escape sequences.
     t.attachCustomKeyEventHandler(
@@ -295,6 +304,10 @@ export function SubShellView({
               onUpdateTabRef.current?.({ agentActive: undefined });
             }
             void hookWatcher.tick(foregroundRef.current);
+            const tasks = tabTaskPatch(tabRef.current, foregroundRef.current, () =>
+              getScreenLines(tab.id),
+            );
+            if (tasks) onUpdateTabRef.current?.(tasks);
           })
           .catch(() => {});
       }, 1000);
@@ -366,6 +379,7 @@ export function SubShellView({
       safely('sub-shell output listener', () => unlistenOut?.());
       safely('sub-shell agent closer', () => unregisterCloser());
       unregisterElement();
+      unregisterTerminal(tab.id, t);
       safely('sub-shell exit listener', () => unlistenExit?.());
       if (fgPoll) clearInterval(fgPoll);
       safely('sub-shell input listener', () => onData.dispose());
