@@ -83,9 +83,12 @@ public sealed class PtyHost
 
     private readonly ConcurrentDictionary<string, PtySession> _sessions = new();
 
-    public PtyHost(IConfiguration configuration, ILogger<PtyHost> logger)
+    private readonly ControlBroker _control;
+
+    public PtyHost(IConfiguration configuration, ILogger<PtyHost> logger, ControlBroker control)
     {
         _logger = logger;
+        _control = control;
         _ptyCmd = configuration["PTY_CMD"] ?? "/bin/bash";
         _ptyArgs = (configuration["PTY_ARGS"] ?? "")
             .Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -152,6 +155,11 @@ public sealed class PtyHost
             ["USER"] = _ptyUser,
             ["LOGNAME"] = _ptyUser,
             ["HOME"] = runAsUser ? $"/home/{_ptyUser}" : Environment.GetEnvironmentVariable("HOME") ?? "/tmp",
+            // `axn-term session …` from inside this terminal (ControlListener):
+            // authenticates as this PTY (AXN_SESSION_ID) with the secret.
+            ["AXN_TERM_PTY_SECRET"] = _control.MintSecret(id),
+            ["AXN_TERM_CONTROL_SOCKET"] = Path.Combine(_stateDir, ControlListener.SocketName),
+            ["AXN_TERM_CLI"] = Path.Combine(_stateDir, "bin", ControlListener.ScriptName),
         };
 
         IPtyConnection pty;
@@ -209,7 +217,11 @@ public sealed class PtyHost
     }
 
     /// <summary>Drop a session from the registry (task-state polling stops).</summary>
-    public void Remove(string id) => _sessions.TryRemove(id, out _);
+    public void Remove(string id)
+    {
+        _sessions.TryRemove(id, out _);
+        _control.Forget(id);
+    }
 
     /// <summary>Resolve a client path relative to the shell's live cwd.
     /// With AXN_FS_JAIL_HOME=1 the result must stay inside the PTY user's
@@ -553,7 +565,8 @@ public sealed class PtyHost
     /// Service runs as root while the PTY user doesn't — mutations must go
     /// through `setpriv` (same as `exec` and PTY spawn) so files and dirs
     /// land owned by the shell user.
-    private bool RunsAsPtyUser => geteuid() == 0 && _ptyUser != "root";
+    public bool RunsAsPtyUser => geteuid() == 0 && _ptyUser != "root";
+    public string PtyUser => _ptyUser;
 
     /// <summary>
     /// `app args` — wrapped in `setpriv` to run as the PTY user when the

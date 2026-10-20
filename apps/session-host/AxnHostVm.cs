@@ -152,8 +152,22 @@ public sealed class AxnHostVm : ApplicationModel
         return false;
     }
 
+    public override void OnClientConnected(SessionConnection connection)
+    {
+        _controlConnections++;
+        TryRegisterControl();
+    }
+
     public override void OnClientDisconnected(SessionConnection connection)
     {
+        // A session nobody is connected to cannot answer — stop routing
+        // `axn-term session …` lines to it.
+        if (--_controlConnections <= 0)
+        {
+            _controlConnections = 0;
+            _controlChannel?.Dispose();
+            _controlChannel = null;
+        }
         if (!_viewports.Remove(connection.Id)) return;
         // The smallest viewport left — re-fit every live PTY.
         foreach (var pty in _host.Sessions.Values)
@@ -165,10 +179,72 @@ public sealed class AxnHostVm : ApplicationModel
     // continuations (registration) — concurrent for safety.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SessionStream> _streams = new();
 
-    public AxnHostVm(PtyHost host, ILogger<AxnHostVm> logger)
+    public AxnHostVm(PtyHost host, ControlBroker control, ILogger<AxnHostVm> logger)
     {
         _host = host;
+        _control = control;
         _logger = logger;
+    }
+
+    // ---- `axn-term session …` (ControlBroker) ----
+    // Requests go to the client as JSON lines on the duplex `control` stream
+    // ({requestId, ptyId, line}); its answers come back the same way
+    // ({requestId, ok, message?, error?}).
+
+    private const string ControlStreamName = "control";
+    private readonly ControlBroker _control;
+    private SessionStream? _controlStream;
+    private IDisposable? _controlChannel;
+    private int _controlConnections;
+
+    private void DeclareControlStream()
+    {
+        Session!.DeclareStream(new StreamDeclaration
+        {
+            Name = ControlStreamName,
+            Direction = StreamDirection.Duplex,
+            OnData = data =>
+            {
+                try
+                {
+                    var reply = JsonNode.Parse(System.Text.Encoding.UTF8.GetString(data.Span));
+                    var requestId = reply?["requestId"]?.GetValue<string>();
+                    if (requestId is not null) _control.Reply(requestId, ControlReply.FromJson(reply));
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // not an answer — ignore
+                }
+                return ValueTask.CompletedTask;
+            },
+            OnClose = _ =>
+            {
+                _controlChannel?.Dispose();
+                _controlChannel = null;
+                _controlStream = null;
+                return ValueTask.CompletedTask;
+            },
+        });
+        // OpenStreamAsync posts to the session mailbox — continue out of band.
+        _ = OpenControlStreamAsync();
+    }
+
+    private async Task OpenControlStreamAsync()
+    {
+        _controlStream = await Session!.OpenStreamAsync(ControlStreamName);
+        TryRegisterControl();
+    }
+
+    private void TryRegisterControl()
+    {
+        var stream = _controlStream;
+        if (stream is null || _controlConnections <= 0 || _controlChannel is not null) return;
+        _controlChannel = _control.RegisterHub((requestId, ptyId, line) =>
+        {
+            var json = new JsonObject { ["requestId"] = requestId, ["ptyId"] = ptyId, ["line"] = line };
+            stream.Write(System.Text.Encoding.UTF8.GetBytes(json.ToJsonString()));
+            return Task.CompletedTask;
+        });
     }
 
     public string Hostname { get; } = Environment.MachineName;
@@ -205,6 +281,7 @@ public sealed class AxnHostVm : ApplicationModel
     public void Attach(Session session)
     {
         Session = session;
+        DeclareControlStream();
 
         // Hydrated entries (resumed session record) re-index; PTYs the host
         // no longer runs are pruned from the projection.

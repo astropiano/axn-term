@@ -1,4 +1,6 @@
+import { answerControl } from './types.ts';
 import type {
+  ControlCommandHandler,
   DirEntry,
   FsResult,
   PathStat,
@@ -54,6 +56,12 @@ export class WsBackend implements SessionBackend {
   // per-conn storage left the replacement with no callbacks (dead output).
   private outputListeners = new Map<string, Set<(data: Uint8Array) => void>>();
   private assignedCbs = new Set<(clientId: string, serverId: string) => void>();
+  private controlHandlers = new Set<ControlCommandHandler>();
+
+  onControlCommand(cb: ControlCommandHandler): Unsubscribe {
+    this.controlHandlers.add(cb);
+    return () => this.controlHandlers.delete(cb);
+  }
   private closedCbs = new Map<string, Set<() => void>>();
   // Sub-shell bookkeeping: a sub-shell is just another /ws conn whose PTY was
   // spawned with a command/cwd override; parent linkage is client-side so
@@ -352,6 +360,17 @@ export class WsBackend implements SessionBackend {
       if (msg.type === 'session' && typeof msg.sessionId === 'string') {
         conn.serverSessionId = msg.sessionId;
         for (const cb of this.assignedCbs) cb(clientId, msg.sessionId);
+        return;
+      }
+      // `axn-term session …` from inside this PTY (host ControlBroker): the
+      // frame arrives on this PTY's own connection, so it is ours by id.
+      if (msg.type === 'control-command' && typeof msg.requestId === 'string' && typeof msg.line === 'string') {
+        const requestId = msg.requestId;
+        void answerControl(this.controlHandlers, { ptyId: clientId, line: msg.line }).then((reply) => {
+          if (conn.ws.readyState === WebSocket.OPEN) {
+            conn.ws.send(JSON.stringify({ type: 'control-reply', requestId, ...reply }));
+          }
+        });
         return;
       }
       if (typeof msg.type === 'string' && msg.type.endsWith('-result') && msg.requestId) {

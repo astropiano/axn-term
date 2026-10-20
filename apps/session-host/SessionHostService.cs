@@ -29,11 +29,15 @@ public sealed class SessionHostService : BackgroundService
     private readonly ConcurrentDictionary<string, DateTime> _sessionMtimes = new();
     private readonly ConcurrentDictionary<WebSocket, TaskSubscriber> _taskSubscribers = new();
 
-    public SessionHostService(PtyHost host, ILogger<SessionHostService> logger, ILogger<WsControlRouter> routerLogger)
+    private readonly ControlBroker _control;
+
+    public SessionHostService(
+        PtyHost host, ControlBroker control, ILogger<SessionHostService> logger, ILogger<WsControlRouter> routerLogger)
     {
         _host = host;
+        _control = control;
         _logger = logger;
-        _router = new WsControlRouter(host, routerLogger);
+        _router = new WsControlRouter(host, control, routerLogger);
     }
 
     /// <summary>
@@ -55,6 +59,11 @@ public sealed class SessionHostService : BackgroundService
 
         var pty = session.Pty;
         await sender.SendJsonAsync(new JsonObject { ["type"] = "session", ["sessionId"] = sessionId }, cancellationToken);
+        // `axn-term session …` from this PTY is answered by this connection.
+        using var controlChannel = _control.RegisterPty(sessionId, (requestId, _, line) =>
+            sender.SendJsonAsync(
+                new JsonObject { ["type"] = "control-command", ["requestId"] = requestId, ["line"] = line },
+                cancellationToken));
 
         using (pty)
         using (var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
