@@ -2420,6 +2420,18 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         {ed.dirty && (
                           <span className="h-1.5 w-1.5 rounded-full bg-[var(--orange)]" />
                         )}
+                        {ed.kind === 'shell' && ed.hookStatus && ed.hookStatus !== 'idle' && (
+                          <span
+                            data-tip={ed.hookAttention?.message ?? ed.hookStatus}
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              ed.hookStatus === 'blocked'
+                                ? 'animate-pulse bg-[var(--red)]'
+                                : ed.hookStatus === 'running'
+                                  ? 'bg-[var(--blue)]'
+                                  : 'bg-[var(--green)]'
+                            }`}
+                          />
+                        )}
                       </button>
                       <button
                         type="button"

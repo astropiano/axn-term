@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { AgentHookSpec } from '@axn-term/plugin-sdk';
-import { agentEventFile } from '@axn-term/plugin-sdk';
+import { agentEventFile, agentEventLog } from '@axn-term/plugin-sdk';
 import { syncHookConfig } from './agentHookBridge';
 import type { SessionViewPlugin } from './plugin';
 import {
@@ -36,6 +36,8 @@ const toySpec: AgentHookSpec = {
         };
       case 'Done':
         return { status: 'completed', attention: null };
+      case 'Nudge':
+        return { attention: { level: 'warning', message: 'toy is waiting' } };
       default:
         return null;
     }
@@ -61,6 +63,12 @@ function harness(overrides: Parameters<typeof makeHarness>[1] = {}) {
 
 function writeEvent(h: ReturnType<typeof harness>, ev: Record<string, unknown>) {
   h.files.set(EVENT_FILE, JSON.stringify(ev));
+}
+
+const EVENT_LOG = agentEventLog(EVENT_FILE);
+
+function appendEvent(h: ReturnType<typeof harness>, ev: Record<string, unknown>) {
+  h.files.set(EVENT_LOG, `${h.files.get(EVENT_LOG) ?? ''}${JSON.stringify(ev)}\n`);
 }
 
 describe('hookSpec host wiring (spec-only plugin)', () => {
@@ -175,6 +183,34 @@ describe('hookSpec host wiring (spec-only plugin)', () => {
       sessionId: h.session.id,
       patch: { status: 'completed' },
     });
+    dispatchClose(toyPlugin, h.ctx);
+  });
+
+  it('applies every event appended between two polls, in order', async () => {
+    const h = harness();
+    appendEvent(h, { hook_event_name: 'Go' });
+    await start(h);
+    await vi.advanceTimersByTimeAsync(1600);
+    // a permission prompt and the agent's follow-up land within one poll
+    appendEvent(h, { hook_event_name: 'NeedYou', what: 'approve' });
+    appendEvent(h, { hook_event_name: 'Nudge' });
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(h.updateSessionCalls).toContainEqual({ sessionId: h.session.id, patch: { status: 'blocked' } });
+    // the warning nudge does not downgrade the pending critical flag
+    expect(h.attentionCalls.at(-1)).toEqual(
+      expect.objectContaining({ level: 'critical', message: 'toy needs you: approve' }),
+    );
+    dispatchClose(toyPlugin, h.ctx);
+  });
+
+  it('applies only the newest logged event on the first read', async () => {
+    const h = harness();
+    appendEvent(h, { hook_event_name: 'NeedYou' });
+    appendEvent(h, { hook_event_name: 'Done' });
+    await start(h);
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(h.updateSessionCalls).not.toContainEqual({ sessionId: h.session.id, patch: { status: 'blocked' } });
+    expect(h.updateSessionCalls).toContainEqual({ sessionId: h.session.id, patch: { status: 'completed' } });
     dispatchClose(toyPlugin, h.ctx);
   });
 });

@@ -128,6 +128,15 @@ export interface EditorTab {
    * "continue latest" fallback.
    */
   agentResume?: string;
+  /**
+   * For kind 'shell': status reported by the hooks of the agent running in
+   * this tab (`app/subShellHooks.ts`) — the tab-level counterpart of
+   * `session.status`. 'completed' outlives the agent; anything else clears
+   * when it exits.
+   */
+  hookStatus?: SessionStatus;
+  /** For kind 'shell': the tab agent's hook-raised flag — rolls up into the session's attention. */
+  hookAttention?: SessionAttention | null;
   /** For kind 'shell': working directory override; defaults to the session's live cwd. */
   cwd?: string;
   /** For kind 'shell': custom tab label; absent falls back to the command/dir default. */
