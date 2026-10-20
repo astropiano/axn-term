@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Terminal, type ILink, type ILinkProvider } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import type { PathStat, SessionBackend, Unsubscribe } from '@axn-term/session-backend';
 import { PathActionMenu } from './PathActionMenu';
+import { placeHoverCard } from './hoverCardPlacement';
 import type { ShellSession } from './types';
 import { useSettings } from './SettingsProvider';
 import { getXtermColors, resolveShellFont } from './themes';
-import { registerTerminal, takePtyKeepAlive, unregisterTerminal } from './terminalRegistry';
-import { applyTerminalRenderer } from './terminalRenderer';
+import { registerTerminal, takePtyKeepAlive, unregisterTerminal, registerTerminalElement } from './terminalRegistry';
+import { applyTerminalRenderer, repaintTerminal, safely } from './terminalRenderer';
 import { acquirePty } from './ptyLifetime';
 import { foregroundStatusPatch } from './foregroundStatus';
 import {
@@ -19,10 +20,11 @@ import {
   findWrappedUrlThrough,
   URL_START_RE,
   type GetLinkLine,
+  wrappedSelectionCandidates,
 } from './terminalLinks';
 import { DEVIN_PROCESS_RE } from './processPatterns';
 import { createHiddenCommandInput } from './app/hiddenCommands';
-import { isAppNavigationShortcut } from './app/shortcuts';
+import { isAppNavigationShortcut, isReloadShortcut } from './app/shortcuts';
 import { useShellServices } from './services';
 
 import '@xterm/xterm/css/xterm.css';
@@ -52,6 +54,7 @@ interface ShellTerminalProps {
 }
 
 interface HoverCardState {
+  /** Pointer position relative to the terminal — the card's anchor. */
   x: number;
   y: number;
   /** Absolute file path — or the URL itself when `isUrl` is set. */
@@ -117,6 +120,9 @@ export function ShellTerminal({
   const rendererCleanupRef = useRef<(() => void) | null>(null);
   const rendererMountedRef = useRef(false);
   const [hoverCard, setHoverCard] = useState<HoverCardState | null>(null);
+  // Measured placement of the visible card — below/right of the pointer, or
+  // flipped above/left when it would leave the terminal.
+  const [hoverCardPos, setHoverCardPos] = useState<{ left: number; top: number } | null>(null);
   const hoverCardRef = useRef<HoverCardState | null>(null);
   const hoverCardElRef = useRef<HTMLDivElement | null>(null);
   const lastHoverPathRef = useRef<string | null>(null);
@@ -154,9 +160,9 @@ export function ShellTerminal({
     hoverShowTimer.current = setTimeout(() => {
       const rect = terminalRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const width = 384;
-      const x = Math.min(Math.max(event.clientX - rect.left, 4), Math.max(rect.width - width - 8, 4));
-      const y = Math.min(event.clientY - rect.top + 14, Math.max(rect.height - 120, 4));
+      // Placement relative to the card's measured size happens on render.
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
       setHoverCard({ x, y, resolvedPath: stat.path, isDir: stat.isDir, isUrl, copyOnly });
     }, delay);
   };
@@ -215,6 +221,7 @@ export function ShellTerminal({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(terminalRef.current);
+    const unregisterElement = registerTerminalElement(terminalRef.current, term);
     registerTerminal(session.id, term);
     rendererCleanupRef.current = applyTerminalRenderer(
       term,
@@ -525,9 +532,22 @@ export function ShellTerminal({
               if (resolved && active) {
                 showHoverCard(event, resolved.stat, resolved.isUrl, 0);
               }
-            } else if (active) {
-              // Multi-token selection: don't try to pick a path out of it;
-              // just offer a copy of the whole selected text.
+            } else {
+              // A selection across rows may hold a path/URL the terminal
+              // wrapped (agent TUIs hard-wrap long paths onto an indented
+              // continuation row): rejoin the rows and take the longest
+              // candidate that resolves.
+              for (const candidate of wrappedSelectionCandidates(selection)) {
+                const resolved = await resolveToken(candidate);
+                if (!active) return;
+                if (resolved) {
+                  showHoverCard(event, resolved.stat, resolved.isUrl, 0);
+                  armHoverHide(4000);
+                  return;
+                }
+              }
+              if (!active) return;
+              // Nothing path-like: offer a copy of the whole selected text.
               showHoverCard(
                 event,
                 { path: selection, isFile: false, isDir: false },
@@ -575,7 +595,7 @@ export function ShellTerminal({
         term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
           // App navigation shortcuts must bubble to ShellApp's window
           // listener instead of becoming escape sequences.
-          if (isAppNavigationShortcut(event)) return false;
+          if (isAppNavigationShortcut(event) || isReloadShortcut(event)) return false;
           const isShiftEnter =
             event.key === 'Enter' &&
             event.shiftKey &&
@@ -669,22 +689,29 @@ export function ShellTerminal({
       if (enterPollTimeout) clearTimeout(enterPollTimeout);
       clearHoverTimers();
       setHoverCard(null);
-      linkProviderDisposable?.dispose();
+      // Each step is guarded: an exception escaping this cleanup would take
+      // the whole app down, and must not skip the PTY release either.
+      safely('link provider', () => linkProviderDisposable?.dispose());
       termEl?.removeEventListener('copy', onCopy, true);
       termEl?.removeEventListener('paste', onPaste, true);
       if (onSelectionMouseUp) termEl?.removeEventListener('mouseup', onSelectionMouseUp);
       window.removeEventListener('resize', fitWindow);
       resizeObserver?.disconnect();
-      onResize?.dispose();
-      onData?.dispose();
-      onTitleChange?.dispose();
-      unlisten?.();
+      safely('resize listener', () => onResize?.dispose());
+      safely('input listener', () => onData?.dispose());
+      safely('title listener', () => onTitleChange?.dispose());
+      safely('output listener', () => unlisten?.());
       // A PTY flagged keep-alive survives this unmount — it reattaches in a
       // different view (sub-shell promoted to main, demoted main re-shown as
       // a sub-shell tab).
-      pty.release(takePtyKeepAlive(ptyId));
+      safely('PTY release', () => pty.release(takePtyKeepAlive(ptyId)));
       unregisterTerminal(sessionId, term);
-      term.dispose();
+      unregisterElement();
+      // Dispose the renderer addon first: disposing an xterm with a live
+      // WebGL addon can throw.
+      safely('renderer', () => rendererCleanupRef.current?.());
+      rendererCleanupRef.current = null;
+      safely('terminal', () => term.dispose());
       terminal.current = null;
       fitAddon.current = null;
     };
@@ -726,12 +753,39 @@ export function ShellTerminal({
     if (!isVisible || !terminal.current || !fitAddon.current) return;
     fitAddon.current.fit();
     // A display:none terminal pauses xterm's renderer (IntersectionObserver),
-    // and the webview can drop the accelerated canvas' backing meanwhile. When
-    // no output arrived while hidden and fit() didn't resize, nothing marks
-    // rows dirty and the canvas stays blank until the next focus/click —
-    // force a repaint of the viewport.
-    terminal.current.refresh(0, terminal.current.rows - 1);
+    // and the webview can drop the accelerated canvas' backing (and WebGL's
+    // glyph atlas) meanwhile — repaint from freshly rasterized glyphs.
+    repaintTerminal(terminal.current);
   }, [isVisible]);
+
+  // Place the card from its real size, before paint, and again whenever it
+  // grows (the preview loads after the card opens).
+  useLayoutEffect(() => {
+    const el = hoverCardElRef.current;
+    const container = terminalRef.current;
+    if (!hoverCard || !el || !container) {
+      setHoverCardPos(null);
+      return;
+    }
+    const place = () => {
+      const rect = container.getBoundingClientRect();
+      setHoverCardPos(
+        placeHoverCard({
+          anchorX: hoverCard.x,
+          anchorY: hoverCard.y,
+          width: el.offsetWidth,
+          height: el.offsetHeight,
+          containerWidth: rect.width,
+          containerHeight: rect.height,
+        }),
+      );
+    };
+    place();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(place);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hoverCard]);
 
   return (
     <div className="relative h-full w-full bg-[var(--terminal-bg)] p-1.5">
@@ -739,8 +793,12 @@ export function ShellTerminal({
       {hoverCard && (
         <div
           ref={hoverCardElRef}
-          className="absolute z-50 w-96 rounded-md border border-[var(--border)] bg-[var(--bg-secondary)] shadow-xl"
-          style={{ left: hoverCard.x, top: hoverCard.y }}
+          className="absolute z-50 w-96 max-w-[calc(100%-8px)] rounded-md border border-[var(--border)] bg-[var(--bg-secondary)] shadow-xl"
+          style={{
+            left: hoverCardPos?.left ?? hoverCard.x,
+            top: hoverCardPos?.top ?? hoverCard.y,
+            visibility: hoverCardPos ? 'visible' : 'hidden',
+          }}
           onMouseEnter={cancelHideHoverCard}
           onMouseMove={cancelHideHoverCard}
           onMouseLeave={() => scheduleHideHoverCard()}

@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fragment } from 'react';
-import { Plus, Save, FolderOpen, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Check, Pencil, BrushCleaning, LayoutGrid, X } from 'lucide-react';
+import { ContextMenu } from '../ContextMenu';
+import { Plus, Save, FolderOpen, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight } from 'lucide-react';
+import { Trans } from '@lingui/react/macro';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
-import { useSessionBackend, useShellPlatform } from '../services';
+import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
 import { SessionView } from './SessionView';
 import { useSettings } from '../SettingsProvider';
 import { usePluginSettings } from './PluginSettingsProvider';
@@ -31,6 +33,8 @@ interface SessionPanelProps {
   updateWorkspace: (workspaceId: string, patch: Partial<Workspace>) => void;
   onAddSession: (workspaceId?: string, cwd?: string, name?: string) => void;
   onMoveSession: (sessionId: string, workspaceId: string, beforeSessionId?: string | null) => void;
+  /** Opens the "Move to workspace" picker for a session (menu row). */
+  onRequestMoveSession?: (sessionId: string) => void;
   onReorderWorkspace: (workspaceId: string, targetIndex: number) => void;
   onMoveWorkspace: (workspaceId: string, delta: -1 | 1) => void;
   onRenameSession: (id: string, name: string) => void;
@@ -233,37 +237,18 @@ function WorkspaceContextMenu({
   /** Rows contributed by enabled plugins via `workspaceMenuItems`. */
   pluginItems?: RepoMenuItem[];
 }) {
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [onClose]);
-
-  const x = Math.min(position.x, window.innerWidth - 240);
-  const y = Math.min(position.y, window.innerHeight - 200);
 
   const itemClass =
     'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]';
   const disabled = ' pointer-events-none opacity-40';
 
   return (
-    <div
-      ref={menuRef}
-      style={{ top: y, left: x }}
-      className="fixed z-50 w-56 rounded-lg bg-[var(--surface)] p-1 shadow-2xl"
+    <ContextMenu
+      x={position.x}
+      y={position.y}
+      onClose={onClose}
+      className="rounded-lg bg-[var(--surface)] p-1 shadow-2xl"
     >
       <div
         className="truncate px-2 py-1 text-[10px] text-[var(--text-secondary)]"
@@ -374,7 +359,7 @@ function WorkspaceContextMenu({
           </button>
         </>
       )}
-    </div>
+    </ContextMenu>
   );
 }
 
@@ -532,14 +517,16 @@ function WorkspaceHeader({
 
 interface SessionContextMenuProps {
   session: ShellSession;
-  workspaces: Workspace[];
   position: MenuPosition;
   onClose: () => void;
   onDuplicate: () => void;
   onRename: (name: string) => void;
-  onMove: (workspaceId: string) => void;
+  /** Opens the "Move to workspace" picker; absent hides the row. */
+  onRequestMove?: () => void;
   onSubShell: () => void;
   onBrowse: () => void;
+  /** Copies the shell's live working directory; absent where it can't be read. */
+  onCopyPath?: () => void;
   onCloseSession: () => void;
   onTurnIntoWorkspace?: () => void;
   /** Rows contributed by enabled plugins via `sessionMenuItems`. */
@@ -548,14 +535,14 @@ interface SessionContextMenuProps {
 
 function SessionContextMenu({
   session,
-  workspaces,
   position,
   onClose,
   onDuplicate,
   onRename,
-  onMove,
+  onRequestMove,
   onSubShell,
   onBrowse,
+  onCopyPath,
   onCloseSession,
   onTurnIntoWorkspace,
   pluginItems,
@@ -565,25 +552,7 @@ function SessionContextMenu({
   // inside the menu instead of closing without a word.
   const [confirmClose, setConfirmClose] = useState(false);
   const [name, setName] = useState(session.name);
-  const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [onClose]);
 
   useEffect(() => {
     if (renaming && inputRef.current) {
@@ -592,8 +561,6 @@ function SessionContextMenu({
     }
   }, [renaming]);
 
-  const x = Math.min(position.x, window.innerWidth - 240);
-  const y = Math.min(position.y, window.innerHeight - 300);
 
   const commitRename = () => {
     const trimmed = name.trim();
@@ -614,10 +581,11 @@ function SessionContextMenu({
     'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]';
 
   return (
-    <div
-      ref={menuRef}
-      style={{ top: y, left: x }}
-      className="fixed z-50 w-56 rounded-lg bg-[var(--surface)] p-1 shadow-2xl"
+    <ContextMenu
+      x={position.x}
+      y={position.y}
+      onClose={onClose}
+      className="rounded-lg bg-[var(--surface)] p-1 shadow-2xl"
     >
       {confirmClose ? (
         <div className="px-2 py-2">
@@ -740,6 +708,19 @@ function SessionContextMenu({
         <FolderOpen className="h-3.5 w-3.5 shrink-0" />
         Browse folder
       </button>
+      {onCopyPath && (
+        <button
+          type="button"
+          onClick={() => {
+            onCopyPath();
+            onClose();
+          }}
+          className={itemClass}
+        >
+          <Copy className="h-3.5 w-3.5 shrink-0" />
+          Copy path
+        </button>
+      )}
       {(pluginItems?.length ?? 0) > 0 && (
         <>
           <div className="my-1 h-px bg-[var(--border)]" />
@@ -758,28 +739,22 @@ function SessionContextMenu({
           ))}
         </>
       )}
-      <div className="my-1 h-px bg-[var(--border)]" />
-      <div className="px-2 py-1 text-[10px] text-[var(--text-secondary)]">Move to</div>
-      <div className="max-h-40 overflow-y-auto">
-        {workspaces.map((w) => (
+      {onRequestMove && (
+        <>
+          <div className="my-1 h-px bg-[var(--border)]" />
           <button
-            key={w.id}
             type="button"
             onClick={() => {
-              if (w.id !== session.workspaceId) onMove(w.id);
               onClose();
+              onRequestMove();
             }}
             className={itemClass}
           >
-            {w.id === session.workspaceId ? (
-              <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-            ) : (
-              <span className="h-3.5 w-3.5 shrink-0" />
-            )}
-            <span className="truncate">{w.name}</span>
+            <MoveRight className="h-3.5 w-3.5 shrink-0" />
+            <Trans>Move to workspace…</Trans>
           </button>
-        ))}
-      </div>
+        </>
+      )}
       <div className="my-1 h-px bg-[var(--border)]" />
       <button
         type="button"
@@ -800,7 +775,7 @@ function SessionContextMenu({
       </button>
       </>
       )}
-    </div>
+    </ContextMenu>
   );
 }
 
@@ -907,7 +882,7 @@ export function SessionItem({
   onTurnIntoWorkspace,
   taskState,
   onSelect,
-  onMove,
+  onRequestMove,
   onRename,
   onDuplicate,
   onCloseSession,
@@ -931,7 +906,8 @@ export function SessionItem({
   isSelected: boolean;
   taskState: TaskStateSnapshot | null;
   onSelect: () => void;
-  onMove: (workspaceId: string) => void;
+  /** Opens the "Move to workspace" picker for this session. */
+  onRequestMove?: () => void;
   onRename: (name: string) => void;
   onDuplicate: () => void;
   onCloseSession: () => void;
@@ -963,6 +939,7 @@ export function SessionItem({
 }) {
   const backend = useSessionBackend();
   const platform = useShellPlatform();
+  const { services } = useShellServices();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition>({ x: 0, y: 0 });
   const taskListRef = useRef<HTMLUListElement | null>(null);
@@ -1158,7 +1135,6 @@ export function SessionItem({
       {menuOpen && (
         <SessionContextMenu
           session={session}
-          workspaces={workspaces}
           position={menuPos}
           onClose={() => setMenuOpen(false)}
           pluginItems={plugins.flatMap((plugin) => {
@@ -1186,7 +1162,7 @@ export function SessionItem({
           })}
           onDuplicate={onDuplicate}
           onRename={onRename}
-          onMove={onMove}
+          onRequestMove={onRequestMove}
           onCloseSession={onCloseSession}
           onSubShell={() => onOpenSubShell(session.id)}
           onTurnIntoWorkspace={
@@ -1195,12 +1171,25 @@ export function SessionItem({
               ? () => onTurnIntoWorkspace(session.id)
               : undefined
           }
+          onCopyPath={
+            backend.getCwd
+              ? () =>
+                  void (async () => {
+                    // The live shell's cwd — readable even while a program
+                    // runs in the foreground (it is the shell's, not the
+                    // program's). session.cwd is only a fallback snapshot.
+                    const cwd =
+                      (await backend.getCwd?.(ptyIdOf(session)).catch(() => null)) ?? session.cwd;
+                    if (cwd) await services.copyText(cwd);
+                  })()
+              : undefined
+          }
           onBrowse={() => {
             void (async () => {
               // The PTY's live cwd beats session.cwd, which is only refreshed
               // while the session is visible and can be stale.
               const cwd =
-                (await backend.getCwd?.(session.id).catch(() => null)) ??
+                (await backend.getCwd?.(ptyIdOf(session)).catch(() => null)) ??
                 session.cwd ??
                 (await platform.homeDir().catch(() => '/'));
               onOpenBrowser(session.id, cwd);
@@ -1228,6 +1217,7 @@ export function SessionPanel({
   updateWorkspace,
   onAddSession,
   onMoveSession,
+  onRequestMoveSession,
   onReorderWorkspace,
   onMoveWorkspace,
   onRenameSession,
@@ -1461,7 +1451,9 @@ export function SessionPanel({
                           onSelectSession(session.id);
                           onSelectWorkspace(workspace.id);
                         }}
-                        onMove={(workspaceId) => onMoveSession(session.id, workspaceId)}
+                        onRequestMove={
+                          onRequestMoveSession ? () => onRequestMoveSession(session.id) : undefined
+                        }
                         onRename={(name) => onRenameSession(session.id, name)}
                         onDuplicate={() => onDuplicateSession(session.id)}
                         onCloseSession={() => onCloseSession(session.id)}

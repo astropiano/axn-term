@@ -153,6 +153,18 @@ export interface ShellPlatform {
    * number of plugins registered. Absent = no external plugin support.
    */
   loadExternalPlugins?(): Promise<number>;
+  /**
+   * Message channel between this app's windows (desktop: Tauri app-wide
+   * events, delivered to every window including the sender — filter by the
+   * payload's own window id). Powers the cross-window workspace directory and
+   * moving a session into another window. Absent on web (one tab = one app).
+   */
+  peers?: PeerChannel;
+}
+
+export interface PeerChannel {
+  publish(topic: string, payload: unknown): void;
+  subscribe(topic: string, cb: (payload: unknown) => void): Unsubscribe;
 }
 
 // ---------------------------------------------------------------------------

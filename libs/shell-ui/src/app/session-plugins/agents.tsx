@@ -2,6 +2,7 @@ import { Bot, Play } from 'lucide-react';
 import type { ShellSession, Workspace } from '../../types';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import { axnLog } from '../log';
+import { pickFromList } from '../pickerHost';
 import { SessionIconGlyph } from '../SessionPanel';
 import { useSettings } from '../../SettingsProvider';
 import { agentLaunchLine } from './devWorkflow';
@@ -281,6 +282,21 @@ function runningSection(
 // Plugin definition
 // ---------------------------------------------------------------------------
 
+/** Searchable persona picker — resolves the chosen persona, or null. */
+async function pickPersona(): Promise<AgentPersona | null> {
+  const personas = listPersonas();
+  const key = await pickFromList({
+    title: 'New session with agent',
+    placeholder: 'Search agents…',
+    items: personas.map((p) => ({
+      key: p.name,
+      label: p.name,
+      detail: p.description ?? [p.cli, p.model].filter(Boolean).join(' · '),
+    })),
+  });
+  return personas.find((p) => p.name === key) ?? null;
+}
+
 export const agentsPlugin: SessionViewPlugin = {
   id: 'agents',
   title: 'agents',
@@ -346,21 +362,32 @@ export const agentsPlugin: SessionViewPlugin = {
     },
   ],
 
+  // One "New session with agent…" row opening a searchable persona picker,
+  // instead of a row per persona.
   sessionMenuItems: (ctx) => {
     syncRegistry(ctx.pluginSettings);
-    return listPersonas().map((persona) => ({
-      label: `New session with ${persona.name}`,
-      onClick: () => launchPersonaSession(ctx, persona),
-    }));
+    if (listPersonas().length === 0) return [];
+    return [
+      {
+        label: 'New session with agent…',
+        onClick: () =>
+          void pickPersona().then((persona) => persona && launchPersonaSession(ctx, persona)),
+      },
+    ];
   },
 
   workspaceMenuItems: (ctx, workspace) => {
     syncRegistry(ctx.pluginSettings);
-    if (!workspace.defaultFolder) return [];
-    return listPersonas().map((persona) => ({
-      label: `New session with ${persona.name}`,
-      onClick: () => launchPersonaSession(ctx, persona, workspace.defaultFolder),
-    }));
+    if (!workspace.defaultFolder || listPersonas().length === 0) return [];
+    return [
+      {
+        label: 'New session with agent…',
+        onClick: () =>
+          void pickPersona().then(
+            (persona) => persona && launchPersonaSession(ctx, persona, workspace.defaultFolder),
+          ),
+      },
+    ];
   },
 
   renderRail: ({ pluginSettings, viewActive, toggleView }) => {

@@ -7,6 +7,7 @@ import {
   findWrappedUrlThrough,
   type GetLinkLine,
   type LinkLine,
+  wrappedSelectionCandidates,
 } from './terminalLinks';
 
 function lines(rows: (string | { text: string; isWrapped?: boolean })[]): GetLinkLine {
@@ -526,5 +527,33 @@ describe('createLookupCache', () => {
     expect(lookup).not.toHaveBeenCalled();
     await cached('b');
     expect(lookup).toHaveBeenCalledWith('b');
+  });
+});
+
+describe('wrappedSelectionCandidates', () => {
+  it('rejoins a path an agent TUI hard-wrapped onto an indented row', () => {
+    const selection =
+      '/Volumes/MgnlDevExtended/Mgnl/Git/worktrees/AIACC-631-dashboard-docs-count\n' +
+      '  /.local-drafts/VECTORDB-context-dashboard-translation-ticket.md,';
+    expect(wrappedSelectionCandidates(selection)[0]).toBe(
+      '/Volumes/MgnlDevExtended/Mgnl/Git/worktrees/AIACC-631-dashboard-docs-count' +
+        '/.local-drafts/VECTORDB-context-dashboard-translation-ticket.md',
+    );
+  });
+
+  it('finds the wrapped path inside surrounding prose, longest first', () => {
+    const selection = "It's now at /Volumes/a/b-very-long\n  /c/file.md, renamed to match.";
+    expect(wrappedSelectionCandidates(selection)).toEqual(['/Volumes/a/b-very-long/c/file.md']);
+  });
+
+  it('rejoins a wrapped URL', () => {
+    expect(
+      wrappedSelectionCandidates('see https://gitlab.example.com/group/proj/-/merge_\n  requests/12'),
+    ).toEqual(['https://gitlab.example.com/group/proj/-/merge_requests/12']);
+  });
+
+  it('offers nothing for a single row or prose without paths', () => {
+    expect(wrappedSelectionCandidates('/one/row/only')).toEqual([]);
+    expect(wrappedSelectionCandidates('two lines of\n  plain prose')).toEqual([]);
   });
 });

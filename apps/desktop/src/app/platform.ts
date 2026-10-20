@@ -143,6 +143,10 @@ export const desktopPlatform: ShellPlatform = {
         cb({ sessionId: event.payload.id, line: event.payload.line }),
       ),
     ),
+  peers: {
+    publish: (topic, payload) => void emit(topic, payload).catch(() => {}),
+    subscribe: (topic, cb) => syncSub(listen<unknown>(topic, (event) => cb(event.payload))),
+  },
   loadExternalPlugins: () =>
     loadExternalPlugins({
       list: () => invoke<string[]>('list_external_plugins'),

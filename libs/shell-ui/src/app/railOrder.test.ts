@@ -3,8 +3,7 @@ import {
   RAIL_ORDER_KEY,
   orderRailPlugins,
   railOrderAfterDrop,
-  storedRailOrder,
-} from './railOrder';
+  storedRailOrder, railDropIndexAt } from './railOrder';
 
 const plugins = (...ids: string[]) => ids.map((id) => ({ id }));
 const data = (order: unknown) => ({ [RAIL_ORDER_KEY]: { order } });
@@ -60,5 +59,30 @@ describe('railOrderAfterDrop', () => {
   });
   it('returns the stored order untouched for an unknown dragId', () => {
     expect(railOrderAfterDrop(['a', 'b'], ['x'], 'nope', 0)).toEqual(['x']);
+  });
+});
+
+describe('railDropIndexAt', () => {
+  // Three 28px icons stacked 12px apart.
+  const rects = [
+    { top: 100, height: 28 },
+    { top: 140, height: 28 },
+    { top: 180, height: 28 },
+  ];
+
+  it('inserts before the first item whose midpoint is below the pointer', () => {
+    expect(railDropIndexAt(90, rects)).toBe(0);
+    expect(railDropIndexAt(113, rects)).toBe(0);
+    expect(railDropIndexAt(120, rects)).toBe(1);
+    expect(railDropIndexAt(160, rects)).toBe(2);
+  });
+
+  it('appends below the last item', () => {
+    expect(railDropIndexAt(200, rects)).toBe(3);
+    expect(railDropIndexAt(900, rects)).toBe(3);
+  });
+
+  it('skips items that are not mounted', () => {
+    expect(railDropIndexAt(150, [undefined, { top: 140, height: 28 }])).toBe(1);
   });
 });

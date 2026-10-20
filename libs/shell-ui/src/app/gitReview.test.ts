@@ -107,9 +107,9 @@ describe('agent commands', () => {
     );
     expect(talkResumeCommand('devin')).toBe('devin -c; exec "${SHELL:-sh}" -l');
     expect(talkResumeCommand('claude')).toBe('claude -c; exec "${SHELL:-sh}" -l');
-    // claude ignores the name — -c continues the most recent conversation
-    expect(talkResumeCommand('claude', 'ignored')).toBe(
-      'claude -c; exec "${SHELL:-sh}" -l',
+    // a captured conversation id resumes exactly that conversation
+    expect(talkResumeCommand('claude', '2d05aba3')).toBe(
+      'claude --resume 2d05aba3; exec "${SHELL:-sh}" -l',
     );
     // gemini picks interactively, codex resumes its latest
     expect(talkResumeCommand('gemini')).toBe('gemini --resume; exec "${SHELL:-sh}" -l');

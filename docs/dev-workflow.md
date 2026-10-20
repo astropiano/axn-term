@@ -372,8 +372,11 @@ arbitrary prompt text survives `sh -c` quoting.
 
 ## Merge-request review
 
-A workflow whose `vars` declares a `kind: mr` variable gets a `review`
-button on every MR row in the gitlab-mr plugin — the full merge-requests
+A workflow whose `vars` declares a *required* `kind: mr` variable gets a
+button labelled with the workflow's `title` (e.g. "MR review") on every MR
+row in the gitlab-mr plugin — one per such workflow, so several stay
+distinguishable. An optional `kind: mr` var (a development flow that records
+its own MR later) gets no row button. The button appears in the full merge-requests
 view *and* the per-session MR list. The seam is `mrActions.ts`: plugins
 `registerMrActions(id, Provider)` at module scope and glab-mr renders each
 registered provider component on its rows with `{ mr, env }`

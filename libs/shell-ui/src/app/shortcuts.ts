@@ -17,3 +17,17 @@ export function isAppNavigationShortcut(event: ShortcutKeyEvent): boolean {
     event.key === 'ArrowRight'
   );
 }
+
+/**
+ * Reload the window: `⌘⇧R` (macOS) / `Ctrl+Shift+R`. Shift keeps it clear of
+ * the shell's own Ctrl+R (reverse search) and of an accidental ⌘R. Like the
+ * navigation shortcuts, terminals must let it through to ShellApp.
+ */
+export function isReloadShortcut(event: ShortcutKeyEvent): boolean {
+  return (
+    (event.metaKey || event.ctrlKey) &&
+    event.shiftKey &&
+    !event.altKey &&
+    event.key.toLowerCase() === 'r'
+  );
+}

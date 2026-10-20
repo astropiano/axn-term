@@ -54,7 +54,7 @@ const AGENT_CMDS: Record<
   claude: {
     print: (p) => `claude -p ${p}`,
     seed: (p) => `claude ${p}`,
-    resume: () => 'claude -c',
+    resume: (id) => (id ? `claude --resume ${id}` : 'claude -c'),
   },
   gemini: {
     print: (p) => `gemini -p ${p}`,
