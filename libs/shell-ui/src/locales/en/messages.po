@@ -19,6 +19,10 @@ msgstr "Auto"
 msgid "Auto (WebGL → canvas → DOM)"
 msgstr "Auto (WebGL → canvas → DOM)"
 
+#: libs/shell-ui/src/app/ErrorBoundary.tsx:61
+msgid "axn-term hit an unexpected error"
+msgstr "axn-term hit an unexpected error"
+
 #: libs/shell-ui/src/PathActionMenu.tsx:82
 msgid "Binary file"
 msgstr "Binary file"
@@ -30,6 +34,10 @@ msgstr "Cancel"
 #: libs/shell-ui/src/app/SettingsModal.tsx:472
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
+
+#: libs/shell-ui/src/app/ShellApp.tsx:2436
+msgid "Close tab"
+msgstr "Close tab"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:491
 msgid "Config file"
@@ -56,6 +64,10 @@ msgstr "Copy URL"
 #: libs/shell-ui/src/app/SettingsModal.tsx:251
 msgid "Could not parse the file as YAML."
 msgstr "Could not parse the file as YAML."
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:52
+msgid "current"
+msgstr "current"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:55
 msgid "Dark"
@@ -166,17 +178,45 @@ msgstr "Light theme"
 msgid "Loading…"
 msgstr "Loading…"
 
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
+msgid "Main window"
+msgstr "Main window"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:485
 msgid "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
 msgstr "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:58
+msgid "Move “{sessionName}” to workspace"
+msgstr "Move “{sessionName}” to workspace"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:738
+msgid "Move to workspace…"
+msgstr "Move to workspace…"
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:68
+msgid "New workspace “{name}” in this window"
+msgstr "New workspace “{name}” in this window"
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:164
+#~ msgid "New workspace “{trimmed}” in this window"
+#~ msgstr "New workspace “{trimmed}” in this window"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:808
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "No icons configured — every session shows the default terminal icon."
 
+#: libs/shell-ui/src/app/SearchPickerModal.tsx:118
+msgid "No matches."
+msgstr "No matches."
+
 #: libs/shell-ui/src/WorkspacePicker.tsx:51
 msgid "no workspaces"
 msgstr "no workspaces"
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:114
+#~ msgid "No workspaces match."
+#~ msgstr "No workspaces match."
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:245
 msgid "Not a valid config.yaml — expected a YAML mapping."
@@ -215,6 +255,14 @@ msgstr "Preview unavailable"
 msgid "Process"
 msgstr "Process"
 
+#: libs/shell-ui/src/app/ErrorBoundary.tsx:72
+msgid "Reload view"
+msgstr "Reload view"
+
+#: libs/shell-ui/src/app/ErrorBoundary.tsx:72
+msgid "Reload window"
+msgstr "Reload window"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:801
 msgid "Remove icon"
 msgstr "Remove icon"
@@ -232,6 +280,14 @@ msgstr "requires {0}{1}"
 #: libs/shell-ui/src/app/SettingsModal.tsx:863
 msgid "Save"
 msgstr "Save"
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:59
+msgid "Search workspaces or windows…"
+msgstr "Search workspaces or windows…"
+
+#: libs/shell-ui/src/app/SearchPickerModal.tsx:109
+msgid "Search…"
+msgstr "Search…"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:481
 msgid "Session icons"
@@ -287,6 +343,14 @@ msgstr "Theme"
 msgid "This plugin declares no settings."
 msgstr "This plugin declares no settings."
 
+#: libs/shell-ui/src/app/ErrorBoundary.tsx:63
+msgid "This view hit an unexpected error"
+msgstr "This view hit an unexpected error"
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
+msgid "This window"
+msgstr "This window"
+
 #: libs/shell-ui/src/PathActionMenu.tsx:67
 #: libs/shell-ui/src/PathActionMenu.tsx:92
 msgid "Unable to read file"
@@ -299,3 +363,8 @@ msgstr "unmet, plugin disabled"
 #: libs/shell-ui/src/app/SettingsModal.tsx:370
 msgid "Use system default"
 msgstr "Use system default"
+
+#. placeholder {0}: k.n
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
+msgid "Window {0}"
+msgstr "Window {0}"

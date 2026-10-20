@@ -6,6 +6,7 @@ import { SessionIcon } from '../SessionPanel';
 import { usePluginSettings } from '../PluginSettingsProvider';
 import { WorkspacePicker } from '../../WorkspacePicker';
 import { axnLog } from '../log';
+import { pickFromList } from '../pickerHost';
 import { resolvePersona, agentLauncherFor } from './agentRegistry';
 import type { AgentLaunchTools } from './agentRegistry';
 import { registerMrActions, type MrActionProps, type MrRef, type MrRowEnv } from './mrActions';
@@ -1811,8 +1812,22 @@ export function mrReviewLaunch(
 }
 
 /**
- * Provider registered with glab-mr — renders a 'review' button per workflow
- * that declares a `kind: mr` var. Reads dev-workflow's settings through the
+ * Workflows that start from an MR row: those declaring a *required*
+ * `kind: mr` var. A workflow that only records its MR later (an optional
+ * var, e.g. a development flow that opens its own MR) gets no row button —
+ * starting it on someone else's MR makes no sense.
+ */
+export function mrStartWorkflows(settings: Record<string, unknown> | undefined): WorkflowDef[] {
+  if (settings?.enabled !== true) return [];
+  return parseWorkflows(settings).filter((d) =>
+    d.vars?.some((v) => v.kind === 'mr' && v.required),
+  );
+}
+
+/**
+ * Provider registered with glab-mr — renders one button per workflow from
+ * `mrStartWorkflows`, labelled with the workflow's title so several stay
+ * distinguishable. Reads dev-workflow's settings through the
  * provider tree, so it honours live plugins.yaml edits and the plugin's
  * `enabled` flag without a session-bound ctx.
  */
@@ -1840,10 +1855,7 @@ function MrReviewButton({ mr, env }: MrActionProps) {
     return () => window.removeEventListener('keydown', key, true);
   }, [errOpen]);
   const settings = pluginSettings['dev-workflow'] as Record<string, unknown> | undefined;
-  const defs =
-    settings?.enabled === true
-      ? parseWorkflows(settings).filter((d) => d.vars?.some((v) => v.kind === 'mr'))
-      : [];
+  const defs = mrStartWorkflows(settings);
   if (defs.length === 0) return null;
   const workspaces = env.workspaces ?? [];
   const fail = (msg: string) => {
@@ -1901,7 +1913,7 @@ function MrReviewButton({ mr, env }: MrActionProps) {
           ) : (
             <>
               <Workflow className="h-2.5 w-2.5" />
-              review
+              {def.title}
             </>
           )}
         </button>
@@ -2650,10 +2662,25 @@ export const devWorkflowPlugin: SessionViewPlugin = {
       if (defs.length === 1) {
         return [{ label: 'Start workflow', onClick: () => menuStart(ctx, defs[0]) }];
       }
-      return defs.map((d) => ({
-        label: `Start workflow: ${d.title}`,
-        onClick: () => menuStart(ctx, d),
-      }));
+      // One row opening a searchable workflow picker, not a row per workflow.
+      return [
+        {
+          label: 'Start workflow…',
+          onClick: () =>
+            void pickFromList({
+              title: 'Start workflow',
+              placeholder: 'Search workflows…',
+              items: defs.map((d) => ({
+                key: d.id,
+                label: d.title,
+                detail: d.states.join(' → '),
+              })),
+            }).then((key) => {
+              const def = defs.find((d) => d.id === key);
+              if (def) menuStart(ctx, def);
+            }),
+        },
+      ];
     }
     const def = findBound(ctx);
     if (!def) return [{ label: 'Stop workflow', onClick: () => clearBinding(ctx) }];

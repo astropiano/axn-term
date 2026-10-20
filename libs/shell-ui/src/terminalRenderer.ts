@@ -1,6 +1,7 @@
 import type { ITerminalAddon, Terminal } from '@xterm/xterm';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { CanvasAddon } from '@xterm/addon-canvas';
+import { axnLog } from './app/log';
 
 /** `terminalRenderer` config values. */
 export type TerminalRendererMode = 'auto' | 'webgl' | 'canvas' | 'dom';
@@ -116,4 +117,39 @@ function refreshGlyphsOnFontLoad(
     disposed = true;
     fonts.removeEventListener('loadingdone', clear);
   };
+}
+
+/**
+ * Repaint a terminal that just became visible again. While display:none,
+ * the webview may drop the accelerated canvas' backing — and with WebGL
+ * also corrupt the glyph texture atlas, so a plain refresh() repaints
+ * garbage from the stale atlas. Re-rasterize the glyphs, then mark every
+ * row dirty (needed for the DOM/canvas renderers too, where nothing else
+ * dirties rows when no output arrived while hidden). Deferred one frame so
+ * it runs after the container is laid out again.
+ */
+export function repaintTerminal(term: Pick<Terminal, 'refresh' | 'rows'> & Partial<Pick<Terminal, 'clearTextureAtlas'>>): void {
+  // The deferred frame can land after the view unmounted and disposed the
+  // terminal — a throw there must not escape.
+  const run = () =>
+    safely('repaint terminal', () => {
+      term.clearTextureAtlas?.();
+      term.refresh(0, term.rows - 1);
+    });
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  else run();
+}
+
+/**
+ * Run one teardown step, logging instead of throwing. Unmount cleanups chain
+ * several disposals (renderer addons, listeners, the xterm itself); an
+ * exception escaping a React effect cleanup tears down the whole app and
+ * leaves an empty window, and it would also skip the remaining steps.
+ */
+export function safely(scope: string, fn: () => void): void {
+  try {
+    fn();
+  } catch (e) {
+    axnLog('warn', 'terminal', `${scope} failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }

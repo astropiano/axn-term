@@ -19,6 +19,10 @@ msgstr "자동"
 msgid "Auto (WebGL → canvas → DOM)"
 msgstr "자동 (WebGL → 캔버스 → DOM)"
 
+#: libs/shell-ui/src/app/ErrorBoundary.tsx:61
+msgid "axn-term hit an unexpected error"
+msgstr "axn-term에서 예기치 않은 오류가 발생했습니다"
+
 #: libs/shell-ui/src/PathActionMenu.tsx:82
 msgid "Binary file"
 msgstr "바이너리 파일"
@@ -30,6 +34,10 @@ msgstr "취소"
 #: libs/shell-ui/src/app/SettingsModal.tsx:472
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "터미널의 셀 렌더러입니다. 자동은 GPU(WebGL)를 사용하고 자동으로 폴백합니다. 렌더링 문제가 있으면 캔버스/DOM으로 고정하세요."
+
+#: libs/shell-ui/src/app/ShellApp.tsx:2436
+msgid "Close tab"
+msgstr "탭 닫기"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:491
 msgid "Config file"
@@ -56,6 +64,10 @@ msgstr "URL 복사"
 #: libs/shell-ui/src/app/SettingsModal.tsx:251
 msgid "Could not parse the file as YAML."
 msgstr "파일을 YAML로 파싱할 수 없습니다."
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:52
+msgid "current"
+msgstr "현재"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:55
 msgid "Dark"
@@ -166,17 +178,45 @@ msgstr "라이트 테마"
 msgid "Loading…"
 msgstr "불러오는 중…"
 
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
+msgid "Main window"
+msgstr "메인 창"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:485
 msgid "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
 msgstr "실행 파일 이름을 Lucide 아이콘(예: Bot, SquareTerminal) 또는 SVG 태그에 매핑합니다."
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:58
+msgid "Move “{sessionName}” to workspace"
+msgstr "“{sessionName}”을(를) 워크스페이스로 이동"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:738
+msgid "Move to workspace…"
+msgstr "워크스페이스로 이동…"
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:68
+msgid "New workspace “{name}” in this window"
+msgstr "이 창에 새 워크스페이스 “{name}”"
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:164
+#~ msgid "New workspace “{trimmed}” in this window"
+#~ msgstr "이 창에 새 워크스페이스 “{trimmed}”"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:808
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "설정된 아이콘이 없습니다 — 모든 세션에 기본 터미널 아이콘이 표시됩니다."
 
+#: libs/shell-ui/src/app/SearchPickerModal.tsx:118
+msgid "No matches."
+msgstr "일치하는 항목이 없습니다."
+
 #: libs/shell-ui/src/WorkspacePicker.tsx:51
 msgid "no workspaces"
 msgstr "워크스페이스 없음"
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:114
+#~ msgid "No workspaces match."
+#~ msgstr "일치하는 워크스페이스가 없습니다."
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:245
 msgid "Not a valid config.yaml — expected a YAML mapping."
@@ -215,6 +255,14 @@ msgstr "미리보기를 사용할 수 없음"
 msgid "Process"
 msgstr "프로세스"
 
+#: libs/shell-ui/src/app/ErrorBoundary.tsx:72
+msgid "Reload view"
+msgstr "보기 다시 불러오기"
+
+#: libs/shell-ui/src/app/ErrorBoundary.tsx:72
+msgid "Reload window"
+msgstr "창 다시 불러오기"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:801
 msgid "Remove icon"
 msgstr "아이콘 제거"
@@ -232,6 +280,14 @@ msgstr "{0}{1} 필요"
 #: libs/shell-ui/src/app/SettingsModal.tsx:863
 msgid "Save"
 msgstr "저장"
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:59
+msgid "Search workspaces or windows…"
+msgstr "워크스페이스 또는 창 검색…"
+
+#: libs/shell-ui/src/app/SearchPickerModal.tsx:109
+msgid "Search…"
+msgstr "검색…"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:481
 msgid "Session icons"
@@ -287,6 +343,14 @@ msgstr "테마"
 msgid "This plugin declares no settings."
 msgstr "이 플러그인은 설정을 선언하지 않았습니다."
 
+#: libs/shell-ui/src/app/ErrorBoundary.tsx:63
+msgid "This view hit an unexpected error"
+msgstr "이 보기에서 예기치 않은 오류가 발생했습니다"
+
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
+msgid "This window"
+msgstr "이 창"
+
 #: libs/shell-ui/src/PathActionMenu.tsx:67
 #: libs/shell-ui/src/PathActionMenu.tsx:92
 msgid "Unable to read file"
@@ -299,3 +363,8 @@ msgstr "충족되지 않음, 플러그인 비활성화됨"
 #: libs/shell-ui/src/app/SettingsModal.tsx:370
 msgid "Use system default"
 msgstr "시스템 기본값 사용"
+
+#. placeholder {0}: k.n
+#: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
+msgid "Window {0}"
+msgstr "창 {0}"

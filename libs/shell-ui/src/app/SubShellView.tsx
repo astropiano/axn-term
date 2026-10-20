@@ -8,9 +8,15 @@ import { takePtyKeepAlive } from '../terminalRegistry';
 import { DEVIN_PROCESS_RE } from '../processPatterns';
 import { createHiddenCommandInput } from './hiddenCommands';
 import { createOsc8LeakGuard, OSC8_CLOSE } from '../terminalLinks';
-import { applyTerminalRenderer } from '../terminalRenderer';
+import { applyTerminalRenderer, repaintTerminal, safely } from '../terminalRenderer';
 import { acquirePty } from '../ptyLifetime';
-import { parseDevinSessionName } from './session-plugins/devinTasks';
+import {
+  agentOfProcess,
+  captureAgentResume,
+  registerSubShellCloser,
+  subShellSpawnCommand,
+  withLoginShell,
+} from './subShellAgents';
 import { talkResumeCommand } from './gitReview';
 import { isAppNavigationShortcut } from './shortcuts';
 import type { EditorTab, ShellSession } from '../types';
@@ -61,6 +67,13 @@ export function SubShellView({
   const spawnRef = useRef<() => void>(() => {});
   // Foreground process of this sub-shell's PTY — gates axn-* interception.
   const foregroundRef = useRef<string | null>(null);
+  // Agent conversations in this tab (see subShellAgents.ts): the output tail
+  // the exit hint is parsed from, a waiter the close-time capture resolves,
+  // and whether the app's close is stopping the agent (that exit must not
+  // count as the user leaving it).
+  const agentTailRef = useRef('');
+  const hintWaiterRef = useRef<(() => void) | null>(null);
+  const closingRef = useRef(false);
   const shellNameRef = useRef('');
   const isVisibleRef = useRef(isVisible);
   const onCloseRef = useRef(onClose);
@@ -134,7 +147,7 @@ export function SubShellView({
         parentId: sessionRef.current.mainPtyId ?? sessionRef.current.id,
         // Agent tabs resume their conversation once the tab has run; the
         // seed `command` only ever runs on the very first spawn.
-        command: current.resumeCommand ?? current.command ?? undefined,
+        command: subShellSpawnCommand(current),
         cwd: current.cwd ?? undefined,
         cols: t.cols,
         rows: t.rows,
@@ -239,6 +252,17 @@ export function SubShellView({
             const name = p?.toLowerCase() ?? '';
             const isShell = !name || name === shellNameRef.current;
             foregroundRef.current = isShell ? null : p;
+            // Track the agent running in this tab: a fresh start forgets the
+            // id of an earlier run; an exit the app did not drive means the
+            // user left the agent — nothing to resume next time.
+            const agent = agentOfProcess(foregroundRef.current);
+            const current = tabRef.current;
+            if (agent && current.agentActive !== agent) {
+              agentTailRef.current = '';
+              onUpdateTabRef.current?.({ agentActive: agent, agentResume: undefined });
+            } else if (!agent && current.agentActive && !closingRef.current) {
+              onUpdateTabRef.current?.({ agentActive: undefined });
+            }
           })
           .catch(() => {});
       }, 1000);
@@ -249,20 +273,47 @@ export function SubShellView({
     // enough to be certain it wasn't a merely long legitimate link.
     const outputDecoder = new TextDecoder();
     const osc8Guard = createOsc8LeakGuard(() => t.write(OSC8_CLOSE));
-    let outputTail = '';
     const unlistenOut = backend.onOutput(tab.id, (data) => {
       t.write(data);
       const text = outputDecoder.decode(data, { stream: true });
       osc8Guard(text);
+      // Capture the agent's exit hint (exact conversation id/name): a talk
+      // tab stores it as its resumeCommand, a plain tab as agentResume.
       const current = tabRef.current;
-      if (current.agent !== 'devin') return;
-      outputTail = (outputTail + text).slice(-16_384);
-      const name = parseDevinSessionName(outputTail, true);
-      if (!name) return;
-      const resumeCommand = talkResumeCommand('devin', name);
-      if (current.resumeCommand !== resumeCommand) {
-        onUpdateTabRef.current?.({ resumeCommand });
+      const agent =
+        current.agent === 'claude' || current.agent === 'devin'
+          ? current.agent
+          : current.agentActive ?? agentOfProcess(foregroundRef.current);
+      if (!agent) return;
+      agentTailRef.current = (agentTailRef.current + text).slice(-16_384);
+      const resume = captureAgentResume(agent, agentTailRef.current);
+      if (!resume) return;
+      if (current.agent === agent) {
+        const resumeCommand = withLoginShell(resume);
+        if (current.resumeCommand !== resumeCommand) onUpdateTabRef.current?.({ resumeCommand });
+      } else if (current.agentResume !== resume) {
+        onUpdateTabRef.current?.({ agentResume: resume });
       }
+      hintWaiterRef.current?.();
+    });
+    // On app close, stop a running agent gracefully so it prints its resume
+    // hint — the same Ctrl-C pairs the claude/devin plugins send to the main
+    // shell — and keep agentActive so the next start resumes it.
+    const unregisterCloser = registerSubShellCloser(tab.id, async () => {
+      if (!agentOfProcess(foregroundRef.current)) return;
+      closingRef.current = true;
+      const hint = new Promise<void>((resolve) => {
+        hintWaiterRef.current = resolve;
+      });
+      const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+      for (let round = 0; round < 2; round++) {
+        await backend.write(tab.id, '\x03');
+        await pause(250);
+        await backend.write(tab.id, '\x03');
+        if ((await Promise.race([hint.then(() => true), pause(1_500).then(() => false)])) === true) break;
+      }
+      await Promise.race([hint, pause(2_000)]);
+      hintWaiterRef.current = null;
     });
     const unlistenExit = backend.onSubshellExit?.((ptyId, exitCode) => {
       if (ptyId !== tab.id) return;
@@ -278,18 +329,25 @@ export function SubShellView({
 
     return () => {
       active = false;
-      unlistenOut?.();
-      unlistenExit?.();
+      // Each step is guarded: closing a tab must never take the app down, and
+      // one failing disposal must not skip the rest (the PTY release above all).
+      safely('sub-shell output listener', () => unlistenOut?.());
+      safely('sub-shell agent closer', () => unregisterCloser());
+      safely('sub-shell exit listener', () => unlistenExit?.());
       if (fgPoll) clearInterval(fgPoll);
-      onData.dispose();
-      onResize.dispose();
+      safely('sub-shell input listener', () => onData.dispose());
+      safely('sub-shell resize listener', () => onResize.dispose());
       window.removeEventListener('resize', fitWindow);
       resizeObserver?.disconnect();
       // Keep-alive PTYs survive the unmount: a promoted sub-shell becomes the
       // session's main view, a demoted main re-shows here, and "turn into
       // workspace" tabs reattach as standalone sessions.
-      pty.release(takePtyKeepAlive(tab.id));
-      t.dispose();
+      safely('sub-shell PTY release', () => pty.release(takePtyKeepAlive(tab.id)));
+      // Dispose the renderer addon first: disposing an xterm with a live
+      // WebGL addon can throw.
+      safely('sub-shell renderer', () => rendererCleanupRef.current?.());
+      rendererCleanupRef.current = null;
+      safely('sub-shell terminal', () => t.dispose());
       term.current = null;
       fitAddon.current = null;
     };
@@ -330,9 +388,8 @@ export function SubShellView({
     if (!isVisible || !term.current) return;
     fitAddon.current?.fit();
     // Same as ShellTerminal: the webview may drop the accelerated canvas'
-    // backing while display:none, and nothing marks rows dirty — force a
-    // repaint so the view doesn't stay blank until the next click.
-    term.current.refresh(0, term.current.rows - 1);
+    // backing (and WebGL's glyph atlas) while display:none — repaint.
+    repaintTerminal(term.current);
   }, [isVisible]);
 
   return (

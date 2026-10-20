@@ -11,6 +11,7 @@ import {
 } from '@axn-term/plugin-sdk';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import { axnLog } from '../log';
+import { sessionLastSelectedAt } from '../attention';
 
 /**
  * Runtime half of the agent-hook bridge — the pure, dependency-free pieces
@@ -52,6 +53,12 @@ export interface HookRuntime {
   pollTimer?: ReturnType<typeof setInterval>;
   /** Once a hook event was applied, deterministic hook state owns session.status. */
   hooksOwnStatus?: boolean;
+  /**
+   * When the hook raised its current *warning* flag ("needs input"). Such a
+   * flag is informational: selecting the session after this acknowledges it.
+   * Critical flags (a pending permission) wait for the agent's next event.
+   */
+  warningRaisedAt?: number;
 }
 
 const runtimes = new Map<string, HookRuntime>();
@@ -119,7 +126,16 @@ function applyHookEffect(
       session.pluginState?.[stateKey] as { attention?: unknown } | undefined
     )?.attention;
     if (effect.attention !== null || liveFlag) ctx.setAttention(effect.attention);
+    rt.warningRaisedAt = effect.attention?.level === 'warning' ? Date.now() : undefined;
   }
+}
+
+/** Drop a hook-raised warning flag once the user selected the session after it. */
+function acknowledgeWarning(ctx: Ctx, rt: HookRuntime): void {
+  if (rt.warningRaisedAt === undefined) return;
+  if (sessionLastSelectedAt(ctx.session.id) <= rt.warningRaisedAt) return;
+  rt.warningRaisedAt = undefined;
+  ctx.setAttention(null);
 }
 
 async function pollEventFile(ctx: Ctx, spec: AgentHookSpec, stateKey: string, final = false): Promise<void> {
@@ -134,6 +150,7 @@ async function pollEventFile(ctx: Ctx, spec: AgentHookSpec, stateKey: string, fi
     if (runtimes.get(runtimeKey(spec, ctx.session.id)) !== rt) return;
     if (contents) break;
   }
+  acknowledgeWarning(ctx, rt);
   if (!contents || contents === rt.lastRaw) return;
   rt.lastRaw = contents;
   const ev = parseHookEvent(contents);

@@ -19,6 +19,7 @@ export const HOOK_EVENTS = [
   'SessionStart',
   'UserPromptSubmit',
   'PreToolUse',
+  'PostToolUse',
   'PermissionRequest',
   'Notification',
   'Stop',
@@ -43,16 +44,24 @@ export function mapClaudeHookEvent(ev: Record<string, unknown>): ClaudeHookEffec
   switch (ev.hook_event_name) {
     case 'UserPromptSubmit':
     case 'PreToolUse':
-    case 'SubagentStop':
+    // After a tool ran — clears a permission block as soon as it was
+    // approved, instead of waiting for the next tool call.
+    case 'PostToolUse':
       return { status: 'running', attention: null };
+    // Background subagents can finish after the main turn's Stop — that must
+    // not flip a completed session back to running.
+    case 'SubagentStop':
+      return null;
     case 'PermissionRequest':
       return {
         status: 'blocked',
         attention: { level: 'critical', message: `claude needs permission${toolSuffix}` },
       };
+    // Claude asks for input (or has idled waiting for it, often after Stop):
+    // flag it, but leave the status alone — the turn is not blocked, and the
+    // flag clears once the session is looked at or claude moves on.
     case 'Notification':
       return {
-        status: 'blocked',
         attention: {
           level: 'warning',
           message:

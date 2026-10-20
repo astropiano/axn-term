@@ -115,6 +115,19 @@ export interface EditorTab {
    * `codex resume --last` before that).
    */
   resumeCommand?: string;
+  /**
+   * For kind 'shell': agent running in this tab right now (from the
+   * sub-shell's foreground process) — kept when the app's close stops it,
+   * cleared when it exits on its own. A tab whose agent was running when the
+   * app went away resumes it on the next spawn (`subShellAgents.ts`).
+   */
+  agentActive?: 'claude' | 'devin';
+  /**
+   * For kind 'shell': the exact resume line captured from that agent's exit
+   * hint (`claude --resume <id>`, `devin -r <name>`); absent → the agent's
+   * "continue latest" fallback.
+   */
+  agentResume?: string;
   /** For kind 'shell': working directory override; defaults to the session's live cwd. */
   cwd?: string;
   /** For kind 'shell': custom tab label; absent falls back to the command/dir default. */

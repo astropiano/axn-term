@@ -130,7 +130,7 @@ describe('removeClaudeHookSettings', () => {
 
 describe('mapClaudeHookEvent', () => {
   it('maps activity events to running + clear', () => {
-    for (const name of ['UserPromptSubmit', 'PreToolUse', 'SubagentStop']) {
+    for (const name of ['UserPromptSubmit', 'PreToolUse', 'PostToolUse']) {
       expect(mapClaudeHookEvent({ hook_event_name: name })).toEqual({
         status: 'running',
         attention: null,
@@ -147,11 +147,10 @@ describe('mapClaudeHookEvent', () => {
     });
   });
 
-  it('maps Notification to blocked + warning attention with the message', () => {
+  it('maps Notification to a warning flag only — the status stays', () => {
     expect(
       mapClaudeHookEvent({ hook_event_name: 'Notification', message: 'Claude is waiting' }),
     ).toEqual({
-      status: 'blocked',
       attention: { level: 'warning', message: 'Claude is waiting' },
     });
     // Missing message → generic text.
@@ -185,8 +184,12 @@ describe('mapClaudeHookEvent', () => {
     });
   });
 
+  it('ignores SubagentStop — a background subagent must not reopen a finished turn', () => {
+    expect(mapClaudeHookEvent({ hook_event_name: 'SubagentStop' })).toBeNull();
+  });
+
   it('ignores unknown events', () => {
-    expect(mapClaudeHookEvent({ hook_event_name: 'PostToolUse' })).toBeNull();
+    expect(mapClaudeHookEvent({ hook_event_name: 'Elicitation' })).toBeNull();
     expect(mapClaudeHookEvent({})).toBeNull();
   });
 });

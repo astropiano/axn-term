@@ -54,3 +54,19 @@ export function railOrderAfterDrop(
   }
   return ids;
 }
+
+/**
+ * Insertion index for a pointer at `clientY` over the rail items' rects (in
+ * rail order): before the first item whose vertical midpoint lies below the
+ * pointer, else at the end.
+ */
+export function railDropIndexAt(
+  clientY: number,
+  rects: ReadonlyArray<{ top: number; height: number } | undefined>,
+): number {
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i];
+    if (r && clientY < r.top + r.height / 2) return i;
+  }
+  return rects.length;
+}

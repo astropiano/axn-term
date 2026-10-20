@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ContextMenu } from '../ContextMenu';
+import { Trans } from '@lingui/react/macro';
+import { ErrorBoundary } from './ErrorBoundary';
 import { dump } from 'js-yaml';
 import { Menu, X, Settings, SquareTerminal, Terminal, FileText, Folder, Pencil, BrushCleaning, Eye, MoveRight, AlertOctagon, AlertTriangle, GitBranch } from 'lucide-react';
 import { ShellTerminal } from '../ShellTerminal';
@@ -38,7 +41,19 @@ import {
   pluginCommands,
 } from './session-plugins';
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
-import { getScreenLines, keepPtyAlive } from '../terminalRegistry';
+import { getScreenLines, keepPtyAlive, takePtyKeepAlive } from '../terminalRegistry';
+import { MoveToWorkspaceModal } from './MoveToWorkspaceModal';
+import { runSubShellClosers } from './subShellAgents';
+import { PickerHost } from './pickerHost';
+import {
+  requestAdopt,
+  TOPIC_ADOPT,
+  TOPIC_ADOPT_ACK,
+  useWorkspaceDirectory,
+  type AdoptAck,
+  type AdoptRequest,
+  type WorkspaceTarget,
+} from './windowPeers';
 import { defaultTabLabel, planSubShellPromote, planTurnIntoWorkspace } from './subshellPromote';
 import {
   PluginSettingsProvider,
@@ -56,7 +71,7 @@ import { parseSessionSummary, runCommandChain } from './hiddenCommands';
 import { isAppNavigationShortcut } from './shortcuts';
 import { sessionAttention, setAppAttention, summarizeAttention, useAppAttention, noteSessionSelected } from './attention';
 import type { RailFlag } from './attention';
-import { RAIL_ORDER_KEY, orderRailPlugins, railOrderAfterDrop, storedRailOrder } from './railOrder';
+import { RAIL_ORDER_KEY, orderRailPlugins, railDropIndexAt, railOrderAfterDrop, storedRailOrder } from './railOrder';
 import { ptyIdOf } from '../types';
 import type { AgentCli, EditorTab, RepoInfo, SessionAttention, SessionBanner, ShellSession, WindowState } from '../types';
 import type { AppSettings } from '../themes';
@@ -280,13 +295,16 @@ export function ShellApp({ backend, services, platform, fileReader, tasksWsUrl }
     <ShellPlatformProvider platform={platform}>
      <SessionBackendProvider backend={backend}>
       <PluginSettingsProvider store={platform.pluginSettingsStore}>
-        <ShellAppInner
-          backend={backend}
-          services={services}
-          platform={platform}
-          fileReader={fileReader}
-          tasksWsUrl={tasksWsUrl}
-        />
+        {/* Last resort: an uncaught error must not leave an empty window. */}
+        <ErrorBoundary kind="app" scope="axn-term">
+          <ShellAppInner
+            backend={backend}
+            services={services}
+            platform={platform}
+            fileReader={fileReader}
+            tasksWsUrl={tasksWsUrl}
+          />
+        </ErrorBoundary>
       </PluginSettingsProvider>
      </SessionBackendProvider>
     </ShellPlatformProvider>
@@ -443,6 +461,66 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       mergePluginData(RAIL_ORDER_KEY, { order });
     },
     [railPlugins, pluginData, mergePluginData],
+  );
+
+  // Rail reordering is pointer-driven, not HTML5 drag-and-drop: rail views
+  // are <button>s, and WebKit (macOS) starts no drag from a button press —
+  // it only showed a "+" copy cursor and never moved anything. Press, move
+  // 4px to start, release to drop; Esc cancels. The click that follows a
+  // drag is swallowed so dropping does not also toggle the plugin.
+  const railItemRefs = useRef(new Map<string, HTMLDivElement>());
+  const suppressRailClick = useRef(false);
+  const startRailDrag = useCallback(
+    (e: React.PointerEvent, pluginId: string) => {
+      if (e.button !== 0) return;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let dragging = false;
+      const dropIndexAt = (y: number) =>
+        railDropIndexAt(
+          y,
+          railPlugins.map((p) => railItemRefs.current.get(p.id)?.getBoundingClientRect()),
+        );
+      const end = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', cancel);
+        window.removeEventListener('keydown', key, true);
+        setRailDragId(null);
+        setRailDropIndex(null);
+      };
+      const move = (ev: PointerEvent) => {
+        if (!dragging) {
+          if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
+          dragging = true;
+          setRailDragId(pluginId);
+        }
+        setRailDropIndex(dropIndexAt(ev.clientY));
+      };
+      const up = (ev: PointerEvent) => {
+        end();
+        if (!dragging) return;
+        suppressRailClick.current = true;
+        // No click may follow (released outside the item) — don't let the
+        // flag swallow the next real click.
+        setTimeout(() => {
+          suppressRailClick.current = false;
+        }, 0);
+        dropRailPlugin(pluginId, dropIndexAt(ev.clientY));
+      };
+      const cancel = () => end();
+      const key = (ev: KeyboardEvent) => {
+        if (ev.key !== 'Escape' || !dragging) return;
+        ev.preventDefault();
+        dragging = false;
+        end();
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', cancel);
+      window.addEventListener('keydown', key, true);
+    },
+    [railPlugins, dropRailPlugin],
   );
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -860,6 +938,88 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       updateSession,
       setSelectedSessionId,
     ]
+  );
+
+  // ---- "Move to workspace…": a searchable picker over every window's
+  // workspaces. Same window → plain move; another window → hand the session
+  // over through the peer channel. Its PTYs stay alive throughout (output is
+  // broadcast to every window, so the target's terminals reattach); the
+  // source only lets go once the target confirmed the adoption.
+  const otherWindowWorkspaces = useWorkspaceDirectory(platform.peers, windowId, workspaces);
+  const [moveDialogSessionId, setMoveDialogSessionId] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+
+  const moveSessionToWindow = useCallback(
+    async (sessionId: string, target: WorkspaceTarget) => {
+      const peers = platform.peers;
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!peers || !session) return;
+      // The main shell plus every sub-shell tab — none may die when this
+      // window's views unmount.
+      const ptyIds = [
+        ptyIdOf(session),
+        ...(session.editors ?? []).filter((e) => e.kind === 'shell').map((e) => e.id),
+      ];
+      for (const id of ptyIds) keepPtyAlive(id);
+      const result = await requestAdopt(peers, {
+        to: target.windowId,
+        from: windowId,
+        workspaceId: target.workspace.id,
+        session: { ...session, workspaceId: target.workspace.id },
+      });
+      if (!result.ok) {
+        for (const id of ptyIds) takePtyKeepAlive(id);
+        setMoveError(
+          `Could not move '${session.name}' to ${target.windowLabel} / ${target.workspace.name}: ${result.error}`,
+        );
+        return;
+      }
+      // Hand-over confirmed: drop this window's per-session runtime state
+      // (hook polling), then let the session go without killing anything.
+      for (const plugin of enabledPluginsRef.current) {
+        if (plugin.hookSpec) dropHookSpec(plugin, buildPluginApi(session, plugin));
+      }
+      closeSession(sessionId);
+    },
+    [platform.peers, windowId, closeSession, buildPluginApi],
+  );
+
+  // Adopt sessions handed over by another window.
+  useEffect(() => {
+    const peers = platform.peers;
+    if (!peers) return;
+    return peers.subscribe(TOPIC_ADOPT, (payload) => {
+      const req = payload as AdoptRequest;
+      if (req?.to !== windowId || !req.session?.id) return;
+      const ack = (ok: boolean, error?: string) =>
+        peers.publish(TOPIC_ADOPT_ACK, {
+          to: req.from,
+          requestId: req.requestId,
+          ok,
+          error,
+        } satisfies AdoptAck);
+      if (!workspacesRef.current.some((w) => w.id === req.workspaceId)) {
+        ack(false, 'the workspace no longer exists');
+        return;
+      }
+      if (sessionsRef.current.some((s) => s.id === req.session.id)) {
+        ack(false, 'the session is already in that window');
+        return;
+      }
+      adoptSession(req.workspaceId, req.session);
+      setSelectedSessionId(req.session.id);
+      saveNow().catch(() => {});
+      ack(true);
+    });
+  }, [platform.peers, windowId, adoptSession, setSelectedSessionId, saveNow]);
+
+  const pickMoveTarget = useCallback(
+    (sessionId: string, target: WorkspaceTarget) => {
+      setMoveDialogSessionId(null);
+      if (target.isCurrentWindow) moveSessionToWorkspace(sessionId, target.workspace.id);
+      else void moveSessionToWindow(sessionId, target);
+    },
+    [moveSessionToWorkspace, moveSessionToWindow],
   );
 
   // Cycle the selected session's tabs: 'shell' first, then sub-view tabs in
@@ -1351,6 +1511,9 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           }
         }
       }));
+      // Sub-shell tabs running an agent: stop them gracefully too, so their
+      // exit hints (exact conversation ids) land before the state is saved.
+      await runSubShellClosers();
 
       // Grab the latest cwd for the active session before the PTY goes away.
       const current = selectedSessionRef.current;
@@ -1968,37 +2131,22 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           return (
             <div
               key={plugin.id}
-              draggable
+              ref={(el) => {
+                if (el) railItemRefs.current.set(plugin.id, el);
+                else railItemRefs.current.delete(plugin.id);
+              }}
               data-tip={`${plugin.title} (drag to reorder)`}
-              onDragStart={(e) => {
-                e.dataTransfer.setData('application/x-axn-rail', plugin.id);
-                e.dataTransfer.effectAllowed = 'move';
-                setRailDragId(plugin.id);
-              }}
-              onDragEnd={() => {
-                setRailDragId(null);
-                setRailDropIndex(null);
-              }}
-              onDragOver={(e) => {
-                if (!railDragId) return;
+              onPointerDown={(e) => startRailDrag(e, plugin.id)}
+              onClickCapture={(e) => {
+                if (!suppressRailClick.current) return;
+                suppressRailClick.current = false;
                 e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                if (railDragId === plugin.id) {
-                  setRailDropIndex(null);
-                  return;
-                }
-                const rect = e.currentTarget.getBoundingClientRect();
-                setRailDropIndex(e.clientY < rect.top + rect.height / 2 ? i : i + 1);
+                e.stopPropagation();
               }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (railDragId && railDragId !== plugin.id && railDropIndex !== null) {
-                  dropRailPlugin(railDragId, railDropIndex);
-                }
-                setRailDragId(null);
-                setRailDropIndex(null);
-              }}
-              className={`mt-3${railDragId === plugin.id ? ' opacity-40' : ''}${
+              onDragStart={(e) => e.preventDefault()}
+              className={`mt-3 touch-none select-none${railDragId ? ' cursor-grabbing' : ''}${
+                railDragId === plugin.id ? ' opacity-40' : ''
+              }${
                 railDropIndex === i && railDragId !== plugin.id
                   ? ' shadow-[inset_0_2px_0_var(--accent)]'
                   : ''
@@ -2034,18 +2182,6 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
               ? ' min-h-4'
               : ''
           }`}
-          onDragOver={(e) => {
-            if (!railDragId) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            setRailDropIndex(railPlugins.length);
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (railDragId) dropRailPlugin(railDragId, railPlugins.length);
-            setRailDragId(null);
-            setRailDropIndex(null);
-          }}
         />
         <button
           type="button"
@@ -2096,6 +2232,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 updateWorkspace={updateWorkspace}
                 onAddSession={openSession}
                 onMoveSession={moveSessionToWorkspace}
+                onRequestMoveSession={setMoveDialogSessionId}
                 onReorderWorkspace={reorderWorkspace}
                 onMoveWorkspace={moveWorkspace}
                 onRenameSession={renameSession}
@@ -2123,6 +2260,9 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {stateNotice && (
           <Banner level="warning" message={stateNotice} onDismiss={dismissStateNotice} />
+        )}
+        {moveError && (
+          <Banner level="error" message={moveError} onDismiss={() => setMoveError(null)} />
         )}
         <div className="flex min-h-0 flex-1 overflow-hidden">
         {sessions.map((session) => {
@@ -2289,6 +2429,14 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                     key={ed.id}
                     className={activeTab === ed.id ? 'h-full w-full' : 'hidden'}
                   >
+                    {/* A crashing tab view replaces only itself. */}
+                    <ErrorBoundary
+                      scope={`${ed.kind} tab — ${ed.label || ed.path || ed.id}`}
+                      extraAction={{
+                        label: <Trans>Close tab</Trans>,
+                        onClick: () => closeTab(session, ed.id),
+                      }}
+                    >
                     {ed.kind === 'browser' ? (
                       <BrowserView
                         path={ed.path}
@@ -2339,6 +2487,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         onDirtyChange={(dirty) => setEditorDirty(session.id, ed.id, dirty)}
                       />
                     )}
+                    </ErrorBoundary>
                   </div>
                 ))}
               </div>
@@ -2525,6 +2674,25 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         />
       )}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <PickerHost />
+      {(() => {
+        const moving = sessions.find((s) => s.id === moveDialogSessionId);
+        return moving ? (
+          <MoveToWorkspaceModal
+            sessionName={moving.name}
+            currentWorkspaceId={moving.workspaceId}
+            windowId={windowId}
+            ownWorkspaces={workspaces}
+            otherWindows={otherWindowWorkspaces}
+            onPick={(target) => pickMoveTarget(moving.id, target)}
+            onCreate={(name) => {
+              setMoveDialogSessionId(null);
+              moveSessionToWorkspace(moving.id, addWorkspace(name));
+            }}
+            onClose={() => setMoveDialogSessionId(null)}
+          />
+        ) : null;
+      })()}
       {attentionOpen && railAttention && (
         <AttentionModal
           flags={railFlags}
@@ -2596,25 +2764,7 @@ function TabContextMenu({
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(tab.label ?? '');
-  const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [onClose]);
 
   useEffect(() => {
     if (renaming && inputRef.current) {
@@ -2623,8 +2773,6 @@ function TabContextMenu({
     }
   }, [renaming]);
 
-  const x = Math.min(position.x, window.innerWidth - 200);
-  const y = Math.min(position.y, window.innerHeight - 140);
 
   const tabLabel =
     tab.kind === 'shell'
@@ -2647,10 +2795,11 @@ function TabContextMenu({
     'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]';
 
   return (
-    <div
-      ref={menuRef}
-      style={{ top: y, left: x }}
-      className="fixed z-50 max-h-[70vh] w-56 overflow-y-auto rounded-lg bg-[var(--surface)] p-1 shadow-2xl"
+    <ContextMenu
+      x={position.x}
+      y={position.y}
+      onClose={onClose}
+      className="rounded-lg bg-[var(--surface)] p-1 shadow-2xl"
     >
       <div className="flex items-center gap-1 pr-1">
         {renaming && onRename ? (
@@ -2743,6 +2892,6 @@ function TabContextMenu({
         <X className="h-3.5 w-3.5 shrink-0" />
         Close tab
       </button>
-    </div>
+    </ContextMenu>
   );
 }
