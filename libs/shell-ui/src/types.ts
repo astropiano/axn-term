@@ -137,6 +137,12 @@ export interface EditorTab {
   hookStatus?: SessionStatus;
   /** For kind 'shell': the tab agent's hook-raised flag — rolls up into the session's attention. */
   hookAttention?: SessionAttention | null;
+  /**
+   * For kind 'shell': the task list of the agent running in this tab, read
+   * from the tab's screen (`app/subShellTasks.ts`), and its done share 0–100.
+   */
+  tasks?: Task[];
+  progress?: number;
   /** For kind 'shell': working directory override; defaults to the session's live cwd. */
   cwd?: string;
   /** For kind 'shell': custom tab label; absent falls back to the command/dir default. */

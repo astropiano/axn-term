@@ -37,7 +37,6 @@ import {
   getSessionViewPlugins,
   createPluginApi,
   isPluginEnabled,
-  pluginCommands,
 } from './session-plugins';
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
 import { keepPtyAlive, takePtyKeepAlive, terminalAt } from '../terminalRegistry';
@@ -66,29 +65,20 @@ import { bindGitBackend } from './gitClient';
 import { AttentionDot } from './AttentionDot';
 import { AttentionModal } from './AttentionModal';
 import { Banner, sessionBanners } from './Banner';
-import { parseSessionSummary, runCommandChain } from './hiddenCommands';
 import { isAppNavigationShortcut, isReloadShortcut } from './shortcuts';
 import { AppContextMenu, appMenuTarget, type AppMenuTarget } from './AppContextMenu';
 import { sessionAttention, setAppAttention, summarizeAttention, useAppAttention, noteSessionSelected } from './attention';
 import type { RailFlag } from './attention';
 import { RAIL_ORDER_KEY, orderRailPlugins, railDropIndexAt, railOrderAfterDrop, storedRailOrder } from './railOrder';
 import { ptyIdOf } from '../types';
-import { controlReply, sessionForPty } from './controlCommands';
 import { CloseConfirmModal } from './CloseConfirmModal';
 import { TabContextMenu } from './TabContextMenu';
+import { useSessionCommands } from './useSessionCommands';
 import { SessionTabStrip } from './SessionTabStrip';
-import {
-  AXN_ARG_COMMANDS,
-  AXN_BUILTIN_COMMANDS,
-  AXN_BUILTIN_RE,
-  browserTabPatch,
-  completePathArg,
-  resolveSessionPath,
-} from './shellCommandSupport';
+import { browserTabPatch, resolveSessionPath } from './shellCommandSupport';
 import type { AgentCli, EditorTab, SessionAttention, ShellSession, WindowState } from '../types';
 import type { AppSettings } from '../themes';
 import type { SessionViewPlugin } from './session-plugins/plugin';
-import { registerSessionCommandDispatch } from './session-plugins/plugin';
 import { pushSandboxViewData, sandboxRuntime, syncSandboxes } from './session-plugins/sandbox';
 import {
   dropHookSpec,
@@ -812,335 +802,23 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // Built-in hidden commands (axn-session*, axn-workspace-*). Resolves
   // asynchronously; `false` swallows the line, a string replaces it (used to
   // echo errors back into the shell).
-  const runBuiltinCommand = useCallback(
-    async (
-      sessionId: string,
-      line: string,
-      ptyId?: string,
-    ): Promise<string | false | undefined> => {
-      const m = AXN_BUILTIN_RE.exec(line);
-      if (!m) return undefined;
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return false;
-      const [, cmd, argRaw] = m;
-      const arg = argRaw?.replace(/^["']+|["']+$/g, '');
-      // Resolve paths/cwd against the PTY the command was typed into — a
-      // sub-shell's cwd can differ from the session's stored cwd.
-      const targetPty = ptyId ?? ptyIdOf(session);
-
-      const wsSessions = sessionsRef.current.filter(
-        (s) => s.workspaceId === session.workspaceId,
-      );
-      const idx = wsSessions.findIndex((s) => s.id === sessionId);
-
-      switch (cmd) {
-        case 'axn-session': {
-          const liveCwd =
-            (await backend.getCwd?.(targetPty).catch(() => null)) ?? session.cwd;
-          if (!arg || arg === '.') {
-            openSession(session.workspaceId, liveCwd ?? undefined);
-            return false;
-          }
-          const stat =
-            (await backend.statPath?.(targetPty, liveCwd ?? '/', arg).catch(() => null)) ??
-            null;
-          if (stat?.isDir) {
-            openSession(session.workspaceId, stat.path);
-            return false;
-          }
-          return `echo ${JSON.stringify(`axn-session: not a directory: ${arg}`)}`;
-        }
-        case 'axn-session-mv': {
-          if (!arg) return 'echo "usage: axn-session-mv <workspace>"';
-          const existing = workspacesRef.current.find(
-            (w) => w.name.toLowerCase() === arg.toLowerCase(),
-          );
-          moveSessionToWorkspace(sessionId, existing?.id ?? addWorkspace(arg));
-          return false;
-        }
-        case 'axn-session-up': {
-          const prev = wsSessions[idx - 1];
-          if (idx > 0 && prev) {
-            moveSessionToWorkspace(sessionId, session.workspaceId, prev.id);
-          }
-          return false;
-        }
-        case 'axn-session-down': {
-          const next = wsSessions[idx + 1];
-          if (!next) return false;
-          const afterNext = wsSessions[idx + 2];
-          moveSessionToWorkspace(sessionId, session.workspaceId, afterNext?.id ?? null);
-          return false;
-        }
-        case 'axn-workspace-up':
-          moveWorkspace(session.workspaceId, -1);
-          return false;
-        case 'axn-workspace-down':
-          moveWorkspace(session.workspaceId, 1);
-          return false;
-        case 'axn-focus': {
-          // Bring a session view to the front: `shell` (default) the main
-          // terminal, else a sub-view tab by 1-based index, kind, id (prefix)
-          // or label/path-basename text.
-          const target = arg?.trim();
-          if (!target || target === 'shell') {
-            activateSessionTab(sessionId, 'shell');
-            return false;
-          }
-          const editors = session.editors ?? [];
-          const lower = target.toLowerCase();
-          const hit =
-            (/^\d+$/.test(target) ? editors[parseInt(target, 10) - 1] : undefined) ??
-            editors.find((e) => e.id === target || e.id.startsWith(target)) ??
-            editors.find((e) => (e.kind ?? 'editor') === lower) ??
-            editors.find((e) =>
-              (e.label ?? e.path.split('/').pop() ?? '').toLowerCase().includes(lower),
-            );
-          if (!hit) {
-            return `echo ${JSON.stringify(`axn-focus: no such tab: ${target}`)}`;
-          }
-          activateSessionTab(sessionId, hit.id);
-          return false;
-        }
-      }
-      return undefined;
-    },
-    [openSession, addWorkspace, moveSessionToWorkspace, moveWorkspace, activateSessionTab],
-  );
-
-  // Give plugins a chance to intercept submitted input lines ("hidden
-  // commands" like axn-devin-resume) before they reach the shell. Built-in
-  // axn-session*/axn-workspace-* commands are handled first.
-  const handleSessionCommand = useCallback(
-    (
-      sessionId: string,
-      line: string,
-      ptyId?: string,
-    ): string | false | undefined | Promise<string | false | undefined> => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return undefined;
-      const renameMatch = /^\s*axn-rename(?:\s+(.*?))?\s*$/.exec(line);
-      if (renameMatch) {
-        // `axn-rename` (no arg) clears the override → process-reported name.
-        renameSession(
-          sessionId,
-          renameMatch[1]?.trim().replace(/^["']+|["']+$/g, '') ?? '',
-        );
-        return false;
-      }
-      const summary = parseSessionSummary(line);
-      if (summary !== undefined) {
-        // `axn-session-summary` (no arg) clears the summary — same convention
-        // as `axn-rename`.
-        updateSession(sessionId, { summary });
-        return false;
-      }
-      const shMatch = /^\s*axn-sh(?:\s+(.*?))?\s*$/.exec(line);
-      if (shMatch) {
-        return (async (): Promise<string | false | undefined> => {
-          const arg = shMatch[1]?.trim().replace(/^["']+|["']+$/g, '');
-          const targetPty = ptyId ?? ptyIdOf(session);
-          if (arg) {
-            // A single argument that resolves to a directory opens an
-            // interactive sub-shell there (`axn-sh .`, `axn-sh src`); anything
-            // else is a `sh -c` one-shot command.
-            const liveCwd =
-              (await backend.getCwd?.(targetPty).catch(() => null)) ?? session.cwd;
-            const stat =
-              (await backend.statPath?.(targetPty, liveCwd ?? '/', arg).catch(() => null)) ??
-              null;
-            if (stat?.isDir) {
-              openSubShell(sessionId, undefined, stat.path);
-              return false;
-            }
-          }
-          openSubShell(sessionId, arg || undefined);
-          return false;
-        })();
-      }
-      const installMatch = /^\s*axn-install(?:\s+(.*?))?\s*$/.exec(line);
-      if (installMatch) {
-        // Swap for `axn-term install …` and let it run visibly in the shell.
-        // Resolve the running binary so the command also works in dev builds
-        // where `axn-term` is not on PATH.
-        return (async (): Promise<string | false | undefined> => {
-          const exe = (await platform.exePath?.().catch(() => undefined)) ?? 'axn-term';
-          const args = installMatch[1]?.trim();
-          return `${JSON.stringify(exe)} install${args ? ` ${args}` : ''}`;
-        })();
-      }
-      if (
-        /^\s*(axn-session(?:-mv|-up|-down)?|axn-workspace-up|axn-workspace-down)(?:\s|$)/.test(
-          line,
-        )
-      ) {
-        return runBuiltinCommand(sessionId, line, ptyId);
-      }
-      // Plugin-declared commands (e.g. axn-devin-resume): the first word of
-      // the line selects the owning plugin's command; `run` decides the
-      // outcome (a string replaces the line, `false` swallows it, undefined
-      // passes it through to the shell).
-      const word = /^\s*(\S+)/.exec(line)?.[1];
-      if (word) {
-        for (const plugin of enabledPluginsRef.current) {
-          const declared = pluginCommands(plugin).find((c) => c.name === word && c.run);
-          if (!declared?.run) continue;
-          const arg = line.trim().slice(word.length).trim() || undefined;
-          try {
-            // `void` collapses to `undefined` at runtime: pass-through.
-            return declared.run(buildPluginApi(session, plugin), arg, line.trim()) as
-              | string
-              | false
-              | undefined
-              | Promise<string | false | undefined>;
-          } catch (e) {
-            console.warn(`[plugin:${plugin.id}] command ${word} failed:`, e);
-            return `echo ${JSON.stringify(`${word}: command failed`)}`;
-          }
-        }
-        if (word.startsWith('axn-')) {
-          axnLog(
-            'warn',
-            'shell',
-            `no plugin claimed '${word}' — enabled: ${enabledPluginsRef.current.map((p) => p.id).join(',')}`,
-          );
-        }
-      }
-      return runCommandChain(
-        enabledPluginsRef.current.filter((p) => p.onCommand),
-        (plugin) => plugin.onCommand?.(buildPluginApi(session, plugin), line),
-        (plugin, e) => console.warn(`[plugin:${plugin.id}] onCommand failed:`, e),
-      );
-    },
-    [buildPluginApi, openSubShell, renameSession, runBuiltinCommand, updateSession],
-  );
-
-  // `PluginApi.runCommand` — every built api (SessionPanel call sites don't
-  // see this callback) dispatches through the module-level holder.
-  useEffect(
-    () => registerSessionCommandDispatch(handleSessionCommand),
-    [handleSessionCommand],
-  );
-
-  // Remote-control command lines (desktop: POST /sessions/<id>/command → the
-  // 'remote-command' event) run through the same hidden/plugin dispatch as a
-  // typed line — a replacement string is written to the PTY, `false`
-  // swallows, `undefined` passes the line through.
-  useEffect(() => {
-    const unlisten = platform.onRemoteCommand?.(({ sessionId, line }) => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return;
-      const ptyId = ptyIdOf(session);
-      void Promise.resolve(handleSessionCommand(sessionId, line, ptyId)).then(
-        (resolved) => {
-          if (resolved === false) return;
-          void backend.write(ptyId, `${typeof resolved === 'string' ? resolved : line}\r`);
-        },
-      );
-    });
-    return () => unlisten?.();
-  }, [platform, handleSessionCommand]);
-
-  // `axn-term session …` from a program inside one of our terminals (control
-  // socket): the line runs through the same dispatch, for the PTY it came
-  // from — never typed into it (an agent owns the foreground).
-  useEffect(() => {
-    const unlisten = platform.onControlCommand?.(async ({ ptyId, line }) => {
-      const session = sessionForPty(sessionsRef.current, ptyId);
-      if (!session) return null;
-      try {
-        return controlReply(line, await handleSessionCommand(session.id, line, ptyId));
-      } catch (e) {
-        return { ok: false, error: String(e) };
-      }
-    });
-    return () => unlisten?.();
-  }, [platform, handleSessionCommand]);
-
-  // Tab-completion for axn-* hidden commands: completes the command word, a
-  // workspace name for axn-session-mv, or a filesystem path for axn-edit /
-  // axn-browse / axn-session. Returns full replacement lines.
-  const handleCompleteInput = useCallback(
-    async (sessionId: string, line: string, ptyId?: string): Promise<string[]> => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return [];
-      const declared = enabledPluginsRef.current.flatMap((p) =>
-        pluginCommands(p).map((cmd) => ({ plugin: p, cmd })),
-      );
-      const commands = [...AXN_BUILTIN_COMMANDS, ...declared.map((d) => d.cmd.name)];
-      const argCommands = new Set([
-        ...AXN_ARG_COMMANDS,
-        ...declared.filter((d) => d.cmd.takesArg).map((d) => d.cmd.name),
-      ]);
-      const m = /^(\s*)(\S*)(?:\s+(.*))?$/.exec(line);
-      if (!m) return [];
-      const [, leading, word, rest] = m;
-
-      if (rest === undefined) {
-        if (!word.startsWith('axn-')) return [];
-        const candidates = commands
-          .filter((c) => c.startsWith(word) && c !== word)
-          .map((c) => `${leading}${c}${argCommands.has(c) ? ' ' : ''}`);
-        if (argCommands.has(word)) candidates.unshift(`${leading}${word} `);
-        return candidates;
-      }
-
-      const completeWorkspaceArg = () => {
-        const prefix = rest.replace(/^["']/, '');
-        return workspacesRef.current
-          .map((w) => w.name)
-          .filter((n) => n.toLowerCase().startsWith(prefix.toLowerCase()) && n !== prefix)
-          .map((n) => `${leading}${word} ${n.includes(' ') ? `"${n}"` : n}`);
-      };
-
-      if (word === 'axn-session-mv') {
-        return completeWorkspaceArg();
-      }
-      if (
-        word === 'axn-browse' ||
-        word === 'axn-edit' ||
-        word === 'axn-preview' ||
-        word === 'axn-session' ||
-        word === 'axn-sh'
-      ) {
-        // Complete against the originating PTY's live cwd (a sub-shell's cwd
-        // can differ from the session's stored cwd).
-        const liveCwd =
-          (await backend.getCwd?.(ptyId ?? ptyIdOf(session)).catch(() => null)) ??
-          session.cwd;
-        return completePathArg(
-          pathDeps,
-          liveCwd,
-          `${leading}${word} `,
-          rest,
-          word === 'axn-edit' || word === 'axn-preview',
-        );
-      }
-      const declaredCmd = declared.find((d) => d.cmd.name === word);
-      if (declaredCmd?.cmd.completeArg) {
-        try {
-          const candidates = await declaredCmd.cmd.completeArg(
-            buildPluginApi(session, declaredCmd.plugin),
-            rest,
-          );
-          return candidates.map((a) => `${leading}${word} ${a}`);
-        } catch (e) {
-          console.warn(`[plugin:${declaredCmd.plugin.id}] completion for ${word} failed:`, e);
-          return [];
-        }
-      }
-      const argCompletion = declaredCmd?.cmd.argCompletion;
-      if (argCompletion === 'workspace') return completeWorkspaceArg();
-      if (argCompletion) {
-        const liveCwd =
-          (await backend.getCwd?.(ptyId ?? ptyIdOf(session)).catch(() => null)) ??
-          session.cwd;
-        return completePathArg(pathDeps, liveCwd, `${leading}${word} `, rest, argCompletion === 'file');
-      }
-      return [];
-    },
-    [buildPluginApi],
-  );
+  const { handleSessionCommand, handleCompleteInput } = useSessionCommands({
+    backend,
+    platform,
+    sessionsRef,
+    workspacesRef,
+    enabledPluginsRef,
+    buildPluginApi,
+    openSession,
+    openSubShell,
+    addWorkspace,
+    moveSessionToWorkspace,
+    moveWorkspace,
+    activateSessionTab,
+    renameSession,
+    updateSession,
+    pathDeps,
+  });
 
   // Sessions whose PTY just spawned, waiting for plugin settings to load
   // before their onSessionOpen hooks may run.
