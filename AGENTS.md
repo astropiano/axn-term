@@ -754,7 +754,7 @@ disabled.
 **Sandboxed plugins** (`~/.axn-term/plugins/<dir>/`) are the isolated tier:
 each directory holds a `plugin.json` manifest (`id`, `title`, `version`,
 `settings`, `commands` incl. `completeArg`, `processPattern`,
-`handlesProgress`, `hostsTabs`, `logic`, `view`), a `plugin.mjs` logic entry
+`handlesProgress`, `hostsTabs`, `logic`, `view`, `permissions`), a `plugin.mjs` logic entry
 and an optional `index.html` view. Everything runs inside
 `sandbox="allow-scripts"` iframes (opaque origin — no app DOM, storage or
 Tauri internals); the only capability channel is the postMessage contract in
@@ -777,7 +777,17 @@ sync-only render slots (`[data-axn-action]` clicks → `surfaceAction`).
 `renderView` mounts the view iframe (theme CSS vars injected + live
 `theme`/`sessions`/`appState` pushes; `peer` relays between a plugin's logic
 and view frames). Sandboxes boot/dispose with the enabled set
-(`syncSandboxes`). `pendingRestore`/`repoMenuItems`/`sessionMenuItems` and
+(`syncSandboxes`). Capabilities are opt-in via `permissions`
+(`PluginPermission` in `libs/plugin-sdk/src/permissions.ts`: `exec` —
+`exec`/`openSubShell`/`runCommand`; `terminal-input` — `writeToSession`, the
+`line` hook and replacement lines from owned commands; `terminal-output` —
+`getScreenLines`/`waitForSessionOutput` and the `output` hook; `fs-read`;
+`fs-write`; `sessions` — `openSession`/`selectSession`/`activateTab`). The
+bridge refuses undeclared calls with an error and never delivers undeclared
+hooks; unknown entries are dropped with a warning at load. Default is none —
+own pluginState, banners/attention, surfaces, tabs and swallowing owned
+commands need no permission. Settings → Plugins lists the declared set.
+`pendingRestore`/`repoMenuItems`/`sessionMenuItems` and
 `renderSettings` stay in-process-only (sync contracts or trusted DOM).
 Desktop reads plugin dirs via `list_external_plugin_dirs` /
 `read_external_plugin_file`; web has no plugin dirs (capability absent).

@@ -1,6 +1,7 @@
 export * from './contract';
 export * from './api';
 export * from './hooks';
+export * from './permissions';
 
 /** Identity helper — gives full typechecking on a plugin manifest literal. */
 export function definePluginManifest(manifest: import('./api').PluginManifest) {
