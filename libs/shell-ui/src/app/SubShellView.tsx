@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { useSessionBackend } from '../services';
+import { useSessionBackend, useShellServices } from '../services';
+import { backendFileService } from './fileService';
+import { createTabHookWatcher } from './subShellHooks';
 import { useSettings } from '../SettingsProvider';
 import { getXtermColors, resolveShellFont } from '../themes';
 import { registerTerminalElement, takePtyKeepAlive } from '../terminalRegistry';
@@ -98,6 +100,9 @@ export function SubShellView({
   onSessionCommandRef.current = onSessionCommand;
   onCompleteInputRef.current = onCompleteInput;
   const { activeTheme, settings } = useSettings();
+  const { services } = useShellServices();
+  const notifyRef = useRef(services.notify);
+  notifyRef.current = services.notify;
   // Disposes the active GPU renderer addon when the setting hot-swaps.
   const rendererCleanupRef = useRef<(() => void) | null>(null);
   const rendererMountedRef = useRef(false);
@@ -241,6 +246,29 @@ export function SubShellView({
     // Poll the sub-shell's foreground process — hidden commands are only
     // intercepted at a bare shell prompt (same rule as the main terminal).
     let fgPoll: ReturnType<typeof setInterval> | null = null;
+    // Hook status of an agent running in this tab (subShellHooks.ts). A
+    // previous run's non-final status/flag is stale by now.
+    if (tabRef.current.hookAttention || (tabRef.current.hookStatus ?? 'completed') !== 'completed') {
+      onUpdateTabRef.current?.({ hookStatus: undefined, hookAttention: null });
+    }
+    const hookWatcher = createTabHookWatcher({
+      tabId: tab.id,
+      read: (path) => backendFileService(backend, tab.id).readFile(path),
+      stateDir: async () =>
+        (await backend.exec?.(tab.id, 'printf %s "${AXN_TERM_STATE_DIR:-$HOME/.axn-term}"'))?.trim() || undefined,
+      getTab: () => tabRef.current,
+      update: (patch) => {
+        const looking = isVisibleRef.current && document.hasFocus();
+        // a "needs input" warning while the user watches this tab says nothing new
+        if (patch.hookAttention?.level === 'warning' && looking) delete patch.hookAttention;
+        if (Object.keys(patch).length === 0) return;
+        onUpdateTabRef.current?.(patch);
+        if (patch.hookAttention && !looking) {
+          const label = tabRef.current.label ?? 'sub-shell';
+          notifyRef.current?.(`${sessionRef.current.name} · ${label}`, patch.hookAttention.message);
+        }
+      },
+    });
     if (backend.getForegroundProcess) {
       void backend
         .getDefaultShell?.()
@@ -266,6 +294,7 @@ export function SubShellView({
             } else if (!agent && current.agentActive && !closingRef.current) {
               onUpdateTabRef.current?.({ agentActive: undefined });
             }
+            void hookWatcher.tick(foregroundRef.current);
           })
           .catch(() => {});
       }, 1000);
@@ -386,6 +415,13 @@ export function SubShellView({
     spawnedRef.current = true;
     fitAddon.current?.fit();
     spawnRef.current();
+  }, [isVisible]);
+
+  // Looking at the tab acknowledges its agent's "needs input" warning; a
+  // critical flag (pending permission) waits for the agent's next event.
+  useEffect(() => {
+    if (isVisible && tab.hookAttention?.level === 'warning') onUpdateTab?.({ hookAttention: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVisible]);
 
   useEffect(() => {

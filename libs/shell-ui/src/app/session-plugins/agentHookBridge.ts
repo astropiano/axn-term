@@ -1,13 +1,17 @@
 import {
   agentEventFile,
+  agentEventLog,
   agentPtyEventFile,
   agentHookScript,
   agentHookScriptPath,
   mergeHookSettings,
   parseHookEvent,
+  readHookLog,
   removeHookSettings,
   type AgentHookEffect,
   type AgentHookSpec,
+  type HookLogCursor,
+  type SessionAttention,
 } from '@axn-term/plugin-sdk';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import { axnLog } from '../log';
@@ -22,8 +26,8 @@ import { shellQuote } from '../../shellQuote';
  *
  * A plugin declares `hookSpec` on its `SessionViewPlugin` object; the host
  * calls `maybeWireHookSpec` on output dispatch (syncs the agent's config
- * per the plugin's `installHooks` setting and starts the tty-keyed event
- * poll), `releaseHookSpec` when the bound process ends, and `dropHookSpec`
+ * per the plugin's `installHooks` setting and starts polling the PTY's
+ * append-only event log), `releaseHookSpec` when the bound process ends, and `dropHookSpec`
  * on session boundaries. Built-ins declare `hookSpec` too — no plugin wires
  * the bridge by hand.
  */
@@ -45,15 +49,16 @@ export type { AgentHookEffect, AgentHookSpec } from '@axn-term/plugin-sdk';
  * PTY keeps the same tty for its lifetime, so the result is cached across
  * process restarts.
  */
-export interface HookRuntime {
+export interface HookRuntime extends HookEventSource {
   home?: string;
   eventFile?: string;
   ptyEventFile?: string;
   resolveTried?: boolean;
-  lastRaw?: string;
   pollTimer?: ReturnType<typeof setInterval>;
   /** Once a hook event was applied, deterministic hook state owns session.status. */
   hooksOwnStatus?: boolean;
+  /** A read is in flight — a slow backend must not have two consume the same lines. */
+  polling?: boolean;
   /**
    * When the hook raised its current *warning* flag ("needs input"). Such a
    * flag is informational: selecting the session after this acknowledges it.
@@ -105,8 +110,71 @@ async function resolveHome(ctx: Ctx, rt: HookRuntime): Promise<string | undefine
   }
 }
 
-/** Poll interval for the session's latest-hook-event file. */
-const EVENT_POLL_MS = 1500;
+/** Poll interval for a PTY's hook event log. */
+export const EVENT_POLL_MS = 1500;
+
+/** Where a poller is in a PTY's events — the log it settled on and its read position. */
+export interface HookEventSource {
+  logPath?: string;
+  cursor?: HookLogCursor;
+  /** Last content of a legacy latest-event `.json` (an old agent-hook.sh). */
+  lastRaw?: string;
+}
+
+/**
+ * Events that arrived since the last poll, oldest first. Reads the first
+ * existing `.jsonl` log among `files` (PTY-keyed before tty-keyed) and
+ * sticks with it; the very first read yields only the newest event — a
+ * restarted app must not replay a whole history of notifications. Without
+ * any log, falls back to the latest-event `.json` an older script wrote.
+ */
+export async function pollHookEvents(
+  read: (path: string) => Promise<string>,
+  files: readonly (string | undefined)[],
+  src: HookEventSource,
+): Promise<Record<string, unknown>[]> {
+  for (const file of files) {
+    if (!file) continue;
+    const log = agentEventLog(file);
+    if (src.logPath && src.logPath !== log) continue;
+    const res = await readHookLog(read, log, src.cursor);
+    if (!res) continue;
+    const first = !src.cursor;
+    src.logPath = log;
+    src.cursor = res.cursor;
+    const events = res.lines
+      .map(parseHookEvent)
+      .filter((ev): ev is Record<string, unknown> => ev !== null);
+    return first ? events.slice(-1) : events;
+  }
+  if (src.logPath) return [];
+  for (const file of files) {
+    if (!file) continue;
+    const contents = await read(file).catch(() => '');
+    if (!contents) continue;
+    if (contents === src.lastRaw) return [];
+    src.lastRaw = contents;
+    const ev = parseHookEvent(contents);
+    return ev ? [ev] : [];
+  }
+  return [];
+}
+
+/**
+ * The attention an effect leaves behind: `undefined` = unchanged. A warning
+ * ("needs input") never downgrades a live critical flag (a pending
+ * permission) — only the agent's next real event, which clears it, does.
+ */
+export function nextHookAttention(
+  live: SessionAttention | null | undefined,
+  incoming: SessionAttention | null | undefined,
+): SessionAttention | null | undefined {
+  if (incoming === undefined) return undefined;
+  if (incoming === null) return live ? null : undefined;
+  const liveCritical = !!live && (live.level ?? 'critical') === 'critical';
+  if (incoming.level === 'warning' && liveCritical) return undefined;
+  return incoming;
+}
 
 function applyHookEffect(
   ctx: Ctx,
@@ -119,15 +187,16 @@ function applyHookEffect(
   if (effect.status !== undefined && (session.status ?? 'idle') !== effect.status) {
     ctx.updateSession(session.id, { status: effect.status });
   }
-  if (effect.attention !== undefined) {
-    // Skip redundant clears — activity events (PreToolUse) fire per tool call.
-    // The ctx's pluginState is a stale snapshot inside the poll loop; read the
-    // live session's flag instead.
-    const liveFlag = (
-      session.pluginState?.[stateKey] as { attention?: unknown } | undefined
-    )?.attention;
-    if (effect.attention !== null || liveFlag) ctx.setAttention(effect.attention);
-    rt.warningRaisedAt = effect.attention?.level === 'warning' ? Date.now() : undefined;
+  // Skip redundant clears — activity events (PreToolUse) fire per tool call.
+  // The ctx's pluginState is a stale snapshot inside the poll loop; read the
+  // live session's flag instead.
+  const liveFlag = (
+    session.pluginState?.[stateKey] as { attention?: SessionAttention | null } | undefined
+  )?.attention;
+  const attention = nextHookAttention(liveFlag, effect.attention);
+  if (attention !== undefined) {
+    ctx.setAttention(attention);
+    rt.warningRaisedAt = attention?.level === 'warning' ? Date.now() : undefined;
   }
 }
 
@@ -141,26 +210,29 @@ function acknowledgeWarning(ctx: Ctx, rt: HookRuntime): void {
 
 async function pollEventFile(ctx: Ctx, spec: AgentHookSpec, stateKey: string, final = false): Promise<void> {
   const rt = runtimes.get(runtimeKey(spec, ctx.session.id));
-  if (!rt) return;
-  let contents = '';
-  for (const path of [rt.ptyEventFile, rt.eventFile]) {
-    if (!path) continue;
-    try { contents = await ctx.readFile(path); } catch { /* old hook or missing file */ }
-    // A disabled plugin (or closed session) may have disposed this runtime
-    // while the read was in flight. Never apply it to a replacement runtime.
-    if (runtimes.get(runtimeKey(spec, ctx.session.id)) !== rt) return;
-    if (contents) break;
+  if (!rt || rt.polling) return;
+  rt.polling = true;
+  let events: Record<string, unknown>[];
+  try {
+    events = await pollHookEvents((p) => ctx.readFile(p), [rt.ptyEventFile, rt.eventFile], rt);
+  } finally {
+    rt.polling = false;
   }
+  // A disabled plugin (or closed session) may have disposed this runtime
+  // while the read was in flight. Never apply it to a replacement runtime.
+  if (runtimes.get(runtimeKey(spec, ctx.session.id)) !== rt) return;
   acknowledgeWarning(ctx, rt);
-  if (!contents || contents === rt.lastRaw) return;
-  rt.lastRaw = contents;
-  const ev = parseHookEvent(contents);
-  if (!ev) return;
-  const effect = spec.mapEvent(ev);
-  // A short-lived CLI can emit Stop and exit between polling ticks. Only
-  // reconcile completion, and never overwrite work started since that exit.
-  if (final && (effect?.status !== 'completed' || ctx.getSession().process)) return;
-  if (effect) applyHookEffect(ctx, stateKey, effect, rt);
+  const effects = events
+    .map((ev) => spec.mapEvent(ev))
+    .filter((e): e is AgentHookEffect => e !== null);
+  if (final) {
+    // A short-lived CLI can emit Stop and exit between polling ticks. Only
+    // reconcile completion, and never overwrite work started since that exit.
+    const last = effects[effects.length - 1];
+    if (last?.status === 'completed' && !ctx.getSession().process) applyHookEffect(ctx, stateKey, last, rt);
+    return;
+  }
+  for (const effect of effects) applyHookEffect(ctx, stateKey, effect, rt);
 }
 
 /**
@@ -217,7 +289,7 @@ export function releaseHookRuntime(spec: AgentHookSpec, sessionId: string): void
   const rt = runtimes.get(runtimeKey(spec, sessionId));
   if (rt) {
     rt.hooksOwnStatus = false;
-    // Keep the last payload: a restarted agent must not replay its previous
+    // Keep the read position: a restarted agent must not replay its previous
     // Stop/PermissionRequest while waiting for its first fresh hook event.
   }
 }
@@ -343,12 +415,21 @@ export function dropHookSpec(plugin: HookSpecPlugin, ctx: Ctx): void {
   ctx.setAttention(null);
 }
 
+/** Enabled plugins declaring `hookSpec` — kept by `syncHookSpecPlugins` for sub-shell tabs. */
+let enabledHookPlugins: readonly HookSpecPlugin[] = [];
+
+/** The enabled hook-bridged plugin whose process pattern matches `process`. */
+export function hookPluginFor(process: string): HookSpecPlugin | undefined {
+  return enabledHookPlugins.find((p) => p.processPattern?.test(process));
+}
+
 /** Reconcile enabled plugins without treating a settings change as process exit. */
 export function syncHookSpecPlugins(
   previous: readonly SessionViewPlugin[],
   enabled: readonly SessionViewPlugin[],
   contexts: (plugin: SessionViewPlugin) => Iterable<Ctx>,
 ): void {
+  enabledHookPlugins = enabled.filter((plugin) => plugin.hookSpec);
   const enabledIds = new Set(enabled.map((plugin) => plugin.id));
   const previousIds = new Set(previous.map((plugin) => plugin.id));
   for (const plugin of previous) {
