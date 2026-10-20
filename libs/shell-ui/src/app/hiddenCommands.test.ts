@@ -160,7 +160,7 @@ describe('createHiddenCommandInput', () => {
 
   it('intercepts nothing while a foreground process runs (off)', () => {
     const paths: string[] = [];
-    let mode: 'full' | 'devin' | 'off' = 'off';
+    let mode: 'full' | 'agent' | 'off' = 'off';
     const { input, written } = setup({
       mode: () => mode,
       onEditorRequest: (p) => paths.push(p),
@@ -174,11 +174,11 @@ describe('createHiddenCommandInput', () => {
     expect(paths).toEqual(['bar']);
   });
 
-  it('devin mode: only /exit is notified, everything else passes', () => {
+  it('agent mode: only /exit is notified, everything else passes', () => {
     const lines: string[] = [];
     const paths: string[] = [];
     const { input, written } = setup({
-      mode: () => 'devin',
+      mode: () => 'agent',
       onSessionCommand: (l) => {
         lines.push(l);
         return false;
@@ -186,7 +186,7 @@ describe('createHiddenCommandInput', () => {
       onEditorRequest: (p) => paths.push(p),
     });
     const exitResults = type(input, '/exit\r');
-    expect(exitResults.every((r) => r === false)).toBe(true); // passes to devin
+    expect(exitResults.every((r) => r === false)).toBe(true); // passes to the agent
     expect(lines).toEqual(['/exit']);
     const editResults = type(input, 'axn-edit foo\r');
     expect(editResults.every((r) => r === false)).toBe(true);

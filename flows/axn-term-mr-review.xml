@@ -7,7 +7,7 @@
     </tags>
     <setup>
       <env>
-        <var name="AXN_TERM_BINARY" value="target/debug/axn-term" />
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
         <var name="AXN_TERM_TEST_VARIANT" value="mr-review" />
       </env>
     </setup>

@@ -241,7 +241,8 @@ function toSessionInfo(s: ShellSession, stateKey: string): SessionInfo {
     progress: s.progress,
     cwd: s.cwd,
     process: s.process,
-    devinActive: s.devinActive,
+    agentInput: s.agentInput,
+    devinActive: s.agentInput === 'devin',
     repo: s.repo,
     state: (s.pluginState ?? {})[stateKey],
   };

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { PathStat, SessionBackend } from '@axn-term/session-backend';
 import type { AgentHookSpec } from '@axn-term/plugin-sdk';
 import { ptyIdOf } from '../../types';
-import type { AgentCli, RepoInfo, SessionAttention, SessionBanner, ShellSession, Workspace } from '../../types';
+import type { AgentCli, RepoInfo, SessionAttention, SessionBanner, ShellSession, Task, Workspace } from '../../types';
 import type { PluginSettings } from '../pluginSettings';
 import { backendFileService, resolvePath } from '../fileService';
 import { getScreenLines } from '../../terminalRegistry';
@@ -456,6 +456,14 @@ export interface SessionViewPlugin {
    */
   processPattern?: RegExp;
   /**
+   * The `processPattern` program is an agent that edits its own input line.
+   * While it is foreground, hidden-command interception observes only
+   * `/exit` (for `onCommand`) instead of switching off, and the session
+   * carries `agentInput: <plugin id>`. `title` also marks the session from
+   * the OSC terminal title, before the 1 s process poll has seen the agent.
+   */
+  agentInput?: { title?: RegExp };
+  /**
    * If true, this plugin reports progress for the matching process and the
    * generic output-scanner progress plugin should stay out of the way.
    */
@@ -471,6 +479,13 @@ export interface SessionViewPlugin {
    * with no lifecycle code of their own.
    */
   hookSpec?: AgentHookSpec;
+  /**
+   * Pure screen parser: the agent's task list from the visible terminal
+   * lines, or undefined when none is on screen. Sub-shell tabs running a
+   * process matching `processPattern` use it to track their own tasks
+   * (`app/subShellTasks.ts`) — plugin hooks only ever see the main PTY.
+   */
+  screenTasks?: (lines: string[]) => Task[] | undefined;
   /**
    * Declares that the plugin consumes system memory statistics. When any
    * enabled plugin sets this, the app polls `get_memory_stats` periodically

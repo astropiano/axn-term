@@ -57,7 +57,11 @@ over a local socket and acts on the terminal it runs in:
   failed (reason on stderr — e.g. a command whose result would have to be
   typed into the shell, like `axn-claude-resume`), `2` = usage error or not
   inside axn-term.
-- Desktop only for now; the web session host has no control socket.
+- Web terminals work the same: the session host writes a small `sh` + `curl`
+  client to `$AXN_STATE_DIR/bin/axn-term` and points `AXN_TERM_CLI` at it;
+  it authenticates with `AXN_SESSION_ID` + `AXN_TERM_PTY_SECRET` against
+  the host's `control.sock`, which forwards the line to the browser tab
+  showing that terminal.
 
 The `axn-term` skill (`axn-term install --skills`) carries these
 instructions for agents.

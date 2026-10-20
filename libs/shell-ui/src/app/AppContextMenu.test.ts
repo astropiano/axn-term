@@ -4,11 +4,15 @@ import type { Terminal } from '@xterm/xterm';
 import { appMenuTarget } from './AppContextMenu';
 
 describe('appMenuTarget', () => {
-  const term = {} as Terminal;
+  const term = { getSelection: () => 'a whole sentence' } as unknown as Terminal;
 
-  it('prefers the terminal under the pointer', () => {
+  it('prefers the terminal under the pointer and captures its selection right away', () => {
     const inner = document.createElement('span');
-    expect(appMenuTarget(inner, () => term)).toEqual({ kind: 'terminal', term });
+    expect(appMenuTarget(inner, () => term)).toEqual({
+      kind: 'terminal',
+      term,
+      selection: 'a whole sentence',
+    });
   });
 
   it('recognises text fields', () => {
