@@ -4,7 +4,9 @@ import { axnLog } from '../log';
 import { hookStatusOwned } from './agentHookBridge';
 import { claudeHookSpec } from './claudeHooks';
 import { registerAgentLauncher } from './agentRegistry';
-import { agentCommand, promptArg, shellWord } from './devWorkflow';
+import { agentCommand } from './devWorkflow';
+import { promptArg, shellWord } from '../../shellQuote';
+import { shellQuote } from '../../shellQuote';
 
 interface ClaudePluginState {
   /** Set once a claude process has been observed in this session. */
@@ -166,9 +168,6 @@ function getSettings(ctx: SessionViewContext & PluginApi): ClaudePluginSettings 
   return (ctx.pluginSettings as ClaudePluginSettings | undefined) ?? {};
 }
 
-function shellQuote(path: string): string {
-  return `'${path.replace(/'/g, `'\\''`)}'`;
-}
 
 /**
  * Resume this session's own conversation when claude's exit hint was

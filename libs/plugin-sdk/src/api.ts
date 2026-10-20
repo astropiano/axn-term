@@ -70,6 +70,11 @@ export interface PluginManifest {
   settings?: PluginSettingField[];
   /** Owned `axn-*` commands. */
   commands?: PluginCommandDecl[];
+  /**
+   * Capabilities the plugin needs (see `PluginPermission`) — shown in
+   * Settings; anything undeclared is refused by the host. Default: none.
+   */
+  permissions?: import('./permissions').PluginPermission[];
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,6 @@
 pub mod cli;
+#[cfg(unix)]
+pub mod control;
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
@@ -530,6 +532,21 @@ fn spawn_pty(
     cmd.env("AXN_TERM_PTY_ID", &session_id);
     if let Ok(dir) = state_dir() {
         cmd.env("AXN_TERM_STATE_DIR", dir);
+    }
+    // `axn-term session …` from inside this terminal authenticates as this
+    // PTY with the secret (control.rs); AXN_TERM_CLI finds the binary even
+    // when the .app is not on PATH.
+    #[cfg(unix)]
+    if let Some(control) = app.try_state::<Arc<control::ControlState>>() {
+        match control.mint_secret(&session_id) {
+            Ok(secret) => {
+                cmd.env("AXN_TERM_PTY_SECRET", secret);
+            }
+            Err(e) => log::warn!("control: no secret for {}: {}", session_id, e),
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        cmd.env("AXN_TERM_CLI", exe);
     }
     if cmd.get_env("LANG").is_none() {
         cmd.env("LANG", "en_US.UTF-8");
@@ -2197,6 +2214,48 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
+/// Serve `axn-term session …` requests from programs inside our terminals
+/// (control.rs); verified lines go to the frontend as `control-command`.
+#[cfg(unix)]
+fn start_control_socket(app_handle: AppHandle) {
+    let Some(state) = app_handle.try_state::<Arc<control::ControlState>>() else { return };
+    let state = state.inner().clone();
+    let dir = match state_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::warn!("control socket disabled: {}", e);
+            return;
+        }
+    };
+    let path = control::socket_path(&dir);
+    let handle = app_handle.clone();
+    if let Err(e) = control::serve(&path, state, control::REPLY_TIMEOUT, move |id, pty, line| {
+        let _ = handle.emit(
+            "control-command",
+            serde_json::json!({ "requestId": id, "ptyId": pty, "line": line }),
+        );
+    }) {
+        log::warn!("control socket disabled: {}", e);
+    }
+}
+
+/// The owning window's answer to a `control-command`.
+#[cfg(unix)]
+#[tauri::command]
+fn control_reply(
+    request_id: u64,
+    reply: control::ControlReply,
+    state: State<'_, Arc<control::ControlState>>,
+) -> bool {
+    state.reply(request_id, reply)
+}
+
+#[cfg(not(unix))]
+#[tauri::command]
+fn control_reply(_request_id: u64, _reply: JsonValue) -> bool {
+    false
+}
+
 fn start_remote_control_server(app_handle: AppHandle, rc: RemoteControl) -> Result<(), String> {
     let addr = format!("{}:{}", rc.host, rc.port);
     let server = tiny_http::Server::http(&addr).map_err(|e| e.to_string())?;
@@ -2401,7 +2460,7 @@ pub fn run() {
         .format_timestamp_nanos()
         .init();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // Default menu, but "About axn-term" (macOS app menu) also shows the
         // build time: "Version 0.1.0 (built 2026-10-20 17:30 UTC)".
         .menu(|handle| {
@@ -2434,7 +2493,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
-        .manage(AppState::new(remote_control.is_some()))
+        .manage(AppState::new(remote_control.is_some()));
+    #[cfg(unix)]
+    let builder = builder.manage(Arc::new(control::ControlState::default()));
+    builder
         .setup(move |app| -> Result<(), Box<dyn std::error::Error>> {
             app.listen("log", |event| {
                 if let Ok(p) = serde_json::from_str::<LogPayload>(event.payload()) {
@@ -2506,6 +2568,8 @@ pub fn run() {
                     std::process::exit(0);
                 });
             }
+            #[cfg(unix)]
+            start_control_socket(app.handle().clone());
             if let Some(rc) = remote_control {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
@@ -2517,6 +2581,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            control_reply,
             allow_file_roots,
             get_default_shell,
             create_session,

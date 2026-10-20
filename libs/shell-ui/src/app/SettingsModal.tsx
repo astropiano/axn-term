@@ -12,6 +12,7 @@ import { themeDefinitions } from '../themes';
 import { useSessionBackend, useShellPlatform } from '../services';
 import { getSessionViewPlugins, isPluginEnabled, pluginDependencies } from './session-plugins';
 import type { PluginSettingField, SessionViewPlugin } from './session-plugins';
+import { isSandboxedPlugin } from './session-plugins/sandbox';
 import { getFilePreviewPlugins, isFilePreviewEnabled } from './preview-plugins';
 import type { FilePreviewPlugin } from './preview-plugins';
 
@@ -627,6 +628,20 @@ function PluginsTab() {
                   {met ? '' : ` — ${t`unmet, plugin disabled`}`}
                 </div>
               ))}
+              {selected.kind === 'session' && isSandboxedPlugin(selected.plugin) && (
+                <div className="text-[10px] text-[var(--text-secondary)]">
+                  {selected.plugin.sandbox.manifest.permissions?.length ? (
+                    <>
+                      <Trans>permissions:</Trans>{' '}
+                      <span className="font-mono text-[var(--text-primary)]">
+                        {selected.plugin.sandbox.manifest.permissions.join(', ')}
+                      </span>
+                    </>
+                  ) : (
+                    <Trans>sandboxed — no permissions (no shell, files or terminal access)</Trans>
+                  )}
+                </div>
+              )}
             </div>
             <label className="flex shrink-0 items-center gap-2 text-xs text-[var(--text-primary)]">
               <input

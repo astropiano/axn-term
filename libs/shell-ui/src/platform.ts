@@ -1,3 +1,4 @@
+import type { ControlReply } from './app/controlCommands';
 import type { Unsubscribe } from '@axn-term/session-backend';
 
 export const isMac =
@@ -148,6 +149,15 @@ export interface ShellPlatform {
    * line sees. Absent on web (no remote control).
    */
   onRemoteCommand?(cb: (cmd: { sessionId: string; line: string }) => void): Unsubscribe;
+  /**
+   * `axn-term session …` requests from a program inside one of our
+   * terminals (desktop: the control socket, already authenticated as
+   * `ptyId`). Every window hears each request; the one owning the PTY
+   * resolves an answer, the others resolve null. Absent on web.
+   */
+  onControlCommand?(
+    cb: (cmd: { ptyId: string; line: string }) => Promise<ControlReply | null>,
+  ): Unsubscribe;
   /**
    * Load external `.mjs` plugins from disk — desktop-only. Resolves the
    * number of plugins registered. Absent = no external plugin support.

@@ -2,7 +2,8 @@ import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin'
 import { axnLog } from '../log';
 import { codexHookSpec } from './codexHooks';
 import { registerAgentLauncher } from './agentRegistry';
-import { agentCommand, shellWord } from './devWorkflow';
+import { agentCommand } from './devWorkflow';
+import { shellWord } from '../../shellQuote';
 
 interface CodexPluginState {
   /** Set once a codex process has been observed in this session. */

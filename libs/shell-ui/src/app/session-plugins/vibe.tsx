@@ -4,6 +4,7 @@ import { axnLog } from '../log';
 import { sessionLastSelectedAt } from '../attention';
 import type { SessionAttention, SessionBanner, SessionStatus, ShellSession, Task } from '../../types';
 import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin';
+import { shellQuote } from '../../shellQuote';
 
 // Anchored: session.process is the argv-derived basename, so 'vibe' and
 // 'vibe-agent' match while 'python -m vibe' (module launch) does not.
@@ -371,9 +372,6 @@ export function parseVibeSessionName(output: string, requireComplete = false): s
   return match.name;
 }
 
-function shellQuote(path: string): string {
-  return `'${path.replace(/'/g, `'\\''`)}'`;
-}
 
 function isPlausibleVibeName(name: string | undefined): name is string {
   return (

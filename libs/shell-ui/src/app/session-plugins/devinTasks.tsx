@@ -6,6 +6,7 @@ import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin'
 import { DEVIN_PROCESS_RE } from '../../processPatterns';
 import { registerAgentLauncher } from './agentRegistry';
 import { agentCommand } from './devWorkflow';
+import { shellQuote } from '../../shellQuote';
 
 type DevinTaskStatus = 'pending' | 'running' | 'completed' | 'blocked';
 
@@ -534,9 +535,6 @@ export function parseDevinSessionName(output: string, requireComplete = false): 
   return match.name;
 }
 
-function shellQuote(path: string): string {
-  return `'${path.replace(/'/g, `'\\''`)}'`;
-}
 
 /**
  * Validate the devin session name remembered for this terminal session.

@@ -16,7 +16,7 @@ import { worktreesPlugin } from './worktrees';
 import { remoteLinkPlugin } from './remoteLink';
 import { agentsPlugin } from './agents';
 import type { SessionViewPlugin } from './plugin';
-import type { PluginManifest } from '@axn-term/plugin-sdk';
+import { parsePermissions, type PluginManifest } from '@axn-term/plugin-sdk';
 import { registerExternalPreview } from '../preview-plugins';
 import type { ExternalPreviewSpec } from '../preview-plugins';
 import { sandboxedPlugin } from './sandbox';
@@ -154,6 +154,11 @@ export async function loadExternalPlugins(source: ExternalPluginSource): Promise
           axnLog('warn', 'plugins', `${dir}/plugin.json needs id + title`);
           continue;
         }
+        const { permissions, unknown } = parsePermissions(manifest.permissions);
+        if (unknown.length) {
+          axnLog('warn', 'plugins', `${dir}/plugin.json: unknown permissions ignored: ${unknown.join(', ')}`);
+        }
+        manifest.permissions = permissions;
         const spec: SandboxPluginSpec = { dir, manifest };
         try {
           spec.logicSource = await source.readFile(dir, manifest.logic ?? 'plugin.mjs');

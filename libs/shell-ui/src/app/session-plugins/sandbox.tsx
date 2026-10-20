@@ -2,9 +2,12 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Puzzle } from 'lucide-react';
 import {
   AXN_PLUGIN_API_VERSION,
+  hookPermission,
   isFrameMessage,
+  methodPermission,
   type HostMessage,
   type PluginManifest,
+  type PluginPermission,
   type SessionInfo,
 } from '@axn-term/plugin-sdk';
 // The iframe-side client is injected verbatim into the sandboxed document —
@@ -12,6 +15,7 @@ import {
 import shimSource from '../../../../plugin-sdk/src/shim.js?raw';
 import { sanitizePreviewHtml } from '../preview-plugins/html';
 import { shellServices } from '../../services';
+import { axnLog } from '../log';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import type { ShellSession } from '../../types';
 
@@ -27,6 +31,9 @@ import type { ShellSession } from '../../types';
  * frame (`index.html`) mounted into the plugin's full-area view.
  * `render`/`renderRow` become pushed sanitized-HTML surfaces
  * (`axn.setSurface`) since RPC can't satisfy their synchronous contract.
+ *
+ * Capabilities are opt-in: a call or hook needing a `PluginPermission` the
+ * manifest's `permissions` does not list is refused here, at the bridge.
  */
 
 export interface SandboxPluginSpec {
@@ -39,6 +46,11 @@ export interface SandboxPluginSpec {
 }
 
 export type SandboxedPlugin = SessionViewPlugin & { sandbox: SandboxPluginSpec };
+
+/** Whether a (load-validated) manifest declares `permission`. */
+export function hasPermission(manifest: PluginManifest, permission: PluginPermission): boolean {
+  return manifest.permissions?.includes(permission) ?? false;
+}
 
 export function isSandboxedPlugin(p: SessionViewPlugin): p is SandboxedPlugin {
   return (p as SandboxedPlugin).sandbox != null;
@@ -263,6 +275,11 @@ class PluginSandbox {
     return this.spec.manifest.id;
   }
 
+  /** Whether plugin.json declared `permission`. */
+  allows(permission: PluginPermission): boolean {
+    return hasPermission(this.spec.manifest, permission);
+  }
+
   private escapeInline(src: string): string {
     return src.replace(/<\/script/gi, '<\\/script');
   }
@@ -378,6 +395,10 @@ class PluginSandbox {
     viewCtx: PluginViewCtx | undefined,
   ): Promise<unknown> {
     const a = <T,>(i: number) => args[i] as T;
+    const needed = methodPermission(method);
+    if (needed && !this.allows(needed)) {
+      throw new Error(`${method} needs the '${needed}' permission — declare it in plugin.json "permissions"`);
+    }
     if (sessionId != null) {
       const ctx = this.plugin
         ? sandboxRuntime.buildApi?.(this.plugin, sessionId) ?? null
@@ -477,7 +498,14 @@ class PluginSandbox {
       }
       case 'subscribe': {
         if (isView) break;
-        this.subscribed = new Set(data.hooks);
+        this.subscribed = new Set(
+          data.hooks.filter((hook) => {
+            const needed = hookPermission(hook);
+            if (!needed || this.allows(needed)) return true;
+            axnLog('warn', 'plugins', `${this.id}: '${hook}' hook needs the '${needed}' permission — not delivered`);
+            return false;
+          }),
+        );
         // Replay sessionOpen for sessions that predate the subscription so a
         // mid-run enable still sees the full world — once; every axn.on()
         // re-posts its hook list.
@@ -646,12 +674,19 @@ export function sandboxedPlugin(spec: SandboxPluginSpec): SandboxedPlugin {
               argPrefix: prefix,
             }) as Promise<string[]>
         : undefined,
-      run: (ctx, arg, line) =>
-        sandbox()?.request('command', ctx.session.id, {
+      run: async (ctx, arg, line) => {
+        const result = (await sandbox()?.request('command', ctx.session.id, {
           name: decl.name,
           arg,
           line,
-        }) as Promise<string | false | void>,
+        })) as string | false | void;
+        // a replacement line is typed into the shell — that is terminal input
+        if (typeof result === 'string' && !hasPermission(m, 'terminal-input')) {
+          axnLog('warn', 'plugins', `${m.id}: ${decl.name} replacement refused — needs the 'terminal-input' permission`);
+          return false;
+        }
+        return result;
+      },
     })),
     onSessionOpen: (ctx) => sandbox()?.forward('sessionOpen', ctx.session.id),
     onOutput: (ctx, text) => sandbox()?.forward('output', ctx.session.id, { text }),

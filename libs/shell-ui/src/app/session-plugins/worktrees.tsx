@@ -6,6 +6,7 @@ import type {
   SessionViewPlugin,
 } from './plugin';
 import type { Workspace } from '../../types';
+import { shellQuote } from '../../shellQuote';
 
 type Ctx = SessionViewContext & PluginApi;
 
@@ -86,21 +87,17 @@ export function agentResumeCommand(agent: string): string | null {
   }
 }
 
-/** Single-quote a path for `sh -c` command strings. */
-export function quotePath(p: string): string {
-  return `'${p.replace(/'/g, `'\\''`)}'`;
-}
 
 export function addWorktreeCmd(repoRoot: string, dir: string, branch: string): string {
-  return `git -C ${quotePath(repoRoot)} worktree add ${quotePath(dir)} -b ${quotePath(branch)}`;
+  return `git -C ${shellQuote(repoRoot)} worktree add ${shellQuote(dir)} -b ${shellQuote(branch)}`;
 }
 
 export function removeWorktreeCmd(repoRoot: string, dir: string, force = false): string {
-  return `git -C ${quotePath(repoRoot)} worktree remove ${force ? '--force ' : ''}${quotePath(dir)}`;
+  return `git -C ${shellQuote(repoRoot)} worktree remove ${force ? '--force ' : ''}${shellQuote(dir)}`;
 }
 
 export function deleteBranchCmd(repoRoot: string, branch: string): string {
-  return `git -C ${quotePath(repoRoot)} branch -D ${quotePath(branch)}`;
+  return `git -C ${shellQuote(repoRoot)} branch -D ${shellQuote(branch)}`;
 }
 
 /**
