@@ -123,6 +123,9 @@ export function SubShellView({
       fontSize: shellFont.size,
       fontFamily: shellFont.family,
       allowProposedApi: true,
+      // macOS defaults this on: a right-click would replace the selection
+      // with the word under the pointer before the context menu's Copy.
+      rightClickSelectsWord: false,
       theme: getXtermColors(activeTheme),
     });
     const fit = new FitAddon();
