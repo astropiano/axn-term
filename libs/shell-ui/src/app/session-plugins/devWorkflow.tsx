@@ -753,7 +753,32 @@ export async function agentLaunchLine(
   return agentCommand(cli, spec, inst ? inst + (prompt ? `\n\n${prompt}` : '') : prompt);
 }
 
-/** Substitute {{placeholder}}s in a raw `command:` step template. */
+/**
+ * Substitute {{placeholder}}s in a `command:` step template for the shell.
+ * Values come from places an attacker can reach — MR titles/branches, the
+ * `axn-workflow-var:` output marker, card fields — so each one goes in as a
+ * single shell word (`shellWord`: plain values stay bare, anything else is
+ * single-quoted), never as raw shell text. Quotes the author already put
+ * around a placeholder (`"{{x}}"`, `'{{x}}'`) are replaced rather than
+ * nested. `rawKeys` (the base64 `{{prompt}}` word from promptArg) are
+ * inserted as-is — they are already safe shell words.
+ */
+export function renderCommandTemplate(
+  template: string,
+  vars: Record<string, string>,
+  rawKeys: readonly string[] = [],
+): string {
+  return template.replace(
+    /(["']?)\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}\1/g,
+    (m, _quote: string, key: string) => {
+      const value = vars[key];
+      if (value === undefined) return m;
+      return rawKeys.includes(key) ? value : shellWord(value);
+    },
+  );
+}
+
+/** Substitute {{placeholder}}s in prompt text (no shell involved). */
 export function renderTemplate(
   template: string,
   vars: Record<string, string>,
@@ -925,10 +950,11 @@ async function actionCommand(
   const vars = await actionVars(ctx, def, action, state);
   const prompt = await actionPrompt(ctx, action, vars);
   if (action.command) {
-    return renderTemplate(action.command, {
-      ...vars,
-      prompt: prompt ? promptArg(prompt) : '',
-    });
+    return renderCommandTemplate(
+      action.command,
+      { ...vars, prompt: prompt ? promptArg(prompt) : '' },
+      ['prompt'],
+    );
   }
   if (action.agent) {
     const spec = resolveAgentSpec(action.agent);
