@@ -196,7 +196,9 @@ describe('hookSpec host wiring (spec-only plugin)', () => {
     appendEvent(h, { hook_event_name: 'Nudge' });
     await vi.advanceTimersByTimeAsync(1600);
     expect(h.updateSessionCalls).toContainEqual({ sessionId: h.session.id, patch: { status: 'blocked' } });
-    // the warning nudge does not downgrade the pending critical flag
+    // the warning nudge does not downgrade the pending critical flag — not
+    // even transiently (the batch is folded, the host commits asynchronously)
+    expect(h.attentionCalls.some((a) => (a as { level?: string } | null)?.level === 'warning')).toBe(false);
     expect(h.attentionCalls.at(-1)).toEqual(
       expect.objectContaining({ level: 'critical', message: 'toy needs you: approve' }),
     );

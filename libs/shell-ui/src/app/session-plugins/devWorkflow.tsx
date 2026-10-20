@@ -390,11 +390,37 @@ function workflowsOf(ctx: Ctx): WorkflowDef[] {
  * exec callbacks, sub-shell exit events) would otherwise read and clobber
  * fresh `checks` entries.
  */
-function bindingOf(ctx: Ctx): BindingState {
+function bindingSource(ctx: Ctx): BindingState | undefined {
   const live = (
     ctx.getSession().pluginState as Record<string, unknown> | undefined
   )?.['dev-workflow'];
-  return ((live ?? ctx.pluginState) as BindingState | undefined) ?? {};
+  return (live ?? ctx.pluginState) as BindingState | undefined;
+}
+
+/**
+ * Our own binding writes the host has not committed yet. The host applies
+ * `updatePluginState` asynchronously (a React state update), so until the
+ * session object changes, a read — the next output chunk, the affordance
+ * refresh in the same chunk — would see the pre-write binding and could
+ * write it back (undoing e.g. a marker move). Keyed by session; `base` is
+ * the binding object the write was made against.
+ */
+const uncommitted = new Map<string, { base: BindingState | undefined; binding: BindingState }>();
+
+function bindingOf(ctx: Ctx): BindingState {
+  const source = bindingSource(ctx);
+  const pending = uncommitted.get(ctx.session.id);
+  if (pending && pending.base === source) return pending.binding;
+  if (pending) uncommitted.delete(ctx.session.id);
+  return source ?? {};
+}
+
+/** Write (part of) the binding and read it back until the host commits it. */
+function writeBinding(ctx: Ctx, patch: BindingState): void {
+  const base = bindingSource(ctx);
+  const binding = { ...bindingOf(ctx), ...patch };
+  ctx.updatePluginState(patch);
+  uncommitted.set(ctx.session.id, { base, binding });
 }
 
 function checkKey(state: string, name: string): string {
@@ -595,7 +621,7 @@ function showState(
       Object.entries(bindingOf(ctx).checks ?? {}).filter(([k]) => !k.startsWith(prefix)),
     );
   }
-  ctx.updatePluginState(patch);
+  writeBinding(ctx, patch);
   const idx = def.states.indexOf(rec.state);
   const prev = idx > 0 ? def.states[idx - 1] : undefined;
   const next = idx >= 0 && idx < def.states.length - 1 ? def.states[idx + 1] : undefined;
@@ -672,7 +698,7 @@ function recordCheck(
 ): void {
   const checks = { ...(bindingOf(ctx).checks ?? {}) };
   checks[checkKey(state, name)] = check;
-  ctx.updatePluginState({ checks });
+  writeBinding(ctx, { checks });
   refreshBanner(ctx, def);
 }
 
@@ -683,7 +709,7 @@ function recordCheck(
  */
 function setVar(ctx: Ctx, def: WorkflowDef, key: string, value: string): void {
   const vars = { ...(bindingOf(ctx).vars ?? {}), ...expandVars(def, { [key]: value }) };
-  ctx.updatePluginState({ vars });
+  writeBinding(ctx, { vars });
   const instances = {
     ...(((ctx.appState as { instances?: Record<string, WorkflowInstance> } | undefined)
       ?.instances) ?? {}),
@@ -696,7 +722,7 @@ function setVar(ctx: Ctx, def: WorkflowDef, key: string, value: string): void {
 }
 
 function clearBinding(ctx: Ctx): void {
-  ctx.updatePluginState({
+  writeBinding(ctx, {
     workflow: undefined,
     state: undefined,
     updated: undefined,
@@ -1415,7 +1441,6 @@ const lastRunKey = new Map<string, string>();
 
 /** Re-render the banner when the foreground process flips Run eligibility. */
 function refreshRunAffordance(ctx: Ctx, def: WorkflowDef): void {
-  // re-read — a state marker in this same chunk may have already moved us
   const bound = bindingOf(ctx);
   if (!bound.state) return;
   const key = affordanceKey(ctx, def, bound.state);
@@ -1477,7 +1502,7 @@ function recordCheckMarker(ctx: Ctx, def: WorkflowDef, key: string, rc: number):
  * `axn-workflow-var[<token>]: <key> <value>`. Lines carrying no or another
  * binding's token are ignored.
  */
-function scanMarkers(ctx: Ctx, def: WorkflowDef, text: string): void {
+function scanMarkers(ctx: Ctx, def: WorkflowDef, text: string): boolean {
   const id = ctx.session.id;
   const lines = ((markerTails.get(id) ?? '') + text).split('\n');
   markerTails.set(id, lines.pop() ?? '');
@@ -1506,7 +1531,7 @@ function scanMarkers(ctx: Ctx, def: WorkflowDef, text: string): void {
       // Agent-driven transition — an entry like any other, so the entered
       // state's `auto` actions fire (e.g. axn-focus back to the shell).
       runAutoActions(ctx, def, target, false);
-      return;
+      return true;
     }
     const cm = marked(CHECK_MARKER.exec(line));
     if (cm) {
@@ -1527,6 +1552,7 @@ function scanMarkers(ctx: Ctx, def: WorkflowDef, text: string): void {
     }
     axnLog('info', 'dev-workflow', `${id}: ignored marker without this binding's token`);
   }
+  return false;
 }
 
 function scheduleReconcile(ctx: Ctx): void {
@@ -2517,7 +2543,7 @@ export const devWorkflowPlugin: SessionViewPlugin = {
             `axn-workflow-start: '${def.id}' requires ${missing.map((k) => `<${k}>`).join(' ')}`,
           );
         }
-        if (Object.keys(vars).length > 0) ctx.updatePluginState({ vars });
+        if (Object.keys(vars).length > 0) writeBinding(ctx, { vars });
         const attached = await attachExisting(ctx, def);
         if (attached !== undefined) {
           return echo(`workflow '${def.id}' attached — state '${attached}'`);
@@ -2811,7 +2837,7 @@ export const devWorkflowPlugin: SessionViewPlugin = {
           message: `review workflow '${pending.workflow}' is no longer configured`,
         });
       } else {
-        ctx.updatePluginState({ vars: pending.vars });
+        writeBinding(ctx, { vars: pending.vars });
         void (async () => {
           if ((await attachExisting(ctx, def)) !== undefined) return;
           const res = await transitionTo(ctx, def, def.start, { waitForPrompt: true });
@@ -2850,7 +2876,10 @@ export const devWorkflowPlugin: SessionViewPlugin = {
     // File-tracked sessions: the file may have been written by an agent.
     if (def.trackingFile) scheduleReconcile(ctx);
     // Every bound session: scan for the state/check/run handoff markers.
-    scanMarkers(ctx, def, text);
+    // A state move already rendered the banner — and the session read back
+    // here would still be the pre-move snapshot (the host commits plugin
+    // state asynchronously), so re-rendering from it would undo the move.
+    if (scanMarkers(ctx, def, text)) return;
     // A foreground-process change (agent launch/exit) flips Run eligibility.
     refreshRunAffordance(ctx, def);
   },
@@ -2862,6 +2891,7 @@ export const devWorkflowPlugin: SessionViewPlugin = {
       reconcileTimers.delete(ctx.session.id);
     }
     markerTails.delete(ctx.session.id);
+    uncommitted.delete(ctx.session.id);
     lastRunKey.delete(ctx.session.id);
     for (const [tabId, p] of pendingChecks) {
       if (p.sessionId === ctx.session.id) pendingChecks.delete(tabId);
