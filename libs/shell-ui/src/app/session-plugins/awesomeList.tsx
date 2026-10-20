@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import type { SessionViewPlugin } from './plugin';
+import { shellQuote } from '../../shellQuote';
 
 // ---------------------------------------------------------------------------
 // Bookmark model — persisted in window state under pluginData['awesome-list']
@@ -65,9 +66,6 @@ function basename(path: string): string {
   return path.split('/').filter(Boolean).pop() ?? path;
 }
 
-function shQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
-}
 
 /** Split a leading token (honoring quotes) off an argument string. */
 export function splitHead(arg: string): [string, string] {
@@ -429,12 +427,12 @@ export const awesomeListPlugin: SessionViewPlugin = {
         const items = readItems(ctx.appState);
         const [sub, subArg] = splitHead(arg ?? '');
         const print = (lines: string[]) =>
-          `printf '%s\\n' ${lines.map(shQuote).join(' ')}`;
+          `printf '%s\\n' ${lines.map(shellQuote).join(' ')}`;
 
         if (sub === 'add') {
           const [raw, label] = splitHead(subArg);
           if (!raw) {
-            return `echo ${shQuote('usage: axn-awesome add <path|url> [label]')}`;
+            return `echo ${shellQuote('usage: axn-awesome add <path|url> [label]')}`;
           }
           const cwd = (await ctx.getCwd()) ?? ctx.session.cwd;
           const path = await resolveBookmarkPath(raw, cwd);
@@ -444,13 +442,13 @@ export const awesomeListPlugin: SessionViewPlugin = {
             label: unquote(label) || undefined,
           };
           ctx.updateAppState({ items: [...items, item] });
-          return `echo ${shQuote(`awesome: added ${item.label ?? path}`)}`;
+          return `echo ${shellQuote(`awesome: added ${item.label ?? path}`)}`;
         }
 
         if (sub === 'rm' || sub === 'remove') {
           const needle = unquote(subArg);
           if (!needle) {
-            return `echo ${shQuote('usage: axn-awesome rm <n|path>')}`;
+            return `echo ${shellQuote('usage: axn-awesome rm <n|path>')}`;
           }
           const idx = /^\d+$/.test(needle)
             ? Number(needle) - 1
@@ -462,14 +460,14 @@ export const awesomeListPlugin: SessionViewPlugin = {
               );
           const item = idx >= 0 && idx < items.length ? items[idx] : undefined;
           if (!item) {
-            return `echo ${shQuote(`awesome: no bookmark ${needle}`)}`;
+            return `echo ${shellQuote(`awesome: no bookmark ${needle}`)}`;
           }
           ctx.updateAppState({ items: items.filter((_, i) => i !== idx) });
-          return `echo ${shQuote(`awesome: removed ${item.label ?? item.path}`)}`;
+          return `echo ${shellQuote(`awesome: removed ${item.label ?? item.path}`)}`;
         }
 
         if (sub && sub !== 'ls' && sub !== 'list') {
-          return `echo ${shQuote('usage: axn-awesome [ls|add <path|url> [label]|rm <n|path>]')}`;
+          return `echo ${shellQuote('usage: axn-awesome [ls|add <path|url> [label]|rm <n|path>]')}`;
         }
         return print(
           items.length === 0

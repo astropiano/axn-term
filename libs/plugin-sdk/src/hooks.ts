@@ -6,11 +6,14 @@ import type { SessionAttention, SessionStatus } from './api';
  *
  * CLI agents with a lifecycle hook system (Claude Code, Codex, Gemini CLI)
  * run configured hook commands with the event JSON on stdin. axn-term
- * installs one script — `agent-hook.sh <agent>` — which writes that JSON to
- * `$AXN_TERM_STATE_DIR/<agent>-events/pty-<id>.json` (one file per PTY).
- * Legacy terminals without the injected identity fall back to the TTY.
- * The host resolves the session's event file and applies the
- * spec's `mapEvent` result onto the session's status/attention.
+ * installs one script — `agent-hook.sh <agent>` — which appends that JSON as
+ * one line to `$AXN_TERM_STATE_DIR/<agent>-events/pty-<id>.jsonl` (one
+ * append-only log per PTY, rotated to `.jsonl.1` past 64 KB). Legacy
+ * terminals without the injected identity fall back to the TTY. The host
+ * reads the log from where it left off (`readHookLog`) and applies each
+ * event's `mapEvent` result, in order, onto the status/attention of the
+ * session or sub-shell tab owning the PTY — a PermissionRequest followed
+ * within one poll by another event is no longer lost.
  *
  * A plugin contributes an `AgentHookSpec`: which events to subscribe to,
  * which agent config file to merge hook entries into, and how an event maps
@@ -90,15 +93,64 @@ export function agentPtyEventFile(stateDir: string, agent: string, ptyId: string
   return `${stateDir}/${agent}-events/pty-${ptyId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
 }
 
+/** The append-only event log next to a (legacy latest-event) `.json` file. */
+export function agentEventLog(eventFile: string): string {
+  return eventFile.replace(/\.json$/, '.jsonl');
+}
+
+/** Read position in an event log: chars consumed + the first line seen (rotation check). */
+export interface HookLogCursor {
+  offset: number;
+  head: string;
+}
+
+function completeLines(text: string, from: number): { lines: string[]; end: number } {
+  const end = text.lastIndexOf('\n') + 1;
+  if (end <= from) return { lines: [], end: from };
+  return { lines: text.slice(from, end).split('\n').filter((l) => l.trim()), end };
+}
+
+/**
+ * New complete lines of an event log since `cursor` (all of them on the
+ * first read). A log that shrank or starts differently was rotated: the rest
+ * of `<log>.1` past the old offset comes first. Resolves null when the log
+ * does not exist (yet). A trailing partial line waits for the next read.
+ */
+export async function readHookLog(
+  read: (path: string) => Promise<string>,
+  path: string,
+  cursor: HookLogCursor | undefined,
+): Promise<{ lines: string[]; cursor: HookLogCursor } | null> {
+  let text: string;
+  try {
+    text = await read(path);
+  } catch {
+    return null;
+  }
+  const head = text.slice(0, text.indexOf('\n') + 1);
+  const lines: string[] = [];
+  let from = cursor?.offset ?? 0;
+  if (cursor && (text.length < cursor.offset || !text.startsWith(cursor.head))) {
+    const rotated = await read(`${path}.1`).catch(() => '');
+    if (rotated.startsWith(cursor.head)) lines.push(...completeLines(rotated, cursor.offset).lines);
+    from = 0;
+  }
+  const fresh = completeLines(text, from);
+  lines.push(...fresh.lines);
+  return { lines, cursor: { offset: fresh.end, head } };
+}
+
 /**
  * Shell script installed as the hook command (`agent-hook.sh <agent>`):
- * stores the stdin event JSON as the latest event for the invoking PTY.
- * Always exits 0 — a hook failure must never block the agent.
+ * appends the stdin event JSON as one line to the invoking PTY's event log.
+ * Each append is a single `cat` of at most ~3.5 KB — oversized payloads (tool
+ * output) shrink to the fields the bridge maps — so concurrent hooks never
+ * interleave. Always exits 0 — a hook failure must never block the agent.
  */
 export function agentHookScript(): string {
   return `#!/bin/sh
-# axn-term bridge — agent hooks write their event JSON keyed by the
-# invoking PTY; one file per PTY, atomically replaced per event. Usage:
+# axn-term bridge — agent hooks append their event JSON, one line each, to
+# the invoking PTY's log; rotated to .jsonl.1 past 64 KB. Usage:
 #   agent-hook.sh <agent> [hook-event]
 agent=$1
 case "$agent" in
@@ -122,7 +174,28 @@ umask 077
 mkdir -p "$d" 2>/dev/null || exit 0
 tmp=$(mktemp "$d/.event.XXXXXX") || exit 0
 trap 'rm -f "$tmp"' EXIT HUP INT TERM
-cat > "$tmp" 2>/dev/null && mv -f "$tmp" "$d/$n.json" 2>/dev/null
+# One event per line: raw newlines in JSON only ever separate tokens.
+tr '\r\n' '  ' > "$tmp" 2>/dev/null || exit 0
+if [ "$(wc -c < "$tmp")" -gt 3500 ]; then
+  f=
+  for k in hook_event_name tool_name notification_type; do
+    v=$(grep -o '"'"$k"'"[[:space:]]*:[[:space:]]*"[^"\\]*"' "$tmp" | head -n 1)
+    [ -n "$v" ] && f="$f$v,"
+  done
+  printf '{%s"axn_truncated":true}' "$f" > "$tmp"
+fi
+printf '\n' >> "$tmp"
+log="$d/$n.jsonl"
+if [ -f "$log" ] && [ "$(wc -c < "$log")" -gt 65536 ]; then
+  # One rotator at a time, re-checking under the lock: a second mv would
+  # replace the .1 the host has not finished reading with a fresh log.
+  [ -n "$(find "$log.lock" -prune -mmin +1 2>/dev/null)" ] && rmdir "$log.lock" 2>/dev/null
+  if mkdir "$log.lock" 2>/dev/null; then
+    [ "$(wc -c < "$log")" -gt 65536 ] && mv -f "$log" "$log.1" 2>/dev/null
+    rmdir "$log.lock" 2>/dev/null
+  fi
+fi
+cat "$tmp" >> "$log" 2>/dev/null
 exit 0
 `;
 }

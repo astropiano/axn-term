@@ -1,4 +1,5 @@
 import type { ShellServices } from '@axn-term/session-backend';
+import { promptArg } from '../shellQuote';
 
 /**
  * Agent-powered review helpers for the git inspect view: prompt building,
@@ -95,29 +96,6 @@ export function explainKeyForCommitFile(sha: string, path: string): string {
  */
 export function explainKeyForWorktreeFile(path: string): string {
   return `wt:${path}`;
-}
-
-/** UTF-8-safe base64 (btoa only accepts Latin-1 bytes). */
-function toBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(bin);
-}
-
-/**
- * Embed the prompt inline as base64 — the charset `[A-Za-z0-9+/=]` is
- * shell-inert inside single quotes, so the command survives `sh -c`
- * verbatim no matter what the diff contains (quotes, `$()`, backticks,
- * CRLF). No temp file, no fs capability, nothing to clean up. A heredoc
- * would be more readable but POSIX `sh` fails to parse `'`s inside a
- * heredoc body nested in `"$( )"`. NUL bytes are stripped (argv cannot
- * carry them).
- */
-function promptArg(prompt: string): string {
-  return `"$(printf %s '${toBase64(prompt.replace(/\0/g, ""))}' | base64 -d)"`;
 }
 
 /**

@@ -143,6 +143,15 @@ export const desktopPlatform: ShellPlatform = {
         cb({ sessionId: event.payload.id, line: event.payload.line }),
       ),
     ),
+  onControlCommand: (cb) =>
+    syncSub(
+      listen<{ requestId: number; ptyId: string; line: string }>('control-command', (event) => {
+        const { requestId, ptyId, line } = event.payload;
+        void cb({ ptyId, line }).then((reply) => {
+          if (reply) void invoke('control_reply', { requestId, reply }).catch(() => {});
+        });
+      }),
+    ),
   peers: {
     publish: (topic, payload) => void emit(topic, payload).catch(() => {}),
     subscribe: (topic, cb) => syncSub(listen<unknown>(topic, (event) => cb(event.payload))),

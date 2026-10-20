@@ -2,6 +2,7 @@ import type { EditorTab } from '../types';
 import { DEVIN_PROCESS_RE } from '../processPatterns';
 import { parseClaudeResumeHint } from './session-plugins/claude';
 import { parseDevinSessionName } from './session-plugins/devinTasks';
+import { shellQuote } from '../shellQuote';
 
 /**
  * Agent conversations in sub-shell tabs — the tab-level counterpart of the
@@ -31,9 +32,6 @@ const FALLBACK: Record<TabAgent, string> = {
   devin: 'devin -c',
 };
 
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
-}
 
 /** The agent a foreground process name belongs to, if any. */
 export function agentOfProcess(process: string | null | undefined): TabAgent | undefined {

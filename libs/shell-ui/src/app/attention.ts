@@ -5,7 +5,8 @@ import type { SessionViewPlugin } from './session-plugins/plugin';
 /**
  * Read the attention flags currently raised on a session. Flags live in the
  * plugin's pluginState under the reserved key `attention`, written via
- * `ctx.setAttention(...)`.
+ * `ctx.setAttention(...)`, plus one per sub-shell tab whose agent's hooks
+ * raised one (`tab.hookAttention`, keyed `tab:<label>`).
  */
 export function sessionAttention(
   session: ShellSession,
@@ -19,6 +20,9 @@ export function sessionAttention(
       | undefined;
     const attention = state?.attention;
     if (attention && typeof attention === 'object') out[plugin.id] = attention;
+  }
+  for (const tab of session.editors ?? []) {
+    if (tab.kind === 'shell' && tab.hookAttention) out[`tab:${tab.label ?? tab.id}`] = tab.hookAttention;
   }
   return out;
 }

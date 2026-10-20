@@ -32,7 +32,7 @@ state, not a pipeline job. If something is a phase with its own handoff,
 model it as a state, not an action. The one exception is `auto: true`: an
 auto action is the state's "on-enter" hook and fires every time the state is
 entered (start, `axn-workflow-move`, board chevrons, an agent's
-`axn-workflow-state:` marker).
+`axn-workflow-state[<token>]:` marker).
 
 ## Configuration (plugins.yaml)
 
@@ -154,7 +154,7 @@ Values are set when the workflow starts —
 `axn-workflow-start mr-review <url>` fills declared vars in order,
 `key=value` pairs set them by name — via the editable fields on the kanban
 card, via `axn-workflow-set <var> <value>`, or agent-side via the whole-line
-output marker `axn-workflow-var: <key> <value>`. They persist in the
+output marker `axn-workflow-var[<token>]: <key> <value>`. They persist in the
 session binding (`pluginState.vars`) and mirror onto cards
 (`WorkflowInstance.vars`) so closed-session cards keep showing them.
 
@@ -162,7 +162,7 @@ Vars reach actions two ways:
 
 - **Templates** — `{{key}}` in `command`, `prompt` and `prompt-file`
   substitutes the value (built-ins `state`, `workflow`, `action`, `cwd`,
-  `tracking`, `model`, `promptFile` win name collisions).
+  `tracking`, `model`, `promptFile`, `workflow_token` win name collisions).
 - **Environment** — every launched action runs as
   `AXN_WORKFLOW=<id> AXN_STATE=<state> AXN_ACTION=<name> KEY=<value> … <cmd>`
   (camelCase/kebab keys → SNAKE), for `shell`, `sub-shell` and `headless`
@@ -214,25 +214,38 @@ which constrain interactive moves only):
   flag and is not applied. The resolved path is exposed to steps as the
   `{{tracking}}` template var.
 - **Output marker** — an agent prints a whole line
-  `axn-workflow-state: <state>` on its stdout; the plugin adopts declared
-  states from `onOutput`. Works with or without a tracking file (a
+  `axn-workflow-state[<token>]: <state>` on its stdout; the plugin adopts
+  declared states from `onOutput`. Works with or without a tracking file (a
   configured file is kept in sync). The whole-line anchor keeps prose
   mentions from triggering it.
 
-Two more whole-line markers complete the agent-facing channel:
+**Marker token.** Every output marker carries the binding's token in
+brackets. It is 16 random hex characters minted when the session binds to a
+workflow (a fresh one when it re-binds to another workflow, dropped on
+`axn-workflow-stop`), stored in `pluginState.token`, and handed only to what
+the workflow launches: the `AXN_WORKFLOW_TOKEN` env var and the
+`{{workflow_token}}` template var. Marker-shaped lines without the token —
+or with another binding's — are ignored (and logged), so text that merely
+passes through the terminal (`cat` of a hostile README, a build log, an MR
+description) cannot move the workflow, fire actions or set vars. From a
+shell or script: `echo "axn-workflow-state[$AXN_WORKFLOW_TOKEN]: review"`;
+in a prompt template: `axn-workflow-state[{{workflow_token}}]: review`.
 
-- `axn-workflow-check: <name> <rc>` — report a check result for the named
-  action of the current state (`axn-workflow-check: <state>:<name> <rc>`
+Three more whole-line markers complete the agent-facing channel:
+
+- `axn-workflow-check[<token>]: <name> <rc>` — report a check result for
+  the named action of the current state
+  (`axn-workflow-check[<token>]: <state>:<name> <rc>`
   addresses another state's action — the form the shell trailer emits so a
   check that outlives a move still lands correctly). Recorded under
   `checks` like a plugin-run result.
-- `axn-workflow-run: <name>` — ask the plugin to fire the named action of
+- `axn-workflow-run[<token>]: <name>` — ask the plugin to fire the named action of
   the current state, the agent-side equivalent of its Run button.
   `sub-shell`/`headless` actions dispatch regardless of the foreground
   process; `shell` actions follow the same rules as the button (prompt
   injection into a running same-cli agent, refused under a foreign
   process — a warning attention flag explains the refusal).
-- `axn-workflow-var: <key> <value>` — set a workflow var from a step or
+- `axn-workflow-var[<token>]: <key> <value>` — set a workflow var from a step or
   agent (e.g. a computed branch or a verdict path). `kind` derivation
   applies for declared vars; undeclared keys store verbatim.
 
@@ -279,7 +292,7 @@ A `command` action's exit status is recorded in the session binding under
 never gate transitions. The capture channel depends on `run-in`:
 
 - `shell` — the typed line gets a trailer
-  `; rc=$?; printf '\naxn-workflow-check: %s:%s %d\n' <state> <name> "$rc"`;
+  `; rc=$?; printf '\naxn-workflow-check[%s]: %s:%s %d\n' <token> <state> <name> "$rc"`;
   the marker is scanned back out of PTY output (whole-line, chunked
   safely).
 - `headless` — `ctx.exec` rejects on non-zero; the rejection's message
@@ -295,7 +308,7 @@ A state's checks are discarded when the state is (re-)entered — a stale
 green `spec-lint` from two visits ago is worse than none. Agent actions
 record no implicit check (the plugin can't observe conversational
 success); an agent that wants to report one prints the
-`axn-workflow-check:` marker itself.
+`axn-workflow-check[<token>]:` marker itself.
 
 Agent command presets (`cli: devin|claude|vibe`) render the right flags;
 a raw `command:` template with `{{prompt}}`, `{{promptFile}}`, `{{model}}`,
