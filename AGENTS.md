@@ -269,6 +269,11 @@ conversation (fallback `claude -c`/`devin -c`) only when the agent was still
 running when the app went away. On app close `runSubShellClosers` (awaited
 in `ShellApp`'s collect-and-close path) sends each running agent the same
 Ctrl-C pairs as the plugins' `onClose`, so the hint lands before the save.
+The session context menu and a sub-shell tab's context menu offer "Copy path" —
+the live working directory of that shell (`backend.getCwd` on the session's
+`ptyIdOf` / the tab's PTY; it is the shell's cwd, so it works while a program
+runs in the foreground; the recorded cwd is the fallback, and the row is
+absent where the backend cannot read a cwd).
 They carry an optional `label` override (right-click a tab → Rename…, or
 `axn-rename` inside it) — an empty rename clears it back to the default
 command/dir label. Sub-shells intercept the same `axn-*` commands as the
@@ -458,7 +463,12 @@ only trusted when the row shares the table's border layout and every other
 cell is blank (single-cell tables additionally need an unmatched `(` before
 the URL — e.g. `!6 (https://…` continuing `merge_requests/6)` below). Hovering a
 reconstructed URL shows the hover card with the joined link (Open / Copy
-URL); plain single-line URLs stay click-only. The hover card is placed from
+URL); plain single-line URLs stay click-only. Selecting text also opens the
+card: a one-word selection resolves as a path/URL; a selection spanning rows
+is rejoined without its wrap indentation (`wrappedSelectionCandidates` in
+`terminalLinks.ts` — agent TUIs hard-wrap long paths onto an indented
+continuation row) and its longest path/URL-like word that resolves gets the
+card; otherwise a copy-only card. The hover card is placed from
 its measured size (`placeHoverCard` in `hoverCardPlacement.ts`, re-run via
 ResizeObserver as its preview loads): below/right of the pointer, flipped
 above near the bottom edge and to the left near the right edge.

@@ -20,6 +20,7 @@ import {
   findWrappedUrlThrough,
   URL_START_RE,
   type GetLinkLine,
+  wrappedSelectionCandidates,
 } from './terminalLinks';
 import { DEVIN_PROCESS_RE } from './processPatterns';
 import { createHiddenCommandInput } from './app/hiddenCommands';
@@ -530,9 +531,22 @@ export function ShellTerminal({
               if (resolved && active) {
                 showHoverCard(event, resolved.stat, resolved.isUrl, 0);
               }
-            } else if (active) {
-              // Multi-token selection: don't try to pick a path out of it;
-              // just offer a copy of the whole selected text.
+            } else {
+              // A selection across rows may hold a path/URL the terminal
+              // wrapped (agent TUIs hard-wrap long paths onto an indented
+              // continuation row): rejoin the rows and take the longest
+              // candidate that resolves.
+              for (const candidate of wrappedSelectionCandidates(selection)) {
+                const resolved = await resolveToken(candidate);
+                if (!active) return;
+                if (resolved) {
+                  showHoverCard(event, resolved.stat, resolved.isUrl, 0);
+                  armHoverHide(4000);
+                  return;
+                }
+              }
+              if (!active) return;
+              // Nothing path-like: offer a copy of the whole selected text.
               showHoverCard(
                 event,
                 { path: selection, isFile: false, isDir: false },

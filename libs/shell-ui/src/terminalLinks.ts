@@ -490,3 +490,28 @@ export function createLookupCache<T>(
     return value;
   };
 }
+
+/**
+ * Path/URL candidates in a multi-line selection. Agent TUIs hard-wrap long
+ * paths onto an indented continuation row (`…/docs-count` ⏎ `  /.local-…md`),
+ * so no single row holds the whole path. The rows are rejoined without their
+ * wrap indentation and without a separator, and every path- or URL-like word
+ * of the result is offered, longest first. Joining two ordinary words at a
+ * row break yields nothing path-like — and callers still verify each
+ * candidate (stat / URL check) before using it.
+ */
+export function wrappedSelectionCandidates(selection: string): string[] {
+  const rows = selection
+    .split(/\r?\n/)
+    .map((row) => row.trim())
+    .filter(Boolean);
+  if (rows.length < 2) return [];
+  const strip = (t: string) =>
+    t.replace(/^[.,;:'"()[\]{}<>*]+/, '').replace(/[.,;:'"()[\]{}<>*@|=]+$/, '');
+  const words = rows
+    .join('')
+    .split(/\s+/)
+    .map(strip)
+    .filter((w) => w.length > 1 && (w.includes('/') || w.startsWith('~')));
+  return [...new Set(words)].sort((a, b) => b.length - a.length);
+}
