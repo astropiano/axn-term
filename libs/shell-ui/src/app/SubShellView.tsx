@@ -8,6 +8,7 @@ import { useSettings } from '../SettingsProvider';
 import { getXtermColors, resolveShellFont } from '../themes';
 import {
   getScreenLines,
+  handleClipboardWrites,
   registerTerminal,
   registerTerminalElement,
   takePtyKeepAlive,
@@ -132,6 +133,10 @@ export function SubShellView({
     t.loadAddon(fit);
     t.open(terminalRef.current);
     const unregisterElement = registerTerminalElement(terminalRef.current, t);
+    // OSC 52: TUIs with their own mouse selection (Claude Code) copy this way
+    const clipboardWrites = handleClipboardWrites(t, (text) => {
+      void Promise.resolve(services.copyText(text)).catch(() => {});
+    });
     // keyed by the tab id: screen scans (subShellTasks.ts) read this PTY's view
     registerTerminal(tab.id, t);
     // App navigation shortcuts must bubble to ShellApp's window listener
@@ -382,6 +387,7 @@ export function SubShellView({
       safely('sub-shell output listener', () => unlistenOut?.());
       safely('sub-shell agent closer', () => unregisterCloser());
       unregisterElement();
+      safely('OSC 52 handler', () => clipboardWrites.dispose());
       unregisterTerminal(tab.id, t);
       safely('sub-shell exit listener', () => unlistenExit?.());
       if (fgPoll) clearInterval(fgPoll);
