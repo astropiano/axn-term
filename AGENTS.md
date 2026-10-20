@@ -178,6 +178,12 @@ HEAD as a "Changes vs <ref>" section; echoes an error outside a repo) and
 <persona>` (agents plugin → the persona's launch line) are implemented this
 way.
 
+Every `PluginApi` ctx comes from one builder, `createPluginApi(session,
+plugin, deps)` (`session-plugins/plugin.ts`): ShellApp's lifecycle dispatch
+passes live lookups (`getLiveSession`, `getSessionCount`) and `onAttention`
+(OS notification), the panel/view `render` call sites pass snapshots — the
+behaviour is otherwise identical, so the two can no longer drift.
+
 Plugin ctx (`PluginApi`) also exposes `appState`/`updateAppState` — the
 app-level counterpart of `pluginState`, backed by window state
 `pluginData.<settingsKey>` and shared across sessions. That's how
