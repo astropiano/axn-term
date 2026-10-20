@@ -139,3 +139,45 @@ describe('WsBackend close handling', () => {
     expect(exits).toEqual([]);
   });
 });
+
+describe('WsBackend control commands', () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('answers a forwarded `axn-term session` line on the PTY connection, keyed by our id', async () => {
+    const { backend, output } = setup();
+    const ws = await connect(backend);
+    const seen: { ptyId: string; line: string }[] = [];
+    backend.onControlCommand((cmd) => {
+      seen.push(cmd);
+      return Promise.resolve({ ok: true, message: 'done' });
+    });
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'control-command', requestId: 'r1', line: 'axn-session-summary hi' }),
+    });
+    await vi.waitFor(() => expect(ws.sent.length).toBeGreaterThan(1));
+    expect(seen).toEqual([{ ptyId: 's1', line: 'axn-session-summary hi' }]);
+    expect(JSON.parse(ws.sent.at(-1) as string)).toEqual({
+      type: 'control-reply',
+      requestId: 'r1',
+      ok: true,
+      message: 'done',
+    });
+    // a control frame is never terminal output
+    expect(output).toEqual([]);
+  });
+
+  it('refuses when no handler owns the PTY', async () => {
+    const { backend } = setup();
+    const ws = await connect(backend);
+    backend.onControlCommand(() => Promise.resolve(null));
+    ws.onmessage?.({ data: JSON.stringify({ type: 'control-command', requestId: 'r2', line: 'axn-x' }) });
+    await vi.waitFor(() => expect(ws.sent.length).toBeGreaterThan(1));
+    expect(JSON.parse(ws.sent.at(-1) as string)).toMatchObject({ type: 'control-reply', requestId: 'r2', ok: false });
+  });
+});

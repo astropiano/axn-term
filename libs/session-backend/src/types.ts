@@ -67,6 +67,31 @@ export interface FsResult {
   resolved?: string;
 }
 
+/** The answer to an `axn-term session …` line: ok + message, or an error. */
+export interface ControlReply {
+  ok: boolean;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Runs an `axn-term session …` line for the PTY it came from; resolves null
+ * when this window does not show that PTY.
+ */
+export type ControlCommandHandler = (cmd: { ptyId: string; line: string }) => Promise<ControlReply | null>;
+
+/** The first handler that owns the PTY answers; nobody → an error. */
+export async function answerControl(
+  handlers: Iterable<ControlCommandHandler>,
+  cmd: { ptyId: string; line: string },
+): Promise<ControlReply> {
+  for (const handler of handlers) {
+    const reply = await handler(cmd).catch((e: unknown) => ({ ok: false, error: String(e) }));
+    if (reply) return reply;
+  }
+  return { ok: false, error: 'this window does not show that terminal' };
+}
+
 export interface SessionBackend {
   /**
    * Spawn or attach to the PTY bound to `sessionId`. Resolves `true` when a
@@ -88,6 +113,13 @@ export interface SessionBackend {
 
   /** Name of the foreground process in the session PTY (null = shell). */
   getForegroundProcess?(sessionId: string): Promise<string | null>;
+  /**
+   * `axn-term session …` lines from programs inside a remote terminal,
+   * forwarded by the session host (web: a `control-command` frame on the
+   * PTY's /ws connection, or the Ramphastos `control` stream). `ptyId` is
+   * this backend's id for the PTY. Desktop uses `platform.onControlCommand`.
+   */
+  onControlCommand?(cb: ControlCommandHandler): Unsubscribe;
   /**
    * Controlling terminal of the session PTY (e.g. `/dev/ttys003`,
    * `/dev/pts/0`) — lets a plugin correlate out-of-band events emitted by a
