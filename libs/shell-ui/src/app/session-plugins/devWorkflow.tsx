@@ -38,9 +38,13 @@ import type {
  * agent-writable mirror — transitions are mirrored to it and file edits are
  * reconciled back (e.g. a speckit agent flips `state: plan` to
  * `state: plan-review`). Without a file, agents hand off by printing a
- * whole-line `axn-workflow-state: <state>` marker — scanned from PTY output.
- * Two more whole-line output markers exist: `axn-workflow-check:` reports a
- * check result, `axn-workflow-run:` asks the plugin to fire a named action.
+ * whole-line `axn-workflow-state[<token>]: <state>` marker — scanned from PTY
+ * output. Three more whole-line output markers exist: `axn-workflow-check`
+ * reports a check result, `axn-workflow-run` asks the plugin to fire a named
+ * action, `axn-workflow-var` sets a var. Every marker carries the binding's
+ * random token (`$AXN_WORKFLOW_TOKEN`, `{{workflow_token}}`), so text that
+ * merely passes through the terminal — `cat` of a hostile README — cannot
+ * drive the workflow.
  *
  * Task/progress/attention tracking once an action launches stays with the
  * agent's own plugin (devin/claude) via its processPattern.
@@ -124,7 +128,7 @@ export interface ActionCheck {
 /**
  * A workflow-declared input variable. Values are supplied at start
  * (`axn-workflow-start <wf> [arg|key=value]`), via the session card's var
- * fields, the `axn-workflow-set` command or the `axn-workflow-var:` output
+ * fields, the `axn-workflow-set` command or the `axn-workflow-var[<token>]:` output
  * marker. They substitute into `{{key}}` templates and are exported to
  * every action's environment as `KEY` (camelCase/kebab → SNAKE).
  * `kind: 'mr'` marks the value as a merge/pull-request reference — a GitLab
@@ -148,7 +152,7 @@ export interface WorkflowDef {
    * mirrors the session state and is agent-writable: edits reconcile back.
    * The file extension selects the encoding (.json → JSON, else YAML).
    * Absent = session pluginState only; agents hand off via the
-   * `axn-workflow-state:` output marker.
+   * `axn-workflow-state[<token>]:` output marker.
    */
   trackingFile?: string;
   trackingFormat: 'json' | 'yaml';
@@ -192,6 +196,11 @@ export interface BindingState {
   checks?: Record<string, ActionCheck>;
   /** Declared-var values for this binding (incl. kind-derived companions). */
   vars?: Record<string, string>;
+  /**
+   * Random per-binding secret every output marker must carry. Handed only to
+   * what the workflow launches (env + prompt var); minted on bind.
+   */
+  token?: string;
 }
 
 /** Entry mirrored to appState.instances — the kanban board's read model. */
@@ -570,11 +579,15 @@ function showState(
   rec: WorkflowStateRecord,
   opts?: { freshEntry?: boolean },
 ): void {
+  const bound = bindingOf(ctx);
   const patch: BindingState = {
     workflow: def.id,
     state: rec.state,
     updated: rec.updated,
     history: rec.history,
+    // a (re)bind to another workflow gets a fresh token — markers aimed at
+    // the old binding stop counting
+    token: bound.workflow === def.id && bound.token ? bound.token : newWorkflowToken(),
   };
   if (opts?.freshEntry) {
     const prefix = `${rec.state}:`;
@@ -690,6 +703,7 @@ function clearBinding(ctx: Ctx): void {
     history: undefined,
     checks: undefined,
     vars: undefined,
+    token: undefined,
   });
   ctx.setBanner(null);
   ctx.setAttention(null);
@@ -756,7 +770,7 @@ export async function agentLaunchLine(
 /**
  * Substitute {{placeholder}}s in a `command:` step template for the shell.
  * Values come from places an attacker can reach — MR titles/branches, the
- * `axn-workflow-var:` output marker, card fields — so each one goes in as a
+ * `axn-workflow-var[<token>]:` output marker, card fields — so each one goes in as a
  * single shell word (`shellWord`: plain values stay bare, anything else is
  * single-quoted), never as raw shell text. Quotes the author already put
  * around a placeholder (`"{{x}}"`, `'{{x}}'`) are replaced rather than
@@ -880,6 +894,7 @@ function actionEnv(ctx: Ctx, def: WorkflowDef, action: WorkflowAction, state: st
     axn_workflow: def.id,
     axn_state: state,
     axn_action: action.name,
+    axn_workflow_token: bindingOf(ctx).token ?? '',
   });
 }
 
@@ -896,6 +911,7 @@ async function actionVars(
     state,
     workflow: def.id,
     action: action.name,
+    workflow_token: bindingOf(ctx).token ?? '',
     cwd,
     tracking: (await stateFilePath(ctx, def)) ?? '',
     model: resolveAgentSpec(action.agent).model ?? '',
@@ -966,13 +982,13 @@ async function actionCommand(
 /**
  * The typed line for a `run-in: shell` action. Command actions get a
  * reporter trailer that captures the exit code and prints a whole-line
- * `axn-workflow-check:` marker — the plugin's onOutput scans it back into
+ * `axn-workflow-check[<token>]:` marker — the plugin's onOutput scans it back into
  * the checks record. The leading `\n` guarantees the marker starts a fresh
  * line even when the command's output lacked a trailing newline.
  */
-export function shellLine(action: WorkflowAction, state: string, cmd: string): string {
+export function shellLine(action: WorkflowAction, state: string, cmd: string, token: string): string {
   if (!action.command) return cmd;
-  return `${cmd}; rc=$?; printf '\\naxn-workflow-check: %s:%s %d\\n' ${shellWord(state)} ${shellWord(action.name)} "$rc"`;
+  return `${cmd}; rc=$?; printf '\\naxn-workflow-check[%s]: %s:%s %d\\n' ${shellWord(token)} ${shellWord(state)} ${shellWord(action.name)} "$rc"`;
 }
 
 export interface ActionRunInfo {
@@ -1216,7 +1232,7 @@ async function runAction(
       }
       if (typeof resolved === 'string') line = resolved;
     }
-    await ctx.writeToSession(`${env}${shellLine(action, state, line)}\r`);
+    await ctx.writeToSession(`${env}${shellLine(action, state, line, bindingOf(ctx).token ?? '')}\r`);
     if (action.command) {
       recordCheck(ctx, def, state, action.name, { status: 'running', at: Date.now() });
     }
@@ -1345,35 +1361,46 @@ const RECONCILE_DELAY_MS = 800;
 
 /**
  * Agent handoff without a tracking file: an agent prints a whole output line
- * `axn-workflow-state: <state>` and the session adopts it — the file-free
+ * `axn-workflow-state[<token>]: <state>` and the session adopts it — the file-free
  * equivalent of editing the state file. The whole-line anchor keeps prose
- * ("I will now emit axn-workflow-state: impl") from triggering it. Like the
+ * ("I will now emit axn-workflow-state[…]: impl") from triggering it; the
+ * token keeps text that merely scrolls past (a hostile file being `cat`ed)
+ * from triggering it. Like the
  * file channel, `transitions` does not gate this — interactive moves only.
  */
-const STATE_MARKER = /^axn-workflow-state:\s*([A-Za-z0-9_-]+)\s*$/;
+const STATE_MARKER = /^axn-workflow-state\[([A-Za-z0-9]+)\]:\s*([A-Za-z0-9_-]+)\s*$/;
 /**
- * Check-result report: `axn-workflow-check: <name> <rc>` or with an explicit
- * state `axn-workflow-check: <state>:<name> <rc>` (shell-run actions emit
+ * Check-result report: `axn-workflow-check[<token>]: <name> <rc>` or with an
+ * explicit state `axn-workflow-check[<token>]: <state>:<name> <rc>` (shell-run actions emit
  * this form via their printf trailer so a check outliving a move still lands
  * under the right state). Agents may print the bare-name form to report a
  * check themselves — it resolves against the current state.
  */
-const CHECK_MARKER = /^axn-workflow-check:\s*([A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)?)\s+(-?\d+)\s*$/;
+const CHECK_MARKER =
+  /^axn-workflow-check\[([A-Za-z0-9]+)\]:\s*([A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)?)\s+(-?\d+)\s*$/;
 /**
- * Agent-triggered action launch: `axn-workflow-run: <name>` runs the named
+ * Agent-triggered action launch: `axn-workflow-run[<token>]: <name>` runs the named
  * action of the current state — the agent-side counterpart of the Run
  * button. `sub-shell`/`headless` actions dispatch regardless of the
  * foreground process; `shell` actions follow the same rules as the button
  * (send-prompt to the running agent cli, refused under a foreign process).
  */
-const RUN_MARKER = /^axn-workflow-run:\s*([A-Za-z0-9_-]+)\s*$/;
+const RUN_MARKER = /^axn-workflow-run\[([A-Za-z0-9]+)\]:\s*([A-Za-z0-9_-]+)\s*$/;
 /**
- * Var write-back: `axn-workflow-var: <key> <value>` lets a step or agent set
+ * Var write-back: `axn-workflow-var[<token>]: <key> <value>` lets a step or agent set
  * a workflow var from its output (e.g. a computed branch or verdict path).
  * `kind` derivation applies for declared vars; undeclared keys store
  * verbatim.
  */
-const VAR_MARKER = /^axn-workflow-var:\s*([A-Za-z0-9_-]+)\s+(.*)$/;
+const VAR_MARKER = /^axn-workflow-var\[([A-Za-z0-9]+)\]:\s*([A-Za-z0-9_-]+)\s+(.*)$/;
+/** Any marker-shaped line, token or not — to log the ones that don't count. */
+const ANY_MARKER = /^axn-workflow-(state|check|run|var)\b/;
+
+/** 16 hex chars from the platform CSPRNG. */
+export function newWorkflowToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 /** Per-session leftover of an output chunk that split a marker mid-line. */
 const markerTails = new Map<string, string>();
@@ -1427,7 +1454,7 @@ async function markerRun(ctx: Ctx, def: WorkflowDef, name: string): Promise<void
 }
 
 /**
- * A `axn-workflow-check:` marker line. `key` is `<name>` (current state) or
+ * A `axn-workflow-check[<token>]:` marker line. `key` is `<name>` (current state) or
  * `<state>:<name>` (explicit — the shell trailer's form).
  */
 function recordCheckMarker(ctx: Ctx, def: WorkflowDef, key: string, rc: number): void {
@@ -1444,19 +1471,24 @@ function recordCheckMarker(ctx: Ctx, def: WorkflowDef, key: string, rc: number):
 
 /**
  * Scan output for the plugin's whole-line markers:
- * `axn-workflow-state: <state>` (agent handoff — adopt the state),
- * `axn-workflow-check: <name> <rc>` (check result report), and
- * `axn-workflow-run: <name>` (agent-requested action run).
+ * `axn-workflow-state[<token>]: <state>` (agent handoff — adopt the state),
+ * `axn-workflow-check[<token>]: <name> <rc>` (check result report),
+ * `axn-workflow-run[<token>]: <name>` (agent-requested action run) and
+ * `axn-workflow-var[<token>]: <key> <value>`. Lines carrying no or another
+ * binding's token are ignored.
  */
 function scanMarkers(ctx: Ctx, def: WorkflowDef, text: string): void {
   const id = ctx.session.id;
   const lines = ((markerTails.get(id) ?? '') + text).split('\n');
   markerTails.set(id, lines.pop() ?? '');
+  const token = bindingOf(ctx).token;
   for (const raw of lines) {
     const line = raw.trim();
-    const sm = STATE_MARKER.exec(line);
+    if (!ANY_MARKER.test(line)) continue;
+    const marked = (m: RegExpExecArray | null) => (m && token && m[1] === token ? m : null);
+    const sm = marked(STATE_MARKER.exec(line));
     if (sm) {
-      const target = sm[1];
+      const target = sm[2];
       if (!def.states.includes(target) || target === bindingOf(ctx).state) continue;
       const now = Date.now();
       const rec: WorkflowStateRecord = {
@@ -1476,22 +1508,24 @@ function scanMarkers(ctx: Ctx, def: WorkflowDef, text: string): void {
       runAutoActions(ctx, def, target, false);
       return;
     }
-    const cm = CHECK_MARKER.exec(line);
+    const cm = marked(CHECK_MARKER.exec(line));
     if (cm) {
-      recordCheckMarker(ctx, def, cm[1], parseInt(cm[2], 10));
+      recordCheckMarker(ctx, def, cm[2], parseInt(cm[3], 10));
       continue;
     }
-    const rm = RUN_MARKER.exec(line);
+    const rm = marked(RUN_MARKER.exec(line));
     if (rm) {
-      void markerRun(ctx, def, rm[1]).catch((e) =>
-        axnLog('warn', 'dev-workflow', `run marker '${rm[1]}' failed: ${String(e)}`),
+      void markerRun(ctx, def, rm[2]).catch((e) =>
+        axnLog('warn', 'dev-workflow', `run marker '${rm[2]}' failed: ${String(e)}`),
       );
       continue;
     }
-    const vm = VAR_MARKER.exec(line);
-    if (vm && vm[2] !== undefined) {
-      setVar(ctx, def, vm[1], vm[2].trim());
+    const vm = marked(VAR_MARKER.exec(line));
+    if (vm && vm[3] !== undefined) {
+      setVar(ctx, def, vm[2], vm[3].trim());
+      continue;
     }
+    axnLog('info', 'dev-workflow', `${id}: ignored marker without this binding's token`);
   }
 }
 
@@ -1616,7 +1650,7 @@ async function attachExisting(ctx: Ctx, def: WorkflowDef): Promise<string | unde
  * Fire the `auto` actions of `state` — an "on-enter" hook: runs when the
  * workflow starts (start state) and on every later transition into a state,
  * whether the move came from a command, the board, or an agent's
- * `axn-workflow-state:` marker. `waitForPrompt` (start paths) delays until
+ * `axn-workflow-state[<token>]:` marker. `waitForPrompt` (start paths) delays until
  * the session's first output so a `shell` action isn't typed before the
  * prompt exists; later entries fire immediately — the session is live.
  */
@@ -2624,7 +2658,7 @@ export const devWorkflowPlugin: SessionViewPlugin = {
               at: Date.now(),
             });
           }
-          return `${actionEnv(ctx, def, action, bound.state)}${shellLine(action, bound.state, cmd)}`;
+          return `${actionEnv(ctx, def, action, bound.state)}${shellLine(action, bound.state, cmd, bound.token ?? '')}`;
         }
         await runAction(ctx, def, bound.state, action);
         return echo(`workflow '${def.id}' running '${action.name}'`);
