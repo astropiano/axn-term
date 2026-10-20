@@ -187,7 +187,11 @@ export interface ShellSession {
   progress: number;
   output: string;
   cwd?: string;
-  devinActive?: boolean;
+  /**
+   * Id of the plugin whose `agentInput` agent is running in the session —
+   * set from the foreground process or the terminal title. Runtime only.
+   */
+  agentInput?: string;
   process?: string;
   repo?: RepoInfo;
   editors?: EditorTab[];

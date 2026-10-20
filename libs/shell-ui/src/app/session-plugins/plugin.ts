@@ -456,6 +456,14 @@ export interface SessionViewPlugin {
    */
   processPattern?: RegExp;
   /**
+   * The `processPattern` program is an agent that edits its own input line.
+   * While it is foreground, hidden-command interception observes only
+   * `/exit` (for `onCommand`) instead of switching off, and the session
+   * carries `agentInput: <plugin id>`. `title` also marks the session from
+   * the OSC terminal title, before the 1 s process poll has seen the agent.
+   */
+  agentInput?: { title?: RegExp };
+  /**
    * If true, this plugin reports progress for the matching process and the
    * generic output-scanner progress plugin should stay out of the way.
    */

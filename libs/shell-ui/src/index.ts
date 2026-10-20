@@ -5,7 +5,6 @@ export * from './themes';
 export * from './terminalLinks';
 export * from './terminalRegistry';
 export * from './platform';
-export * from './processPatterns';
 export * from './imageMime';
 export * from './services';
 export * from './i18n';

@@ -3,7 +3,6 @@ import { axnLog } from '../log';
 import { sessionLastSelectedAt } from '../attention';
 import type { SessionAttention, SessionBanner, SessionStatus, ShellSession, Task } from '../../types';
 import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin';
-import { DEVIN_PROCESS_RE } from '../../processPatterns';
 import { registerAgentLauncher } from './agentRegistry';
 import { agentCommand } from './devWorkflow';
 import { shellQuote } from '../../shellQuote';
@@ -491,12 +490,11 @@ function armIdleTimer(ctx: SessionViewContext & PluginApi) {
   );
 }
 
-// Matches the foreground process names that ShellTerminal marks as
-// task runners and sets `session.devinActive` for.
-export { DEVIN_PROCESS_RE };
+/** The devin CLI as `session.process` reports it (argv-derived basename). */
+export const DEVIN_PROCESS_RE = /^devin/i;
 
 function isDevinSession(session: ShellSession): boolean {
-  return session.devinActive === true || DEVIN_PROCESS_RE.test(session.process ?? '');
+  return session.agentInput === devinPlugin.id || DEVIN_PROCESS_RE.test(session.process ?? '');
 }
 
 function getDevinSettings(ctx: SessionViewContext & PluginApi): DevinPluginSettings {
@@ -666,6 +664,9 @@ export const devinPlugin: SessionViewPlugin = {
   stateKey: 'devin',
   settingsKey: 'devin',
   processPattern: DEVIN_PROCESS_RE,
+  // devin edits its own input line; it also sets the terminal title while it
+  // runs, which marks the session before the process poll catches up.
+  agentInput: { title: /devin/i },
   handlesProgress: true,
   screenTasks: (lines) => {
     const tasks = screenTaskBlock(lines);

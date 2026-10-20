@@ -13,7 +13,7 @@
  * buffer contents can no longer be trusted) and resumes on the next Enter.
  */
 
-export type HiddenCommandMode = 'full' | 'devin' | 'off';
+export type HiddenCommandMode = 'full' | 'agent' | 'off';
 
 export interface HiddenCommandInputDeps {
   /** Write raw data to the view's PTY (used for the \x15 line-clear). */
@@ -21,7 +21,8 @@ export interface HiddenCommandInputDeps {
   /**
    * Interception mode, evaluated per input event:
    * - 'full':  no foreground process — all axn-* commands are intercepted.
-   * - 'devin': a devin/agent process is foreground — only `/exit` is tracked.
+   * - 'agent': a plugin-declared `agentInput` program is foreground — only
+   *            `/exit` is tracked.
    * - 'off':   another program owns input — nothing is intercepted.
    */
   mode: () => HiddenCommandMode;
@@ -35,7 +36,7 @@ export interface HiddenCommandInputDeps {
   onPreviewRequest?: (path: string) => void;
   /**
    * Session-level command dispatch (axn-session*, axn-workspace-*, axn-sh,
-   * axn-install, plugin commands, /exit in devin mode). `undefined` passes
+   * axn-install, plugin commands, /exit in agent mode). `undefined` passes
    * the line through to the shell; a string replaces it; `false` swallows it.
    */
   onSessionCommand?: (
@@ -177,7 +178,7 @@ export function createHiddenCommandInput(
         const line = lineBuffer;
         lineBuffer = '';
         if (line !== null) {
-          if (mode === 'devin') {
+          if (mode === 'agent') {
             if (line.trim() === '/exit') deps.onSessionCommand?.(line);
             continue;
           }
