@@ -3,15 +3,16 @@
  * `permissions`. The host refuses every call and hook that needs an
  * undeclared one; a plugin without the field gets none of them — it can
  * still keep per-session state, raise banners/attention flags, push
- * surfaces, open tabs and own `axn-*` commands that swallow their line.
+ * surfaces and own `axn-*` commands that swallow their line.
  */
 export type PluginPermission =
   /** Run shell commands: `exec`, `openSubShell`, `runCommand`. */
   | 'exec'
   /**
    * Type into a session's shell: `writeToSession`, the `line` hook (it can
-   * rewrite every submitted line) and a replacement line returned from an
-   * owned command.
+   * rewrite every submitted line), a replacement line returned from an
+   * owned command — and `setRestoring`, whose overlay takes the terminal's
+   * input away.
    */
   | 'terminal-input'
   /** Read what a terminal shows: `getScreenLines`, `waitForSessionOutput`, the `output` hook. */
@@ -20,7 +21,10 @@ export type PluginPermission =
   | 'fs-read'
   /** `writeFile`, `mkdir`. */
   | 'fs-write'
-  /** Drive the app's sessions: `openSession`, `selectSession`, `activateTab`. */
+  /**
+   * Drive the app's sessions and views: `openSession`, `selectSession`,
+   * `activateTab`, `openTab`, `openBrowser`.
+   */
   | 'sessions';
 
 export const PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
@@ -37,6 +41,7 @@ const METHOD_PERMISSIONS: Record<string, PluginPermission> = {
   openSubShell: 'exec',
   runCommand: 'exec',
   writeToSession: 'terminal-input',
+  setRestoring: 'terminal-input',
   getScreenLines: 'terminal-output',
   waitForSessionOutput: 'terminal-output',
   readFile: 'fs-read',
@@ -46,6 +51,8 @@ const METHOD_PERMISSIONS: Record<string, PluginPermission> = {
   openSession: 'sessions',
   selectSession: 'sessions',
   activateTab: 'sessions',
+  openTab: 'sessions',
+  openBrowser: 'sessions',
 };
 
 const HOOK_PERMISSIONS: Record<string, PluginPermission> = {
