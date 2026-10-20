@@ -6,6 +6,7 @@ import { SessionIcon } from '../SessionPanel';
 import { usePluginSettings } from '../PluginSettingsProvider';
 import { WorkspacePicker } from '../../WorkspacePicker';
 import { axnLog } from '../log';
+import { promptArg, shellQuote, shellWord } from '../../shellQuote';
 import { pickFromList } from '../pickerHost';
 import { resolvePersona, agentLauncherFor } from './agentRegistry';
 import type { AgentLaunchTools } from './agentRegistry';
@@ -13,7 +14,6 @@ import { registerMrActions, type MrActionProps, type MrRef, type MrRowEnv } from
 import { normalizeReviewAgent } from '../gitReview';
 import {
   normPath,
-  quotePath,
   worktreeBranchFor,
   worktreeDirFor,
 } from './worktrees';
@@ -700,27 +700,6 @@ function clearBinding(ctx: Ctx): void {
 // ---------------------------------------------------------------------------
 // Step launch
 // ---------------------------------------------------------------------------
-
-function toBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(bin);
-}
-
-/**
- * Embed the prompt inline as base64 — shell-inert inside single quotes, so
- * the command survives `sh -c` verbatim (same trick as gitReview.promptArg).
- */
-export function promptArg(prompt: string): string {
-  return `"$(printf %s '${toBase64(prompt.replace(/\x00/g, ''))}' | base64 -d)"`;
-}
-
-export function shellWord(value: string): string {
-  return /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
-}
 
 /**
  * Render the agent launch command for a step's `agent` spec. `extraFlags`
@@ -1724,8 +1703,8 @@ async function reviewMr(
     // Fetch the target branch in the same call so `origin/<target>` is a
     // usable compare base for the worktree's git tab (`axn-git origin/N`).
     await api.exec(
-      `git -C ${quotePath(root)} fetch origin ${quotePath(fetchRef)}` +
-        `${mr.targetBranch ? ` ${quotePath(mr.targetBranch)}` : ''}`,
+      `git -C ${shellQuote(root)} fetch origin ${shellQuote(fetchRef)}` +
+        `${mr.targetBranch ? ` ${shellQuote(mr.targetBranch)}` : ''}`,
       root,
     );
     if ((await api.statPath(dir, root).catch(() => null))?.isDir) {
@@ -1733,17 +1712,17 @@ async function reviewMr(
       // fast-forward to the just-fetched head when the tree is clean
       // (a dirty or diverged review worktree stays as-is).
       const inside = await api
-        .exec(`git -C ${quotePath(dir)} rev-parse --is-inside-work-tree`, root)
+        .exec(`git -C ${shellQuote(dir)} rev-parse --is-inside-work-tree`, root)
         .then(() => true)
         .catch(() => false);
       if (!inside) return `${mr.reference}: ${dir} exists but is not a git worktree`;
       await api
-        .exec(`git -C ${quotePath(dir)} merge --ff-only FETCH_HEAD`, root)
+        .exec(`git -C ${shellQuote(dir)} merge --ff-only FETCH_HEAD`, root)
         .catch(() => {});
     } else {
       // `-B` re-creates `wt/mr-N` when a stale branch outlived its worktree.
       await api.exec(
-        `git -C ${quotePath(root)} worktree add ${quotePath(dir)} -B ${quotePath(branch)} FETCH_HEAD`,
+        `git -C ${shellQuote(root)} worktree add ${shellQuote(dir)} -B ${shellQuote(branch)} FETCH_HEAD`,
         root,
       );
     }
