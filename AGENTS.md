@@ -67,7 +67,12 @@
   tab menus; any right-click no view handles itself opens `AppContextMenu`
   instead of the webview's native menu — Copy/Paste/Select all for the
   terminal under the pointer (`terminalAt`, `registerTerminalElement` in
-  `terminalRegistry.ts`; paste goes through `term.paste`), Cut/Copy/Paste/
+  `terminalRegistry.ts`; paste goes through `term.paste`; Copy reads
+  `terminalSelection` — xterm's live selection, else the user's last one,
+  forgotten on a left click or typing — and terminals honour OSC 52 clipboard
+  writes via `handleClipboardWrites`, because TUIs with their own mouse
+  selection such as Claude Code copy that way and leave xterm with no
+  selection; reads (`?`) are refused), Cut/Copy/Paste/
   Select all for text fields, plus "Reload window" (also `⌘⇧R`/`Ctrl+Shift+R`,
   `isReloadShortcut` — terminals let it through; it saves state first and,
   running no React cleanup, keeps the PTYs, which the reloaded window

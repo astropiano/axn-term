@@ -52,11 +52,80 @@ export function getScreenLines(sessionId: string): string[] {
 // under the pointer (main shell or sub-shell tab) to copy from / paste into.
 const terminalElements = new WeakMap<Element, Terminal>();
 
+// The last selection the user made in each terminal. A program in the
+// terminal can make xterm drop the live selection behind the user's back
+// (xterm clears it on anything it counts as input — e.g. with Claude Code
+// in the foreground the selection was gone by the time the right-click
+// menu read it), so Copy falls back to this. Only the user deselecting —
+// a left click in the terminal or typing — forgets it.
+const lastSelections = new WeakMap<Terminal, string>();
+
 export function registerTerminalElement(el: Element, term: Terminal): () => void {
   terminalElements.set(el, term);
+  const selectionSub = term.onSelectionChange(() => {
+    const text = term.getSelection();
+    if (text) lastSelections.set(term, text);
+  });
+  const forget = () => lastSelections.delete(term);
+  const onMouseDown = (event: Event) => {
+    if ((event as MouseEvent).button === 0) forget();
+  };
+  // typing deselects; ⌘C/Ctrl+Shift+C and other shortcuts do not
+  const onKeyDown = (event: Event) => {
+    const key = event as KeyboardEvent;
+    if (!key.metaKey && !key.ctrlKey) forget();
+  };
+  // capture phase: before xterm handles (and possibly re-selects on) the click
+  el.addEventListener('mousedown', onMouseDown, true);
+  el.addEventListener('keydown', onKeyDown, true);
   return () => {
     if (terminalElements.get(el) === term) terminalElements.delete(el);
+    selectionSub.dispose();
+    el.removeEventListener('mousedown', onMouseDown, true);
+    el.removeEventListener('keydown', onKeyDown, true);
+    forget();
   };
+}
+
+/**
+ * OSC 52 "set clipboard" — the payload of `ESC ] 52 ; <targets> ; <base64>`
+ * as the text to copy. Read requests (`?`), clears (empty) and malformed or
+ * oversized payloads yield undefined: programs may write the clipboard,
+ * never read it.
+ */
+export function parseOsc52(data: string): string | undefined {
+  const sep = data.indexOf(';');
+  if (sep < 0) return undefined;
+  const payload = data.slice(sep + 1);
+  if (!payload || payload === '?' || payload.length > 4 * 1024 * 1024) return undefined;
+  try {
+    const bytes = Uint8Array.from(atob(payload), (c) => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Honour OSC 52 writes from the program in the terminal. TUIs that track the
+ * mouse themselves (Claude Code) draw their own selection and copy it this
+ * way — xterm has no selection of its own then, so the text is also what
+ * the context menu's Copy offers.
+ */
+export function handleClipboardWrites(term: Terminal, copy: (text: string) => void): { dispose(): void } {
+  return term.parser.registerOscHandler(52, (data) => {
+    const text = parseOsc52(data);
+    if (text) {
+      copy(text);
+      lastSelections.set(term, text);
+    }
+    return true;
+  });
+}
+
+/** What Copy should copy: the live selection, else the user's last one. */
+export function terminalSelection(term: Terminal): string {
+  return term.getSelection() || lastSelections.get(term) || '';
 }
 
 /** The terminal whose container holds `target`, if any. */
