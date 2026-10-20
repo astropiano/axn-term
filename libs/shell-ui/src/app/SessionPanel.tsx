@@ -3,7 +3,7 @@ import { ContextMenu } from '../ContextMenu';
 import { Plus, Save, FolderOpen, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight } from 'lucide-react';
 import { Trans } from '@lingui/react/macro';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
-import { useSessionBackend, useShellPlatform } from '../services';
+import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
 import { SessionView } from './SessionView';
 import { useSettings } from '../SettingsProvider';
 import { usePluginSettings } from './PluginSettingsProvider';
@@ -525,6 +525,8 @@ interface SessionContextMenuProps {
   onRequestMove?: () => void;
   onSubShell: () => void;
   onBrowse: () => void;
+  /** Copies the shell's live working directory; absent where it can't be read. */
+  onCopyPath?: () => void;
   onCloseSession: () => void;
   onTurnIntoWorkspace?: () => void;
   /** Rows contributed by enabled plugins via `sessionMenuItems`. */
@@ -540,6 +542,7 @@ function SessionContextMenu({
   onRequestMove,
   onSubShell,
   onBrowse,
+  onCopyPath,
   onCloseSession,
   onTurnIntoWorkspace,
   pluginItems,
@@ -705,6 +708,19 @@ function SessionContextMenu({
         <FolderOpen className="h-3.5 w-3.5 shrink-0" />
         Browse folder
       </button>
+      {onCopyPath && (
+        <button
+          type="button"
+          onClick={() => {
+            onCopyPath();
+            onClose();
+          }}
+          className={itemClass}
+        >
+          <Copy className="h-3.5 w-3.5 shrink-0" />
+          Copy path
+        </button>
+      )}
       {(pluginItems?.length ?? 0) > 0 && (
         <>
           <div className="my-1 h-px bg-[var(--border)]" />
@@ -923,6 +939,7 @@ export function SessionItem({
 }) {
   const backend = useSessionBackend();
   const platform = useShellPlatform();
+  const { services } = useShellServices();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition>({ x: 0, y: 0 });
   const taskListRef = useRef<HTMLUListElement | null>(null);
@@ -1154,12 +1171,25 @@ export function SessionItem({
               ? () => onTurnIntoWorkspace(session.id)
               : undefined
           }
+          onCopyPath={
+            backend.getCwd
+              ? () =>
+                  void (async () => {
+                    // The live shell's cwd — readable even while a program
+                    // runs in the foreground (it is the shell's, not the
+                    // program's). session.cwd is only a fallback snapshot.
+                    const cwd =
+                      (await backend.getCwd?.(ptyIdOf(session)).catch(() => null)) ?? session.cwd;
+                    if (cwd) await services.copyText(cwd);
+                  })()
+              : undefined
+          }
           onBrowse={() => {
             void (async () => {
               // The PTY's live cwd beats session.cwd, which is only refreshed
               // while the session is visible and can be stale.
               const cwd =
-                (await backend.getCwd?.(session.id).catch(() => null)) ??
+                (await backend.getCwd?.(ptyIdOf(session)).catch(() => null)) ??
                 session.cwd ??
                 (await platform.homeDir().catch(() => '/'));
               onOpenBrowser(session.id, cwd);

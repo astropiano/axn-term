@@ -3,7 +3,7 @@ import { ContextMenu } from '../ContextMenu';
 import { Trans } from '@lingui/react/macro';
 import { ErrorBoundary } from './ErrorBoundary';
 import { dump } from 'js-yaml';
-import { Menu, X, Settings, SquareTerminal, Terminal, FileText, Folder, Pencil, BrushCleaning, Eye, MoveRight, AlertOctagon, AlertTriangle, GitBranch } from 'lucide-react';
+import { Menu, X, Settings, SquareTerminal, Terminal, FileText, Folder, Pencil, BrushCleaning, Eye, MoveRight, AlertOctagon, AlertTriangle, GitBranch, Copy } from 'lucide-react';
 import { ShellTerminal } from '../ShellTerminal';
 import {
   SessionBackendProvider,
@@ -2647,6 +2647,20 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
               ? () => promoteSubShell(tabMenu.session!.id, tabMenu.tab.id)
               : undefined
           }
+          onCopyPath={
+            tabMenu.session && tabMenu.tab.kind === 'shell' && backend.getCwd
+              ? () => {
+                  const tab = tabMenu.tab;
+                  const fallback = tab.cwd ?? tabMenu.session?.cwd;
+                  void (async () => {
+                    // The tab shell's live cwd (its own PTY), even while a
+                    // program runs in it; the recorded cwd is the fallback.
+                    const cwd = (await backend.getCwd?.(tab.id).catch(() => null)) ?? fallback;
+                    if (cwd) await services.copyText(cwd);
+                  })();
+                }
+              : undefined
+          }
           onCloseTab={() =>
             tabMenu.session
               ? closeTab(tabMenu.session, tabMenu.tab.id)
@@ -2746,6 +2760,7 @@ function TabContextMenu({
   onClose,
   onRename,
   onMakeMain,
+  onCopyPath,
   onCloseTab,
   moveTargets,
   onMoveTo,
@@ -2757,6 +2772,8 @@ function TabContextMenu({
   onRename?: (label: string) => void;
   /** Only provided for sub-shell tabs — promotes the tab to the main shell. */
   onMakeMain?: () => void;
+  /** Only provided for sub-shell tabs — copies the tab shell's live cwd. */
+  onCopyPath?: () => void;
   onCloseTab: () => void;
   /** "Move to" targets — plugin views for session tabs, sessions for hosted tabs. */
   moveTargets?: { id: string; label: string }[];
@@ -2857,6 +2874,19 @@ function TabContextMenu({
         >
           <SquareTerminal className="h-3.5 w-3.5 shrink-0" />
           Make main shell
+        </button>
+      )}
+      {onCopyPath && (
+        <button
+          type="button"
+          onClick={() => {
+            onCopyPath();
+            onClose();
+          }}
+          className={itemClass}
+        >
+          <Copy className="h-3.5 w-3.5 shrink-0" />
+          Copy path
         </button>
       )}
       {moveTargets && moveTargets.length > 0 && (
