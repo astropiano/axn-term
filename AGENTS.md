@@ -450,7 +450,16 @@ section, so `<plugin>.enabled: true` enables the preview too (still opt-in).
 ## CLI subcommands and agent skills
 
 `main.rs` routes argv before Tauri starts (`src-tauri/src/cli.rs`): bare
-`axn-term` launches the app; `axn-term install`/`uninstall` copy the bundled
+`axn-term` launches the app; `axn-term session summary|rename|focus|command …`
+runs an `axn-*` command for the terminal it is invoked from — over the
+control socket (`src-tauri/src/control.rs`, `$AXN_TERM_STATE_DIR/control.sock`,
+0600): every PTY gets `AXN_TERM_PTY_ID` + a random `AXN_TERM_PTY_SECRET` +
+`AXN_TERM_CLI` (the app binary), the socket verifies the secret minted for that
+PTY and emits `control-command`; the window owning the PTY
+(`sessionForPty` in `app/controlCommands.ts`) runs the line through
+`handleSessionCommand` and answers via `control_reply` (`controlReply`: swallowed
+→ ok, `echo "<msg>"` → message, any other replacement → refused, 5 s timeout);
+`axn-term install`/`uninstall` copy the bundled
 agent skills (embedded via `include_str!` from `src-tauri/skills/<name>/`) into
 agent skill dirs — same scheme as `axn-dev install` (`--skills`, `--skill`,
 `--project`, `--repo`, `--devin`, `--agent`, `--all-agents`). Agent-facing

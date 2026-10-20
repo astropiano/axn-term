@@ -2,7 +2,9 @@
 //!
 //! `install`/`uninstall` copy the bundled agent skills (embedded via
 //! `include_str!`, so the packaged binary is self-contained) into agent skill
-//! directories — the same scheme as `axn-dev install`.
+//! directories — the same scheme as `axn-dev install`. `session` runs an
+//! `axn-*` command for the terminal it is invoked from, over the app's
+//! control socket (`control.rs`).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -84,6 +86,10 @@ Usage:
   axn-term                            Start the app (default)
   axn-term install <target> [opts]    Install bundled agent skills
   axn-term uninstall <target> [opts]  Remove installed skills
+  axn-term session summary [text]     Set this terminal's session summary (no text clears it)
+  axn-term session rename [name]      Rename this terminal's session (no name resets it)
+  axn-term session focus [tab]        Bring a view of this session to the front
+  axn-term session command <axn-…>    Run any axn-* or plugin command for this session
   axn-term --help                     Show this help
   axn-term --version                  Print the version
 
@@ -113,6 +119,7 @@ pub fn run_cli(args: &[String]) -> Option<i32> {
     match args.first()?.as_str() {
         "install" => Some(run_install(&args[1..], false)),
         "uninstall" => Some(run_install(&args[1..], true)),
+        "session" => Some(run_session(&args[1..])),
         "--help" | "-h" | "help" => {
             print!("{HELP}");
             Some(0)
@@ -362,5 +369,92 @@ mod tests {
 
         let p = parse_install_args(&args(&["--skills", "--project", "--devin"])).unwrap();
         assert!(p.project && p.devin && p.agent.is_none());
+    }
+}
+
+/// The command line `axn-term session <sub> …` stands for. Arguments join
+/// verbatim — the hidden commands parse the rest of the line themselves
+/// (summary/rename take it whole, matching outer quotes stripped).
+fn session_line(args: &[String]) -> Result<String, String> {
+    let (sub, rest) = args.split_first().ok_or("usage: axn-term session <summary|rename|focus|command> …")?;
+    let command = match sub.as_str() {
+        "summary" => "axn-session-summary".to_string(),
+        "rename" => "axn-rename".to_string(),
+        "focus" => "axn-focus".to_string(),
+        "command" => {
+            let (cmd, rest) = rest.split_first().ok_or("usage: axn-term session command <axn-command> [args…]")?;
+            if !cmd.starts_with("axn-") {
+                return Err(format!("not an axn-term command: {cmd}"));
+            }
+            return Ok(std::iter::once(cmd.as_str()).chain(rest.iter().map(String::as_str)).collect::<Vec<_>>().join(" "));
+        }
+        other => return Err(format!("unknown session command: {other}")),
+    };
+    Ok(std::iter::once(command.as_str()).chain(rest.iter().map(String::as_str)).collect::<Vec<_>>().join(" "))
+}
+
+#[cfg(unix)]
+fn run_session(args: &[String]) -> i32 {
+    let line = match session_line(args) {
+        Ok(line) => line,
+        Err(e) => {
+            eprintln!("axn-term session: {e}");
+            return 2;
+        }
+    };
+    let (Ok(pty), Ok(secret)) = (std::env::var("AXN_TERM_PTY_ID"), std::env::var("AXN_TERM_PTY_SECRET")) else {
+        eprintln!("axn-term session: not inside an axn-term terminal (AXN_TERM_PTY_ID/AXN_TERM_PTY_SECRET unset)");
+        return 2;
+    };
+    let state_dir = std::env::var("AXN_TERM_STATE_DIR")
+        .map(PathBuf::from)
+        .or_else(|_| dirs::home_dir().map(|h| h.join(".axn-term")).ok_or(()))
+        .unwrap_or_default();
+    let request = crate::control::ControlRequest { pty, secret, line };
+    match crate::control::send(&crate::control::socket_path(&state_dir), &request) {
+        Ok(reply) if reply.ok => {
+            if let Some(message) = reply.message {
+                println!("{message}");
+            }
+            0
+        }
+        Ok(reply) => {
+            eprintln!("axn-term session: {}", reply.error.unwrap_or_else(|| "failed".into()));
+            1
+        }
+        Err(e) => {
+            eprintln!("axn-term session: {e}");
+            1
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn run_session(_args: &[String]) -> i32 {
+    eprintln!("axn-term session: not supported on this platform");
+    2
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::session_line;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn maps_subcommands_to_hidden_command_lines() {
+        assert_eq!(session_line(&args(&["summary", "fixing the build"])).unwrap(), "axn-session-summary fixing the build");
+        assert_eq!(session_line(&args(&["summary"])).unwrap(), "axn-session-summary");
+        assert_eq!(session_line(&args(&["rename", "api", "work"])).unwrap(), "axn-rename api work");
+        assert_eq!(session_line(&args(&["command", "axn-workflow-move", "review"])).unwrap(), "axn-workflow-move review");
+    }
+
+    #[test]
+    fn refuses_anything_but_axn_commands() {
+        assert!(session_line(&args(&["command", "rm", "-rf", "/"])).is_err());
+        assert!(session_line(&args(&["bogus"])).is_err());
+        assert!(session_line(&args(&[])).is_err());
     }
 }

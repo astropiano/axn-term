@@ -74,6 +74,7 @@ import { sessionAttention, setAppAttention, summarizeAttention, useAppAttention,
 import type { RailFlag } from './attention';
 import { RAIL_ORDER_KEY, orderRailPlugins, railDropIndexAt, railOrderAfterDrop, storedRailOrder } from './railOrder';
 import { ptyIdOf } from '../types';
+import { controlReply, sessionForPty } from './controlCommands';
 import type { AgentCli, EditorTab, RepoInfo, SessionAttention, SessionBanner, ShellSession, WindowState } from '../types';
 import type { AppSettings } from '../themes';
 import type { RepoMenuContext, SessionViewPlugin } from './session-plugins/plugin';
@@ -1280,6 +1281,22 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           void backend.write(ptyId, `${typeof resolved === 'string' ? resolved : line}\r`);
         },
       );
+    });
+    return () => unlisten?.();
+  }, [platform, handleSessionCommand]);
+
+  // `axn-term session …` from a program inside one of our terminals (control
+  // socket): the line runs through the same dispatch, for the PTY it came
+  // from — never typed into it (an agent owns the foreground).
+  useEffect(() => {
+    const unlisten = platform.onControlCommand?.(async ({ ptyId, line }) => {
+      const session = sessionForPty(sessionsRef.current, ptyId);
+      if (!session) return null;
+      try {
+        return controlReply(line, await handleSessionCommand(session.id, line, ptyId));
+      } catch (e) {
+        return { ok: false, error: String(e) };
+      }
     });
     return () => unlisten?.();
   }, [platform, handleSessionCommand]);

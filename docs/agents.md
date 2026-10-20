@@ -32,10 +32,41 @@ The terminal scans the live screen for progress indicators (`45%`,
 - When several bars are on screen, the bottom-most line is reported.
 - When no bar remains on screen, the indicator is withdrawn.
 
+## `axn-term session` — commands for your own session
+
+A program running inside an axn-term terminal (an agent's Bash tool, a
+script) can't type the hidden commands below — they are only intercepted
+when typed at a bare shell prompt. Use the CLI instead; it reaches the app
+over a local socket and acts on the terminal it runs in:
+
+```sh
+"${AXN_TERM_CLI:-axn-term}" session summary 'Reviewing the auth token refresh race'
+"$AXN_TERM_CLI" session rename api-refactor
+"$AXN_TERM_CLI" session focus git
+"$AXN_TERM_CLI" session command axn-workflow-move review   # any axn-*/plugin command
+```
+
+- Every PTY is started with `AXN_TERM_PTY_ID`, a random per-PTY
+  `AXN_TERM_PTY_SECRET` and `AXN_TERM_CLI` (the app binary, which need not
+  be on `PATH`). The CLI sends id + secret + the command line to
+  `$AXN_TERM_STATE_DIR/control.sock` (mode 0600); the app checks the secret
+  it minted for that PTY and runs the line through the same dispatch as a
+  typed one. A sub-shell tab is its own PTY — commands act on the session
+  that owns it.
+- Exit status `0` = done (a command's message is printed), `1` = refused or
+  failed (reason on stderr — e.g. a command whose result would have to be
+  typed into the shell, like `axn-claude-resume`), `2` = usage error or not
+  inside axn-term.
+- Desktop only for now; the web session host has no control socket.
+
+The `axn-term` skill (`axn-term install --skills`) carries these
+instructions for agents.
+
 ## Hidden `axn-*` commands
 
-These are intercepted by axn-term before the line reaches the shell — never
-emit them in output text, and prefer them over guessing equivalents:
+These are intercepted by axn-term when *typed* at a bare shell prompt — the
+user's way in. Printing one in output does nothing; from inside a running
+program use `axn-term session …` above:
 
 - `axn-session [path]` — open a new session in the current workspace (`.` or
   no argument uses the session cwd).
@@ -77,8 +108,9 @@ emit them in output text, and prefer them over guessing equivalents:
   vars pre-filled. The current session is untouched.
 - `axn-workflow-move <state>` — transition the bound workflow to `<state>`
   (fires the entered state's `auto` actions — the on-enter hook; other
-  steps still wait for the human's Run). As a *running agent* you can't type
-  hidden commands, so hand off by either: printing a whole line
+  steps still wait for the human's Run). As a *running agent* hand off with
+  `"$AXN_TERM_CLI" session command axn-workflow-move <state>` (see
+  `axn-term session` above), or by printing a whole line
   `axn-workflow-state[<token>]: <state>` to stdout (the plugin adopts
   declared states), or — when the workflow has `tracking.file` — updating `state:` in
   that file. That's how a speckit-style agent hands a finished `plan` to
