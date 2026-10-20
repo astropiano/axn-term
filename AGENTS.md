@@ -242,6 +242,12 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   actions use it as an on-enter "switch the view" (e.g. `axn-focus` on a
   human-gate state).
 
+The session-level dispatch behind it — built-ins, plugin-owned commands,
+`onCommand` hooks, Tab completion, and the out-of-band entry points
+(`PluginApi.runCommand`, remote-control lines, `axn-term session …`) — is
+`useSessionCommands` (`app/useSessionCommands.ts`), fed by ShellApp; the
+built-in command tables and path helpers sit in `app/shellCommandSupport.ts`.
+
 Input interception for all of this lives in `createHiddenCommandInput`
 (`app/hiddenCommands.ts`) — a per-view line-buffer tracker shared by
 `ShellTerminal` and `SubShellView`. It gates on a `mode()` callback
