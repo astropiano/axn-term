@@ -695,85 +695,103 @@ export function isPluginEnabled(
   });
 }
 
+/** What `createPluginApi` binds a ctx to — the host's state and actions. */
+export interface PluginApiDeps {
+  backend: SessionBackend;
+  updateSession: (sessionId: string, patch: Partial<ShellSession>) => void;
+  mergePluginState: (sessionId: string, stateKey: string, patch: Record<string, unknown>) => void;
+  pluginSettings: PluginSettings;
+  /** Every registered plugin — enabled ones are picked via `isPluginEnabled`. */
+  plugins: readonly SessionViewPlugin[];
+  openBrowser: (sessionId: string, path: string) => void;
+  openTab: (
+    sessionId: string,
+    tab: { path: string; kind: 'editor' | 'browser' | 'preview' | 'git'; base?: string },
+  ) => void;
+  openSubShell: (
+    sessionId: string,
+    command?: string,
+    cwd?: string,
+    label?: string,
+    agent?: AgentCli,
+  ) => string | undefined;
+  openSession: (workspaceId: string, cwd?: string, name?: string) => void;
+  getWorkspaces?: () => Workspace[];
+  pluginData: Record<string, unknown>;
+  mergePluginData: (key: string, patch: Record<string, unknown>) => void;
+  /**
+   * Live session lookup. Lifecycle hooks (onOutput, timers, …) outlive the
+   * snapshot the ctx was built from; without it `getSession` returns that
+   * snapshot (fine for synchronous `render`).
+   */
+  getLiveSession?: (sessionId: string) => ShellSession | undefined;
+  getSessionCount?: () => number;
+  /** Called after a raised flag is stored — the host OS-notifies from here. */
+  onAttention?: (session: ShellSession, stateKey: string, attention: SessionAttention | null) => void;
+}
+
 /**
- * Build the ctx object handed to `render`/`renderRow` hooks. Lifecycle hooks
- * (onOutput, onCommand, ...) are built in App.tsx instead — they need
- * `getSession`/`getSessionCount` backed by live state.
+ * Build the `PluginApi` ctx for one session and plugin — the one builder
+ * behind every hook: ShellApp's lifecycle dispatch (with live lookups and
+ * notifications) and the panel/view `render` call sites alike.
  */
 export function createPluginApi(
   session: ShellSession,
   plugin: SessionViewPlugin,
-  deps: {
-    backend: SessionBackend;
-    updateSession: (sessionId: string, patch: Partial<ShellSession>) => void;
-    mergePluginState: (sessionId: string, stateKey: string, patch: Record<string, unknown>) => void;
-    pluginSettings: PluginSettings;
-    plugins: readonly SessionViewPlugin[];
-    openBrowser: (sessionId: string, path: string) => void;
-    openTab: (
-      sessionId: string,
-      tab: { path: string; kind: 'editor' | 'browser' | 'preview' | 'git'; base?: string },
-    ) => void;
-    openSubShell: (
-      sessionId: string,
-      command?: string,
-      cwd?: string,
-      label?: string,
-      agent?: AgentCli,
-    ) => string | undefined;
-    openSession: (workspaceId: string, cwd?: string, name?: string) => void;
-    getWorkspaces?: () => Workspace[];
-    pluginData: Record<string, unknown>;
-    mergePluginData: (key: string, patch: Record<string, unknown>) => void;
-  },
+  deps: PluginApiDeps,
 ): SessionViewContext & PluginApi {
   const stateKey = plugin.stateKey ?? plugin.id;
   const settingsKey = plugin.settingsKey ?? plugin.id;
   // PTY-bound ops target the session's current main PTY, which differs from
   // session.id after a sub-shell was promoted.
   const ptyId = ptyIdOf(session);
+  const live = () => deps.getLiveSession?.(session.id) ?? session;
+  const enabledPlugins = () =>
+    deps.plugins.filter((p) => isPluginEnabled(p, deps.pluginSettings, deps.plugins));
+  const writeToSession = async (data: string) => {
+    await deps.backend.write(ptyId, data);
+  };
+  const exec = (command: string, cwd?: string) => {
+    if (!deps.backend.exec) return Promise.reject(new Error('exec is not available on this backend'));
+    return deps.backend.exec(ptyId, command, cwd ?? session.cwd);
+  };
+  const getCwd = () => deps.backend.getCwd?.(ptyId).catch(() => null) ?? Promise.resolve(null);
+  const openBrowser = (path: string) => deps.openBrowser(session.id, path);
+  const openTab: PluginApi['openTab'] = (tab) => deps.openTab(session.id, tab);
+  const openSubShell: PluginApi['openSubShell'] = (command, cwd, label, agent) =>
+    deps.openSubShell(session.id, command, cwd, label, agent);
   const menuCtx: RepoMenuContext = {
     session,
     updateSession: deps.updateSession,
-    writeToSession: async (data: string) => {
-      deps.backend.write(ptyId, data);
-    },
-    exec: (command: string, cwd?: string) => {
-      if (!deps.backend.exec) return Promise.reject(new Error('exec unavailable'));
-      return deps.backend.exec(ptyId, command, cwd ?? session.cwd);
-    },
-    getCwd: () => deps.backend.getCwd?.(ptyId).catch(() => null) ?? Promise.resolve(null),
-    openBrowser: (path: string) => deps.openBrowser(session.id, path),
-    openTab: (tab) => deps.openTab(session.id, tab),
-    openSubShell: (command, cwd, label, agent) =>
-      deps.openSubShell(session.id, command, cwd, label, agent),
+    writeToSession,
+    exec,
+    getCwd,
+    openBrowser,
+    openTab,
+    openSubShell,
   };
   return {
     session,
     updateSession: deps.updateSession,
-    writeToSession: async (data: string) => {
-      deps.backend.write(ptyId, data);
-    },
+    writeToSession,
+    // Merged against the latest session state inside the host's updater — a
+    // stale snapshot must never resurrect old fields.
     updatePluginState: (patch: unknown) => {
       deps.mergePluginState(session.id, stateKey, patch as Record<string, unknown>);
     },
-    getSession: () => session,
-    getSessionCount: () => 1,
+    getSession: live,
+    getSessionCount: () => deps.getSessionCount?.() ?? 1,
     pluginState: (session.pluginState ?? {})[stateKey],
     pluginSettings: deps.pluginSettings[settingsKey],
-    exec: (command: string, cwd?: string) => {
-      if (!deps.backend.exec) return Promise.reject(new Error('exec unavailable'));
-      return deps.backend.exec(ptyId, command, cwd ?? session.cwd);
-    },
+    exec,
     setRestoring: (label: string | null) =>
       setSessionRestoring(session.id, plugin.id, label),
     waitForSessionOutput: createWaitForSessionOutput(deps.backend, ptyId),
-    getCwd: () => deps.backend.getCwd?.(ptyId).catch(() => null) ?? Promise.resolve(null),
+    getCwd,
     getTty: () => deps.backend.getTty?.(ptyId).catch(() => null) ?? Promise.resolve(null),
-    openBrowser: (path: string) => deps.openBrowser(session.id, path),
-    openTab: (tab) => deps.openTab(session.id, tab),
-    openSubShell: (command, cwd, label, agent) =>
-      deps.openSubShell(session.id, command, cwd, label, agent),
+    openBrowser,
+    openTab,
+    openSubShell,
     openSession: (cwd, name, workspaceId) =>
       deps.openSession(workspaceId ?? session.workspaceId, cwd, name),
     getWorkspace: () =>
@@ -795,21 +813,22 @@ export function createPluginApi(
       deps.backend.mkdir?.(ptyId, resolvePath(cwd ?? session.cwd, path)).then(() => true, () => false) ??
       Promise.resolve(false),
     repoMenuItems: (repo) =>
-      deps.plugins
-        .filter(
-          (p) => p.repoMenuItems && isPluginEnabled(p, deps.pluginSettings, deps.plugins),
-        )
+      enabledPlugins()
+        .filter((p) => p.repoMenuItems)
         .flatMap((p) => p.repoMenuItems!(menuCtx, repo)),
+    // Reads the live process — hooks may fire on a timer long after the ctx
+    // snapshot was built (e.g. progress debounce scans).
     isProgressHandled: () =>
-      deps.plugins.some(
+      enabledPlugins().some(
         (p) =>
           p.id !== plugin.id &&
           p.handlesProgress &&
-          p.processPattern?.test(session.process ?? '') === true,
+          p.processPattern?.test(live().process ?? '') === true,
       ),
     getScreenLines: () => getScreenLines(session.id),
     setAttention: (attention) => {
       deps.mergePluginState(session.id, stateKey, { attention: attention ?? null });
+      deps.onAttention?.(session, stateKey, attention ?? null);
     },
     setBanner: (banner) => {
       deps.mergePluginState(session.id, stateKey, { banner: banner ?? null });

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ContextMenu } from '../ContextMenu';
 import { Trans } from '@lingui/react/macro';
 import { ErrorBoundary } from './ErrorBoundary';
 import { dump } from 'js-yaml';
-import { Menu, X, Settings, SquareTerminal, Terminal, FileText, Folder, Pencil, BrushCleaning, Eye, MoveRight, AlertOctagon, AlertTriangle, GitBranch, Copy } from 'lucide-react';
+import { Menu, X, Settings, FileText, Folder, Eye, AlertOctagon, AlertTriangle } from 'lucide-react';
 import { ShellTerminal } from '../ShellTerminal';
 import {
   SessionBackendProvider,
@@ -30,18 +29,18 @@ import { BrowserView } from './BrowserView';
 import { SubShellView } from './SubShellView';
 import { PreviewView } from './PreviewView';
 import { GitInspectView } from './GitInspectView';
-import { backendFileService, expandPathArg, resolvePath } from './fileService';
+import { backendFileService, resolvePath } from './fileService';
 import { useShellSessions, MAX_OUTPUT_LENGTH } from './useShellSessions';
 import { useAgentTasks } from './useAgentTasks';
 import { MemoryStatsProvider } from './useMemoryStats';
 import {
   getSessionViewPlugins,
-  createWaitForSessionOutput,
+  createPluginApi,
   isPluginEnabled,
   pluginCommands,
 } from './session-plugins';
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
-import { getScreenLines, keepPtyAlive, takePtyKeepAlive, terminalAt } from '../terminalRegistry';
+import { keepPtyAlive, takePtyKeepAlive, terminalAt } from '../terminalRegistry';
 import { MoveToWorkspaceModal } from './MoveToWorkspaceModal';
 import { runSubShellClosers } from './subShellAgents';
 import { PickerHost } from './pickerHost';
@@ -54,7 +53,7 @@ import {
   type AdoptRequest,
   type WorkspaceTarget,
 } from './windowPeers';
-import { defaultTabLabel, planSubShellPromote, planTurnIntoWorkspace } from './subshellPromote';
+import { planSubShellPromote, planTurnIntoWorkspace } from './subshellPromote';
 import {
   PluginSettingsProvider,
   PLUGINS_ATTENTION_SOURCE,
@@ -75,13 +74,21 @@ import type { RailFlag } from './attention';
 import { RAIL_ORDER_KEY, orderRailPlugins, railDropIndexAt, railOrderAfterDrop, storedRailOrder } from './railOrder';
 import { ptyIdOf } from '../types';
 import { controlReply, sessionForPty } from './controlCommands';
-import type { AgentCli, EditorTab, RepoInfo, SessionAttention, SessionBanner, ShellSession, WindowState } from '../types';
-import type { AppSettings } from '../themes';
-import type { RepoMenuContext, SessionViewPlugin } from './session-plugins/plugin';
+import { CloseConfirmModal } from './CloseConfirmModal';
+import { TabContextMenu } from './TabContextMenu';
+import { SessionTabStrip } from './SessionTabStrip';
 import {
-  dispatchSessionCommand,
-  registerSessionCommandDispatch,
-} from './session-plugins/plugin';
+  AXN_ARG_COMMANDS,
+  AXN_BUILTIN_COMMANDS,
+  AXN_BUILTIN_RE,
+  browserTabPatch,
+  completePathArg,
+  resolveSessionPath,
+} from './shellCommandSupport';
+import type { AgentCli, EditorTab, SessionAttention, ShellSession, WindowState } from '../types';
+import type { AppSettings } from '../themes';
+import type { SessionViewPlugin } from './session-plugins/plugin';
+import { registerSessionCommandDispatch } from './session-plugins/plugin';
 import { pushSandboxViewData, sandboxRuntime, syncSandboxes } from './session-plugins/sandbox';
 import {
   dropHookSpec,
@@ -93,168 +100,7 @@ import {
 
 const SMALL_SCREEN_QUERY = '(max-width: 639px)';
 
-const AXN_BUILTIN_COMMANDS = [
-  'axn-edit',
-  'axn-browse',
-  'axn-preview',
-  'axn-sh',
-  'axn-rename',
-  'axn-install',
-  'axn-session',
-  'axn-session-mv',
-  'axn-session-up',
-  'axn-session-down',
-  'axn-session-summary',
-  'axn-workspace-up',
-  'axn-workspace-down',
-  'axn-focus',
-];
 
-/** Hidden commands that take an argument (get a trailing space on complete). */
-const AXN_ARG_COMMANDS = new Set([
-  'axn-edit',
-  'axn-browse',
-  'axn-preview',
-  'axn-sh',
-  'axn-rename',
-  'axn-install',
-  'axn-session',
-  'axn-session-mv',
-  'axn-session-summary',
-  'axn-focus',
-]);
-
-const AXN_BUILTIN_RE =
-  /^\s*(axn-session(?:-mv|-up|-down)?|axn-workspace-up|axn-workspace-down|axn-focus)(?:\s+(.*?))?\s*$/;
-
-/** Filesystem completion for a path argument token; returns full lines. */
-async function completePathArg(
-  deps: {
-    listDir: (path: string) => Promise<{ name: string; isDirectory: boolean }[]>;
-    homeDir: () => Promise<string>;
-  },
-  cwd: string | undefined,
-  linePrefix: string,
-  token: string,
-  includeFiles: boolean,
-): Promise<string[]> {
-  const unquoted = token.replace(/^["']/, '');
-  const sep = unquoted.lastIndexOf('/');
-  const dirPart = sep === -1 ? '' : unquoted.slice(0, sep + 1);
-  const base = sep === -1 ? unquoted : unquoted.slice(sep + 1);
-
-  let absDir: string;
-  if (dirPart.startsWith('/')) {
-    absDir = dirPart;
-  } else if (dirPart === '~' || dirPart.startsWith('~/')) {
-    const home = await deps.homeDir().catch(() => '');
-    if (!home) return [];
-    absDir = home.replace(/\/$/, '') + dirPart.slice(1);
-  } else if (dirPart === '') {
-    absDir = cwd ?? '/';
-  } else {
-    absDir = `${(cwd ?? '/').replace(/\/$/, '')}/${dirPart}`;
-  }
-
-  try {
-    const list = await deps.listDir(absDir);
-    return list
-      .filter(
-        (e) => e.name.startsWith(base) && e.name !== base && (includeFiles || e.isDirectory),
-      )
-      .sort(
-        (a, b) =>
-          Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name),
-      )
-      .slice(0, 50)
-      .map((e) => `${linePrefix}${dirPart}${e.name}${e.isDirectory ? '/' : ''}`);
-  } catch {
-    return [];
-  }
-}
-
-async function resolveSessionPath(
-  backend: SessionBackend,
-  homeDir: () => Promise<string>,
-  session: ShellSession,
-  path: string,
-  ptyId?: string,
-): Promise<string> {
-  // Typed arguments get the same unquote + `~` handling as completion.
-  const home = path.trim().replace(/^["']/, '').startsWith('~')
-    ? await homeDir().catch(() => undefined)
-    : undefined;
-  const liveCwd =
-    (await backend.getCwd?.(ptyId ?? ptyIdOf(session)).catch(() => null)) ?? session.cwd;
-  return resolvePath(liveCwd, expandPathArg(path, home));
-}
-
-function browserTabPatch(session: ShellSession, path: string): Partial<ShellSession> {
-  const editors = session.editors ?? [];
-  const existing = editors.find((e) => e.path === path && e.kind === 'browser');
-  const id = existing?.id ?? `br-${crypto.randomUUID()}`;
-  return {
-    editors: existing ? editors : [...editors, { id, path, kind: 'browser' }],
-    activeTab: id,
-  };
-}
-
-interface CloseConfirmModalProps {
-  sessionCount: number;
-  runningCount: number;
-  onCancel: () => void;
-  onConfirm: () => void;
-}
-
-function CloseConfirmModal({ sessionCount, runningCount, onCancel, onConfirm }: CloseConfirmModalProps) {
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-      if (e.key === 'Enter') onConfirm();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onCancel, onConfirm]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-80 max-w-[90vw] rounded border border-[var(--border)] bg-[var(--surface)] p-4 shadow-lg">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)]">
-          Close window?
-        </h2>
-        <p className="mb-1 text-xs text-[var(--text-primary)]">
-          {sessionCount} open session{sessionCount === 1 ? '' : 's'}
-        </p>
-        <p className="mb-3 text-xs text-[var(--text-secondary)]">
-          {runningCount > 0
-            ? `${runningCount} ${runningCount === 1 ? 'session has' : 'sessions have'} a running process`
-            : 'All sessions are idle'}
-        </p>
-        {runningCount > 0 && (
-          <p className="mb-3 text-xs text-[var(--orange)]">
-            Running processes will be terminated.
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="rounded bg-[var(--red)] px-3 py-1.5 text-xs text-[var(--text-inverted)] hover:opacity-90"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export interface ShellAppProps {
   backend: SessionBackend;
@@ -387,8 +233,6 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   );
   // Bumped after external .mjs plugins are registered so plugin consumers re-render.
   const [pluginsVersion, setPluginsVersion] = useState(0);
-  const [tabDragId, setTabDragId] = useState<string | null>(null);
-  const [tabDropId, setTabDropId] = useState<string | null>(null);
   const [railDragId, setRailDragId] = useState<string | null>(null);
   const [railDropIndex, setRailDropIndex] = useState<number | null>(null);
   const [tabMenu, setTabMenu] = useState<{
@@ -691,136 +535,48 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     [updateSession],
   );
 
-  const buildPluginApi = useCallback(
-    (session: ShellSession, plugin: SessionViewPlugin) => {
-      const stateKey = plugin.stateKey ?? plugin.id;
-      const settingsKey = plugin.settingsKey ?? plugin.id;
-      const currentState = (session.pluginState ?? {}) as Record<string, unknown>;
-      // PTY-bound ops target the session's current main PTY, which differs
-      // from session.id after a sub-shell was promoted.
-      const ptyId = ptyIdOf(session);
-      return {
-        session,
-        updateSession,
-        writeToSession: async (data: string) => {
-          await backend.write(ptyId, data);
-        },
-        updatePluginState: (patch: unknown) => {
-          // Merge against the latest session state inside the updater — using
-          // the captured `currentState` here would let a stale snapshot
-          // resurrect old fields (e.g. an outdated devinSessionName).
-          mergePluginState(session.id, stateKey, patch as Record<string, unknown>);
-        },
-        getSession: () =>
-          sessionsRef.current.find((s) => s.id === session.id) ?? session,
-        getSessionCount: () => sessionsRef.current.length,
-        pluginState: currentState[stateKey],
-        pluginSettings: pluginSettingsRef.current[settingsKey as keyof typeof pluginSettings],
-        exec: (command: string, cwd?: string) => {
-          if (!backend.exec) return Promise.reject(new Error('exec is not available on this backend'));
-          return backend.exec(ptyId, command, cwd ?? session.cwd);
-        },
-        waitForSessionOutput: createWaitForSessionOutput(backend, ptyId),
-        getCwd: () => backend.getCwd?.(ptyId).catch(() => null) ?? Promise.resolve(null),
-        getTty: () => backend.getTty?.(ptyId).catch(() => null) ?? Promise.resolve(null),
-        openBrowser: (path: string) => {
-          const latest =
-            sessionsRef.current.find((s) => s.id === session.id) ?? session;
-          updateSession(session.id, browserTabPatch(latest, path));
-        },
-        openTab: (tab: {
-          path: string;
-          kind: 'editor' | 'browser' | 'preview' | 'git';
-          base?: string;
-        }) => openSessionTab(session.id, tab),
-        openSubShell: (command?: string, cwd?: string, label?: string, agent?: AgentCli) =>
-          openSubShell(session.id, command, cwd, label, agent),
-        openSession: (cwd?: string, name?: string, workspaceId?: string) =>
-          openSession(workspaceId ?? session.workspaceId, cwd, name),
-        runCommand: (line: string) =>
-          dispatchSessionCommand(session.id, line, ptyId),
-        activateTab: (tabId: string) =>
-          dispatchSessionCommand(session.id, `axn-focus ${tabId}`, ptyId).then(
-            (r) => r === false,
-          ),
-        getWorkspace: () =>
-          workspacesRef.current.find((w) => w.id === session.workspaceId),
-        getWorkspaces: () => workspacesRef.current,
-        readFile: (path: string, cwd?: string) =>
-          backendFileService(backend, ptyId).readFile(path, cwd ?? session.cwd),
-        writeFile: (path: string, contents: string, cwd?: string) =>
-          backendFileService(backend, ptyId).writeFile(path, cwd ?? session.cwd, contents),
-        statPath: (path: string, cwd?: string) =>
-          backend.statPath?.(ptyId, cwd ?? session.cwd ?? '/', path).catch(() => null) ??
-          Promise.resolve(null),
-        mkdir: (path: string, cwd?: string) =>
-          backend.mkdir?.(ptyId, resolvePath(cwd ?? session.cwd, path)).then(() => true, () => false) ??
-          Promise.resolve(false),
-        repoMenuItems: (repo: RepoInfo) => {
-          const menuCtx: RepoMenuContext = {
-            session,
-            updateSession,
-            writeToSession: async (data: string) => {
-              await backend.write(ptyId, data);
-            },
-            exec: (command: string, cwd?: string) => {
-              if (!backend.exec) return Promise.reject(new Error('exec is not available on this backend'));
-              return backend.exec(ptyId, command, cwd ?? session.cwd);
-            },
-            getCwd: () => backend.getCwd?.(ptyId).catch(() => null) ?? Promise.resolve(null),
-            openBrowser: (path: string) => {
-              const latest =
-                sessionsRef.current.find((s) => s.id === session.id) ?? session;
-              updateSession(session.id, browserTabPatch(latest, path));
-            },
-            openTab: (tab) => openSessionTab(session.id, tab),
-            openSubShell: (command, cwd, label, agent) =>
-              openSubShell(session.id, command, cwd, label, agent),
-          };
-          return enabledPluginsRef.current
-            .filter((p) => p.repoMenuItems)
-            .flatMap((p) => p.repoMenuItems!(menuCtx, repo));
-        },
-        isProgressHandled: () =>
-          enabledPluginsRef.current.some(
-            (p) =>
-              p.id !== plugin.id &&
-              p.handlesProgress &&
-              p.processPattern?.test(
-                // Read the live process — hooks may fire on a timer long after
-                // the ctx snapshot was built (e.g. progress debounce scans).
-                (sessionsRef.current.find((s) => s.id === session.id) ?? session)
-                  .process ?? '',
-              ) === true,
-          ),
-        getScreenLines: () => getScreenLines(session.id),
-        setAttention: (attention: SessionAttention | null) => {
-          mergePluginState(session.id, stateKey, { attention: attention ?? null });
-          const notifyKey = `${session.id}:${stateKey}`;
-          if (!attention) {
-            notifiedAttentionRef.current.delete(notifyKey);
-            return;
-          }
-          // OS-notify once per flag content, only for sessions the user isn't
-          // looking at (different session selected, or window unfocused).
-          const signature = `${attention.level ?? ''}:${attention.message}`;
-          if (notifiedAttentionRef.current.get(notifyKey) === signature) return;
-          notifiedAttentionRef.current.set(notifyKey, signature);
-          if (session.id !== selectedSessionIdRef.current || !document.hasFocus()) {
-            services.notify?.(session.name, attention.message);
-          }
-        },
-        setBanner: (banner: SessionBanner | null) => {
-          mergePluginState(session.id, stateKey, { banner: banner ?? null });
-        },
-        setRestoring: (label: string | null) =>
-          setSessionRestoring(session.id, plugin.id, label),
-        appState: pluginDataRef.current[settingsKey],
-        updateAppState: (patch: Record<string, unknown>) =>
-          mergePluginData(settingsKey, patch),
-      };
+  // OS-notify a raised flag once per content, only for sessions the user
+  // isn't looking at (different session selected, or window unfocused).
+  const notifyAttention = useCallback(
+    (session: ShellSession, stateKey: string, attention: SessionAttention | null) => {
+      const notifyKey = `${session.id}:${stateKey}`;
+      if (!attention) {
+        notifiedAttentionRef.current.delete(notifyKey);
+        return;
+      }
+      const signature = `${attention.level ?? ''}:${attention.message}`;
+      if (notifiedAttentionRef.current.get(notifyKey) === signature) return;
+      notifiedAttentionRef.current.set(notifyKey, signature);
+      if (session.id !== selectedSessionIdRef.current || !document.hasFocus()) {
+        services.notify?.(session.name, attention.message);
+      }
     },
-    [updateSession, mergePluginState, mergePluginData, openSessionTab, openSubShell, openSession],
+    [services],
+  );
+
+  const buildPluginApi = useCallback(
+    (session: ShellSession, plugin: SessionViewPlugin) =>
+      createPluginApi(session, plugin, {
+        backend,
+        updateSession,
+        mergePluginState,
+        pluginSettings: pluginSettingsRef.current,
+        plugins: getSessionViewPlugins(),
+        openBrowser: (sessionId, path) => {
+          const latest = sessionsRef.current.find((s) => s.id === sessionId) ?? session;
+          updateSession(sessionId, browserTabPatch(latest, path));
+        },
+        openTab: openSessionTab,
+        openSubShell,
+        openSession,
+        getWorkspaces: () => workspacesRef.current,
+        pluginData: pluginDataRef.current,
+        mergePluginData,
+        getLiveSession: (sessionId) => sessionsRef.current.find((s) => s.id === sessionId),
+        getSessionCount: () => sessionsRef.current.length,
+        onAttention: notifyAttention,
+      }),
+    [updateSession, mergePluginState, mergePluginData, openSessionTab, openSubShell, openSession, notifyAttention],
   );
 
   const previousHookPluginsRef = useRef<SessionViewPlugin[]>([]);
@@ -2353,115 +2109,14 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 />
               ))}
               {editors.length > 0 && (
-                <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
-                  <button
-                    type="button"
-                    onClick={() => updateSession(session.id, { activeTab: 'shell' })}
-                    data-tip="Shell"
-                    className={`flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[11px] transition ${
-                      activeTab === 'shell'
-                        ? 'bg-[var(--surface)] text-[var(--text-primary)]'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    <SquareTerminal className="h-3.5 w-3.5" />
-                    shell
-                  </button>
-                  {editors.map((ed) => (
-                    <div
-                      key={ed.id}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setTabMenu({ session, tab: ed, x: e.clientX, y: e.clientY });
-                      }}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('application/x-axn-tab', ed.id);
-                        e.dataTransfer.effectAllowed = 'move';
-                        setTabDragId(ed.id);
-                      }}
-                      onDragEnd={() => {
-                        setTabDragId(null);
-                        setTabDropId(null);
-                      }}
-                      onDragOver={(e) => {
-                        if (!tabDragId || tabDragId === ed.id) return;
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = 'move';
-                        setTabDropId(ed.id);
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        if (tabDragId && tabDragId !== ed.id) {
-                          reorderTab(session, tabDragId, ed.id);
-                        }
-                        setTabDragId(null);
-                        setTabDropId(null);
-                      }}
-                      className={`flex h-6 shrink-0 items-center rounded pl-2 pr-1 text-[11px] transition ${
-                        activeTab === ed.id
-                          ? 'bg-[var(--surface)] text-[var(--text-primary)]'
-                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-                      }${tabDragId === ed.id ? ' opacity-40' : ''}${
-                        tabDropId === ed.id && tabDragId !== ed.id
-                          ? ' shadow-[inset_2px_0_0_var(--accent)]'
-                          : ''
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => updateSession(session.id, { activeTab: ed.id })}
-                        data-tip={
-                          ed.kind === 'shell'
-                            ? (ed.label ?? defaultTabLabel(ed))
-                            : ed.path
-                        }
-                        className="flex items-center gap-1.5"
-                      >
-                        {ed.kind === 'browser' ? (
-                          <Folder className="h-3.5 w-3.5" />
-                        ) : ed.kind === 'shell' ? (
-                          <Terminal className="h-3.5 w-3.5" />
-                        ) : ed.kind === 'preview' ? (
-                          <Eye className="h-3.5 w-3.5" />
-                        ) : ed.kind === 'git' ? (
-                          <GitBranch className="h-3.5 w-3.5" />
-                        ) : (
-                          <FileText className="h-3.5 w-3.5" />
-                        )}
-                        <span className="max-w-40 truncate">
-                          {ed.kind === 'shell'
-                            ? (ed.label ?? defaultTabLabel(ed))
-                            : ed.path.split('/').pop() || ed.path}
-                        </span>
-                        {ed.dirty && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-[var(--orange)]" />
-                        )}
-                        {ed.kind === 'shell' && ed.hookStatus && ed.hookStatus !== 'idle' && (
-                          <span
-                            data-tip={ed.hookAttention?.message ?? ed.hookStatus}
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              ed.hookStatus === 'blocked'
-                                ? 'animate-pulse bg-[var(--red)]'
-                                : ed.hookStatus === 'running'
-                                  ? 'bg-[var(--blue)]'
-                                  : 'bg-[var(--green)]'
-                            }`}
-                          />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => closeTab(session, ed.id)}
-                        data-tip="Close tab"
-                        aria-label="Close tab"
-                        className="ml-0.5 flex h-4 w-4 items-center justify-center rounded text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--red)]"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <SessionTabStrip
+                  editors={editors}
+                  activeTab={activeTab}
+                  onSelect={(tabId) => updateSession(session.id, { activeTab: tabId })}
+                  onTabMenu={(tab, x, y) => setTabMenu({ session, tab, x, y })}
+                  onReorder={(dragId, targetId) => reorderTab(session, dragId, targetId)}
+                  onCloseTab={(tabId) => closeTab(session, tabId)}
+                />
               )}
               <div className="min-h-0 flex-1">
                 <div
@@ -2827,178 +2482,3 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   );
 }
 
-/**
- * Right-click menu for tabs: rename (inline input, sub-shell tabs only),
- * "Move to" targets (sessions ↔ tab-hosting plugin views), and close.
- */
-function TabContextMenu({
-  tab,
-  position,
-  onClose,
-  onRename,
-  onMakeMain,
-  onCopyPath,
-  onCloseTab,
-  moveTargets,
-  onMoveTo,
-}: {
-  tab: EditorTab;
-  position: { x: number; y: number };
-  onClose: () => void;
-  /** Only provided for sub-shell tabs — they are the renamable kind. */
-  onRename?: (label: string) => void;
-  /** Only provided for sub-shell tabs — promotes the tab to the main shell. */
-  onMakeMain?: () => void;
-  /** Only provided for sub-shell tabs — copies the tab shell's live cwd. */
-  onCopyPath?: () => void;
-  onCloseTab: () => void;
-  /** "Move to" targets — plugin views for session tabs, sessions for hosted tabs. */
-  moveTargets?: { id: string; label: string }[];
-  onMoveTo?: (targetId: string) => void;
-}) {
-  const [renaming, setRenaming] = useState(false);
-  const [name, setName] = useState(tab.label ?? '');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (renaming && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [renaming]);
-
-
-  const tabLabel =
-    tab.kind === 'shell'
-      ? (tab.label ?? defaultTabLabel(tab))
-      : tab.path.split('/').pop() || tab.path;
-
-  const commitRename = () => {
-    const trimmed = name.trim();
-    // Non-empty sets the tab label; empty clears it → default label.
-    if (trimmed ? trimmed !== tab.label : tab.label) onRename?.(trimmed);
-    onClose();
-  };
-
-  const resetLabel = () => {
-    onRename?.('');
-    onClose();
-  };
-
-  const itemClass =
-    'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]';
-
-  return (
-    <ContextMenu
-      x={position.x}
-      y={position.y}
-      onClose={onClose}
-      className="rounded-lg bg-[var(--surface)] p-1 shadow-2xl"
-    >
-      <div className="flex items-center gap-1 pr-1">
-        {renaming && onRename ? (
-          <input
-            ref={inputRef}
-            type="text"
-            value={name}
-            placeholder={defaultTabLabel(tab)}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitRename();
-              if (e.key === 'Escape') {
-                e.stopPropagation();
-                setName(tab.label ?? '');
-                setRenaming(false);
-              }
-            }}
-            className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--bg)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none"
-          />
-        ) : (
-          <div
-            className="min-w-0 flex-1 truncate px-2 py-1 text-[10px] text-[var(--text-secondary)]"
-            data-tip={tab.kind === 'shell' ? tabLabel : tab.path}
-          >
-            {tabLabel}
-          </div>
-        )}
-        {onRename && tab.label && (
-          <button
-            type="button"
-            data-tip="Reset to default name"
-            aria-label="Reset to default name"
-            onClick={resetLabel}
-            className="shrink-0 rounded p-1 text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-          >
-            <BrushCleaning className="h-3 w-3" />
-          </button>
-        )}
-      </div>
-      <div className="my-1 h-px bg-[var(--border)]" />
-      {!renaming && onRename && (
-        <button type="button" onClick={() => setRenaming(true)} className={itemClass}>
-          <Pencil className="h-3.5 w-3.5 shrink-0" />
-          Rename…
-        </button>
-      )}
-      {onMakeMain && (
-        <button
-          type="button"
-          onClick={() => {
-            onMakeMain();
-            onClose();
-          }}
-          className={itemClass}
-        >
-          <SquareTerminal className="h-3.5 w-3.5 shrink-0" />
-          Make main shell
-        </button>
-      )}
-      {onCopyPath && (
-        <button
-          type="button"
-          onClick={() => {
-            onCopyPath();
-            onClose();
-          }}
-          className={itemClass}
-        >
-          <Copy className="h-3.5 w-3.5 shrink-0" />
-          Copy path
-        </button>
-      )}
-      {moveTargets && moveTargets.length > 0 && (
-        <>
-          <div className="px-2 pb-0.5 pt-1 text-[9px] uppercase tracking-wide text-[var(--text-secondary)]">
-            Move to
-          </div>
-          {moveTargets.map((target) => (
-            <button
-              key={target.id}
-              type="button"
-              onClick={() => {
-                onMoveTo?.(target.id);
-                onClose();
-              }}
-              className={itemClass}
-            >
-              <MoveRight className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{target.label}</span>
-            </button>
-          ))}
-          <div className="my-1 h-px bg-[var(--border)]" />
-        </>
-      )}
-      <button
-        type="button"
-        onClick={() => {
-          onCloseTab();
-          onClose();
-        }}
-        className={itemClass}
-      >
-        <X className="h-3.5 w-3.5 shrink-0" />
-        Close tab
-      </button>
-    </ContextMenu>
-  );
-}
