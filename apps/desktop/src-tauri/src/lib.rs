@@ -936,16 +936,12 @@ fn process_name(pid: u32) -> Option<String> {
     }
     #[cfg(target_os = "macos")]
     {
-        // `command=` prints full argv — needed to unwrap interpreter
-        // scripts (comm alone reports e.g. `python` for `vibe`).
-        run_command_with_fallbacks(
-            &["/bin/ps", "/usr/bin/ps", "ps"],
-            &["-p", &pid.to_string(), "-o", "command="],
-        )
-        .and_then(|s| {
-            let argv: Vec<String> = s.split_whitespace().map(String::from).collect();
-            process_identity(&argv)
-        })
+        // Exact argv tokens — needed to unwrap interpreter scripts (comm
+        // alone reports e.g. `python` for `vibe`). Processes of another user
+        // refuse KERN_PROCARGS2; proc_name still yields their comm.
+        macos_argv(pid)
+            .and_then(|argv| process_identity(&argv))
+            .or_else(|| macos_comm(pid))
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
@@ -966,14 +962,7 @@ fn process_cwd(pid: u32) -> Option<String> {
     }
     #[cfg(target_os = "macos")]
     {
-        run_command_with_fallbacks(
-            &["/usr/sbin/lsof", "/usr/bin/lsof", "lsof"],
-            &["-p", &pid.to_string(), "-a", "-d", "cwd", "-Fn"],
-        )
-        .and_then(|s| {
-            s.lines()
-                .find_map(|line| line.strip_prefix('n').map(|p| p.to_string()))
-        })
+        macos_cwd(pid)
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
@@ -982,7 +971,109 @@ fn process_cwd(pid: u32) -> Option<String> {
     }
 }
 
-// Polled ~1/s per terminal; process_name spawns `ps` on macOS.
+/// argv out of a `KERN_PROCARGS2` buffer: a native-endian `int argc`, the
+/// NUL-terminated exec path, NUL padding, then `argc` NUL-terminated
+/// strings (the environment follows and is ignored).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn parse_procargs2(buf: &[u8]) -> Option<Vec<String>> {
+    let argc = i32::from_ne_bytes(buf.get(..4)?.try_into().ok()?);
+    if argc <= 0 {
+        return None;
+    }
+    let rest = &buf[4..];
+    let mut start = rest.iter().position(|b| *b == 0)?;
+    while rest.get(start) == Some(&0) {
+        start += 1;
+    }
+    let argv: Vec<String> = rest[start..]
+        .split(|b| *b == 0)
+        .take(argc as usize)
+        .map(|s| String::from_utf8_lossy(s).into_owned())
+        .collect();
+    (argv.len() == argc as usize).then_some(argv)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_argv(pid: u32) -> Option<Vec<String>> {
+    let mut argmax: libc::c_int = 0;
+    let mut len = std::mem::size_of::<libc::c_int>();
+    let mut mib = [libc::CTL_KERN, libc::KERN_ARGMAX];
+    // SAFETY: mib names a c_int sysctl and len matches the out buffer.
+    let ok = unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            2,
+            (&mut argmax as *mut libc::c_int).cast(),
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    } == 0;
+    if !ok || argmax <= 0 {
+        return None;
+    }
+    let mut buf = vec![0u8; argmax as usize];
+    let mut size = buf.len();
+    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid as libc::c_int];
+    // SAFETY: buf is `size` bytes long; the kernel writes at most that much.
+    let ok = unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            3,
+            buf.as_mut_ptr().cast(),
+            &mut size,
+            std::ptr::null_mut(),
+            0,
+        )
+    } == 0;
+    if !ok {
+        return None;
+    }
+    buf.truncate(size);
+    parse_procargs2(&buf)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_comm(pid: u32) -> Option<String> {
+    let mut buf = [0u8; 256];
+    // SAFETY: buf is 256 bytes; proc_name writes a NUL-terminated name.
+    let n = unsafe { libc::proc_name(pid as libc::c_int, buf.as_mut_ptr().cast(), buf.len() as u32) };
+    if n <= 0 {
+        return None;
+    }
+    let name = String::from_utf8_lossy(&buf[..n as usize]).into_owned();
+    (!name.is_empty()).then(|| argv_basename(&name))
+}
+
+#[cfg(target_os = "macos")]
+fn macos_cwd(pid: u32) -> Option<String> {
+    // SAFETY: proc_vnodepathinfo is plain old data; zeroed is a valid value.
+    let mut info: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
+    let size = std::mem::size_of::<libc::proc_vnodepathinfo>() as libc::c_int;
+    // SAFETY: the buffer is exactly `size` bytes.
+    let n = unsafe {
+        libc::proc_pidinfo(
+            pid as libc::c_int,
+            libc::PROC_PIDVNODEPATHINFO,
+            0,
+            (&mut info as *mut libc::proc_vnodepathinfo).cast(),
+            size,
+        )
+    };
+    if n != size {
+        return None;
+    }
+    let path = &info.pvi_cdir.vip_path;
+    // SAFETY: vip_path is a MAXPATHLEN c_char array, viewed as bytes.
+    let bytes = unsafe {
+        std::slice::from_raw_parts(path.as_ptr().cast::<u8>(), std::mem::size_of_val(path))
+    };
+    let cwd = std::ffi::CStr::from_bytes_until_nul(bytes).ok()?.to_string_lossy();
+    (!cwd.is_empty()).then(|| cwd.into_owned())
+}
+
+// Polled ~1/s per terminal — process_name/process_cwd read /proc (Linux) or
+// call sysctl/proc_pidinfo (macOS) and never spawn a process.
 #[tauri::command]
 async fn get_foreground_process(
     app: AppHandle,
@@ -1020,7 +1111,6 @@ fn current_exe_path() -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
-// process_cwd spawns `lsof` on macOS.
 #[tauri::command]
 async fn get_session_cwd(app: AppHandle, session_id: String) -> Result<Option<String>, String> {
     with_state_blocking(app, move |state| {
@@ -2710,6 +2800,52 @@ mod process_identity_tests {
         assert_eq!(
             process_identity(&argv(&["bash", "-c", "echo hi"])).as_deref(),
             Some("bash")
+        );
+    }
+
+    fn procargs2(exec: &str, args: &[&str], env: &[&str]) -> Vec<u8> {
+        let mut buf = (args.len() as i32).to_ne_bytes().to_vec();
+        buf.extend_from_slice(exec.as_bytes());
+        buf.extend_from_slice(&[0, 0, 0, 0]);
+        for s in args.iter().chain(env) {
+            buf.extend_from_slice(s.as_bytes());
+            buf.push(0);
+        }
+        buf
+    }
+
+    #[test]
+    fn procargs2_keeps_tokens_with_spaces() {
+        let buf = procargs2(
+            "/usr/bin/python3",
+            &["python3", "/Users/me/My Tools/bin/vibe", "--x"],
+            &["HOME=/Users/me"],
+        );
+        let parsed = parse_procargs2(&buf).unwrap();
+        assert_eq!(parsed, vec!["python3", "/Users/me/My Tools/bin/vibe", "--x"]);
+        assert_eq!(process_identity(&parsed).as_deref(), Some("vibe"));
+    }
+
+    #[test]
+    fn procargs2_rejects_truncated_buffers() {
+        assert_eq!(parse_procargs2(&[1, 0]), None);
+        assert_eq!(parse_procargs2(&procargs2("/bin/sh", &[], &[])), None);
+        let mut short = procargs2("/bin/sh", &["sh", "-c"], &[]);
+        short.truncate(short.len() - 4);
+        assert_eq!(parse_procargs2(&short), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_reads_own_argv_and_cwd_without_spawning() {
+        let pid = std::process::id();
+        let argv = macos_argv(pid).expect("own argv");
+        assert_eq!(argv.len(), std::env::args().count());
+        assert!(process_name(pid).is_some());
+        let cwd = process_cwd(pid).expect("own cwd");
+        assert_eq!(
+            std::fs::canonicalize(cwd).unwrap(),
+            std::fs::canonicalize(std::env::current_dir().unwrap()).unwrap()
         );
     }
 }

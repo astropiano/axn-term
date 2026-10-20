@@ -533,7 +533,7 @@ describe('devin process output boundaries', () => {
       id: 'devin-exit-armed',
       workspaceId: 'w1',
       process: 'devin',
-      devinActive: true,
+      agentInput: 'devin',
       output: base + 'Resume this session with devin -r stale-tail\n',
       pluginState: {
         devin: {
@@ -560,7 +560,7 @@ describe('devin process output boundaries', () => {
       id: 'devin-close-stale',
       workspaceId: 'w1',
       process: 'devin',
-      devinActive: true,
+      agentInput: 'devin',
       output: stale,
       realCwd: '/home/user/proj',
       pluginState: {
@@ -696,7 +696,7 @@ describe('devin process output boundaries', () => {
       id: 'devin-repaint-loop',
       workspaceId: 'w1',
       process: 'devin',
-      devinActive: true,
+      agentInput: 'devin',
       output: 'working\n',
       pluginState: { devin: {} },
     });
@@ -749,7 +749,7 @@ describe('devin process output boundaries', () => {
       id: 'devin-restored-quiet',
       workspaceId: 'w1',
       process: 'devin',
-      devinActive: true,
+      agentInput: 'devin',
       output: 'restored\n',
       pluginState: { devin: {} },
     });
@@ -781,7 +781,7 @@ describe('devin process output boundaries', () => {
       id: 'devin-stalled-spinner',
       workspaceId: 'w1',
       process: 'devin',
-      devinActive: true,
+      agentInput: 'devin',
       output: 'thinking\n',
       pluginState: { devin: {} },
     });
@@ -807,7 +807,7 @@ describe('devin process output boundaries', () => {
         id: 'devin-close-capture',
         workspaceId: 'w1',
         process: 'devin',
-        devinActive: true,
+        agentInput: 'devin',
         output: base,
         realCwd: '/home/user/proj',
         pluginState: {
@@ -837,7 +837,7 @@ describe('devin process output boundaries', () => {
       id: 'devin-close-split',
       workspaceId: 'w1',
       process: 'devin',
-      devinActive: true,
+      agentInput: 'devin',
       output: base,
       realCwd: '/home/user/proj',
       pluginState: {
@@ -896,7 +896,7 @@ describe('devin screen task scanning', () => {
     const session = makeSession({
       id: `scr-${Math.random().toString(36).slice(2, 8)}`,
       process: 'devin',
-      devinActive: true,
+      agentInput: 'devin',
       cwd: '/repo',
       realCwd: '/repo',
     });
@@ -964,7 +964,7 @@ describe('devin screen task scanning', () => {
 
   it('does not scan while devin is not the foreground process', () => {
     const { h, session, updateSessionCalls } = screenHarness(SCREEN_WITH_TASKS);
-    session.devinActive = false;
+    session.agentInput = undefined;
     session.process = 'zsh';
     devinPlugin.onOutput?.(h.ctx, 'plain output\n');
     expect(updateSessionCalls).toHaveLength(0);

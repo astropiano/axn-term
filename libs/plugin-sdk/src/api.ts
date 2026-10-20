@@ -147,6 +147,9 @@ export interface SessionInfo {
   progress: number;
   cwd?: string;
   process?: string;
+  /** Id of the plugin whose input-owning agent runs in the session (e.g. `devin`). */
+  agentInput?: string;
+  /** @deprecated Use `agentInput === 'devin'`. */
   devinActive?: boolean;
   repo?: RepoInfo;
   /** This plugin's own persisted per-session state. */
