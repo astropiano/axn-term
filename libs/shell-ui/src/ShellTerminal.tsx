@@ -22,7 +22,7 @@ import {
   type GetLinkLine,
   wrappedSelectionCandidates,
 } from './terminalLinks';
-import { DEVIN_PROCESS_RE } from './processPatterns';
+import { agentInputPluginFor, agentInputPluginForTitle } from './app/session-plugins/agentHookBridge';
 import { createHiddenCommandInput } from './app/hiddenCommands';
 import { isAppNavigationShortcut, isReloadShortcut } from './app/shortcuts';
 import { useShellServices } from './services';
@@ -95,7 +95,7 @@ export function ShellTerminal({
   const terminalRef = useRef<HTMLDivElement | null>(null);
   const terminal = useRef<Terminal | null>(null);
   const fitAddon = useRef<FitAddon | null>(null);
-  const devinActiveRef = useRef(session.devinActive ?? false);
+  const agentInputRef = useRef(session.agentInput);
   const shellNameRef = useRef('');
   const cwdRef = useRef(session.cwd ?? '');
   const sessionRef = useRef(session);
@@ -203,8 +203,8 @@ export function ShellTerminal({
   }, [isVisible]);
 
   useEffect(() => {
-    devinActiveRef.current = session.devinActive ?? false;
-  }, [session.devinActive]);
+    agentInputRef.current = session.agentInput;
+  }, [session.agentInput]);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -315,19 +315,19 @@ export function ShellTerminal({
     (async () => {
       try {
         // Attach the title listener and shell-output listener before creating the
-        // session so that early OSC title sequences (e.g. from devin)
+        // session so that early OSC title sequences (e.g. from an agent)
         // are not lost while the PTY starts up.
         onTitleChange = term.onTitleChange((title) => {
           if (title && onSessionNameChange) {
             onSessionNameChange(sessionId, title);
           }
 
-          // Heuristic: devin sets the terminal title while it runs, so use it as a
-          // per-session signal to enable the devin task parser.
-          const devinActive = /devin/i.test(title);
-          if (devinActive && !devinActiveRef.current && updateSession) {
-            devinActiveRef.current = true;
-            updateSession(sessionId, { devinActive: true });
+          // Agents that set the terminal title mark the session before the
+          // 1 s process poll has seen them (plugin `agentInput.title`).
+          const agent = title ? agentInputPluginForTitle(title)?.id : undefined;
+          if (agent && !agentInputRef.current && updateSession) {
+            agentInputRef.current = agent;
+            updateSession(sessionId, { agentInput: agent });
           }
         });
 
@@ -475,8 +475,11 @@ export function ShellTerminal({
                           end: { x: end, y: bufferLineNumber },
                         },
                   text: wrapped?.url ?? c.token,
+                  // xterm activates a link on mouse-up of any button — a
+                  // right-click opening the context menu must not navigate.
                   activate: isUrl
-                    ? () => {
+                    ? (event: MouseEvent) => {
+                        if (event.button !== 0) return;
                         services.openExternal(stat.path);
                       }
                     : () => {},
@@ -575,15 +578,14 @@ export function ShellTerminal({
 
         // Track the current input line so "hidden commands" (axn-edit)
         // can be intercepted before they are submitted to the shell.
-        // Devin input is tracked only to notify plugins before a manual /exit.
+        // Agent input is tracked only to notify plugins before a manual /exit.
         const hiddenInput = createHiddenCommandInput({
           write: (d) => backend.write(ptyId, d),
-          mode: () =>
-            DEVIN_PROCESS_RE.test(sessionRef.current.process ?? '')
-              ? 'devin'
-              : !sessionRef.current.process
-                ? 'full'
-                : 'off',
+          mode: () => {
+            const process = sessionRef.current.process;
+            if (!process) return 'full';
+            return agentInputPluginFor(process) ? 'agent' : 'off';
+          },
           onEditorRequest: (path) => onEditorRequestRef.current?.(sessionId, path),
           onBrowserRequest: (path) => onBrowserRequestRef.current?.(sessionId, path),
           onPreviewRequest: (path) => onPreviewRequestRef.current?.(sessionId, path),
@@ -645,17 +647,14 @@ export function ShellTerminal({
             const processName = process?.toLowerCase() ?? '';
             const shellName = shellNameRef.current.toLowerCase();
             const isShell = !processName || processName === shellName;
-            const isTaskRunner = DEVIN_PROCESS_RE.test(processName);
+            const agent = isShell ? undefined : agentInputPluginFor(processName)?.id;
 
             const processDisplay = isShell ? undefined : (process ?? undefined);
             const patch = foregroundStatusPatch(sessionRef.current, processDisplay);
 
-            if (isTaskRunner && !devinActiveRef.current) {
-              devinActiveRef.current = true;
-              patch.devinActive = true;
-            } else if (!isTaskRunner && devinActiveRef.current) {
-              devinActiveRef.current = false;
-              patch.devinActive = false;
+            if (agent !== agentInputRef.current) {
+              agentInputRef.current = agent;
+              patch.agentInput = agent;
             }
 
             if (Object.keys(patch).length > 0) {

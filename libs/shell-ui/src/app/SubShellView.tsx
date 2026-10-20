@@ -15,7 +15,7 @@ import {
   unregisterTerminal,
 } from '../terminalRegistry';
 import { tabTaskPatch } from './subShellTasks';
-import { DEVIN_PROCESS_RE } from '../processPatterns';
+import { agentInputPluginFor } from './session-plugins/agentHookBridge';
 import { createHiddenCommandInput } from './hiddenCommands';
 import { createOsc8LeakGuard, OSC8_CLOSE } from '../terminalLinks';
 import { applyTerminalRenderer, repaintTerminal, safely } from '../terminalRenderer';
@@ -213,7 +213,7 @@ export function SubShellView({
       mode: () => {
         const fg = foregroundRef.current;
         if (!fg) return 'full';
-        return DEVIN_PROCESS_RE.test(fg) ? 'devin' : 'off';
+        return agentInputPluginFor(fg) ? 'agent' : 'off';
       },
       onLocalCommand: (line) => {
         const m = /^\s*axn-rename(?:\s+(.*?))?\s*$/.exec(line);

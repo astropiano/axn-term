@@ -61,7 +61,7 @@ export const codexPlugin: SessionViewPlugin = {
     },
   ],
   // Bound to the codex process.
-  processPattern: /codex/i,
+  processPattern: /^codex/i,
   // Declarative agent-hook bridge — the host installs hook entries per
   // installHooks, polls the tty-keyed event file, and releases it when the
   // process ends.

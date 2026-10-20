@@ -25,7 +25,7 @@ it.skipIf(!existsSync(STATE_FILE))('replay real output in 4KB chunks', () => {
     if (!(stored.output as string).includes('Updated todo list')) continue;
     const session: ShellSession = {
       id: stored.id, workspaceId: 'w', name: 'n', topic: '', summary: '',
-      tasks: [], progress: 0, output: '', devinActive: true, process: 'devin',
+      tasks: [], progress: 0, output: '', agentInput: 'devin', process: 'devin',
     } as ShellSession;
     const pluginState: Record<string, unknown> = {};
     const updates: any[] = [];

@@ -369,7 +369,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   const taskState = useAgentTasks(
     selectedSession?.id ?? null,
     updateSession,
-    Boolean(selectedSession?.devinActive),
+    Boolean(selectedSession?.agentInput),
     tasksWsUrl,
   );
   const closingRef = useRef(false);
@@ -1247,7 +1247,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           status: 'idle' as const,
           progress: 0,
           tasks: [],
-          devinActive: false,
+          agentInput: undefined,
         })),
         selectedWorkspaceId,
         selectedSessionId,

@@ -298,6 +298,7 @@ dependencies = [
  "dirs 6.0.0",
  "env_logger",
  "gtk",
+ "libc",
  "log",
  "nix",
  "portable-pty",

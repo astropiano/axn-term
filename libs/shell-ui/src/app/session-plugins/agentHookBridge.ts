@@ -433,8 +433,18 @@ export function dropHookSpec(plugin: HookSpecPlugin, ctx: Ctx): void {
   ctx.setAttention(null);
 }
 
-/** Enabled plugins — kept by `syncHookSpecPlugins` for sub-shell tabs. */
+/** Enabled plugins — kept by `syncHookSpecPlugins` for terminals and sub-shell tabs. */
 let enabledPlugins: readonly SessionViewPlugin[] = [];
+
+/** The enabled plugin declaring `agentInput` whose process pattern matches `process`. */
+export function agentInputPluginFor(process: string): SessionViewPlugin | undefined {
+  return enabledPlugins.find((p) => p.agentInput && p.processPattern?.test(process));
+}
+
+/** The enabled plugin declaring `agentInput` whose title pattern matches `title`. */
+export function agentInputPluginForTitle(title: string): SessionViewPlugin | undefined {
+  return enabledPlugins.find((p) => p.agentInput?.title?.test(title));
+}
 
 /** The enabled hook-bridged plugin whose process pattern matches `process`. */
 export function hookPluginFor(process: string): HookSpecPlugin | undefined {

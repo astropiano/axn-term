@@ -1,7 +1,6 @@
 import type { EditorTab } from '../types';
-import { DEVIN_PROCESS_RE } from '../processPatterns';
-import { parseClaudeResumeHint } from './session-plugins/claude';
-import { parseDevinSessionName } from './session-plugins/devinTasks';
+import { CLAUDE_PROCESS_RE, parseClaudeResumeHint } from './session-plugins/claude';
+import { DEVIN_PROCESS_RE, parseDevinSessionName } from './session-plugins/devinTasks';
 import { shellQuote } from '../shellQuote';
 
 /**
@@ -37,7 +36,7 @@ const FALLBACK: Record<TabAgent, string> = {
 export function agentOfProcess(process: string | null | undefined): TabAgent | undefined {
   if (!process) return undefined;
   if (DEVIN_PROCESS_RE.test(process)) return 'devin';
-  if (/claude/i.test(process)) return 'claude';
+  if (CLAUDE_PROCESS_RE.test(process)) return 'claude';
   return undefined;
 }
 
