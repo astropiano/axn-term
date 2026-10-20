@@ -47,3 +47,23 @@ export function getScreenLines(sessionId: string): string[] {
   }
   return lines;
 }
+
+// Terminal by DOM element — the app-wide context menu resolves the terminal
+// under the pointer (main shell or sub-shell tab) to copy from / paste into.
+const terminalElements = new WeakMap<Element, Terminal>();
+
+export function registerTerminalElement(el: Element, term: Terminal): () => void {
+  terminalElements.set(el, term);
+  return () => {
+    if (terminalElements.get(el) === term) terminalElements.delete(el);
+  };
+}
+
+/** The terminal whose container holds `target`, if any. */
+export function terminalAt(target: EventTarget | null): Terminal | undefined {
+  for (let el = target instanceof Element ? target : null; el; el = el.parentElement) {
+    const term = terminalElements.get(el);
+    if (term) return term;
+  }
+  return undefined;
+}

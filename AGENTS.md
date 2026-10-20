@@ -64,7 +64,14 @@
   outside-mousedown/Escape dismissal, optional `className` for the surface,
   `menuItemClass`/`menuDividerClass` row styles — the shell every right-click
   menu in the app wraps its items in, including the workspace, session and
-  tab menus), `PathActionMenu` /
+  tab menus; any right-click no view handles itself opens `AppContextMenu`
+  instead of the webview's native menu — Copy/Paste/Select all for the
+  terminal under the pointer (`terminalAt`, `registerTerminalElement` in
+  `terminalRegistry.ts`; paste goes through `term.paste`), Cut/Copy/Paste/
+  Select all for text fields, plus "Reload window" (also `⌘⇧R`/`Ctrl+Shift+R`,
+  `isReloadShortcut` — terminals let it through; it saves state first and,
+  running no React cleanup, keeps the PTYs, which the reloaded window
+  reattaches)), `PathActionMenu` /
   `FileHoverPreview`, themes, `SettingsProvider`, session types, terminal
   links/registry, platform labels. Tooltips are the shared `TooltipHost`
   (`app/Tooltip.tsx`, mounted once in `ShellApp`): put `data-tip="..."` on an
@@ -541,6 +548,10 @@ pnpm --filter @axn-term/desktop storybook
 # …or containerized with HMR through the published port:
 axn-dev start -s axn-term-storybook   # http://localhost:8098
 ```
+
+`src-tauri/build.rs` stamps `AXN_BUILD_DATE` (UTC, re-run when `../dist`
+or `src` change); `lib.rs` swaps the default menu's macOS "About axn-term"
+item for one showing "Version <x.y.z> (built <date>)".
 
 Built macOS artifacts:
 

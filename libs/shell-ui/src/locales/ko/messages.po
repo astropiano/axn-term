@@ -35,7 +35,7 @@ msgstr "취소"
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "터미널의 셀 렌더러입니다. 자동은 GPU(WebGL)를 사용하고 자동으로 폴백합니다. 렌더링 문제가 있으면 캔버스/DOM으로 고정하세요."
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2436
+#: libs/shell-ui/src/app/ShellApp.tsx:2473
 msgid "Close tab"
 msgstr "탭 닫기"
 
@@ -43,6 +43,9 @@ msgstr "탭 닫기"
 msgid "Config file"
 msgstr "설정 파일"
 
+#: libs/shell-ui/src/app/AppContextMenu.tsx:80
+#: libs/shell-ui/src/app/AppContextMenu.tsx:102
+#: libs/shell-ui/src/app/AppContextMenu.tsx:116
 #: libs/shell-ui/src/PathActionMenu.tsx:215
 msgid "Copy"
 msgstr "복사"
@@ -68,6 +71,10 @@ msgstr "파일을 YAML로 파싱할 수 없습니다."
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:52
 msgid "current"
 msgstr "현재"
+
+#: libs/shell-ui/src/app/AppContextMenu.tsx:95
+msgid "Cut"
+msgstr "잘라내기"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:55
 msgid "Dark"
@@ -190,7 +197,7 @@ msgstr "실행 파일 이름을 Lucide 아이콘(예: Bot, SquareTerminal) 또�
 msgid "Move “{sessionName}” to workspace"
 msgstr "“{sessionName}”을(를) 워크스페이스로 이동"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:738
+#: libs/shell-ui/src/app/SessionPanel.tsx:754
 msgid "Move to workspace…"
 msgstr "워크스페이스로 이동…"
 
@@ -239,6 +246,11 @@ msgstr "탭에서 미리보기 열기"
 msgid "Panel font"
 msgstr "패널 글꼴"
 
+#: libs/shell-ui/src/app/AppContextMenu.tsx:82
+#: libs/shell-ui/src/app/AppContextMenu.tsx:104
+msgid "Paste"
+msgstr "붙여넣기"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:101
 msgid "Plugins"
 msgstr "플러그인"
@@ -259,6 +271,7 @@ msgstr "프로세스"
 msgid "Reload view"
 msgstr "보기 다시 불러오기"
 
+#: libs/shell-ui/src/app/AppContextMenu.tsx:127
 #: libs/shell-ui/src/app/ErrorBoundary.tsx:72
 msgid "Reload window"
 msgstr "창 다시 불러오기"
@@ -288,6 +301,11 @@ msgstr "워크스페이스 또는 창 검색…"
 #: libs/shell-ui/src/app/SearchPickerModal.tsx:109
 msgid "Search…"
 msgstr "검색…"
+
+#: libs/shell-ui/src/app/AppContextMenu.tsx:88
+#: libs/shell-ui/src/app/AppContextMenu.tsx:109
+msgid "Select all"
+msgstr "모두 선택"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:481
 msgid "Session icons"

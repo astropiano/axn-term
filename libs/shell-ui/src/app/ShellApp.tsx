@@ -13,7 +13,7 @@ import {
 } from '../services';
 import type { FileReader, SessionBackend, ShellServices } from '@axn-term/session-backend';
 import type { ShellPlatform } from '../platform';
-import { registerShellPlatform } from '../platform';
+import { isMac, registerShellPlatform } from '../platform';
 import { resolveFilePreviewPlugin } from './preview-plugins/plugin';
 import { RestoringOverlay } from './RestoringOverlay';
 import { TooltipHost } from './Tooltip';
@@ -41,7 +41,7 @@ import {
   pluginCommands,
 } from './session-plugins';
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
-import { getScreenLines, keepPtyAlive, takePtyKeepAlive } from '../terminalRegistry';
+import { getScreenLines, keepPtyAlive, takePtyKeepAlive, terminalAt } from '../terminalRegistry';
 import { MoveToWorkspaceModal } from './MoveToWorkspaceModal';
 import { runSubShellClosers } from './subShellAgents';
 import { PickerHost } from './pickerHost';
@@ -68,7 +68,8 @@ import { AttentionDot } from './AttentionDot';
 import { AttentionModal } from './AttentionModal';
 import { Banner, sessionBanners } from './Banner';
 import { parseSessionSummary, runCommandChain } from './hiddenCommands';
-import { isAppNavigationShortcut } from './shortcuts';
+import { isAppNavigationShortcut, isReloadShortcut } from './shortcuts';
+import { AppContextMenu, appMenuTarget, type AppMenuTarget } from './AppContextMenu';
 import { sessionAttention, setAppAttention, summarizeAttention, useAppAttention, noteSessionSelected } from './attention';
 import type { RailFlag } from './attention';
 import { RAIL_ORDER_KEY, orderRailPlugins, railDropIndexAt, railOrderAfterDrop, storedRailOrder } from './railOrder';
@@ -1669,6 +1670,42 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // ---- App-wide right-click menu + window reload. The native webview menu
+  // never shows: any right-click no view handled itself (they all
+  // preventDefault) opens AppContextMenu — copy/paste for terminals and text
+  // fields, plus "Reload window" (also ⌘⇧R / Ctrl+Shift+R). A reload saves
+  // first; it runs no React cleanup, so the backend PTYs stay alive and the
+  // reloaded window reattaches to them.
+  const [appMenu, setAppMenu] = useState<{ x: number; y: number; target: AppMenuTarget } | null>(
+    null,
+  );
+  const reloadWindow = useCallback(async () => {
+    await saveNow().catch(() => {});
+    window.location.reload();
+  }, [saveNow]);
+  useEffect(() => {
+    const onContextMenu = (event: MouseEvent) => {
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+      setAppMenu({
+        x: event.clientX,
+        y: event.clientY,
+        target: appMenuTarget(event.target, terminalAt),
+      });
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isReloadShortcut(event)) return;
+      event.preventDefault();
+      void reloadWindow();
+    };
+    window.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      window.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [reloadWindow]);
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!isAppNavigationShortcut(event)) return;
@@ -2689,6 +2726,17 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       )}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <PickerHost />
+      {appMenu && (
+        <AppContextMenu
+          x={appMenu.x}
+          y={appMenu.y}
+          target={appMenu.target}
+          services={services}
+          reloadShortcut={isMac ? '⌘⇧R' : 'Ctrl+Shift+R'}
+          onReload={() => void reloadWindow()}
+          onClose={() => setAppMenu(null)}
+        />
+      )}
       {(() => {
         const moving = sessions.find((s) => s.id === moveDialogSessionId);
         return moving ? (

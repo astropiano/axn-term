@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { useSessionBackend } from '../services';
 import { useSettings } from '../SettingsProvider';
 import { getXtermColors, resolveShellFont } from '../themes';
-import { takePtyKeepAlive } from '../terminalRegistry';
+import { registerTerminalElement, takePtyKeepAlive } from '../terminalRegistry';
 import { DEVIN_PROCESS_RE } from '../processPatterns';
 import { createHiddenCommandInput } from './hiddenCommands';
 import { createOsc8LeakGuard, OSC8_CLOSE } from '../terminalLinks';
@@ -18,7 +18,7 @@ import {
   withLoginShell,
 } from './subShellAgents';
 import { talkResumeCommand } from './gitReview';
-import { isAppNavigationShortcut } from './shortcuts';
+import { isAppNavigationShortcut, isReloadShortcut } from './shortcuts';
 import type { EditorTab, ShellSession } from '../types';
 
 /**
@@ -116,9 +116,12 @@ export function SubShellView({
     const fit = new FitAddon();
     t.loadAddon(fit);
     t.open(terminalRef.current);
+    const unregisterElement = registerTerminalElement(terminalRef.current, t);
     // App navigation shortcuts must bubble to ShellApp's window listener
     // instead of becoming escape sequences.
-    t.attachCustomKeyEventHandler((event) => !isAppNavigationShortcut(event));
+    t.attachCustomKeyEventHandler(
+      (event) => !isAppNavigationShortcut(event) && !isReloadShortcut(event),
+    );
     term.current = t;
     fitAddon.current = fit;
     rendererCleanupRef.current = applyTerminalRenderer(
@@ -333,6 +336,7 @@ export function SubShellView({
       // one failing disposal must not skip the rest (the PTY release above all).
       safely('sub-shell output listener', () => unlistenOut?.());
       safely('sub-shell agent closer', () => unregisterCloser());
+      unregisterElement();
       safely('sub-shell exit listener', () => unlistenExit?.());
       if (fgPoll) clearInterval(fgPoll);
       safely('sub-shell input listener', () => onData.dispose());

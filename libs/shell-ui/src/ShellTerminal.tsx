@@ -7,7 +7,7 @@ import { placeHoverCard } from './hoverCardPlacement';
 import type { ShellSession } from './types';
 import { useSettings } from './SettingsProvider';
 import { getXtermColors, resolveShellFont } from './themes';
-import { registerTerminal, takePtyKeepAlive, unregisterTerminal } from './terminalRegistry';
+import { registerTerminal, takePtyKeepAlive, unregisterTerminal, registerTerminalElement } from './terminalRegistry';
 import { applyTerminalRenderer, repaintTerminal, safely } from './terminalRenderer';
 import { acquirePty } from './ptyLifetime';
 import { foregroundStatusPatch } from './foregroundStatus';
@@ -24,7 +24,7 @@ import {
 } from './terminalLinks';
 import { DEVIN_PROCESS_RE } from './processPatterns';
 import { createHiddenCommandInput } from './app/hiddenCommands';
-import { isAppNavigationShortcut } from './app/shortcuts';
+import { isAppNavigationShortcut, isReloadShortcut } from './app/shortcuts';
 import { useShellServices } from './services';
 
 import '@xterm/xterm/css/xterm.css';
@@ -221,6 +221,7 @@ export function ShellTerminal({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(terminalRef.current);
+    const unregisterElement = registerTerminalElement(terminalRef.current, term);
     registerTerminal(session.id, term);
     rendererCleanupRef.current = applyTerminalRenderer(
       term,
@@ -594,7 +595,7 @@ export function ShellTerminal({
         term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
           // App navigation shortcuts must bubble to ShellApp's window
           // listener instead of becoming escape sequences.
-          if (isAppNavigationShortcut(event)) return false;
+          if (isAppNavigationShortcut(event) || isReloadShortcut(event)) return false;
           const isShiftEnter =
             event.key === 'Enter' &&
             event.shiftKey &&
@@ -705,6 +706,7 @@ export function ShellTerminal({
       // a sub-shell tab).
       safely('PTY release', () => pty.release(takePtyKeepAlive(ptyId)));
       unregisterTerminal(sessionId, term);
+      unregisterElement();
       // Dispose the renderer addon first: disposing an xterm with a live
       // WebGL addon can throw.
       safely('renderer', () => rendererCleanupRef.current?.());
