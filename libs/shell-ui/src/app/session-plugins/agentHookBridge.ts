@@ -12,6 +12,7 @@ import {
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import { axnLog } from '../log';
 import { sessionLastSelectedAt } from '../attention';
+import { shellQuote } from '../../shellQuote';
 
 /**
  * Runtime half of the agent-hook bridge — the pure, dependency-free pieces
@@ -221,9 +222,6 @@ export function releaseHookRuntime(spec: AgentHookSpec, sessionId: string): void
   }
 }
 
-function shellQuote(path: string): string {
-  return `'${path.replace(/'/g, `'\\''`)}'`;
-}
 
 /**
  * Add or remove axn-term's hook entries in the agent's config file per the

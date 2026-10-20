@@ -8,11 +8,11 @@ import {
   worktreeBranchFor,
   parseAgentList,
   agentResumeCommand,
-  quotePath,
   addWorktreeCmd,
   removeWorktreeCmd,
   deleteBranchCmd,
 } from './worktrees';
+import { shellQuote } from '../../shellQuote';
 
 type Ctx = SessionViewContext & PluginApi;
 
@@ -180,7 +180,7 @@ describe('agentResumeCommand', () => {
 
 describe('git command builders', () => {
   it('quotes paths safely', () => {
-    expect(quotePath("/it's/here")).toBe(`'/it'\\''s/here'`);
+    expect(shellQuote("/it's/here")).toBe(`'/it'\\''s/here'`);
   });
   it('builds worktree add with -b', () => {
     expect(addWorktreeCmd(REPO, '/wt/x', 'wt/x')).toBe(
