@@ -341,11 +341,11 @@ function normalizeMr(raw: RawGqlMr): GlabMrItem {
 }
 
 /** Mine = assigned to me ∪ authored by me with no assignee (deduped). */
-export function mergeMine(
-  assigned: GlabMrItem[],
-  authored: GlabMrItem[],
-): GlabMrItem[] {
-  const byKey = new Map<string, GlabMrItem>();
+export function mergeMine<T extends GlabMrItem>(
+  assigned: T[],
+  authored: T[],
+): T[] {
+  const byKey = new Map<string, T>();
   for (const mr of assigned) byKey.set(mr.key, mr);
   for (const mr of authored) {
     if (mr.assignees.length === 0) byKey.set(mr.key, mr);

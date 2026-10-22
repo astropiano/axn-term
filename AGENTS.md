@@ -763,6 +763,21 @@ shows `action/total` for mine and `waiting/total` for review, and toggles
 the plugin's renderView listing both sets. `glab-mr.hostname` overrides the
 `glab api --hostname` default.
 
+The `gh-pr` plugin (`session-plugins/ghPr.tsx`) is the GitHub twin, driven
+by `gh`. Per session it runs `gh pr list --head <branch> --json
+number,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup`
+plus one batched `gh api graphql` call (PR numbers as `-F` variables) for
+`reviewThreads.isResolved` — resolution state is GraphQL-only. Results
+live in pluginState `gh-pr.prs`. App-wide it polls `gh api graphql` with
+`is:pr is:open assignee|author|review-requested:@me` searches on a
+`gh-pr.refresh-interval-seconds` cadence (default 120); `gh-pr.hostname`
+overrides `gh api --hostname` (GHES). It shares glab-mr's model fields and
+classification helpers — `mergeMine`, `openThreads`, `mrNeedsAction` +
+`prNeedsAction` (adds `changes_requested`), `mrWaitingForMe` — and renders
+the same rail/panel/row/view surfaces plus a `changes requested` badge;
+rows carry the shared `mrActions` providers (dev-workflow's `review`
+button already resolves `pull/N/head`).
+
 The `git-inspect` plugin (`session-plugins/gitInspect.tsx`) is layered on
 `git-status` (titled `git` in Settings): `dependsOn: [{ id: 'git-status',
 version: '>=0.1.0' }]`, so it disables itself when git-status is off. It
@@ -786,7 +801,7 @@ disabled.
 
 - Plugins are enabled per-user in `~/.axn-term/plugins.yaml` via `<settingsKey>.enabled: true|false`. Built-ins default to enabled; plugins loaded from `~/.axn-term/plugins/*.mjs` are always opt-in.
 - The Settings view (`app/SettingsModal.tsx`) is a centered modal with General/Plugins tabs. The Plugins tab lists every registered session-view and file-preview plugin on the left (with an enabled dot); the right side offers the `enabled` toggle plus the plugin's declared settings. Changes persist via `updatePluginSection` (`app/PluginSettingsProvider.tsx`) — a shallow section merge that rewrites plugins.yaml (`pluginSettingsToYaml` converts camelCase keys back to kebab-case; comments in the file are not preserved by UI writes). General also holds the font settings: `shellFontFamily`/`shellFontSize` (applied to session and sub-shell terminals via `resolveShellFont` in `libs/shell-ui/src/themes.ts`, default: Monaspace stack @14px) and `panelFontFamily`/`panelFontSize` (applied to the session-panel wrapper — the size scales it proportionally against the 12px base via CSS `zoom`).
-- Plugins declare UI-editable settings via `settings?: PluginSettingField[]` on `SessionViewPlugin` — pure data (`{ key, label, description?, type: 'boolean'|'number'|'string', default? }`) rendered generically, so external `.mjs` plugins can declare fields too. Built-ins may instead/additionally provide `renderSettings({ settings, update })` for a custom view. `git-status` and `glab-mr` each declare `show-in-panel` (gates `render` under the session; the legacy `show-in-header` key is still honored on read) and `show-in-title` (gates the `renderRow` indicator in the session's title row — and, for git-status/glab-mr, the `rowTip` tooltip explanation with it); `devin` (`restore-session`, `idle-timeout-seconds`), `claude`/`codex`/`gemini` (`restore-session`, `install-hooks`), `vibe` (`restore-session`, `idle-timeout-seconds`) and `glab-mr` (`refresh-interval-seconds`, `hostname`) declare their fields as well.
+- Plugins declare UI-editable settings via `settings?: PluginSettingField[]` on `SessionViewPlugin` — pure data (`{ key, label, description?, type: 'boolean'|'number'|'string', default? }`) rendered generically, so external `.mjs` plugins can declare fields too. Built-ins may instead/additionally provide `renderSettings({ settings, update })` for a custom view. `git-status`, `glab-mr` and `gh-pr` each declare `show-in-panel` (gates `render` under the session; the legacy `show-in-header` key is still honored on read) and `show-in-title` (gates the `renderRow` indicator in the session's title row — and, for git-status/glab-mr/gh-pr, the `rowTip` tooltip explanation with it); `devin` (`restore-session`, `idle-timeout-seconds`), `claude`/`codex`/`gemini` (`restore-session`, `install-hooks`), `vibe` (`restore-session`, `idle-timeout-seconds`) and `glab-mr` and `gh-pr` (`refresh-interval-seconds`, `hostname`) declare their fields as well.
 - External `.mjs` plugins `export default` the plugin object (no JSX — `render` may return a string). They are loaded at startup through `loadExternalPlugins()` (`session-plugins/index.ts`) once `plugins.yaml` has been read — the file *watch* only reloads settings, newly dropped `.mjs` files need a restart. An `.mjs` plugin can also declare `hookSpec` (an `AgentHookSpec` from `@axn-term/plugin-sdk`, see "hook bridging" below): the host then drives the whole agent-hook bridge for it — config install per its `install-hooks` setting, event-file polling, mapped status/attention — with no lifecycle code of its own.
 - Example external plugin: `plugins/axn-dev-scenarios.mjs` (copy to `~/.axn-term/plugins/` and set `axn-dev-scenarios.enabled: true`).
 
