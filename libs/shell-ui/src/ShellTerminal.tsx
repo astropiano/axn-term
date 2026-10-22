@@ -258,10 +258,15 @@ export function ShellTerminal({
       e.stopPropagation();
       const selection = terminalSelection(term);
       if (!selection) return;
+      // One writer per copy: the copy event's own clipboardData. Writing the
+      // same text through services.copyText (desktop: the Tauri clipboard
+      // plugin) as well took the pasteboard away from WebKit mid-write, and
+      // AppKit crashed the app in -[NSPasteboard changeCount].
       if (e.clipboardData) {
         e.clipboardData.setData('text/plain', selection);
+      } else {
+        void Promise.resolve(services.copyText(selection)).catch(() => {});
       }
-      void Promise.resolve(services.copyText(selection)).catch(() => {});
       term.clearSelection();
     };
     const onPaste = (e: ClipboardEvent) => {
