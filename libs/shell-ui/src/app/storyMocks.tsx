@@ -115,6 +115,62 @@ const STORY_GLAB_GQL = JSON.stringify({
   },
 });
 
+const pr = (num: number, over: Record<string, unknown> = {}) => ({
+  number: num,
+  title: `Pull request ${num}`,
+  url: `https://github.com/axn-term/axn-term/pull/${num}`,
+  isDraft: false,
+  mergeable: 'MERGEABLE',
+  headRefName: `feat/pr-${num}`,
+  baseRefName: 'develop',
+  updatedAt: new Date().toISOString(),
+  reviewDecision: null,
+  author: { login: 'alice' },
+  assignees: { nodes: [] },
+  reviewRequests: { nodes: [] },
+  repository: { nameWithOwner: 'axn-term/axn-term' },
+  commits: { nodes: [{ commit: { statusCheckRollup: { state: 'SUCCESS' } } }] },
+  reviewThreads: { nodes: [] },
+  reviews: { nodes: [] },
+  ...over,
+});
+
+const STORY_GH_GQL = JSON.stringify({
+  data: {
+    viewer: { login: 'alice' },
+    assigned: {
+      nodes: [
+        pr(101, { commits: { nodes: [{ commit: { statusCheckRollup: { state: 'FAILURE' } } }] } }),
+        pr(98),
+      ],
+    },
+    authored: {
+      nodes: [
+        pr(100, {
+          reviewDecision: 'APPROVED',
+          reviews: { nodes: [{ author: { login: 'bob' } }] },
+        }),
+      ],
+    },
+    review: {
+      nodes: [
+        pr(97, { author: { login: 'bob' } }),
+        pr(96, {
+          author: { login: 'carol' },
+          reviewThreads: {
+            nodes: [
+              {
+                isResolved: false,
+                comments: { nodes: [{ author: { login: 'alice' } }] },
+              },
+            ],
+          },
+        }),
+      ],
+    },
+  },
+});
+
 export const storySessions: ShellSession[] = [
   { id: 'sess-1', workspaceId: 'w1', name: 'axn-term · zsh', topic: '', summary: '', tasks: [], progress: 0, output: '' },
   { id: 'sess-2', workspaceId: 'w1', name: 'gateway · devin', topic: '', summary: '', tasks: [], progress: 0, output: '' },
@@ -221,9 +277,11 @@ export function bindStoryRuntime() {
       Promise.resolve(
         command.includes('glab api graphql')
           ? STORY_GLAB_GQL
-          : command.includes('axn-dev list')
-            ? STORY_AXN_DEV_LIST
-            : '',
+          : command.includes('gh api graphql')
+            ? STORY_GH_GQL
+            : command.includes('axn-dev list')
+              ? STORY_AXN_DEV_LIST
+              : '',
       ),
     statPath: (path) =>
       Promise.resolve({ path, isDir: !path.includes('.'), isFile: path.includes('.') }),

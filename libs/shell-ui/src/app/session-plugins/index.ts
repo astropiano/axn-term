@@ -2,6 +2,7 @@ import { gitStatusPlugin } from './gitStatus';
 import { gitInspectPlugin } from './gitInspect';
 import { awesomeListPlugin } from './awesomeList';
 import { glabMrPlugin } from './glabMr';
+import { ghPrPlugin } from './ghPr';
 import { devinPlugin } from './devinTasks';
 import { claudePlugin } from './claude';
 import { codexPlugin } from './codex';
@@ -28,6 +29,7 @@ export { gitStatusPlugin } from './gitStatus';
 export { gitInspectPlugin } from './gitInspect';
 export { awesomeListPlugin } from './awesomeList';
 export { glabMrPlugin } from './glabMr';
+export { ghPrPlugin } from './ghPr';
 export { devinPlugin } from './devinTasks';
 export { claudePlugin } from './claude';
 export { codexPlugin } from './codex';
@@ -48,6 +50,7 @@ const defaultPlugins: SessionViewPlugin[] = [
   gitInspectPlugin,
   awesomeListPlugin,
   glabMrPlugin,
+  ghPrPlugin,
   devinPlugin,
   claudePlugin,
   codexPlugin,
