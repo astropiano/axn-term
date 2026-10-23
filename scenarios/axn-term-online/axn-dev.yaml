@@ -23,6 +23,7 @@ env:
   AXN_TLS: "internal"
   AXN_SCHEME: "https"
   AXN_WS_SCHEME: "wss"
+  VITE_RAMPHASTOS_URL: "wss://axn-term-gateway.localhost:18092/ramphastos"
   # disable_redirects: cert automation on (tls internal needs it), no :80
   # http→https redirect listener
   AXN_AUTO_HTTPS: "disable_redirects"
