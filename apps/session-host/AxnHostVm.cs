@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
-using Astropiano.Ramphastos.Core;
-using Astropiano.Ramphastos.Protocol;
+using Ramphastos.Core;
+using Ramphastos.Protocol;
 
 namespace Astropiano.AxnTerm.SessionHost;
 
