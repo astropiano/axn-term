@@ -2601,7 +2601,7 @@ pub fn run() {
                 // Grant only the bridge's own data and agent config paths.
                 let scope = app.fs_scope();
                 scope.allow_file(&dir)?;
-                for agent in ["claude", "codex", "gemini"] {
+                for agent in ["claude", "codex", "antigravity"] {
                     scope.allow_directory(dir.join(format!("{}-events", agent)), true)?;
                 }
                 let agent_home = std::env::var_os("AXN_TERM_AGENT_CONFIG_ROOT")
@@ -2610,10 +2610,15 @@ pub fn run() {
                 if let Some(home) = agent_home {
                     scope.allow_file(home.join(".axn-term"))?;
                     scope.allow_file(home.join(".axn-term/agent-hook.sh"))?;
-                    for (agent, file) in [("claude", "settings.json"), ("codex", "hooks.json"), ("gemini", "settings.json")] {
+                    scope.allow_file(home.join(".axn-term/agy-hook.sh"))?;
+                    for (agent, file) in [("claude", "settings.json"), ("codex", "hooks.json")] {
                         scope.allow_file(home.join(format!(".{}", agent)))?;
                         scope.allow_file(home.join(format!(".{}/{}", agent, file)))?;
                     }
+                    // Antigravity CLI hooks live in ~/.gemini/config/hooks.json.
+                    scope.allow_file(home.join(".gemini"))?;
+                    scope.allow_file(home.join(".gemini/config"))?;
+                    scope.allow_file(home.join(".gemini/config/hooks.json"))?;
                 }
             }
             let shell_state = read_shell_state()

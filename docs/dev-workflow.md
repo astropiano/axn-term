@@ -131,12 +131,9 @@ instructions). Delivery is owned by each agent plugin's launcher
   `--append-system-prompt <text>` inline (claude reads the file itself).
 - **codex** — `-c developer_instructions="…"` config override (the file
   is resolved to text; `AGENTS.md` keeps working natively).
-- **gemini** — has no instructions flag. With the gemini plugin's
-  `write-gemini-md: true` setting the instructions are written to a **new**
-  `GEMINI.md` in the launch cwd — gemini reads it natively — and the
-  launch **fails with an error if `GEMINI.md` already exists** (it is
-  never merged or overwritten). Without the setting, instructions fold
-  into the first prompt.
+- **agy** (Antigravity CLI) — prompts are only read from `-p`/`-i`/stdin,
+  so the launch line is `agy … -i <prompt>`; instructions fold into the
+  first prompt.
 - **devin** / **unregistered CLIs** — instructions fold in ahead of the
   seed prompt.
 
@@ -278,7 +275,7 @@ Per action, `run-in` selects where it runs:
   labelled sub-shell tab seeded with the command and returns its tab id.
   Command actions run one-shot so the tab's exit code is the check result;
   agent actions append `; exec $SHELL -l` so the tab stays usable after the
-  seed exits, and a resumable agent cli (`devin`/`claude`/`gemini`/`codex`
+  seed exits, and a resumable agent cli (`devin`/`claude`/`agy`/`codex`
   — resolved through `profile` references too) marks the tab `agent` so
   re-spawns resume the conversation instead of re-seeding.
 - `headless` — one-shot via `ctx.exec`, no terminal — fire-and-forget

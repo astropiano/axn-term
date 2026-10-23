@@ -28,7 +28,7 @@ export const gitInspectPlugin: SessionViewPlugin = {
         { value: '', label: 'Off' },
         { value: 'devin', label: 'Devin' },
         { value: 'claude', label: 'Claude' },
-        { value: 'gemini', label: 'Gemini' },
+        { value: 'agy', label: 'Antigravity' },
         { value: 'codex', label: 'Codex' },
       ],
       default: '',

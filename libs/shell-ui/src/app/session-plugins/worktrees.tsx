@@ -61,12 +61,12 @@ export function worktreeBranchFor(slug: string): string {
 }
 
 export function parseAgentList(raw: unknown): string[] {
-  if (typeof raw !== 'string') return ['claude', 'devin', 'codex', 'gemini', 'vibe'];
+  if (typeof raw !== 'string') return ['claude', 'devin', 'codex', 'agy', 'vibe'];
   const agents = raw
     .split(',')
     .map((a) => a.trim().toLowerCase())
     .filter(Boolean);
-  return agents.length ? agents : ['claude', 'devin', 'codex', 'gemini', 'vibe'];
+  return agents.length ? agents : ['claude', 'devin', 'codex', 'agy', 'vibe'];
 }
 
 /** How an agent resumes its last conversation, when it supports one. */
@@ -78,8 +78,9 @@ export function agentResumeCommand(agent: string): string | null {
       return 'devin -c';
     case 'codex':
       return 'codex resume --last';
-    case 'gemini':
-      return 'gemini --resume';
+    case 'agy':
+    case 'antigravity':
+      return 'agy -c';
     case 'vibe':
       return 'vibe -r';
     default:
@@ -260,9 +261,9 @@ export const worktreesPlugin: SessionViewPlugin = {
       key: 'agents',
       label: 'Agent process names',
       description:
-        'Comma-separated foreground processes that trigger the isolation banner (e.g. claude, devin, codex, gemini).',
+        'Comma-separated foreground processes that trigger the isolation banner (e.g. claude, devin, codex, agy).',
       type: 'string',
-      default: 'claude, devin, codex, gemini',
+      default: 'claude, devin, codex, agy',
     },
     {
       key: 'defaultAgent',

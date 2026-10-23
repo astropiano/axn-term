@@ -223,7 +223,7 @@ export interface AxnSessionHandle {
     command?: string,
     cwd?: string,
     label?: string,
-    agent?: 'devin' | 'claude' | 'gemini' | 'codex',
+    agent?: 'devin' | 'claude' | 'agy' | 'codex',
   ): Promise<string | undefined>;
   /**
    * Open a new session rooted at `cwd` (default: the app's shell default).

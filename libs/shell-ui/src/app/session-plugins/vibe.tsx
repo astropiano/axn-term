@@ -599,7 +599,7 @@ export const vibePlugin: SessionViewPlugin = {
       }
     }
     // Terminal badge as the done signal — 'completed' persists, mid-run
-    // exits fall back to idle (same convention as codex/gemini).
+    // exits fall back to idle (same convention as codex/antigravity).
     const live = ctx.getSession();
     const status = live.status ?? 'idle';
     if (status !== 'completed' && status !== 'idle') {

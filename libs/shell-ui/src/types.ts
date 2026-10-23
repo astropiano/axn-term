@@ -87,7 +87,7 @@ export interface Workspace {
 }
 
 /** Agent CLIs whose conversations a sub-shell tab can host and resume. */
-export type AgentCli = 'devin' | 'claude' | 'gemini' | 'codex';
+export type AgentCli = 'devin' | 'claude' | 'agy' | 'codex';
 
 export interface EditorTab {
   id: string;
@@ -111,7 +111,7 @@ export interface EditorTab {
   /**
    * For kind 'shell': command run in place of `command` on every spawn after
    * the first — the agent resume line (`devin -r <name>` once the session
-   * name was captured, `devin -c`/`claude -c`/`gemini --resume`/
+   * name was captured, `devin -c`/`claude -c`/`agy -c`/
    * `codex resume --last` before that).
    */
   resumeCommand?: string;

@@ -7,7 +7,7 @@ import {
 import { devinPlugin } from './devinTasks';
 import { claudePlugin } from './claude';
 import { codexPlugin } from './codex';
-import { geminiPlugin } from './gemini';
+import { antigravityPlugin } from './antigravity';
 
 afterEach(() => syncHookSpecPlugins([], [], () => []));
 
@@ -34,7 +34,7 @@ describe('agent process patterns', () => {
     [devinPlugin.processPattern, 'devin', 'my-devin-wrapper'],
     [claudePlugin.processPattern, 'claude', 'xclaude-monitor'],
     [codexPlugin.processPattern, 'codex', 'mycodex'],
-    [geminiPlugin.processPattern, 'gemini', 'not-gemini'],
+    [antigravityPlugin.processPattern, 'agy', 'not-agy'],
   ])('%s matches the CLI name, not names merely containing it', (re, name, other) => {
     expect(re?.test(name)).toBe(true);
     expect(re?.test(name.toUpperCase())).toBe(true);

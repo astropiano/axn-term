@@ -324,7 +324,7 @@ function scheduleRefresh(ctx: Ctx): void {
 // Shared actions — session menu + strip + commands
 // ---------------------------------------------------------------------------
 
-const AGENT_RE = /claude|devin|codex|gemini|vibe/i;
+const AGENT_RE = /claude|devin|codex|agy|antigravity|vibe/i;
 
 async function draftPicker(ctx: Ctx): Promise<void> {
   const loc = await resolveScratchpad(ctx);

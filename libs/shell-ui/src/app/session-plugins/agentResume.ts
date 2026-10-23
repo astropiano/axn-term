@@ -3,7 +3,7 @@ import type { SessionViewContext, PluginApi, RepoMenuItem } from './plugin';
 
 /**
  * "Resume last" — the shared agent-session capability used by the built-in
- * agent plugins (devin, claude, vibe, codex, gemini).
+ * agent plugins (devin, claude, vibe, codex, antigravity).
  *
  * There is exactly ONE last session across all agents: whichever agent
  * conversation exited most recently. Each agent plugin persists its own
@@ -11,7 +11,7 @@ import type { SessionViewContext, PluginApi, RepoMenuItem } from './plugin';
  * `at`-stamped) — named from the agent's own exit hint where it prints one
  * (devin/vibe session names, claude conversation ids), else the agent's
  * "continue latest" resume line (`devin -c`, `claude -c`,
- * `codex resume --last`, `gemini --resume`). The in-memory `agentLasts` map
+ * `codex resume --last`, `agy -c`). The in-memory `agentLasts` map
  * tracks every agent's newest record so the session context menu can show
  * the row for the globally latest one only. The capture itself stays
  * plugin-owned — each agent announces its session differently.

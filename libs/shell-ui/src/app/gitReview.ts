@@ -9,7 +9,7 @@ import { promptArg } from '../shellQuote';
  */
 
 /** Agent CLIs usable for explain/talk/resume — a sub-shell tab's `agent`. */
-export type ReviewAgent = 'devin' | 'claude' | 'gemini' | 'codex';
+export type ReviewAgent = 'devin' | 'claude' | 'agy' | 'codex';
 
 export interface Explanation {
   /** The agent's answer text. */
@@ -31,7 +31,7 @@ const MAX_ENTRIES = 200;
 const MAX_DIFF_CHARS = 16000;
 
 export function normalizeReviewAgent(value: unknown): ReviewAgent | null {
-  return value === 'devin' || value === 'claude' || value === 'gemini' || value === 'codex'
+  return value === 'devin' || value === 'claude' || value === 'agy' || value === 'codex'
     ? value
     : null;
 }
@@ -57,10 +57,10 @@ const AGENT_CMDS: Record<
     seed: (p) => `claude ${p}`,
     resume: (id) => (id ? `claude --resume ${id}` : 'claude -c'),
   },
-  gemini: {
-    print: (p) => `gemini -p ${p}`,
-    seed: (p) => `gemini -i ${p}`,
-    resume: () => 'gemini --resume',
+  agy: {
+    print: (p) => `agy -p ${p}`,
+    seed: (p) => `agy -i ${p}`,
+    resume: () => 'agy -c',
   },
   codex: {
     print: (p) => `codex exec ${p}`,
@@ -151,7 +151,7 @@ export function talkCommand(agent: ReviewAgent, prompt: string): string {
  * the captured session by name once known (`devin -r <name>`), falling back
  * to the most recent session in the tab's directory (`devin -c`); the other
  * CLIs continue their most recent conversation (`claude -c`,
- * `gemini --resume`, `codex resume --last`).
+ * `agy -c`, `codex resume --last`).
  */
 export function talkResumeCommand(agent: ReviewAgent, name?: string): string {
   return `${AGENT_CMDS[agent].resume(name)}; exec "\${SHELL:-sh}" -l`;

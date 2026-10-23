@@ -4,7 +4,7 @@ import type { SessionAttention, SessionStatus } from './api';
  * Agent hook bridge — pure, dependency-free pieces of axn-term's agent-hook
  * transport, consumable by plugin authors.
  *
- * CLI agents with a lifecycle hook system (Claude Code, Codex, Gemini CLI)
+ * CLI agents with a lifecycle hook system (Claude Code, Codex, Antigravity CLI)
  * run configured hook commands with the event JSON on stdin. axn-term
  * installs one script — `agent-hook.sh <agent>` — which appends that JSON as
  * one line to `$AXN_TERM_STATE_DIR/<agent>-events/pty-<id>.jsonl` (one
@@ -42,7 +42,7 @@ export interface AgentHookHost {
 
 /** Per-agent adapter consumed by the hook bridge. */
 export interface AgentHookSpec {
-  /** Short id used in file names, log targets and event dirs ('claude', 'codex', 'gemini'). */
+  /** Short id used in file names, log targets and event dirs ('claude', 'codex', 'antigravity'). */
   agent: string;
   /**
    * pluginState key the live attention flag is read from — defaults to the
@@ -228,7 +228,7 @@ function shellQuote(path: string): string {
 
 /**
  * Merge axn-term hook entries into the agent's parsed hook config. Claude
- * Code, Codex and Gemini CLI share the grouped schema
+ * Code and Codex share the grouped schema
  * `hooks.<Event> = [{ matcher?, hooks: [{ type:'command', command, ... }] }]`.
  * Idempotent, preserves unrelated settings and non-axn hooks.
  */
