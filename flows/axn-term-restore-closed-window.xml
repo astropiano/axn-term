@@ -12,42 +12,35 @@
       </env>
     </setup>
     <steps>
-      <script adapter="axn-term" action="prepare" description="Create temp state with one window" />
-      <assertions description="The test harness is ready">
-        <assert that="contains" value="state dir prepared" />
-      </assertions>
+      <step adapter="axn-term" action="prepare" description="Create temp state with one window" >
+        <assert that="contains" value="state dir prepared"  description="The test harness is ready"/>
+      </step>
 
-      <script adapter="axn-term" action="start" description="Launch axn-term" />
-      <assertions description="The app started">
-        <assert that="contains" value="app started" />
-      </assertions>
+      <step adapter="axn-term" action="start" description="Launch axn-term" >
+        <assert that="contains" value="app started"  description="The app started"/>
+      </step>
 
-      <script adapter="axn-term" action="runDevin" description="Run the devin session" />
-      <assertions description="devin is running">
-        <assert that="contains" value="devin running" />
-      </assertions>
+      <step adapter="axn-term" action="runDevin" description="Run the devin session" >
+        <assert that="contains" value="devin running"  description="devin is running"/>
+      </step>
 
-      <script adapter="axn-term" action="createWindow" description="Open an extra window" />
-      <assertions description="Extra window was created">
-        <assert that="contains" value="window created" />
-      </assertions>
+      <step adapter="axn-term" action="createWindow" description="Open an extra window" >
+        <assert that="contains" value="window created"  description="Extra window was created"/>
+      </step>
 
-      <script adapter="axn-term" action="closeWindow" description="Close the extra window before stopping" />
-      <assertions description="Extra window was closed">
-        <assert that="contains" value="window closed" />
-      </assertions>
+      <step adapter="axn-term" action="closeWindow" description="Close the extra window before stopping" >
+        <assert that="contains" value="window closed"  description="Extra window was closed"/>
+      </step>
 
-      <script adapter="axn-term" action="close" description="Close axn-term so main window state is persisted" />
-      <assertions description="The app closed and saved state">
-        <assert that="contains" value="app closed" />
-      </assertions>
+      <step adapter="axn-term" action="close" description="Close axn-term so main window state is persisted" >
+        <assert that="contains" value="app closed"  description="The app closed and saved state"/>
+      </step>
 
-      <script adapter="axn-term" action="reopen" description="Reopen and verify the closed extra window did not come back" />
-      <assertions description="Only the main window is restored">
-        <assert that="contains" value="gray-party" />
-        <assert that="contains" value="windows: 1" />
-        <assert that="contains" value="single window" />
-      </assertions>
+      <step adapter="axn-term" action="reopen" description="Reopen and verify the closed extra window did not come back" >
+        <assert that="contains" value="gray-party"  description="Only the main window is restored"/>
+        <assert that="contains" value="windows: 1"  description="Only the main window is restored"/>
+        <assert that="contains" value="single window"  description="Only the main window is restored"/>
+      </step>
     </steps>
   </flow>
 </flows>

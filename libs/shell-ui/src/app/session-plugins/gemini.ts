@@ -2,7 +2,9 @@ import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin'
 import { axnLog } from '../log';
 import { geminiHookSpec } from './geminiHooks';
 import { registerAgentLauncher } from './agentRegistry';
+import { agentResumeMenuItem, rememberLastAgentSession } from './agentResume';
 import { agentCommand } from './devWorkflow';
+import { shellQuote } from '../../shellQuote';
 
 interface GeminiPluginState {
   /** Set once a gemini process has been observed in this session. */
@@ -44,6 +46,19 @@ function syncSettings(ctx: SessionViewContext & PluginApi): void {
 
 /** `gemini --resume` continues a previous chat (interactive picker). */
 const GEMINI_RESUME_COMMAND = 'gemini --resume';
+
+/**
+ * Publish the just-exited gemini conversation as this agent's last session
+ * (app-level pluginData — see agentResume.ts). Gemini prints no session id
+ * on exit, so the record carries the generic `gemini --resume` picker.
+ */
+function rememberGeminiLast(ctx: SessionViewContext & PluginApi): void {
+  const cwd = ctx.getSession().cwd;
+  rememberLastAgentSession(ctx, 'gemini', {
+    cwd,
+    command: cwd ? `cd ${shellQuote(cwd)} && ${GEMINI_RESUME_COMMAND}` : GEMINI_RESUME_COMMAND,
+  });
+}
 
 export const geminiPlugin: SessionViewPlugin = {
   id: 'gemini',
@@ -100,6 +115,7 @@ export const geminiPlugin: SessionViewPlugin = {
     if ((session.status ?? 'idle') !== 'completed' && (session.status ?? 'idle') !== 'idle') {
       ctx.updateSession(session.id, { status: 'idle' });
     }
+    rememberGeminiLast(ctx);
   },
 
   onOutput: (ctx) => {
@@ -124,6 +140,10 @@ export const geminiPlugin: SessionViewPlugin = {
     },
   ],
 
+  // "Resume gemini session" — the shared last-session capability; offered
+  // on idle sessions once a gemini conversation was captured.
+  sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'gemini'),
+
   // A submitted command starts new shell work — a terminal badge left by a
   // finished agent run no longer applies, and a stale needs-you flag is gone.
   onCommand: (ctx) => {
@@ -134,6 +154,12 @@ export const geminiPlugin: SessionViewPlugin = {
     }
     const st = ctx.pluginState as { attention?: unknown } | undefined;
     if (st?.attention) ctx.setAttention(null);
+  },
+
+  // Gemini exits with the session (no graceful-close capture): keep the
+  // last record so a different shell can still pick the conversation up.
+  onClose: (ctx) => {
+    if (getState(ctx).geminiSeen) rememberGeminiLast(ctx);
   },
 
   onSessionOpen: (ctx) => {

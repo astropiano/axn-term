@@ -12,30 +12,25 @@
       </env>
     </setup>
     <steps>
-      <script adapter="axn-term" action="prepare" description="Create a temp state dir with a fake claude binary" />
-      <assertions description="The test harness is ready">
-        <assert that="contains" value="state dir prepared" />
-      </assertions>
+      <step adapter="axn-term" action="prepare" description="Create a temp state dir with a fake claude binary" >
+        <assert that="contains" value="state dir prepared"  description="The test harness is ready"/>
+      </step>
 
-      <script adapter="axn-term" action="start" description="Launch axn-term with the temp state dir" />
-      <assertions description="The app started">
-        <assert that="contains" value="app started" />
-      </assertions>
+      <step adapter="axn-term" action="start" description="Launch axn-term with the temp state dir" >
+        <assert that="contains" value="app started"  description="The app started"/>
+      </step>
 
-      <script adapter="axn-term" action="runClaude" description="Launch a fresh claude in the session" />
-      <assertions description="claude is the foreground process">
-        <assert that="contains" value="claude running" />
-      </assertions>
+      <step adapter="axn-term" action="runClaude" description="Launch a fresh claude in the session" >
+        <assert that="contains" value="claude running"  description="claude is the foreground process"/>
+      </step>
 
-      <script adapter="axn-term" action="close" description="Close axn-term — claude is interrupted and its resume id captured" />
-      <assertions description="The app closed and saved state">
-        <assert that="contains" value="app closed" />
-      </assertions>
+      <step adapter="axn-term" action="close" description="Close axn-term — claude is interrupted and its resume id captured" >
+        <assert that="contains" value="app closed"  description="The app closed and saved state"/>
+      </step>
 
-      <script adapter="axn-term" action="reopenClaude" description="Reopen axn-term and verify the exact conversation is resumed" />
-      <assertions description="The captured conversation is resumed">
-        <assert that="contains" value="claude restored: 7f3c2a10-5b9e-4d21-8c6f-0a1b2c3d4e5f" />
-      </assertions>
+      <step adapter="axn-term" action="reopenClaude" description="Reopen axn-term and verify the exact conversation is resumed" >
+        <assert that="contains" value="claude restored: 7f3c2a10-5b9e-4d21-8c6f-0a1b2c3d4e5f"  description="The captured conversation is resumed"/>
+      </step>
     </steps>
   </flow>
 </flows>

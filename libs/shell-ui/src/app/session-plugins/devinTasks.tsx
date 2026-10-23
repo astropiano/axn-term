@@ -4,6 +4,11 @@ import { sessionLastSelectedAt } from '../attention';
 import type { SessionAttention, SessionBanner, SessionStatus, ShellSession, Task } from '../../types';
 import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin';
 import { registerAgentLauncher } from './agentRegistry';
+import {
+  agentResumeMenuItem,
+  forgetLastAgentSession,
+  rememberLastAgentSession,
+} from './agentResume';
 import { agentCommand } from './devWorkflow';
 import { shellQuote } from '../../shellQuote';
 
@@ -303,7 +308,10 @@ function beginExitCapture(
       if (exitCaptures.get(id) !== capture) return;
       clearTimeout(timer);
       exitCaptures.delete(id);
-      if (name) ctx.updatePluginState({ devinSessionName: name });
+      if (name) {
+        ctx.updatePluginState({ devinSessionName: name });
+        rememberDevinLast(ctx, { name });
+      }
       axnLog(
         name ? 'debug' : authoritative ? 'warn' : 'debug',
         'devin-close',
@@ -367,6 +375,7 @@ function finishRestore(ctx: SessionViewContext & PluginApi, outcome: 'ok' | 'gon
     // The CLI confirmed the session does not exist — stop retrying it on
     // every restart.
     ctx.updatePluginState({ devinSessionName: undefined });
+    forgetLastAgentSession(ctx, 'devin', pending.name);
     ctx.setBanner({
       level: 'error',
       message: `Devin session '${pending.name}' no longer exists — could not restore it.`,
@@ -505,6 +514,18 @@ function getDevinState(ctx: SessionViewContext & PluginApi): DevinPluginState {
   return (ctx.pluginState as DevinPluginState | undefined) ?? {};
 }
 
+/**
+ * The live counterpart of getDevinState: `ctx.pluginState` is a snapshot
+ * from when the ctx was built, so a capture finishing in the same tick as
+ * another update reads the session's live pluginState instead.
+ */
+function getDevinStateLive(ctx: SessionViewContext & PluginApi): DevinPluginState {
+  const live = (ctx.getSession().pluginState as Record<string, unknown> | undefined)?.[
+    devinPlugin.stateKey ?? devinPlugin.id
+  ];
+  return (live as DevinPluginState | undefined) ?? getDevinState(ctx);
+}
+
 interface DevinSessionNameMatch {
   name: string;
   end: number;
@@ -602,6 +623,25 @@ function devinResumeCommand(remembered: { name: string; cwd?: string }): string 
     return `cd ${shellQuote(remembered.cwd)} && ${resume}`;
   }
   return resume;
+}
+
+/**
+ * Publish the just-exited devin conversation as this agent's last session
+ * (app-level pluginData — see agentResume.ts): the captured name's exact
+ * `devin -r` line when one is known, else `devin -c` — continue the latest
+ * session in the directory devin ran in.
+ */
+function rememberDevinLast(
+  ctx: SessionViewContext & PluginApi,
+  remembered?: { name: string; cwd?: string },
+): void {
+  const cwd = remembered?.cwd ?? getDevinStateLive(ctx).devinSessionCwd ?? ctx.getSession().cwd;
+  const command = remembered
+    ? devinResumeCommand({ ...remembered, cwd: remembered.cwd ?? cwd })
+    : cwd
+      ? `cd ${shellQuote(cwd)} && devin -c`
+      : 'devin -c';
+  rememberLastAgentSession(ctx, 'devin', { name: remembered?.name, cwd, command });
 }
 
 function parseDevinCommand(command: string): { name: string; cwd?: string } | undefined {
@@ -711,6 +751,9 @@ export const devinPlugin: SessionViewPlugin = {
       },
     },
   ],
+  // "Resume devin session '<name>'" — the shared last-session capability;
+  // offered on idle sessions once a devin conversation was captured.
+  sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'devin'),
   render: (ctx) => <DevinTasks ctx={ctx} />,
 
   // Declared before onSessionOpen injects the resume command: the app covers
@@ -748,6 +791,7 @@ export const devinPlugin: SessionViewPlugin = {
     // Capture the cwd one last time when devin exits — if the resume line was
     // missed or truncated, this still records where the session actually ran.
     void recordSessionCwd(ctx);
+    let tailName: string | undefined;
     if (!exitCaptures.get(ctx.session.id)) {
       // A devin exit the plugin did not drive — a manual Ctrl-C×2, /quit,
       // devin's own quit key — still prints the resume hint, and the
@@ -763,8 +807,15 @@ export const devinPlugin: SessionViewPlugin = {
         axnLog('debug', 'devin', `session ${ctx.session.id}: remembered post-exit session ${name}`);
         ctx.updatePluginState({ devinSessionName: name });
       }
+      tailName = name;
       beginExitCapture(ctx, { authoritative: false, seed: tail });
     }
+    // Publish the just-exited conversation as this agent's last session —
+    // the exact `devin -r <name>` line when a name is known (the tail scan's
+    // fresh name wins over an older remembered one), else the directory's
+    // `devin -c` fallback. A hint landing inside the armed capture upgrades
+    // the record.
+    rememberDevinLast(ctx, (tailName ? { name: tailName } : undefined) ?? rememberedDevinSession(ctx));
     const hasTasks = (state.tasks ?? []).length > 0;
     const hasSessionProgress =
       (ctx.session.tasks ?? []).length > 0 || (ctx.session.progress ?? 0) > 0;
@@ -940,6 +991,9 @@ export const devinPlugin: SessionViewPlugin = {
     if (pending) {
       await pending.done;
       await recordSessionCwd(ctx);
+      // A capture that ended nameless still leaves the session's last
+      // conversation resumable via the -c fallback.
+      rememberDevinLast(ctx, rememberedDevinSession(ctx));
       return;
     }
     const live = ctx.getSession();
@@ -974,6 +1028,9 @@ export const devinPlugin: SessionViewPlugin = {
     // PTY disappears. This is the final fallback for sessions whose resume
     // line was missed or whose cwd was not yet written to disk.
     await recordSessionCwd(ctx);
+    // No name within the capture window still leaves a resumable last
+    // session — `devin -c` continues the latest session in its dir.
+    rememberDevinLast(ctx, rememberedDevinSession(ctx));
   },
 
   onSessionOpen: (ctx) => {

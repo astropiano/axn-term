@@ -28,7 +28,7 @@ const { editors, createEditor } = vi.hoisted(() => {
 });
 export { editors, createEditor };
 vi.mock('./monacoSetup', () => ({
-  monaco: { editor: { create: createEditor }, KeyMod: { CtrlCmd: 1 }, KeyCode: { KeyS: 2 } },
+  monaco: { editor: { create: createEditor }, KeyMod: { CtrlCmd: 1, WinCtrl: 4 }, KeyCode: { KeyS: 2 } },
   applyAxnMonacoTheme: vi.fn(), languageForPath: () => 'text', AXN_MONACO_THEME: 'test',
 }));
 vi.mock('../SettingsProvider', () => ({ useSettings: () => ({ activeTheme: {} }) }));

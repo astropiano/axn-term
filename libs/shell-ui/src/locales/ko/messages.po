@@ -27,6 +27,8 @@ msgstr "axn-term에서 예기치 않은 오류가 발생했습니다"
 msgid "Binary file"
 msgstr "바이너리 파일"
 
+#: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
+#: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
 #: libs/shell-ui/src/app/SettingsModal.tsx:870
 msgid "Cancel"
 msgstr "취소"
@@ -88,6 +90,10 @@ msgstr "다크 테마"
 msgid "Decrease font size"
 msgstr "글꼴 크기 줄이기"
 
+#: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:43
+msgid "Default folder"
+msgstr "기본 폴더"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:355
 msgid "Default shell"
 msgstr "기본 셸"
@@ -137,6 +143,14 @@ msgstr "파일 미리보기"
 msgid "File previews"
 msgstr "파일 미리보기"
 
+#: libs/shell-ui/src/app/SessionPanel.tsx:251
+msgid "Filter sessions…"
+msgstr "세션 필터…"
+
+#: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:44
+msgid "Fix the path or open the session in your home folder."
+msgstr "경로를 수정하거나 홈 폴더에서 세션을 여세요."
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:424
 msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
 msgstr "세션/워크스페이스 패널의 글꼴입니다. 크기는 기본 12px 기준으로 배율이 적용됩니다."
@@ -164,6 +178,10 @@ msgstr "가져왔습니다."
 #: libs/shell-ui/src/app/SettingsModal.tsx:222
 msgid "Increase font size"
 msgstr "글꼴 크기 늘리기"
+
+#: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:35
+msgid "Invalid default folder"
+msgstr "유효하지 않은 기본 폴더"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:339
 msgid "Language"
@@ -234,6 +252,10 @@ msgstr "유효한 config.yaml이 아닙니다 — YAML 매핑이어야 합니다
 msgid "Open"
 msgstr "열기"
 
+#: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:66
+msgid "Open in home folder"
+msgstr "홈 폴더에서 열기"
+
 #: libs/shell-ui/src/WorkspacePicker.tsx:33
 msgid "Open in workspace"
 msgstr "워크스페이스에서 열기"
@@ -298,6 +320,7 @@ msgstr "{0}{1} 필요"
 msgid "sandboxed — no permissions (no shell, files or terminal access)"
 msgstr "샌드박스 — 권한 없음 (셸, 파일, 터미널 접근 불가)"
 
+#: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
 #: libs/shell-ui/src/app/SettingsModal.tsx:878
 msgid "Save"
 msgstr "저장"
@@ -326,6 +349,10 @@ msgstr "세션 플러그인"
 #: libs/shell-ui/src/app/SettingsModal.tsx:536
 msgid "Session plugins"
 msgstr "세션 플러그인"
+
+#: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:59
+msgid "Set default folder…"
+msgstr "기본 폴더 설정…"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:132
 msgid "Settings"
@@ -360,6 +387,11 @@ msgstr "터미널 글꼴 패밀리와 px 단위 크기입니다. 비워 두면 �
 #: libs/shell-ui/src/app/SettingsModal.tsx:456
 msgid "Terminal renderer"
 msgstr "터미널 렌더러"
+
+#. placeholder {0}: workspace.name
+#: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:38
+msgid "The default folder of “{0}” does not exist:"
+msgstr "“{0}”의 기본 폴더가 존재하지 않습니다:"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:296
 msgid "Theme"

@@ -2,8 +2,9 @@ import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin'
 import { axnLog } from '../log';
 import { codexHookSpec } from './codexHooks';
 import { registerAgentLauncher } from './agentRegistry';
+import { agentResumeMenuItem, rememberLastAgentSession } from './agentResume';
 import { agentCommand } from './devWorkflow';
-import { shellWord } from '../../shellQuote';
+import { shellQuote, shellWord } from '../../shellQuote';
 
 interface CodexPluginState {
   /** Set once a codex process has been observed in this session. */
@@ -30,6 +31,20 @@ function getSettings(ctx: SessionViewContext & PluginApi): CodexPluginSettings {
 
 /** `codex resume --last` continues the most recent codex conversation. */
 const CODEX_RESUME_COMMAND = 'codex resume --last';
+
+/**
+ * Publish the just-exited codex conversation as this agent's last session
+ * (app-level pluginData — see agentResume.ts). Codex prints no session id
+ * on exit, so the record carries the generic `codex resume --last` —
+ * which targets exactly the conversation that just ended.
+ */
+function rememberCodexLast(ctx: SessionViewContext & PluginApi): void {
+  const cwd = ctx.getSession().cwd;
+  rememberLastAgentSession(ctx, 'codex', {
+    cwd,
+    command: cwd ? `cd ${shellQuote(cwd)} && ${CODEX_RESUME_COMMAND}` : CODEX_RESUME_COMMAND,
+  });
+}
 
 export const codexPlugin: SessionViewPlugin = {
   id: 'codex',
@@ -75,6 +90,7 @@ export const codexPlugin: SessionViewPlugin = {
     if ((session.status ?? 'idle') !== 'completed' && (session.status ?? 'idle') !== 'idle') {
       ctx.updateSession(session.id, { status: 'idle' });
     }
+    rememberCodexLast(ctx);
   },
 
   onOutput: (ctx) => {
@@ -97,6 +113,10 @@ export const codexPlugin: SessionViewPlugin = {
     },
   ],
 
+  // "Resume codex session" — the shared last-session capability; offered on
+  // idle sessions once a codex conversation was captured.
+  sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'codex'),
+
   // A submitted command starts new shell work — a terminal badge left by a
   // finished agent run no longer applies, and a stale needs-you flag is gone.
   onCommand: (ctx) => {
@@ -106,6 +126,12 @@ export const codexPlugin: SessionViewPlugin = {
     }
     const st = ctx.pluginState as { attention?: unknown } | undefined;
     if (st?.attention) ctx.setAttention(null);
+  },
+
+  // Codex exits with the session (no graceful-close capture): keep the last
+  // record so a different shell can still pick the conversation up.
+  onClose: (ctx) => {
+    if (getState(ctx).codexSeen) rememberCodexLast(ctx);
   },
 
   onSessionOpen: (ctx) => {

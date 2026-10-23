@@ -15,31 +15,26 @@
       </env>
     </setup>
     <steps>
-      <script adapter="axn-term" action="prepare" description="Create temp state dir and do not install the fake devin binary" />
-      <assertions description="The test harness is ready">
-        <assert that="contains" value="state dir prepared" />
-      </assertions>
+      <step adapter="axn-term" action="prepare" description="Create temp state dir and do not install the fake devin binary" >
+        <assert that="contains" value="state dir prepared"  description="The test harness is ready"/>
+      </step>
 
-      <script adapter="axn-term" action="start" description="Launch axn-term with the temp state dir" />
-      <assertions description="The app started">
-        <assert that="contains" value="app started" />
-      </assertions>
+      <step adapter="axn-term" action="start" description="Launch axn-term with the temp state dir" >
+        <assert that="contains" value="app started"  description="The app started"/>
+      </step>
 
-      <script adapter="axn-term" action="runDevin" description="Wait for the real devin session to start" />
-      <assertions description="devin is running">
-        <assert that="contains" value="devin running" />
-      </assertions>
+      <step adapter="axn-term" action="runDevin" description="Wait for the real devin session to start" >
+        <assert that="contains" value="devin running"  description="devin is running"/>
+      </step>
 
-      <script adapter="axn-term" action="close" description="Close axn-term so state is persisted" />
-      <assertions description="The app closed and saved state">
-        <assert that="contains" value="app closed" />
-      </assertions>
+      <step adapter="axn-term" action="close" description="Close axn-term so state is persisted" >
+        <assert that="contains" value="app closed"  description="The app closed and saved state"/>
+      </step>
 
-      <script adapter="axn-term" action="reopen" description="Reopen axn-term and verify the restored session" />
-      <assertions description="The same real devin session is restored and only one window exists">
-        <assert that="contains" value="restored:" />
-        <assert that="contains" value="single window" />
-      </assertions>
+      <step adapter="axn-term" action="reopen" description="Reopen axn-term and verify the restored session" >
+        <assert that="contains" value="restored:"  description="The same real devin session is restored and only one window exists"/>
+        <assert that="contains" value="single window"  description="The same real devin session is restored and only one window exists"/>
+      </step>
     </steps>
   </flow>
 </flows>
