@@ -45,21 +45,27 @@ Almost always means the service's URL in `frontend-services:`/
 
 ### `Timed out waiting for <url> to respond with 200`
 
-The flow readiness probe is a plain Node `fetch` — it cannot verify the
-self-signed internal CA and retries into the timeout. `AXN_TLS: "internal"`
-(LAN mode) serves HTTPS-only with an internal CA, so probes fail. For
-local `.localhost` development and flows use:
+Two separate causes seen:
 
-```yaml
-AXN_TLS: "off"            # plain http
-AXN_AUTO_HTTPS: "off"     # no https upgrade
-# and http:// service URLs
-```
+1. **Caddy container not running** — `docker ps` missing
+   `axn-term-online-caddy`; check `docker logs axn-term-online-caddy`.
+   Both env-crash bugs seen here were *empty injected values*: compose
+   injected `AXN_LAN_IP=` into the caddy container, so
+   `default_sni {$AXN_LAN_IP:-localhost}` parsed as no argument. The
+   container env default must be a real value (`${AXN_LAN_IP:-localhost}`).
+   Note `tls off` is **not** valid Caddy — `tls` accepts only `internal`,
+   `force_automate`, or an email; there is no plain-HTTP mode in this
+   Caddyfile despite the comment suggesting otherwise.
 
-LAN deployments are the other mode: `AXN_LAN_IP` + `AXN_TLS: "internal"` +
-`AXN_AUTO_HTTPS: "disable_redirects"` + `https://` URLs. Pick one mode or
-the other — mixing (e.g. `AXN_LAN_IP` with TLS off) mismatches Caddy's
-hostname routing.
+2. **Self-signed cert** — the readiness probe is a plain Node `fetch`,
+   which rejects the internal CA and retries into the timeout. Point Node
+   at the caddy CA:
+
+   ```bash
+   docker exec axn-term-online-caddy cat \
+     /data/caddy/pki/authorities/local/root.crt > /tmp/axn-caddy-ca.crt
+   NODE_EXTRA_CA_CERTS=/tmp/axn-caddy-ca.crt axn-dev flow -f flows/axn-term-login.xml
+   ```
 
 ### `*.localhost` resolution
 
