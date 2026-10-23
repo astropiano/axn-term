@@ -1,5 +1,5 @@
 import { AlertTriangle, ChevronLeft, ChevronRight, Info, Play, Trash2, X } from 'lucide-react';
-import { IconButton } from './IconButton';
+
 import type { BannerLevel, SessionBanner, SessionBannerAction, ShellSession } from '../types';
 import type { SessionViewPlugin } from './session-plugins/plugin';
 
@@ -32,18 +32,17 @@ function BannerAction({
 }) {
   const ActionIcon = action.icon ? actionIcon[action.icon] : undefined;
   return (
-    <IconButton
-      size={action.label ? 'auto' : 'sm'}
-      title={action.title ?? action.label ?? action.id}
-      disabled={action.disabled}
-      onClick={() => onAction?.(action.id)}
-    >
-      <span className="flex items-center gap-1 px-0.5">
+    <span className="inline-flex shrink-0" data-tip={action.title ?? action.label ?? action.id}>
+      <button
+        type="button"
+        disabled={action.disabled}
+        onClick={() => onAction?.(action.id)}
+        className="flex h-6 items-center gap-1 rounded bg-[var(--surface)] px-1.5 text-[9px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-40"
+      >
         {ActionIcon && <ActionIcon className="h-3 w-3" />}
-        {action.label && <span className="text-[9px]">{action.label}</span>}
-        {!ActionIcon && !action.label && <span className="text-[9px]">{action.id}</span>}
-      </span>
-    </IconButton>
+        {action.label ?? (!ActionIcon ? action.id : null)}
+      </button>
+    </span>
   );
 }
 
@@ -68,7 +67,7 @@ export function Banner({
   return (
     <div
       role="status"
-      className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-3 text-[11px] text-[var(--text-primary)]"
+      className="flex h-8 shrink-0 items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1 text-[11px] text-[var(--text-primary)]"
     >
       <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: levelColor[level] }} />
       {actions && actions.length > 0 && (
@@ -78,7 +77,7 @@ export function Banner({
           ))}
         </span>
       )}
-      <span className="min-w-0 shrink-0 truncate" data-tip={message}>
+      <span className="min-w-0 shrink truncate" data-tip={message}>
         {message}
       </span>
       {detail ? (

@@ -27,7 +27,7 @@ export function SessionTabStrip({
   const [tabDragId, setTabDragId] = useState<string | null>(null);
   const [tabDropId, setTabDropId] = useState<string | null>(null);
   return (
-    <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
+    <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1">
       <button
         type="button"
         onClick={() => onSelect('shell')}

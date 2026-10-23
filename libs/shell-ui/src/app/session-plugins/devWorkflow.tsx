@@ -2322,7 +2322,7 @@ function DevWorkflowView({
                           key={sessionId}
                           draggable={live}
                           onDragStart={(e) => {
-                            e.dataTransfer.setData('text/plain', sessionId);
+                            e.dataTransfer.setData('application/x-axn-workflow-session', sessionId);
                             e.dataTransfer.effectAllowed = 'move';
                             setDrag({ sessionId, workflow: def.id, from: inst.state });
                           }}
