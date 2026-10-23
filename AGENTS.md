@@ -179,8 +179,10 @@ plugin → `devin -r <remembered>`), `axn-worktree [name]` (worktrees plugin →
 list), `axn-git [ref]` (git-inspect plugin → opens the repo's `git` tab at the
 session cwd's toplevel — with a ref argument the tab diffs merge-base vs
 HEAD as a "Changes vs <ref>" section; echoes an error outside a repo) and
-`axn-workflow-start|set|move|run|stop` (dev-workflow plugin) and `axn-agent
-<persona>` (agents plugin → the persona's launch line) are implemented this
+`axn-workflow-start|set|move|run|stop` (dev-workflow plugin), `axn-agent
+<persona>` (agents plugin → the persona's launch line) and
+`axn-scratch`/`axn-draft` (scratchpad plugin → `ls|dir|new|open|browse|hint|tell`
+— see below) are implemented this
 way.
 
 Every `PluginApi` ctx comes from one builder, `createPluginApi(session,
@@ -413,11 +415,23 @@ sugar for dispatching `axn-focus <tabId>` through `runCommand` (resolves
 `axn.session(id).activateTab(tabId)`.
 
 Workspaces carry an optional `defaultFolder` (persisted in `state.json`):
-set/clear it from the workspace context menu ("Set default folder to session
-dir" snapshots the representative session's live cwd; hidden when the
+set/clear it from the workspace context menu — "Set default folder…" opens
+`SetDefaultFolderModal`, a free path input seeded with the current value
+(empty = home directory, never validated on save), and "Set default folder to
+session dir" snapshots the representative session's live cwd (hidden when the
 workspace is empty). The workspace "+" button then spawns sessions rooted
-there instead of the default cwd, and workspace-scoped plugin actions (e.g.
-worktrees) resolve their repository from it.
+there instead of the default cwd, checking the path first via `statPath` when
+a live session can answer it — a path that doesn't resolve to a directory
+raises `InvalidDefaultFolderModal` (fix the path, or open in the home folder)
+instead of a dead terminal. Workspace-scoped plugin actions (e.g. worktrees)
+resolve their repository from it.
+
+The session-panel header also has a filter input (`PanelSearch`) right of the
+workspace buttons: a case-insensitive substring match on workspace and
+session names — a workspace stays listed when its own name matches or it
+hosts a matching session, matched substrings are accent-highlighted
+(`Highlight`), collapsed workspaces force-expand while the filter is active,
+and Esc/✕ clears it.
 
 Tab on an `axn-*` line completes the command name, a workspace name for
 `axn-session-mv`, or a filesystem path for `axn-edit`/`axn-browse`/
@@ -666,7 +680,23 @@ xterm and race the injected restore command. The overlay clears on
 or via the overlay's × button for hung restores. The devin plugin uses
 this: `pendingRestore` returns `devin session '<name>'` when
 `restore-session` is on and a captured name exists, and `finishRestore`
-clears it on ok/gone/timeout. Restore also requires the agent to have been running when the session went away (`devinActive`/`claudeActive` in pluginState): set while the agent is foreground, cleared when it exits on its own or the session closes at a plain prompt, kept when `onClose` (or a crash) stops it — the captured name/id survives for `axn-devin-resume`/`axn-claude-resume` either way. Flags
+clears it on ok/gone/timeout. Restore also requires the agent to have been running when the session went away (`devinActive`/`claudeActive` in pluginState): set while the agent is foreground, cleared when it exits on its own or the session closes at a plain prompt, kept when `onClose` (or a crash) stops it — the captured name/id survives for `axn-devin-resume`/`axn-claude-resume` either way.
+Separately, every agent exit also publishes an `at`-stamped "last session"
+into the plugin's app-level pluginData (`pluginData.<key>.last`, shared
+across sessions) via the shared `agentResume.ts` module: the captured
+name/id's exact resume line (`devin -r <name>`, `claude --resume <id>`
+with its `--worktree`), else the agent's "continue latest" line (`devin
+-c`, `claude -c`, `codex resume --last`, `gemini --resume` — vibe records
+named exits only, its bare `-r` lists sessions). Exactly ONE last exists
+across agents — the newest record by `at`, tracked in the module's
+in-memory registry (seeded from the persisted records on read).
+`agentResumeMenuItem` is each agent plugin's `sessionMenuItems`
+contribution — `Resume <agent> session '<name>'` — offered only while no
+process runs in the session (neither `session.process` nor
+`session.agentInput` set) and only by the agent owning the global last,
+so a menu shows at most one resume row; the click dispatches the stored
+line like a typed command so `onCommand` bookkeeping sees it. A restore's
+'gone' outcome clears a matching record (`forgetLastAgentSession`). Flags
 surface as a pulsing disc underlaying the session's process icon; `critical`
 (the default) is red, `warning` orange. `renderRail` plugins get a
 `setAppAttention(attention | null)` for app-level flags (e.g. the RAM plugin
@@ -842,6 +872,7 @@ Example: `plugins/axn-demo-note/`.
 - The `docker` plugin (`session-plugins/docker.tsx`) is a rail-only indicator: the Docker whale SVG icon, running/stopped container counts, and a RAM-style used/free disk bar. Stats come from one `sh -c` probe via `backend.exec` (`command -v docker` + `docker info` gate, `docker ps -a --format '{{.State}}'` for counts, `docker system df --format '{{.Size}}'` for used bytes, `df -k` of `DockerRootDir` with `/` fallback for free space). The rail is session-less: desktop `plugin_exec` ignores the session id, web execs through the first session's host — the plugin hides when docker or exec is unavailable. `docker.refresh-interval-seconds` (default 15, min 5) sets the poll cadence; `system df` is slow, so polls never overlap. ≥80/≥90 % disk use raises a warning/critical app attention flag.
 - The `axn-dev` plugin (`session-plugins/axnDev.tsx`, Boxes rail icon) is a read-only mirror of `axn-dev list`: a shared `useSyncExternalStore` overview polls `axn-dev list` via `appRuntime().exec` on a `axn-dev.refresh-interval-seconds` cadence (default 30, min 10), parsed by the pure `parseAxnDevList` (global section at indent 2, project sections under `  <repo>:` headers at indent 4, endpoint lines and wrapped descriptions one level deeper — told apart by a URL-ish second token). The rail shows `running/found` (warning triangle when the CLI fails); clicking toggles the plugin view, which lists sections like `axn-dev list` — status dot, name, worktree badge, description, and clickable endpoint links for running scenarios — plus a persisted "running only" filter (`pluginData['axn-dev'].runningOnly`). No start/stop actions; `axn-dev serve` remains the full dashboard. The older external `plugins/axn-dev-scenarios.mjs` (opt-in, per-session row) is unaffected — different plugin id.
 - The built-in `worktrees` plugin (`session-plugins/worktrees.tsx`, opt-in `worktrees.enabled: true`) offers agent worktree isolation without any `axn-dev` dependency — plain `git` argv via `ctx.exec`. `git worktree add <dir> -b wt/<slug>` creates `<repo-parent>/worktrees/<repo>-wt-<slug>` (the axn-dev sibling-worktrees convention, so the CLI discovers them via `git worktree list`; `worktrees.worktree-root` overrides the parent), then `ctx.openSession(dir, slug)` spawns the session there — worktree-first, never a moved running shell. Entry points: session context menu ("New worktree session" / "New worktree with <agent>"), workspace context menu (when `defaultFolder` resolves to a repo), and `axn-worktree [name]`. The new session's `pluginState.worktree = { repoRoot, path, branch }` (stamped on `onSessionOpen` from a pending map, or detected once when a session opens inside a foreign-created linked worktree — e.g. dev-workflow's MR review) drives a `⎇` row badge, "Review worktree changes" (git tab at the path) and "Remove worktree" — `git worktree remove` refuses dirty trees, so failure re-raises the banner with a "Force remove" action, and success offers "Delete branch". The isolation nudge: when `session.process` matches `worktrees.agents` (default `claude, devin, codex, gemini, vibe`) in a main checkout (`git-dir == git-common-dir`, probed once per session), a warning banner offers "New worktree session" (seeds the agent's resume command — `claude -c`, `devin -c`, `codex resume --last`, `gemini --resume`, `vibe -r`), with once-per-session re-raise and a persistent "Don't ask again" (`worktrees.suggest-isolation` gates it). `worktrees.default-agent` picks the seeded agent.
+- The built-in `scratchpad` plugin (`session-plugins/scratchpad.tsx`, opt-in — `scratchpad.enabled: true` plus the `scratchpad.patterns` setting, which has no default: `;`- or newline-separated `<repo-regex>: <dir>, <dir>` entries, e.g. `*: .local-drafts, drafts; axn-term: .ai, notes`; an entry without a repo part applies to all repos). The regex matches case-insensitively against the checkout dir basename AND the remote repo name, so one entry covers a repo and all its worktrees (`axn-term` also matches `axn-term-feat-foo`). Matching dirs union in order; the first *existing* dir is `primary` (else the first configured). Its in-panel surface is the session context menu only: one `Open <dir>/` row per configured folder (read from `pluginState.dirs` — sessionMenuItems is synchronous, so `onSessionOpen` and a debounced onOutput refresh resolve+store the dirs — falling back to a single "Open drafts" row before the first resolution), plus "New or open draft…" (`pickOrCreate`), "Copy agent hint" and "Tell agent about scratchpad". Drafts are plain files — agents read/write them with their own tools (filesystem-as-context), the plugin only has to say where they are: `axn-scratch ls|dir` echoes real paths into the scrollback, `axn-scratch hint` prints a paste-able AGENTS.md/CLAUDE.md hint, "Copy agent hint" puts it on the clipboard and "Tell agent about scratchpad" (offered when `agentInput` or an agent-ish process is foreground) types it into the session input *without* a newline. Creating a draft (`axn-scratch new <name>` or a bare name) mkdirs the primary dir, seeds a `*` `.gitignore` (self-ignoring folder — `scratchpad.gitignore-drafts` gates it) and opens the file in an editor tab; `axn-scratch open <name|n>` and bare names open existing drafts, `browse` opens the folder. Beyond the menu there is a `NotebookPen` rail icon opening the `hostsTabs` full-area view: drafts grouped by repo across all sessions, per-repo "copy hint" buttons, editor/browser hosted tabs (listings go through `PluginApi.listDir`, which resolves `null` where the backend lacks `listDir`).
 - The built-in `progress` plugin (`session-plugins/progress.ts`) scans the session's live screen (`ctx.getScreenLines()`, backed by the xterm registry in `terminalRegistry.ts`) for progress indicators (`45%`, `[###---]`, `3/10`) instead of guessing from the output stream. When several bars are on screen the bottom-most one is reported; an indicator must persist ~500 ms before it is shown, and `session.progress` is withdrawn once no bar remains on screen. Only allowlisted programs are tracked: `progress.include-processes` in `plugins.yaml` (exact, case-insensitive process names; `'*'` tracks every program) — unset, it defaults to `DEFAULT_INCLUDED_PROCESSES` (curl/wget/rsync/pv/dd, pacman/apt/dnf/pip/uv/cargo/npm/pnpm/yarn/bun, git, ffmpeg), so percent-like noise from anything else (brew, build logs) never becomes a bar. Exclude programs on top via `progress.exclude-processes: [docker]` (case-insensitive substring match on the foreground process). A built-in list (`BUILTIN_EXCLUDED_PROCESSES`) already covers full-screen monitors/pagers/editors (`top`, `htop`, `vim`, `less`, …) and matches the comm basename exactly.
 
 ## Restore verification
@@ -849,13 +880,13 @@ Example: `plugins/axn-demo-note/`.
 - Desktop unit tests: `pnpm --filter @axn-term/desktop test`.
 - Typecheck: `pnpm exec tsc --noEmit` from `apps/desktop`.
 - Build the embedded production frontend with `pnpm --filter @axn-term/desktop tauri build --bundles deb`; plain `cargo build --release` can still point at Vite's dev URL.
-- Run a desktop restore flow with `axn-dev flow -f flows/axn-term-restore-second-workspace.xml --adapter axn-term=flows/adapters/axnTerm.js`. Flows use isolated temporary state; an explicitly provided state directory must not already exist.
+- Run a desktop restore flow with `axn-dev flow -f flows/axn-term-restore-second-workspace.xml --adapter axn-term=flows/adapters/axn-term.js`. Flows use isolated temporary state; an explicitly provided state directory must not already exist.
 - Flows drive the app through its remote-control HTTP server (`AXN_TERM_REMOTE_CONTROL_PORT`). It only starts together with `AXN_TERM_REMOTE_CONTROL_TOKEN` (removed from the app's env, so PTYs never inherit it): every endpoint but `GET /health` requires `Authorization: Bearer <token>`, and requests whose `Host` is not `127.0.0.1:<port>`/`localhost:<port>` are rejected (DNS-rebinding guard). The adapter generates a token per run. The per-session output buffer behind `GET /sessions/<id>` (last ~200 KB) is only kept while the server is enabled.
 - The talk-tab resume flow is `flows/axn-term-talk-restore.xml` (seeded `agent` shell tab → `/exit` capture → `devin -r <name>` on reopen; plus the `devin -c` fallback when the app is killed mid-session).
 - The worktrees-plugin flow is `flows/axn-term-worktrees.xml` (temp git repo + `worktrees.enabled`; `POST /sessions/<id>/command` submits `axn-worktree <name>` through the frontend dispatch — unlike raw `/write` — then a fake `devin` launch in the main checkout must raise the isolation banner). Like the other flows it runs `target/release/axn-term` from `tauri build` — a plain `cargo build`/`cargo test` binary loads the Vite dev URL, so without `pnpm dev` no frontend starts and no session ever appears.
 - On macOS the bare `target/release/axn-term` binary cannot host WKWebView (the web content process dies at window creation); the adapter automatically prefers `target/release/bundle/macos/axn-term.app/Contents/MacOS/axn-term` next to `AXN_TERM_BINARY`, so run `tauri build --bundles app` once after frontend changes.
 - The flow adapter writes a `$SHELL` shim (`bin/axn-login-shell`) into the state dir: command sub-shells run `sh -c` with `login_shell_path()` — the login-shell PATH, not the app's env PATH — so the fake `devin` would be invisible without it. The shim answers the `-l -i -c env` probe with the flow bin dir prepended and (for zsh) routes startup through a proxy `ZDOTDIR` that re-sources the user's real dotfiles then re-prepends the bin dir, keeping the fake binaries first even after profiles rebuild PATH.
-- Run the real flow with `AXN_TERM_DEVIN_SESSION=<available-session> axn-dev flow -f flows/axn-term-restore-real-devin.xml --adapter axn-term=flows/adapters/axnTerm.js`. The adapter verifies the exact configured name before reopening. Do not remove locks or close unrelated Devin instances to run it.
+- Run the real flow with `AXN_TERM_DEVIN_SESSION=<available-session> axn-dev flow -f flows/axn-term-restore-real-devin.xml --adapter axn-term=flows/adapters/axn-term.js`. The adapter verifies the exact configured name before reopening. Do not remove locks or close unrelated Devin instances to run it.
 - Devin CLI v3000.10.27 treats a combined `/exit\r` write as pasted multiline input rather than submission. Type `/exit`, allow the input to settle, and send `\r` separately. A shell-script stand-in does not reproduce this input behavior.
 - Devin name capture: an authoritative capture is armed immediately before the separate Enter submits `/exit` (or by `onClose`'s Ctrl-C×2) and consumes only subsequent output chunks. For exits the plugin did not drive (manual Ctrl-C×2, `/quit`), `onProcessEnd` instead parses the newest resume line out of a bounded 16 KB output *tail* and arms a short passive capture for chunks still in flight — a passive capture adopts a seen name but never erases a stored one. Never use a scrollback length/offset as a capture cursor: scrollback is capped at 200,000 characters.
 - Devin CLI ≥3000.11 prints the exit resume hint on two lines (` devin -r <name>` then ` resumes this session · devin -r lists recent sessions`); older versions print `Resume this session with \`devin -r <name>\`` on one line. `findDevinSessionName` matches both.

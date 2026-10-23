@@ -13,32 +13,27 @@
       </env>
     </setup>
     <steps>
-      <script adapter="axn-term" action="prepare" description="Create temp state with a git repo, a shell session inside it and worktrees.enabled" />
-      <assertions description="The test harness is ready">
-        <assert that="contains" value="state dir prepared" />
-      </assertions>
+      <step adapter="axn-term" action="prepare" description="Create temp state with a git repo, a shell session inside it and worktrees.enabled" >
+        <assert that="contains" value="state dir prepared"  description="The test harness is ready"/>
+      </step>
 
-      <script adapter="axn-term" action="start" description="Launch axn-term" />
-      <assertions description="The app started">
-        <assert that="contains" value="app started" />
-      </assertions>
+      <step adapter="axn-term" action="start" description="Launch axn-term" >
+        <assert that="contains" value="app started"  description="The app started"/>
+      </step>
 
-      <script adapter="axn-term" action="createWorktree" description="Submit axn-worktree flowtest through the remote command dispatch" />
-      <assertions description="The plugin created worktree, branch and session">
-        <assert that="contains" value="worktree created" />
-        <assert that="contains" value="wt/flowtest" />
-      </assertions>
+      <step adapter="axn-term" action="createWorktree" description="Submit axn-worktree flowtest through the remote command dispatch" >
+        <assert that="contains" value="worktree created"  description="The plugin created worktree, branch and session"/>
+        <assert that="contains" value="wt/flowtest"  description="The plugin created worktree, branch and session"/>
+      </step>
 
-      <script adapter="axn-term" action="nudgeWorktree" description="Run fake devin in the main-checkout session — the plugin must warn" />
-      <assertions description="The isolation banner appeared">
-        <assert that="contains" value="isolation banner" />
-        <assert that="contains" value="main checkout" />
-      </assertions>
+      <step adapter="axn-term" action="nudgeWorktree" description="Run fake devin in the main-checkout session — the plugin must warn" >
+        <assert that="contains" value="isolation banner"  description="The isolation banner appeared"/>
+        <assert that="contains" value="main checkout"  description="The isolation banner appeared"/>
+      </step>
 
-      <script adapter="axn-term" action="close" description="Close axn-term so state is persisted" />
-      <assertions description="The app closed and saved state">
-        <assert that="contains" value="app closed" />
-      </assertions>
+      <step adapter="axn-term" action="close" description="Close axn-term so state is persisted" >
+        <assert that="contains" value="app closed"  description="The app closed and saved state"/>
+      </step>
     </steps>
   </flow>
 </flows>

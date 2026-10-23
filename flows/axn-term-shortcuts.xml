@@ -28,11 +28,9 @@
             description="Open the shell UI, log in with Keycloak, and wait for the container terminal prompt" />
       <step src="steps/shortcuts.ts"
             description="Create a new workspace and session, switch between them, then type axn-devin-resume and verify the rewritten command" />
-      <assertions>
-        <assert that="exitCode" value="0" />
-        <assert that="contains" value="Workspace and session switching verified" />
-        <assert that="contains" value="Devin resume command verified" />
-      </assertions>
+      <assert that="exitCode" value="0" />
+      <assert that="contains" value="Workspace and session switching verified" />
+      <assert that="contains" value="Devin resume command verified" />
     </steps>
   </flow>
 </flows>

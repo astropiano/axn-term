@@ -3,6 +3,9 @@ import { Save } from 'lucide-react';
 import { useSettings } from '../SettingsProvider';
 import { monaco, applyAxnMonacoTheme, languageForPath, AXN_MONACO_THEME } from './monacoSetup';
 import { resolvePath, type FileService } from './fileService';
+import { isMac } from '../platform';
+
+const saveTip = isMac ? 'Save (⌘S / Ctrl+S)' : 'Save (Ctrl+S)';
 
 export interface EditorHandle {
   isDirty(): boolean;
@@ -102,9 +105,11 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
       if (!dirtyRef.current) markDirty(true);
     });
 
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      void saveRef.current();
-    });
+    // CtrlCmd is Cmd on macOS / Ctrl elsewhere; WinCtrl is Ctrl on
+    // macOS+Linux / Win on Windows — together both ⌘S and Ctrl+S save.
+    const saveKey = () => void saveRef.current();
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveKey);
+    editor.addCommand(monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyS, saveKey);
 
     fileServiceRef.current
       .readFile(resolvedPath)
@@ -134,7 +139,17 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
   }, [isVisible]);
 
   return (
-    <div className="flex h-full w-full flex-col bg-[var(--terminal-bg)]">
+    <div
+      className="flex h-full w-full flex-col bg-[var(--terminal-bg)]"
+      // Monaco's own bindings only fire while its textarea is focused; this
+      // catches ⌘S/Ctrl+S pressed with focus anywhere else in the view.
+      onKeyDown={(event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+          event.preventDefault();
+          void saveRef.current();
+        }
+      }}
+    >
       <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
         <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--text-secondary)]">
           {path}
@@ -149,8 +164,8 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
           type="button"
           onClick={() => void save()}
           disabled={saving}
-          data-tip="Save (Ctrl+S)"
-          aria-label="Save (Ctrl+S)"
+          data-tip={saveTip}
+          aria-label={saveTip}
           className="flex h-5 w-5 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--accent)] disabled:opacity-50"
         >
           <Save className="h-3.5 w-3.5" />

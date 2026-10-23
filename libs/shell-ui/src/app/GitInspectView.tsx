@@ -46,6 +46,9 @@ import {
 import type { CommitFile, GitCommit, StatusFile, WorktreeStatus } from './gitClient';
 import { ptyIdOf } from '../types';
 import type { EditorTab, ShellSession } from '../types';
+import { isMac } from '../platform';
+
+const diffSaveTip = isMac ? 'Save (⌘S / Ctrl+S)' : 'Save (Ctrl+S)';
 
 const LOG_LIMIT = 400;
 const MIN_HISTORY_H = 96;
@@ -169,9 +172,11 @@ function MonacoDiff({
       dirtyRef.current = true;
       onDirtyChangeRef.current?.(true);
     });
-    modifiedEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      void saveRef.current();
-    });
+    // CtrlCmd is Cmd on macOS / Ctrl elsewhere; WinCtrl is Ctrl on
+    // macOS+Linux / Win on Windows — together both ⌘S and Ctrl+S save.
+    const saveKey = () => void saveRef.current();
+    modifiedEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveKey);
+    modifiedEditor.addCommand(monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyS, saveKey);
     return () => {
       changeSub.dispose();
       modelsRef.current?.original.dispose();
@@ -1411,8 +1416,8 @@ export function GitInspectView({
                   type="button"
                   onClick={() => void diffApiRef.current?.flush()}
                   disabled={diffSaving || !diffDirty}
-                  data-tip="Save (Ctrl+S)"
-                  aria-label="Save (Ctrl+S)"
+                  data-tip={diffSaveTip}
+                  aria-label={diffSaveTip}
                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--accent)] disabled:opacity-50"
                 >
                   <Save className="h-3 w-3" />

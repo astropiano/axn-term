@@ -26,12 +26,10 @@
     <steps>
       <step src="steps/login.ts"
             description="Open the shell UI, log in with Keycloak, and wait for the container terminal prompt" />
-      <assertions description="The user is authenticated and the container shell prompt is visible">
-        <assert that="exitCode" value="0" description="Playwright step exits successfully" />
-        <assert that="contains"
-                value="Shell login and WebSocket connection verified"
-                description="Step reports a successful login and WebSocket shell connection" />
-      </assertions>
+      <assert that="exitCode" value="0" description="Playwright step exits successfully" />
+      <assert that="contains"
+      value="Shell login and WebSocket connection verified"
+      description="Step reports a successful login and WebSocket shell connection" />
     </steps>
   </flow>
 </flows>

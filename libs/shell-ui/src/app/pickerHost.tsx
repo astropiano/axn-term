@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore, type ReactNode } from 'react';
 import { SearchPickerModal, type PickerItem } from './SearchPickerModal';
 
 /**
@@ -15,9 +15,20 @@ export interface PickOptions {
   items: PickerItem[];
 }
 
+export interface PickCreateOptions extends PickOptions {
+  /** Label of the create row for the typed text; null hides the row. */
+  createLabel?: (query: string) => ReactNode | null;
+}
+
+/** `created` marks the create-row pick — `key` is the typed query then. */
+export interface PickResult {
+  key: string;
+  created: boolean;
+}
+
 interface PickRequest {
-  options: PickOptions;
-  resolve: (key: string | null) => void;
+  options: PickCreateOptions;
+  resolve: (result: PickResult | null) => void;
 }
 
 let current: PickRequest | null = null;
@@ -30,15 +41,24 @@ function set(next: PickRequest | null) {
 
 /** Show the picker; resolves with the picked item's key, or null. */
 export function pickFromList(options: PickOptions): Promise<string | null> {
+  return pickOrCreate(options).then((r) => (r && !r.created ? r.key : null));
+}
+
+/**
+ * Same picker with a create row: resolves `{key, created}` — `key` is the
+ * picked item's key, or the typed query when `created` is true; null when
+ * dismissed.
+ */
+export function pickOrCreate(options: PickCreateOptions): Promise<PickResult | null> {
   // A newer request replaces an open one — the older caller gets null.
   current?.resolve(null);
   return new Promise((resolve) => set({ options, resolve }));
 }
 
-function finish(key: string | null) {
+function finish(result: PickResult | null) {
   const request = current;
   set(null);
-  request?.resolve(key);
+  request?.resolve(result);
 }
 
 export function PickerHost() {
@@ -55,8 +75,14 @@ export function PickerHost() {
       title={request.options.title}
       placeholder={request.options.placeholder}
       items={request.options.items}
-      onPick={(item) => finish(item.key)}
+      onPick={(item) => finish({ key: item.key, created: false })}
       onClose={() => finish(null)}
+      createLabel={request.options.createLabel}
+      onCreate={
+        request.options.createLabel
+          ? (query) => finish({ key: query, created: true })
+          : undefined
+      }
     />
   );
 }

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { PathStat, SessionBackend } from '@axn-term/session-backend';
+import type { DirEntry, PathStat, SessionBackend } from '@axn-term/session-backend';
 import type { AgentHookSpec } from '@axn-term/plugin-sdk';
 import { ptyIdOf } from '../../types';
 import type { AgentCli, RepoInfo, SessionAttention, SessionBanner, ShellSession, Task, Workspace } from '../../types';
@@ -191,6 +191,12 @@ export interface PluginApi {
    * Resolves `false` when the backend cannot create directories.
    */
   mkdir: (path: string, cwd?: string) => Promise<boolean>;
+  /**
+   * List a directory in the session's filesystem. Relative `path` resolves
+   * against `cwd` (default: the session's stored cwd). Resolves `null` when
+   * the backend cannot list directories or the path cannot be read.
+   */
+  listDir: (path: string, cwd?: string) => Promise<DirEntry[] | null>;
   /**
    * Repo context-menu rows contributed by all enabled plugins via their
    * `repoMenuItems` hook — rendered by the git-status repo menu.
@@ -827,6 +833,9 @@ export function createPluginApi(
     mkdir: (path, cwd) =>
       deps.backend.mkdir?.(ptyId, resolvePath(cwd ?? session.cwd, path)).then(() => true, () => false) ??
       Promise.resolve(false),
+    listDir: (path, cwd) =>
+      deps.backend.listDir?.(ptyId, resolvePath(cwd ?? session.cwd, path)).catch(() => null) ??
+      Promise.resolve(null),
     repoMenuItems: (repo) =>
       enabledPlugins()
         .filter((p) => p.repoMenuItems)

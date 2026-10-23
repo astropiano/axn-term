@@ -4,6 +4,11 @@ import { axnLog } from '../log';
 import { sessionLastSelectedAt } from '../attention';
 import type { SessionAttention, SessionBanner, SessionStatus, ShellSession, Task } from '../../types';
 import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin';
+import {
+  agentResumeMenuItem,
+  forgetLastAgentSession,
+  rememberLastAgentSession,
+} from './agentResume';
 import { shellQuote } from '../../shellQuote';
 
 // Anchored: session.process is the argv-derived basename, so 'vibe' and
@@ -203,7 +208,10 @@ function beginExitCapture(ctx: SessionViewContext & PluginApi): ExitCapture {
       if (exitCaptures.get(id) !== capture) return;
       clearTimeout(timer);
       exitCaptures.delete(id);
-      if (name) ctx.updatePluginState({ vibeSessionName: name });
+      if (name) {
+        ctx.updatePluginState({ vibeSessionName: name });
+        rememberVibeLast(ctx, { name });
+      }
       axnLog(name ? 'debug' : 'warn', 'vibe-close',
         `session ${id}: ${name ? `captured post-exit session ${name}` : 'no complete post-exit resume line; name cleared'}`);
       resolveDone();
@@ -240,6 +248,7 @@ function finishRestore(ctx: SessionViewContext & PluginApi, outcome: 'ok' | 'gon
     return;
   }
   if (outcome === 'gone') {
+    forgetLastAgentSession(ctx, 'vibe', pending.name);
     ctx.updatePluginState({ vibeSessionName: undefined });
     ctx.setBanner({
       level: 'error',
@@ -333,6 +342,18 @@ function getVibeState(ctx: SessionViewContext & PluginApi): VibePluginState {
   return (ctx.pluginState as VibePluginState | undefined) ?? {};
 }
 
+/**
+ * The live counterpart of getVibeState: `ctx.pluginState` is a snapshot
+ * from when the ctx was built, so a capture finishing in the same tick as
+ * another update reads the session's live pluginState instead.
+ */
+function getVibeStateLive(ctx: SessionViewContext & PluginApi): VibePluginState {
+  const live = (ctx.getSession().pluginState as Record<string, unknown> | undefined)?.[
+    vibePlugin.stateKey ?? vibePlugin.id
+  ];
+  return (live as VibePluginState | undefined) ?? getVibeState(ctx);
+}
+
 interface VibeSessionNameMatch {
   name: string;
   end: number;
@@ -407,6 +428,25 @@ function vibeResumeCommand(remembered: { name: string; cwd?: string }): string {
     return `cd ${shellQuote(remembered.cwd)} && ${resume}`;
   }
   return resume;
+}
+
+/**
+ * Publish the just-exited vibe conversation as this agent's last session
+ * (app-level pluginData — see agentResume.ts). Named records only: vibe has
+ * no "continue latest" line (bare `vibe -r` lists recent sessions), so a
+ * vibe exit without a captured name leaves no resumable last session.
+ */
+function rememberVibeLast(
+  ctx: SessionViewContext & PluginApi,
+  remembered: { name: string; cwd?: string } | undefined,
+): void {
+  if (!remembered) return;
+  const cwd = remembered.cwd ?? getVibeStateLive(ctx).vibeSessionCwd ?? ctx.getSession().cwd;
+  rememberLastAgentSession(ctx, 'vibe', {
+    name: remembered.name,
+    cwd,
+    command: vibeResumeCommand({ name: remembered.name, cwd }),
+  });
 }
 
 function parseVibeCommand(command: string): { name: string; cwd?: string } | undefined {
@@ -514,6 +554,9 @@ export const vibePlugin: SessionViewPlugin = {
       },
     },
   ],
+  // "Resume vibe session '<name>'" — the shared last-session capability;
+  // offered on idle sessions once a vibe conversation was captured.
+  sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'vibe'),
   render: (ctx) => <VibeTasks ctx={ctx} />,
   renderRow: (ctx) => <VibeRow ctx={ctx} />,
   rowTip: (ctx) =>
@@ -533,6 +576,18 @@ export const vibePlugin: SessionViewPlugin = {
     watchedOutput.delete(ctx.session.id);
     ctx.updatePluginState({ vibeOutputStart: undefined, attention: undefined });
     void recordSessionCwd(ctx);
+    // A vibe exit the plugin did not drive (/quit, a manual Ctrl-C) prints
+    // its resume hint before the foreground poll catches up — take it from
+    // a bounded tail so the last-session record sees it too.
+    const tail = (ctx.getSession().output ?? '').slice(-16_384);
+    const tailName = parseVibeSessionName(tail, true);
+    if (tailName && tailName !== state.vibeSessionName) {
+      ctx.updatePluginState({ vibeSessionName: tailName });
+    }
+    // Publish the just-exited conversation as this agent's last session —
+    // named records only (rememberVibeLast drops nameless exits); the tail
+    // scan's fresh name wins over an older remembered one.
+    rememberVibeLast(ctx, (tailName ? { name: tailName } : undefined) ?? rememberedVibeSession(ctx));
     const hasTasks = (state.tasks ?? []).length > 0;
     const hasSessionProgress =
       (ctx.session.tasks ?? []).length > 0 || (ctx.session.progress ?? 0) > 0;
@@ -680,6 +735,7 @@ export const vibePlugin: SessionViewPlugin = {
     if (pending) {
       await pending.done;
       await recordSessionCwd(ctx);
+      rememberVibeLast(ctx, rememberedVibeSession(ctx));
       return;
     }
     const live = ctx.getSession();
@@ -699,6 +755,9 @@ export const vibePlugin: SessionViewPlugin = {
     }
     await capture.done;
     await recordSessionCwd(ctx);
+    // A capture that ended nameless leaves nothing resumable for vibe —
+    // rememberVibeLast drops nameless exits.
+    rememberVibeLast(ctx, rememberedVibeSession(ctx));
   },
 
   onSessionOpen: (ctx) => {

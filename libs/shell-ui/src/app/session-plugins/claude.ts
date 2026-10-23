@@ -4,6 +4,11 @@ import { axnLog } from '../log';
 import { hookStatusOwned } from './agentHookBridge';
 import { claudeHookSpec } from './claudeHooks';
 import { registerAgentLauncher } from './agentRegistry';
+import {
+  agentResumeMenuItem,
+  forgetLastAgentSession,
+  rememberLastAgentSession,
+} from './agentResume';
 import { agentCommand } from './devWorkflow';
 import { promptArg, shellWord } from '../../shellQuote';
 import { shellQuote } from '../../shellQuote';
@@ -167,6 +172,18 @@ function getState(ctx: SessionViewContext & PluginApi): ClaudePluginState {
   return (ctx.pluginState as ClaudePluginState | undefined) ?? {};
 }
 
+/**
+ * The live counterpart of getState: `ctx.pluginState` is a snapshot from
+ * when the ctx was built, so a capture finishing in the same tick as
+ * another update reads the session's live pluginState instead.
+ */
+function getStateLive(ctx: SessionViewContext & PluginApi): ClaudePluginState {
+  const live = (ctx.getSession().pluginState as Record<string, unknown> | undefined)?.[
+    claudePlugin.stateKey ?? claudePlugin.id
+  ];
+  return (live as ClaudePluginState | undefined) ?? getState(ctx);
+}
+
 function getSettings(ctx: SessionViewContext & PluginApi): ClaudePluginSettings {
   return (ctx.pluginSettings as ClaudePluginSettings | undefined) ?? {};
 }
@@ -183,6 +200,27 @@ function claudeResumeCommand(state: ClaudePluginState, sessionCwd: string | unde
   const cwd = state.claudeCwd;
   if (cwd && cwd !== sessionCwd) return `cd ${shellQuote(cwd)} && ${resume}`;
   return resume;
+}
+
+/**
+ * Publish the just-exited claude conversation as this agent's last session
+ * (app-level pluginData — see agentResume.ts): the captured id's exact
+ * `claude --resume <id>` line (with its --worktree when one was hinted),
+ * else `claude -c` — continue the latest conversation in the directory.
+ * Unlike claudeResumeCommand the `cd` prefix is always folded in — the
+ * menu resume can run from any session's shell.
+ */
+function rememberClaudeLast(ctx: SessionViewContext & PluginApi, state: ClaudePluginState): void {
+  const cwd = state.claudeCwd ?? ctx.getSession().cwd;
+  const worktree = state.claudeWorktree ? ` --worktree ${shellQuote(state.claudeWorktree)}` : '';
+  const resume = state.claudeResumeId
+    ? `claude${worktree} --resume ${state.claudeResumeId}`
+    : 'claude -c';
+  rememberLastAgentSession(ctx, 'claude', {
+    name: state.claudeResumeId,
+    cwd,
+    command: cwd ? `cd ${shellQuote(cwd)} && ${resume}` : resume,
+  });
 }
 
 // Claude Code prints its resume hint on exit (double Ctrl-C, /exit, /quit):
@@ -243,15 +281,23 @@ function beginExitCapture(
 }
 
 /** Feed captured output; adopts the hint and ends the capture once complete. */
-function adoptResumeHint(ctx: SessionViewContext & PluginApi, output: string): boolean {
+function adoptResumeHint(
+  ctx: SessionViewContext & PluginApi,
+  output: string,
+): { id: string; worktree?: string } | undefined {
   const hint = parseClaudeResumeHint(output);
-  if (!hint) return false;
+  if (!hint) return undefined;
   const state = getState(ctx);
   if (hint.id !== state.claudeResumeId || hint.worktree !== state.claudeWorktree) {
     ctx.updatePluginState({ claudeResumeId: hint.id, claudeWorktree: hint.worktree });
     axnLog('debug', 'claude-close', `session ${ctx.session.id}: captured resume id ${hint.id}`);
   }
-  return true;
+  rememberClaudeLast(ctx, {
+    ...getStateLive(ctx),
+    claudeResumeId: hint.id,
+    claudeWorktree: hint.worktree,
+  });
+  return hint;
 }
 
 // After the restore command is injected, the attempt is tracked until
@@ -289,6 +335,7 @@ function finishRestore(ctx: SessionViewContext & PluginApi, outcome: 'ok' | 'gon
   }
   if (outcome === 'gone') {
     // Claude confirmed the conversation is gone — stop retrying it.
+    forgetLastAgentSession(ctx, 'claude', getState(ctx).claudeResumeId);
     ctx.updatePluginState({ claudeResumeId: undefined, claudeWorktree: undefined });
   }
   ctx.setBanner({
@@ -377,7 +424,12 @@ export const claudePlugin: SessionViewPlugin = {
     // capture alive for exit chunks still in flight.
     if (!exitCaptures.has(ctx.session.id)) {
       const tail = (ctx.getSession().output ?? '').slice(-EXIT_TAIL_CHARS);
-      if (!adoptResumeHint(ctx, tail)) beginExitCapture(ctx, PASSIVE_CAPTURE_MS);
+      if (!adoptResumeHint(ctx, tail)) {
+        beginExitCapture(ctx, PASSIVE_CAPTURE_MS);
+        // Publish the just-exited conversation as the last session — a hint
+        // arriving inside the capture upgrades the record to the exact id.
+        rememberClaudeLast(ctx, getStateLive(ctx));
+      }
     }
   },
 
@@ -440,6 +492,10 @@ export const claudePlugin: SessionViewPlugin = {
       },
     },
   ],
+
+  // "Resume claude session '<id>'" — the shared last-session capability;
+  // offered on idle sessions once a claude conversation was captured.
+  sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'claude'),
 
   // A submitted command starts new shell work — a terminal badge left by a
   // finished agent run no longer applies, and a stale needs-you flag is gone.
@@ -527,6 +583,7 @@ export const claudePlugin: SessionViewPlugin = {
     const pending = exitCaptures.get(ctx.session.id);
     if (pending) {
       await pending.done;
+      rememberClaudeLast(ctx, getStateLive(ctx));
       return;
     }
     if (!isClaudeProcess(ctx.getSession().process)) {
@@ -547,6 +604,9 @@ export const claudePlugin: SessionViewPlugin = {
       await Promise.race([capture.done, pause(1_500)]);
     }
     await capture.done;
+    // No hint within the capture window still leaves a resumable last
+    // session — `claude -c` continues the latest conversation in its dir.
+    rememberClaudeLast(ctx, getStateLive(ctx));
   },
 };
 

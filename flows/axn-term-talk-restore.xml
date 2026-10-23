@@ -12,36 +12,30 @@
       </env>
     </setup>
     <steps>
-      <script adapter="axn-term" action="prepare" description="Create a temp state dir with a session carrying an active agent talk tab and a fake devin binary" />
-      <assertions description="The test harness is ready">
-        <assert that="contains" value="state dir prepared" />
-      </assertions>
+      <step adapter="axn-term" action="prepare" description="Create a temp state dir with a session carrying an active agent talk tab and a fake devin binary" >
+        <assert that="contains" value="state dir prepared"  description="The test harness is ready"/>
+      </step>
 
-      <script adapter="axn-term" action="start" description="Launch axn-term with the temp state dir" />
-      <assertions description="The app started">
-        <assert that="contains" value="app started" />
-      </assertions>
+      <step adapter="axn-term" action="start" description="Launch axn-term with the temp state dir" >
+        <assert that="contains" value="app started"  description="The app started"/>
+      </step>
 
-      <script adapter="axn-term" action="waitTalkSeed" description="The talk tab spawns and runs the seed prompt; the fallback resume command is persisted" />
-      <assertions description="The seeded devin session ran and a resume command was stored">
-        <assert that="contains" value="talk seeded" />
-        <assert that="contains" value="devin -c" />
-      </assertions>
+      <step adapter="axn-term" action="waitTalkSeed" description="The talk tab spawns and runs the seed prompt; the fallback resume command is persisted" >
+        <assert that="contains" value="talk seeded"  description="The seeded devin session ran and a resume command was stored"/>
+        <assert that="contains" value="devin -c"  description="The seeded devin session ran and a resume command was stored"/>
+      </step>
 
-      <script adapter="axn-term" action="exitTalk" description="Type /exit into the talk sub-shell so devin prints its resume hint" />
-      <assertions description="The devin session name was captured into the tab's resumeCommand">
-        <assert that="contains" value="resume captured: devin -r gray-party" />
-      </assertions>
+      <step adapter="axn-term" action="exitTalk" description="Type /exit into the talk sub-shell so devin prints its resume hint" >
+        <assert that="contains" value="resume captured: devin -r gray-party"  description="The devin session name was captured into the tab's resumeCommand"/>
+      </step>
 
-      <script adapter="axn-term" action="close" description="Close axn-term so state is persisted" />
-      <assertions description="The app closed and saved state">
-        <assert that="contains" value="app closed" />
-      </assertions>
+      <step adapter="axn-term" action="close" description="Close axn-term so state is persisted" >
+        <assert that="contains" value="app closed"  description="The app closed and saved state"/>
+      </step>
 
-      <script adapter="axn-term" action="reopenTalk" description="Reopen axn-term — the talk tab must resume the captured devin session, not re-seed" />
-      <assertions description="The tab resumed via devin -r gray-party">
-        <assert that="contains" value="talk resumed via 'devin -r gray-party'" />
-      </assertions>
+      <step adapter="axn-term" action="reopenTalk" description="Reopen axn-term — the talk tab must resume the captured devin session, not re-seed" >
+        <assert that="contains" value="talk resumed via 'devin -r gray-party'"  description="The tab resumed via devin -r gray-party"/>
+      </step>
     </steps>
   </flow>
 
@@ -57,31 +51,26 @@
       </env>
     </setup>
     <steps>
-      <script adapter="axn-term" action="prepare" description="Create a temp state dir with a session carrying an active agent talk tab and a fake devin binary" />
-      <assertions description="The test harness is ready">
-        <assert that="contains" value="state dir prepared" />
-      </assertions>
+      <step adapter="axn-term" action="prepare" description="Create a temp state dir with a session carrying an active agent talk tab and a fake devin binary" >
+        <assert that="contains" value="state dir prepared"  description="The test harness is ready"/>
+      </step>
 
-      <script adapter="axn-term" action="start" description="Launch axn-term with the temp state dir" />
-      <assertions description="The app started">
-        <assert that="contains" value="app started" />
-      </assertions>
+      <step adapter="axn-term" action="start" description="Launch axn-term with the temp state dir" >
+        <assert that="contains" value="app started"  description="The app started"/>
+      </step>
 
-      <script adapter="axn-term" action="waitTalkSeed" description="The talk tab spawns and runs the seed prompt; the fallback resume command is persisted" />
-      <assertions description="The seeded devin session ran and a resume command was stored">
-        <assert that="contains" value="talk seeded" />
-        <assert that="contains" value="devin -c" />
-      </assertions>
+      <step adapter="axn-term" action="waitTalkSeed" description="The talk tab spawns and runs the seed prompt; the fallback resume command is persisted" >
+        <assert that="contains" value="talk seeded"  description="The seeded devin session ran and a resume command was stored"/>
+        <assert that="contains" value="devin -c"  description="The seeded devin session ran and a resume command was stored"/>
+      </step>
 
-      <script adapter="axn-term" action="close" description="Close axn-term while devin is still running — no exit hint, only the -c fallback survives" />
-      <assertions description="The app closed and saved state">
-        <assert that="contains" value="app closed" />
-      </assertions>
+      <step adapter="axn-term" action="close" description="Close axn-term while devin is still running — no exit hint, only the -c fallback survives" >
+        <assert that="contains" value="app closed"  description="The app closed and saved state"/>
+      </step>
 
-      <script adapter="axn-term" action="reopenTalk" description="Reopen axn-term — the talk tab must continue the directory's devin session, not re-seed" />
-      <assertions description="The tab resumed via devin -c">
-        <assert that="contains" value="talk resumed via 'devin -c'" />
-      </assertions>
+      <step adapter="axn-term" action="reopenTalk" description="Reopen axn-term — the talk tab must continue the directory's devin session, not re-seed" >
+        <assert that="contains" value="talk resumed via 'devin -c'"  description="The tab resumed via devin -c"/>
+      </step>
     </steps>
   </flow>
 </flows>

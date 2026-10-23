@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fragment } from 'react';
 import { ContextMenu } from '../ContextMenu';
-import { Plus, Save, FolderOpen, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight } from 'lucide-react';
-import { Trans } from '@lingui/react/macro';
+import { Plus, Save, FolderOpen, FolderCog, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight } from 'lucide-react';
+import { Trans, useLingui } from '@lingui/react/macro';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
 import { SessionView } from './SessionView';
@@ -16,6 +16,8 @@ import type { AgentCli, ShellSession, Workspace } from '../types';
 import { ptyIdOf } from '../types';
 import type { RepoMenuItem, SessionViewPlugin } from './session-plugins/plugin';
 import type { TaskStateSnapshot } from './useAgentTasks';
+import { SetDefaultFolderModal } from './SetDefaultFolderModal';
+import { InvalidDefaultFolderModal } from './InvalidDefaultFolderModal';
 
 interface SessionPanelProps {
   workspaces: Workspace[];
@@ -197,6 +199,50 @@ function useEditableName(value: string, onChange: (name: string) => void) {
   return { editing, input, startEdit };
 }
 
+/** Wraps the first case-insensitive occurrence of `query` in an accent span. */
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>;
+  const i = text.toLowerCase().indexOf(query);
+  if (i < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, i)}
+      <span className="rounded bg-[var(--accent)]/25">{text.slice(i, i + query.length)}</span>
+      {text.slice(i + query.length)}
+    </>
+  );
+}
+
+/** Panel-header filter input — sits right of the workspace buttons. */
+function PanelSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useLingui();
+  return (
+    <div className="relative ml-1 flex min-w-0 flex-1 items-center">
+      <Search className="pointer-events-none absolute left-1.5 h-3 w-3 text-[var(--text-secondary)]" />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onChange('');
+        }}
+        placeholder={t`Filter sessions…`}
+        className="w-full min-w-0 rounded border border-[var(--border)] bg-[var(--bg)] py-0.5 pl-5 pr-4 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)] focus:border-[var(--accent)]"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="Clear filter"
+          className="absolute right-1 flex h-4 w-4 items-center justify-center rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function AddWorkspaceButton({ onClick }: { onClick: () => void }) {
   return (
     <IconButton onClick={onClick} title="New workspace">
@@ -215,6 +261,7 @@ function WorkspaceContextMenu({
   onRename,
   onMove,
   onDelete,
+  onEditDefaultFolder,
   onSetDefaultFolder,
   onClearDefaultFolder,
   hasSession,
@@ -229,6 +276,8 @@ function WorkspaceContextMenu({
   onRename: () => void;
   onMove: (delta: -1 | 1) => void;
   onDelete: () => void;
+  /** Opens the default-folder path modal (any path, unverified). */
+  onEditDefaultFolder: () => void;
   /** Set workspace.defaultFolder from the representative session's live cwd. */
   onSetDefaultFolder: () => void;
   onClearDefaultFolder: () => void;
@@ -276,6 +325,17 @@ function WorkspaceContextMenu({
       >
         <Pencil className="h-3.5 w-3.5 shrink-0" />
         Rename workspace…
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onEditDefaultFolder();
+          onClose();
+        }}
+        className={itemClass}
+      >
+        <FolderCog className="h-3.5 w-3.5 shrink-0" />
+        Set default folder…
       </button>
       {hasSession && (
         <button
@@ -375,10 +435,12 @@ function WorkspaceHeader({
   onRename,
   onMove,
   onDelete,
+  onEditDefaultFolder,
   onSetDefaultFolder,
   onClearDefaultFolder,
   hasSession,
   pluginItems,
+  searchQuery,
   onDragStart,
   onDragEnd,
 }: {
@@ -393,10 +455,13 @@ function WorkspaceHeader({
   onRename: (name: string) => void;
   onMove: (delta: -1 | 1) => void;
   onDelete: () => void;
+  onEditDefaultFolder: () => void;
   onSetDefaultFolder: () => void;
   onClearDefaultFolder: () => void;
   hasSession: boolean;
   pluginItems?: RepoMenuItem[];
+  /** Active panel filter — matched name substring is highlighted. */
+  searchQuery?: string;
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: (e: React.DragEvent) => void;
 }) {
@@ -462,7 +527,7 @@ function WorkspaceHeader({
         </div>
       ) : (
         <span className="flex-1 cursor-pointer truncate py-1.5 pl-1 font-semibold">
-          {workspace.name}
+          <Highlight text={workspace.name} query={searchQuery ?? ''} />
         </span>
       )}
 
@@ -505,6 +570,7 @@ function WorkspaceHeader({
           onRename={startEdit}
           onMove={onMove}
           onDelete={onDelete}
+          onEditDefaultFolder={onEditDefaultFolder}
           onSetDefaultFolder={onSetDefaultFolder}
           onClearDefaultFolder={onClearDefaultFolder}
           hasSession={hasSession}
@@ -896,6 +962,7 @@ export function SessionItem({
   mergePluginData,
   isDragging,
   dropBefore,
+  searchQuery,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -904,6 +971,8 @@ export function SessionItem({
   session: ShellSession;
   workspaces: Workspace[];
   isSelected: boolean;
+  /** Active panel filter — matched name substring is highlighted. */
+  searchQuery?: string;
   taskState: TaskStateSnapshot | null;
   onSelect: () => void;
   /** Opens the "Move to workspace" picker for this session. */
@@ -1022,7 +1091,9 @@ export function SessionItem({
               <SessionIcon process={session.process} />
             </span>
           </span>
-          <span className="min-w-0 flex-1 truncate font-semibold">{session.name}</span>
+          <span className="min-w-0 flex-1 truncate font-semibold">
+            <Highlight text={session.name} query={searchQuery ?? ''} />
+          </span>
           {rowBadges}
           {session.status &&
             (session.status === 'running' && (session.progress ?? 0) > 0 ? (
@@ -1241,8 +1312,15 @@ export function SessionPanel({
   const [dragWorkspaceId, setDragWorkspaceId] = useState<string | null>(null);
   // Index in the workspaces array the dragged workspace would land at.
   const [workspaceDropIndex, setWorkspaceDropIndex] = useState<number | null>(null);
+  // Header filter — matched name substrings are highlighted in the rows.
+  const [query, setQuery] = useState('');
+  // Workspace whose default-folder modal is open.
+  const [folderEdit, setFolderEdit] = useState<Workspace | null>(null);
+  // Workspace whose defaultFolder failed the spawn-time check.
+  const [folderError, setFolderError] = useState<Workspace | null>(null);
   const backend = useSessionBackend();
   const { pluginSettings } = usePluginSettings();
+  const q = query.trim().toLowerCase();
 
   // The session a workspace-scoped action binds to: the selected session when
   // it lives in that workspace, otherwise the workspace's first session.
@@ -1287,6 +1365,27 @@ export function SessionPanel({
         (await backend.getCwd?.(ptyIdOf(rep)).catch(() => null)) ?? rep.cwd;
       if (cwd) updateWorkspace(workspace.id, { defaultFolder: cwd });
     })();
+  };
+
+  const handleAddSession = (workspace: Workspace) => {
+    const folder = workspace.defaultFolder?.trim();
+    if (!folder) {
+      onAddSession(workspace.id);
+      return;
+    }
+    const rep = representativeSession(workspace) ?? sessions[0];
+    const pty = rep ? ptyIdOf(rep) : undefined;
+    if (!pty || !backend.statPath) {
+      onAddSession(workspace.id, folder);
+      return;
+    }
+    void backend
+      .statPath(pty, '/', folder)
+      .then((stat) => {
+        if (stat?.isDir) onAddSession(workspace.id, stat.path);
+        else setFolderError(workspace);
+      })
+      .catch(() => onAddSession(workspace.id, folder));
   };
 
   const handleDragStart = (e: React.DragEvent, sessionId: string) => {
@@ -1369,6 +1468,17 @@ export function SessionPanel({
     setDropTarget(null);
   };
 
+  const matchesFilter = (name: string) => name.toLowerCase().includes(q);
+  // A workspace stays listed when its own name matches or it hosts a matching
+  // session.
+  const visibleWorkspaces = q
+    ? workspaces.filter(
+        (ws) =>
+          matchesFilter(ws.name) ||
+          sessions.some((s) => s.workspaceId === ws.id && matchesFilter(s.name)),
+      )
+    : workspaces;
+
   return (
     <div className="flex h-full w-full flex-col border-r border-[var(--border)] bg-[var(--bg)]">
       <div className="flex h-8 shrink-0 items-center justify-between gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
@@ -1381,12 +1491,17 @@ export function SessionPanel({
             <FolderOpen className="h-3.5 w-3.5" />
           </IconButton>
         </div>
+        <PanelSearch value={query} onChange={setQuery} />
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
-        {workspaces.map((workspace, index) => {
-          const workspaceSessions = sessions.filter((s) => s.workspaceId === workspace.id);
-          const isCollapsed = workspace.collapsed ?? false;
+        {visibleWorkspaces.map((workspace, index) => {
+          const workspaceSessions = sessions.filter(
+            (s) => s.workspaceId === workspace.id && (!q || matchesFilter(s.name)),
+          );
+          // A filter hides collapsed groups' content — force-expand while it
+          // is active so matches stay visible.
+          const isCollapsed = q ? false : (workspace.collapsed ?? false);
 
           return (
             <Fragment key={workspace.id}>
@@ -1419,19 +1534,21 @@ export function SessionPanel({
                   isCollapsed={isCollapsed}
                   canDelete={workspaces.length > 1}
                   canMoveUp={index > 0}
-                  canMoveDown={index < workspaces.length - 1}
+                  canMoveDown={index < visibleWorkspaces.length - 1}
                   isDragging={dragWorkspaceId === workspace.id}
                   onToggle={() => onToggleWorkspace(workspace.id)}
-                  onAddSession={() => onAddSession(workspace.id, workspace.defaultFolder)}
+                  onAddSession={() => handleAddSession(workspace)}
                   onRename={(name) => onRenameWorkspace(workspace.id, name)}
                   onMove={(delta) => onMoveWorkspace(workspace.id, delta)}
                   onDelete={() => onDeleteWorkspace(workspace.id)}
+                  onEditDefaultFolder={() => setFolderEdit(workspace)}
                   onSetDefaultFolder={() => handleSetDefaultFolder(workspace)}
                   onClearDefaultFolder={() =>
                     updateWorkspace(workspace.id, { defaultFolder: undefined })
                   }
                   hasSession={representativeSession(workspace) !== undefined}
                   pluginItems={workspacePluginItems(workspace)}
+                  searchQuery={q}
                   onDragStart={(e) => handleWorkspaceDragStart(e, workspace.id)}
                   onDragEnd={handleWorkspaceDragEnd}
                 />
@@ -1468,6 +1585,7 @@ export function SessionPanel({
                         pluginData={pluginData}
                         mergePluginData={mergePluginData}
                         isDragging={dragSessionId === session.id}
+                        searchQuery={q}
                         dropBefore={
                           dropTarget?.beforeSessionId === session.id &&
                           dropTarget.workspaceId === workspace.id
@@ -1483,7 +1601,7 @@ export function SessionPanel({
                   })}
                   {workspaceSessions.length === 0 && (
                     <div className="px-2 py-1 text-xs italic text-[var(--text-secondary)]">
-                      no sessions
+                      {q ? 'no matching sessions' : 'no sessions'}
                     </div>
                   )}
                 </div>
@@ -1492,10 +1610,38 @@ export function SessionPanel({
             </Fragment>
           );
         })}
-        {dragWorkspaceId && workspaceDropIndex === workspaces.length && (
+        {dragWorkspaceId && workspaceDropIndex === visibleWorkspaces.length && (
           <div className="h-0.5 rounded-full bg-[var(--accent)]" />
         )}
+        {q && visibleWorkspaces.length === 0 && (
+          <div className="px-2 py-1 text-xs italic text-[var(--text-secondary)]">no matches</div>
+        )}
       </div>
+
+      {folderEdit && (
+        <SetDefaultFolderModal
+          workspace={folderEdit}
+          onCancel={() => setFolderEdit(null)}
+          onSave={(path) => {
+            updateWorkspace(folderEdit.id, { defaultFolder: path || undefined });
+            setFolderEdit(null);
+          }}
+        />
+      )}
+      {folderError && (
+        <InvalidDefaultFolderModal
+          workspace={folderError}
+          onCancel={() => setFolderError(null)}
+          onFix={() => {
+            setFolderEdit(folderError);
+            setFolderError(null);
+          }}
+          onOpenHome={() => {
+            onAddSession(folderError.id);
+            setFolderError(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { ramPlugin } from './ram';
 import { dockerPlugin } from './docker';
 import { axnDevPlugin } from './axnDev';
 import { worktreesPlugin } from './worktrees';
+import { scratchpadPlugin } from './scratchpad';
 import { remoteLinkPlugin } from './remoteLink';
 import { agentsPlugin } from './agents';
 import type { SessionViewPlugin } from './plugin';
@@ -39,6 +40,7 @@ export { ramPlugin } from './ram';
 export { dockerPlugin } from './docker';
 export { axnDevPlugin } from './axnDev';
 export { worktreesPlugin } from './worktrees';
+export { scratchpadPlugin } from './scratchpad';
 export { agentsPlugin } from './agents';
 export { parsePersonas, resolvePersona, listPersonas, registerPersonas } from './agentRegistry';
 export type { AgentPersona } from './agentRegistry';
@@ -59,6 +61,7 @@ const defaultPlugins: SessionViewPlugin[] = [
   dockerPlugin,
   axnDevPlugin,
   worktreesPlugin,
+  scratchpadPlugin,
   agentsPlugin,
   remoteLinkPlugin,
 ];
