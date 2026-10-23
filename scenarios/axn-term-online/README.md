@@ -85,3 +85,58 @@ foreign.
 old `SessionHostService` API (`PtyExitedStatus`, `MaxReadBytes`, old ctor).
 The app projects compile fine — the test project needs a rewrite, it is
 not a port/sync regression.
+
+## Login & terminal sessions
+
+### `Invalid parameter: redirect_uri` at keycloak
+
+The realm's `redirectUris`/`webOrigins` must contain the URL with the
+**same scheme** the browser uses — under `AXN_TLS: internal` that is
+`https://`. The file that actually gets imported is
+`keycloak/axn-term-realm.json` (mounted via `--import-realm`); a copy at
+the scenario root is not mounted and edits there do nothing. Keycloak
+re-imports on container recreate (dev H2 dies with the container).
+
+### "Failed to start shell session" / `connection lost` after login
+
+Most likely cause on this stack: **the browser never accepted the cert
+for `axn-term-gateway.localhost`.** The page loads over
+`axn-term.localhost` (cert accepted once), but the terminal WebSocket
+goes to `wss://axn-term-gateway.localhost:PORT` — a *different* hostname.
+Browsers fail self-signed WebSocket connects **silently** (no warning
+page), so nothing ever reaches the gateway.
+
+Fix once: open `https://axn-term-gateway.localhost:18092/` in a tab and
+accept, or better — trust the caddy internal CA in the OS keychain:
+
+```bash
+docker exec axn-term-online-caddy cat \
+  /data/caddy/pki/authorities/local/root.crt
+```
+
+Other causes seen:
+
+- **Stale per-user session-host container.** The gateway spawns
+  `axn-term-host-<user>` via docker.sock; a leftover container with the
+  same name (e.g. from an older run) makes the spawn fail silently.
+  `docker rm -f axn-term-host-<user>` and retry.
+- **Mixed http/https env.** `KC_HOSTNAME`, `VITE_KEYCLOAK_URL` and
+  `VITE_SHELL_WS_URL` must all use `https`/`wss` under TLS internal —
+  `AXN_SCHEME`/`AXN_WS_SCHEME` in axn-dev.yaml drive them. Watch for
+  duplicate env keys in compose.yaml: later entries win, so a hardcoded
+  `VITE_KEYCLOAK_URL=http://...` below the templated line overrides it.
+
+### Ramphastos transport vs per-PTY `/ws`
+
+`VITE_RAMPHASTOS_URL` switches terminals to `RemoteBackend` — sessions
+ride the ramphastos hub (`/ramphastos`, proxied by the gateway) instead
+of per-PTY `/ws` sockets. Required for attaching multiple browsers to
+the same session. Leave it unset for the classic WsBackend mode.
+
+### Flow readiness + playwright on self-signed certs
+
+- Node probes: `NODE_EXTRA_CA_CERTS=<caddy root.crt>`.
+- Playwright: the orchestrator tolerates the CA
+  (`ignoreHTTPSErrors`), and `findChromium` locates Linux/macOS cache
+  builds incl. arm64 / "Chrome for Testing" layouts. Override with
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
