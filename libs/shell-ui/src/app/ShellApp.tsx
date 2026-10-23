@@ -76,6 +76,7 @@ import { TabContextMenu } from './TabContextMenu';
 import { useSessionCommands } from './useSessionCommands';
 import { SessionTabStrip } from './SessionTabStrip';
 import { browserTabPatch, resolveSessionPath } from './shellCommandSupport';
+import { installDropGuard } from './dropGuard';
 import type { AgentCli, EditorTab, SessionAttention, ShellSession, WindowState } from '../types';
 import type { AppSettings } from '../themes';
 import type { SessionViewPlugin } from './session-plugins/plugin';
@@ -760,6 +761,11 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       ack(true);
     });
   }, [platform.peers, windowId, adoptSession, setSelectedSessionId, saveNow]);
+
+  // Dropped files/URLs/text from outside must never navigate the webview —
+  // only x-axn drags and drags that started inside this window reach drop
+  // targets (see dropGuard.ts).
+  useEffect(() => installDropGuard(window), []);
 
   const pickMoveTarget = useCallback(
     (sessionId: string, target: WorkspaceTarget) => {

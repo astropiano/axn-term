@@ -214,10 +214,10 @@ function Highlight({ text, query }: { text: string; query: string }) {
 }
 
 /** Panel-header filter input — sits right of the workspace buttons. */
-function PanelSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function PanelSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { t } = useLingui();
   return (
-    <div className="relative ml-1 flex min-w-0 flex-1 items-center">
+    <div className="relative flex min-w-0 flex-1 items-center">
       <Search className="pointer-events-none absolute left-1.5 h-3 w-3 text-[var(--text-secondary)]" />
       <input
         type="text"
@@ -227,7 +227,7 @@ function PanelSearch({ value, onChange }: { value: string; onChange: (v: string)
           if (e.key === 'Escape') onChange('');
         }}
         placeholder={t`Filter sessions…`}
-        className="w-full min-w-0 rounded border border-[var(--border)] bg-[var(--bg)] py-0.5 pl-5 pr-4 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)] focus:border-[var(--accent)]"
+        className="h-6 w-full min-w-0 rounded border border-[var(--border)] bg-[var(--bg)] pl-5 pr-5 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)] focus:border-[var(--accent)]"
       />
       {value && (
         <button
@@ -1481,7 +1481,7 @@ export function SessionPanel({
 
   return (
     <div className="flex h-full w-full flex-col border-r border-[var(--border)] bg-[var(--bg)]">
-      <div className="flex h-8 shrink-0 items-center justify-between gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
+      <div className="flex h-8 shrink-0 items-center justify-between gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1">
         <div className="flex items-center gap-1">
           <AddWorkspaceButton onClick={onAddWorkspace} />
           <IconButton title="Save workspace set" onClick={onSaveWorkspaceSet}>
