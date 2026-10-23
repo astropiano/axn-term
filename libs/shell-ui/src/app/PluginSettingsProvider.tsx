@@ -75,6 +75,11 @@ devin:
 #   show-in-header: true    # MR info in the session header
 #   # refresh-interval-seconds: 120
 #   # hostname: gitlab.example.com
+
+# gh-pr:
+#   show-in-header: true    # PR info in the session header
+#   # refresh-interval-seconds: 120
+#   # hostname: github.enterprise.example.com  (GHES)
 `;
 
 interface PluginSettingsContextValue {
