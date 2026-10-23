@@ -21,6 +21,8 @@ env:
   # ramphastos sources for the session-host build + vite alias
   # (dir containing the astropiano sibling checkouts)
   AXN_LIBS_ROOT: "../../.."
+  # external additional_contexts (sibling checkouts) — grant bake fs access
+  BUILDX_BAKE_ENTITLEMENTS_FS: "0"
   AXN_TLS: "internal"
   # disable_redirects: cert automation on (tls internal needs it), no :80
   # http→https redirect listener
