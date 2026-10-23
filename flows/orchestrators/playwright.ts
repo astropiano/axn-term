@@ -4,21 +4,35 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 function findChromium(): string | undefined {
-  const cache = process.env.PLAYWRIGHT_BROWSERS_PATH || join(homedir(), '.cache', 'ms-playwright');
-  if (!existsSync(cache)) return undefined;
+  // Cache root differs per OS: Linux uses ~/.cache/ms-playwright, macOS uses
+  // ~/Library/Caches/ms-playwright. Try every root × executable layout.
+  const caches = [
+    process.env.PLAYWRIGHT_BROWSERS_PATH,
+    join(homedir(), '.cache', 'ms-playwright'),
+    join(homedir(), 'Library', 'Caches', 'ms-playwright'),
+  ].filter((p): p is string => !!p && existsSync(p));
 
   // Newest build first: playwright-core only drives the browser revision it
   // ships with (or newer), and a lexical sort picked the oldest cached build —
   // with several builds cached the app never finished loading
   // (net::ERR_INSUFFICIENT_RESOURCES on Vite's dep chunks).
   const build = (name: string) => Number(name.slice('chromium-'.length)) || 0;
-  const versions = readdirSync(cache)
-    .filter((name) => name.startsWith('chromium-') && !name.includes('headless'))
-    .sort((a, b) => build(b) - build(a));
+  const layouts = [
+    join('chrome-linux64', 'chrome'),
+    join('chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
+    join('chrome-mac-arm64', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
+  ];
 
-  for (const v of versions) {
-    const exe = join(cache, v, 'chrome-linux64', 'chrome');
-    if (existsSync(exe)) return exe;
+  for (const cache of caches) {
+    const versions = readdirSync(cache)
+      .filter((name) => name.startsWith('chromium-') && !name.includes('headless'))
+      .sort((a, b) => build(b) - build(a));
+    for (const v of versions) {
+      for (const layout of layouts) {
+        const exe = join(cache, v, layout);
+        if (existsSync(exe)) return exe;
+      }
+    }
   }
 
   return undefined;
