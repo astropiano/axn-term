@@ -155,22 +155,23 @@ describe('worktreeBranchFor', () => {
 
 describe('parseAgentList', () => {
   it('defaults to the common agents', () => {
-    expect(parseAgentList(undefined)).toEqual(['claude', 'devin', 'codex', 'gemini', 'vibe']);
+    expect(parseAgentList(undefined)).toEqual(['claude', 'devin', 'codex', 'agy', 'vibe']);
   });
   it('parses comma-separated names case-insensitively', () => {
     expect(parseAgentList(' Claude ,aider')).toEqual(['claude', 'aider']);
   });
   it('falls back to defaults for empty input', () => {
-    expect(parseAgentList('  , ')).toEqual(['claude', 'devin', 'codex', 'gemini', 'vibe']);
+    expect(parseAgentList('  , ')).toEqual(['claude', 'devin', 'codex', 'agy', 'vibe']);
   });
 });
 
 describe('agentResumeCommand', () => {
-  it('knows claude/devin/codex/gemini/vibe resumes', () => {
+  it('knows claude/devin/codex/agy/vibe resumes', () => {
     expect(agentResumeCommand('claude')).toBe('claude -c');
     expect(agentResumeCommand('devin')).toBe('devin -c');
     expect(agentResumeCommand('codex')).toBe('codex resume --last');
-    expect(agentResumeCommand('gemini')).toBe('gemini --resume');
+    expect(agentResumeCommand('agy')).toBe('agy -c');
+    expect(agentResumeCommand('antigravity')).toBe('agy -c');
     expect(agentResumeCommand('vibe')).toBe('vibe -r');
   });
   it('returns null for unknown agents', () => {

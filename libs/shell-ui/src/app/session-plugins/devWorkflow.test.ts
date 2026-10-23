@@ -45,7 +45,7 @@ import { parsePersonas, registerPersonas } from './agentRegistry';
 import './claude';
 import './codex';
 import './devinTasks';
-import './gemini';
+import './antigravity';
 
 type Ctx = SessionViewContext & PluginApi;
 
@@ -1236,7 +1236,7 @@ describe('commands', () => {
       expect(h.subShells[0].command).toContain('exec "${SHELL:-sh}" -l');
     });
 
-    it('marks inline gemini/codex agent steps too; unknown clis stay unmarked', async () => {
+    it('marks inline agy/codex agent steps too; unknown clis stay unmarked', async () => {
       const h = makeCtx({
         execImpl: gitExec,
         settings: {
@@ -1244,7 +1244,7 @@ describe('commands', () => {
             wf: {
               states: ['a', 'b', 'c'],
               steps: {
-                a: { g: { agent: { cli: 'gemini' }, 'run-in': 'sub-shell' } },
+                a: { g: { agent: { cli: 'agy' }, 'run-in': 'sub-shell' } },
                 b: { c: { agent: { cli: 'codex' }, 'run-in': 'sub-shell' } },
                 c: { v: { agent: { cli: 'vibe' }, 'run-in': 'sub-shell' } },
               },
@@ -1255,7 +1255,7 @@ describe('commands', () => {
       await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:g');
       await vi.waitFor(() => expect(h.subShells.length).toBe(1));
-      expect(h.subShells[0].agent).toBe('gemini');
+      expect(h.subShells[0].agent).toBe('agy');
       await cmd('axn-workflow-move').run?.(h.ctx, 'b', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:c');
       await vi.waitFor(() => expect(h.subShells.length).toBe(2));

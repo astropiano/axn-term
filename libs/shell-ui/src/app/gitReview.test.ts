@@ -31,7 +31,7 @@ describe('normalizeReviewAgent', () => {
   it('accepts the resumable agent clis, rejects everything else', () => {
     expect(normalizeReviewAgent('devin')).toBe('devin');
     expect(normalizeReviewAgent('claude')).toBe('claude');
-    expect(normalizeReviewAgent('gemini')).toBe('gemini');
+    expect(normalizeReviewAgent('agy')).toBe('agy');
     expect(normalizeReviewAgent('codex')).toBe('codex');
     expect(normalizeReviewAgent('')).toBeNull();
     expect(normalizeReviewAgent('gpt')).toBeNull();
@@ -81,9 +81,9 @@ describe('agent commands', () => {
     expect(explainCommand('claude', 'p')).toContain('claude -p "$(');
     expect(talkCommand('claude', 'p')).toContain('claude "$(');
   });
-  it('gemini uses -p for explain and -i for the seeded interactive prompt', () => {
-    expect(explainCommand('gemini', 'p')).toContain('gemini -p "$(');
-    expect(talkCommand('gemini', 'p')).toContain('gemini -i "$(');
+  it('agy uses -p for explain and -i for the seeded interactive prompt', () => {
+    expect(explainCommand('agy', 'p')).toContain('agy -p "$(');
+    expect(talkCommand('agy', 'p')).toContain('agy -i "$(');
   });
   it('codex uses exec for explain and a positional prompt interactively', () => {
     expect(explainCommand('codex', 'p')).toContain('codex exec "$(');
@@ -111,8 +111,8 @@ describe('agent commands', () => {
     expect(talkResumeCommand('claude', '2d05aba3')).toBe(
       'claude --resume 2d05aba3; exec "${SHELL:-sh}" -l',
     );
-    // gemini picks interactively, codex resumes its latest
-    expect(talkResumeCommand('gemini')).toBe('gemini --resume; exec "${SHELL:-sh}" -l');
+    // agy and codex resume their latest conversation in the directory
+    expect(talkResumeCommand('agy')).toBe('agy -c; exec "${SHELL:-sh}" -l');
     expect(talkResumeCommand('codex')).toBe('codex resume --last; exec "${SHELL:-sh}" -l');
   });
 });

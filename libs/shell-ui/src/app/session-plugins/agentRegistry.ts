@@ -34,8 +34,8 @@ export interface AgentPersona {
    * Persistent identity/context — delivered through the CLI's own
    * instructions channel by that CLI's registered launcher
    * (`--append-system-prompt(-file)` for claude,
-   * `-c developer_instructions=` for codex, `GEMINI.md` for gemini under
-   * `gemini.write-gemini-md`), prepended to the seed prompt for CLIs without
+   * `-c developer_instructions=` for codex), prepended to the seed prompt
+   * for CLIs without
    * one. `instructionsFile` is cwd-relative like `promptFile`. This is the
    * `system`/system-prompt field other tools expose (opencode
    * `agents.<n>.system`, codex `developer_instructions`, Warp/AGENTS.md
@@ -133,7 +133,7 @@ export interface AgentLaunchTools {
  * the seed prompt goes, and any launch-time side effects. Receives the
  * resolved spec, the seed prompt (may be undefined), fs tools and the
  * launch cwd; returns the shell line. Throws with a user-facing message to
- * refuse the launch (e.g. gemini's GEMINI.md already exists).
+ * refuse the launch (e.g. an instructions file the launcher cannot deliver).
  */
 export type AgentLauncher = (
   spec: AgentLaunchSpec,

@@ -770,11 +770,11 @@ export function agentCommand(
 
 /**
  * Build an agent's launch line through its registered launcher — each agent
- * plugin owns its CLI's semantics (`registerAgentLauncher`: gemini writes
- * GEMINI.md, claude appends system-prompt flags, codex inlines a config
- * override). Unregistered CLIs get the generic line with `instructions`
+ * plugin owns its CLI's semantics (`registerAgentLauncher`: claude appends
+ * system-prompt flags, codex inlines a config override, agy sends the
+ * prompt via `-i`). Unregistered CLIs get the generic line with `instructions`
  * folded into the seed prompt. A launcher may throw a user-facing refusal
- * (e.g. GEMINI.md already exists) — callers surface it as attention.
+ * — callers surface it as attention.
  */
 export async function agentLaunchLine(
   cli: string,
@@ -1156,8 +1156,8 @@ async function runAction(
   action: WorkflowAction,
 ): Promise<void> {
   const mode = action.runIn ?? 'shell';
-  // A launcher's refusal (gemini's existing GEMINI.md, an unreadable
-  // instructions file) throws — surface it on the session instead of
+  // A launcher's refusal (an unreadable instructions file) throws —
+  // surface it on the session instead of
   // failing silently behind a spinner.
   const cmd = await actionCommand(ctx, def, action, state).catch((e) => {
     const msg = String(e instanceof Error ? e.message : e).split('\n')[0].slice(0, 300);

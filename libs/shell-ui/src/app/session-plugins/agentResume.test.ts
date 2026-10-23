@@ -17,7 +17,7 @@ import {
 import { devinPlugin } from './devinTasks';
 import { claudePlugin } from './claude';
 import { codexPlugin } from './codex';
-import { geminiPlugin } from './gemini';
+import { antigravityPlugin } from './antigravity';
 import { vibePlugin } from './vibe';
 
 type Ctx = SessionViewContext & PluginApi;
@@ -349,7 +349,7 @@ describe('claude plugin', () => {
   });
 });
 
-describe('codex / gemini plugins', () => {
+describe('codex / antigravity plugins', () => {
   it('codex records the generic --last resume on process end', () => {
     const h = makeCtx('codex');
     codexPlugin.onProcessEnd?.(h.ctx);
@@ -361,13 +361,24 @@ describe('codex / gemini plugins', () => {
     });
   });
 
-  it('gemini records the generic --resume on process end', () => {
-    const h = makeCtx('gemini');
-    geminiPlugin.onProcessEnd?.(h.ctx);
+  it('antigravity records `agy -c` on process end without a captured id', () => {
+    const h = makeCtx('antigravity');
+    antigravityPlugin.onProcessEnd?.(h.ctx);
     expect(lastOf(h)).toEqual({
       name: undefined,
       cwd: '/repo',
-      command: `cd '/repo' && gemini --resume`,
+      command: `cd '/repo' && agy -c`,
+      at: expect.any(Number),
+    });
+  });
+
+  it('antigravity records the captured --conversation id on process end', () => {
+    const h = makeCtx('antigravity', {}, { pluginState: { agyConversationId: 'abc-123' } });
+    antigravityPlugin.onProcessEnd?.(h.ctx);
+    expect(lastOf(h)).toEqual({
+      name: 'abc-123',
+      cwd: '/repo',
+      command: `cd '/repo' && agy --conversation abc-123`,
       at: expect.any(Number),
     });
   });

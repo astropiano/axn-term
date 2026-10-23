@@ -88,8 +88,8 @@ describe('parsePersonas', () => {
   });
 
   it('accepts the personas map directly and string shorthand', () => {
-    const p = parsePersonas({ solo: 'gemini', named: { model: 'flash' } });
-    expect(p[0]).toMatchObject({ name: 'solo', cli: 'gemini' });
+    const p = parsePersonas({ solo: 'agy', named: { model: 'flash' } });
+    expect(p[0]).toMatchObject({ name: 'solo', cli: 'agy' });
     // an object's cli defaults to the persona name
     expect(p[1]).toMatchObject({ name: 'named', cli: 'named', model: 'flash' });
   });

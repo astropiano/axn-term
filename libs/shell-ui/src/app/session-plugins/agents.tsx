@@ -314,7 +314,7 @@ export const agentsPlugin: SessionViewPlugin = {
       try {
         await ctx.writeToSession(`${await personaCommand(ctx, persona)}\n`);
       } catch (e) {
-        // A launcher's refusal (e.g. gemini's GEMINI.md already exists) —
+        // A launcher's refusal —
         // visible on the session, not a silent no-op.
         const msg = String(e instanceof Error ? e.message : e);
         ctx.setAttention({ level: 'warning', message: msg });

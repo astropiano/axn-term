@@ -1,5 +1,5 @@
 import { claudePlugin } from './claude';
-import { geminiPlugin } from './gemini';
+import { antigravityPlugin } from './antigravity';
 import type { SessionViewPlugin } from './plugin';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { dropHookSpec, ensureHookPolling, hookStatusOwned, agentEventFile, syncHookSpecPlugins } from './agentHookBridge';
@@ -38,11 +38,11 @@ const externalPlugin: SessionViewPlugin = {
   hookSpec: { ...codexPlugin.hookSpec!, agent: 'external-agent', configPath: '.external/hooks.json' },
 };
 
-it.each([codexPlugin, claudePlugin, geminiPlugin, externalPlugin])('$id stops polling on disable and resumes without new output', async (plugin) => {
+it.each([codexPlugin, claudePlugin, antigravityPlugin, externalPlugin])('$id stops polling on disable and resumes without new output', async (plugin) => {
   const h = makeHarness(plugin.id);
   const spec = plugin.hookSpec!;
   const eventPath = agentEventFile(TEST_HOME, spec.agent, TEST_TTY);
-  h.files.set(eventPath, JSON.stringify({ hook_event_name: plugin.id === 'gemini' ? 'Notification' : 'PermissionRequest' }));
+  h.files.set(eventPath, JSON.stringify({ hook_event_name: plugin.id === 'antigravity' ? 'PreInvocation' : 'PermissionRequest' }));
   const readFile = vi.fn(h.ctx.readFile);
   h.ctx.readFile = readFile;
   syncHookSpecPlugins([], [plugin], () => [h.ctx]);
@@ -53,7 +53,7 @@ it.each([codexPlugin, claudePlugin, geminiPlugin, externalPlugin])('$id stops po
   expect(h.attentionCalls[h.attentionCalls.length - 1]).toBeNull();
   h.updateSessionCalls.length = 0;
   readFile.mockClear();
-  h.files.set(eventPath, JSON.stringify({ hook_event_name: plugin.id === 'gemini' ? 'AfterAgent' : 'Stop' }));
+  h.files.set(eventPath, JSON.stringify({ hook_event_name: 'Stop' }));
   await vi.advanceTimersByTimeAsync(5000);
   expect(readFile).not.toHaveBeenCalled();
   expect(h.updateSessionCalls).toEqual([]);
