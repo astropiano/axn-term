@@ -24,7 +24,7 @@ if (!existsSync(link)) {
 
 const { RemoteAuthority } = await import("../libs/session-backend/src/RemoteAuthority.ts");
 const { RemoteBackend } = await import("../libs/session-backend/src/RemoteBackend.ts");
-const { RamphastosSession } = await import("@astropiano/ramphastos-client");
+const { RamphastosSession } = await import("@ramphastos/ramphastos-client");
 
 // Hub URL arg may be a bare base (session-host) or a full endpoint path
 // (gateway /remote). Bare bases get the session-host's /ramphastos appended.

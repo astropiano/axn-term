@@ -1,4 +1,4 @@
-import type { RamphastosSession } from '@astropiano/ramphastos-client';
+import type { RamphastosSession } from '@ramphastos/ramphastos-client';
 
 /**
  * Structurally compatible with shell-ui's ShellStateStore — declared here

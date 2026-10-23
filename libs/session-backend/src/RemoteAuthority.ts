@@ -1,4 +1,4 @@
-import { RamphastosAuthority, RamphastosStream } from '@astropiano/ramphastos-client';
+import { RamphastosAuthority, RamphastosStream } from '@ramphastos/ramphastos-client';
 import type { SessionBackend } from './types';
 
 /** One published terminal in the authority's replicated model. */

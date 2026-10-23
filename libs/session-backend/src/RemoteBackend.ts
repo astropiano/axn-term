@@ -1,4 +1,4 @@
-import { RamphastosSession, RamphastosStream } from '@astropiano/ramphastos-client';
+import { RamphastosSession, RamphastosStream } from '@ramphastos/ramphastos-client';
 import { answerControl } from './types.ts';
 import type {
   ControlCommandHandler,
