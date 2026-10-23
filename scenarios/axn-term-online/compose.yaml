@@ -73,7 +73,7 @@ services:
       - VITE_PORT=5176
       # passed to vite server.allowedHosts so the proxied host is accepted
       - AXN_DOMAIN=${AXN_DOMAIN:-localhost}
-      - AXN_LAN_IP=${AXN_LAN_IP:-}
+      - AXN_LAN_IP=${AXN_LAN_IP:-localhost}
       - VITE_PLUGINS_YAML_SEED=/plugins.seed.yaml
       - VITE_SHELL_WS_URL=${AXN_GATEWAY_URL:-${AXN_WS_SCHEME:-ws}://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/ws
       - VITE_KEYCLOAK_URL=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}
@@ -199,7 +199,7 @@ services:
       - AXN_DOMAIN=${AXN_DOMAIN:-localhost}
       - AXN_TLS=${AXN_TLS:-off}
       - AXN_AUTO_HTTPS=${AXN_AUTO_HTTPS:-off}
-      - AXN_LAN_IP=${AXN_LAN_IP:-}
+      - AXN_LAN_IP=${AXN_LAN_IP:-localhost}
       - AXN_KC_PORT=${AXN_KC_PORT:-18093}
       - AXN_GW_PORT=${AXN_GW_PORT:-18094}
     depends_on:

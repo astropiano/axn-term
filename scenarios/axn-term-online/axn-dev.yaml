@@ -20,10 +20,10 @@ env:
   AXN_LIBS_ROOT: "../../.."
   # external additional_contexts (sibling checkouts) — grant bake fs access
   BUILDX_BAKE_ENTITLEMENTS_FS: "0"
-  AXN_TLS: "off"
+  AXN_TLS: "internal"
   # disable_redirects: cert automation on (tls internal needs it), no :80
   # http→https redirect listener
-  AXN_AUTO_HTTPS: "off"
+  AXN_AUTO_HTTPS: "disable_redirects"
   AXN_DOMAIN: "localhost"
   KEYCLOAK_REALM: "axn-term"
   KEYCLOAK_CLIENT_ID: "axn-term"
@@ -49,9 +49,9 @@ env:
   PUID: "1000"
   PGID: "1000"
 frontend-services:
-  shell: "${AXN_SCHEME:-http}://${AXN_LAN_IP:-axn-term.localhost}:${SCENARIO_PORT:-8092}"
+  shell: "${AXN_SCHEME:-https}://${AXN_LAN_IP:-axn-term.localhost}:${SCENARIO_PORT:-8092}"
 backend-services:
   gateway: "${AXN_GATEWAY_URL:-${AXN_WS_SCHEME:-ws}://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}"
-  keycloak: "${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}"
+  keycloak: "${AXN_SCHEME:-https}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}"
 frontend:
   - shell
