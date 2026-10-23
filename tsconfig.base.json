@@ -24,7 +24,7 @@
       // containers the same tree mounts at /ramphastos.
       // Points at the built dist entry — rebuild the client package
       // there when its sources change.
-      "@astropiano/ramphastos-client": ["../ramphastos/src/client/ramphastos-client/dist/index.js"]
+      "@ramphastos/ramphastos-client": ["../ramphastos/src/client/ramphastos-client/dist/index.js"]
     },
     "jsx": "react-jsx",
     "allowImportingTsExtensions": true,

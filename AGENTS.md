@@ -44,7 +44,7 @@
   fs/exec/cwd/fg/tty map to VM commands. Kept behind a subpath export so the
   desktop build doesn't need the ramphastos-client dependency. Selected in
   `apps/web` via `VITE_RAMPHASTOS_URL` (absent → `WsBackend`). Client dep is a
-  sibling-checkout alias (`@astropiano/ramphastos-client` → `../ramphastos`,
+  sibling-checkout alias (`@ramphastos/ramphastos-client` → `../ramphastos`,
   mounted at `/ramphastos` in containers); rebuild the client package's `dist/`
   when its sources change. End-to-end: `tests/ramphastos-e2e.mjs` (raw protocol)
   and `tests/remote-backend-e2e.mjs` (backend surface; run with

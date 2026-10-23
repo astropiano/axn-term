@@ -21,7 +21,7 @@
       "@axn-term/session-backend/remote": ["../../libs/session-backend/src/remote.ts"],
       // Sibling checkout: ../ramphastos (astropiano layout); containers
       // mount it at /ramphastos (same relative depth).
-      "@astropiano/ramphastos-client": ["../../../ramphastos/src/client/ramphastos-client"],
+      "@ramphastos/ramphastos-client": ["../../../ramphastos/src/client/ramphastos-client"],
       "@axn-term/shell-ui": ["../../libs/shell-ui/src/index.ts"],
       "@axn-term/plugin-sdk": ["../../libs/plugin-sdk/src/index.ts"]
     },

@@ -29,7 +29,7 @@ function jwt(sub) {
   return `${header}.${payload}.${sig}`;
 }
 
-const { RamphastosAuthority, RamphastosSession } = await import("@astropiano/ramphastos-client");
+const { RamphastosAuthority, RamphastosSession } = await import("@ramphastos/ramphastos-client");
 const alice = jwt("alice"), bob = jwt("bob");
 let fails = 0;
 const check = (n, c, x = "") => { console.log(`${c ? "PASS" : "FAIL"} ${n} ${c ? "" : x}`); if (!c) fails++; };

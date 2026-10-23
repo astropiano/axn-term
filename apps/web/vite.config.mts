@@ -85,7 +85,7 @@ export default defineConfig(() => {
         // Sibling checkout (../ramphastos, astropiano layout); containers
         // mount the same tree at /ramphastos — the relative depth resolves.
         // Points at the built dist entry — rebuild the client package there.
-        '@astropiano/ramphastos-client': fileURLToPath(
+        '@ramphastos/ramphastos-client': fileURLToPath(
           new URL(
             '../../../ramphastos/src/client/ramphastos-client/dist/index.js',
             import.meta.url,
