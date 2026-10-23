@@ -77,11 +77,9 @@ services:
       - VITE_PLUGINS_YAML_SEED=/plugins.seed.yaml
       - VITE_SHELL_WS_URL=${AXN_GATEWAY_URL:-${AXN_WS_SCHEME:-ws}://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/ws
       - VITE_KEYCLOAK_URL=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}
-      - VITE_SHELL_WS_URL=ws://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}/ws
       # Set to ws://<gateway>/ramphastos to run terminals over the Ramphastos
       # hub (multiplexed streams) instead of per-PTY /ws sockets.
       - VITE_RAMPHASTOS_URL=${VITE_RAMPHASTOS_URL:-}
-      - VITE_KEYCLOAK_URL=http://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}
       - VITE_KEYCLOAK_REALM=${KEYCLOAK_REALM:-axn-term}
       - VITE_KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-axn-term}
     depends_on:

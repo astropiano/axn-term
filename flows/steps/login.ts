@@ -58,7 +58,15 @@ export default async function login(page: Page, baseUrl: string) {
 
   // The shell UI: a workspace in the sidebar and a session row named after the
   // shell title (e.g. "demo@axn-machine: ~").
-  await page.locator('[data-tip="New workspace"]').waitFor({ state: 'visible', timeout: 15000 });
+  try {
+    await page.locator('[data-tip="New workspace"]').waitFor({ state: 'visible', timeout: 15000 });
+  } catch (e) {
+    await page.screenshot({ path: '/tmp/login-debug.png', fullPage: true });
+    console.log('DEBUG landed at:', page.url());
+    console.log('DEBUG title:', await page.title());
+    console.log('DEBUG body:', (await page.locator('body').innerText()).slice(0, 500));
+    throw e;
+  }
   await page
     .locator(`[data-tip^="workspace-"]`)
     .first()
