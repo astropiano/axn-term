@@ -21,6 +21,7 @@ function findChromium(): string | undefined {
     join('chrome-linux64', 'chrome'),
     join('chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
     join('chrome-mac-arm64', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
+    join('chrome-mac-arm64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
   ];
 
   for (const cache of caches) {
