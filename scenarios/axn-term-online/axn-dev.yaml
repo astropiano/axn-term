@@ -20,7 +20,7 @@ env:
   VITE_RAMPHASTOS_URL: ""
   # ramphastos sources for the session-host build + vite alias
   # (dir containing the astropiano sibling checkouts)
-  AXN_LIBS_ROOT: "/libraries"
+  AXN_LIBS_ROOT: "../../.."
   AXN_TLS: "internal"
   # disable_redirects: cert automation on (tls internal needs it), no :80
   # http→https redirect listener

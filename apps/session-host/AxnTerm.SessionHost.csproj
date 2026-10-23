@@ -23,7 +23,7 @@
   <ItemGroup>
     <!-- Sibling checkout: ../ramphastos, astropiano layout (see nuget.config
          feeds). In the session-host Dockerfile the same tree lands at /ramphastos. -->
-    <ProjectReference Include="../../../ramphastos/src/Astropiano.Ramphastos.Server/Astropiano.Ramphastos.Server.csproj" />
+    <ProjectReference Include="../../../ramphastos/src/Ramphastos.Server/Ramphastos.Server.csproj" />
   </ItemGroup>
 
 </Project>

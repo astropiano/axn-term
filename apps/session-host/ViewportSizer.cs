@@ -1,4 +1,4 @@
-using Astropiano.Ramphastos.Core;
+using Ramphastos.Core;
 
 namespace Astropiano.AxnTerm.SessionHost;
 
