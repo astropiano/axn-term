@@ -9,24 +9,21 @@ env:
   # client enforces PKCE S256, and crypto.subtle only exists in secure
   # contexts). Clients must accept the cert once (or trust the CA from
   # `docker exec axn-term-online-caddy cat /data/caddy/pki/authorities/local/root.crt`).
-  # Set these to your LAN box before deploying; empty falls back to
-  # localhost defaults in compose.yaml.
-  AXN_LAN_IP: ""
+  # Set these to your LAN box before deploying; unset falls back to
+  # localhost defaults in compose.yaml / service URLs. e.g.
+  # AXN_LAN_IP: "192.168.1.5"
   AXN_KC_PORT: "18093"
   AXN_GW_PORT: "18094"
-  AXN_KEYCLOAK_URL: ""
-  AXN_GATEWAY_URL: ""
   # ramphastos hub instead of per-PTY /ws sockets
-  VITE_RAMPHASTOS_URL: ""
   # ramphastos sources for the session-host build + vite alias
   # (dir containing the astropiano sibling checkouts)
   AXN_LIBS_ROOT: "../../.."
   # external additional_contexts (sibling checkouts) — grant bake fs access
   BUILDX_BAKE_ENTITLEMENTS_FS: "0"
-  AXN_TLS: "internal"
+  AXN_TLS: "off"
   # disable_redirects: cert automation on (tls internal needs it), no :80
   # http→https redirect listener
-  AXN_AUTO_HTTPS: "disable_redirects"
+  AXN_AUTO_HTTPS: "off"
   AXN_DOMAIN: "localhost"
   KEYCLOAK_REALM: "axn-term"
   KEYCLOAK_CLIENT_ID: "axn-term"
@@ -52,9 +49,9 @@ env:
   PUID: "1000"
   PGID: "1000"
 frontend-services:
-  shell: "${AXN_SCHEME:-http}://${AXN_LAN_IP:+${AXN_LAN_IP}}${AXN_LAN_IP:-axn-term.${AXN_DOMAIN:-localhost}}:${SCENARIO_PORT:-8092}"
+  shell: "${AXN_SCHEME:-http}://${AXN_LAN_IP:-axn-term.localhost}:${SCENARIO_PORT:-8092}"
 backend-services:
   gateway: "${AXN_GATEWAY_URL:-${AXN_WS_SCHEME:-ws}://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}"
-  keycloak: "${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}"
+  keycloak: "${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}"
 frontend:
   - shell
