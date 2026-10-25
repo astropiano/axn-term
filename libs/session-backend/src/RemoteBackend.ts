@@ -480,8 +480,14 @@ export class RemoteBackend implements SessionBackend {
     if (parentId === null) {
       this.parents.delete(subshellId);
       this.subshells.delete(subshellId);
+      // Promoted to a main session — re-kind on the authority too, else
+      // other devices keep rendering it as a tab under the old parent.
+      void this.invoke('setPtyMeta', subshellId, subshellId, null, null, 'session')
+        .catch(() => {});
     } else {
       this.parents.set(subshellId, parentId);
+      void this.invoke('setPtyMeta', subshellId, this.sessionIdOf(parentId), null, null, 'subshell')
+        .catch(() => {});
     }
   }
 

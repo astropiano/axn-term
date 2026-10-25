@@ -83,7 +83,8 @@ export function createMirrorStateStore(connect: () => Promise<RamphastosSession>
         // Publish workspace names upstream — shared across devices.
         const remoteWsNow = new Map((((s.vm().workspaces as ReplicaWorkspace[] | undefined) ?? []).map((w) => [w.id, w.name])));
         for (const w of layout.workspaces ?? []) {
-          if (!w.id || remoteWsNow.get(w.id) === (w.name ?? null)) continue;
+          // 'remote' is the synthetic bucket — never a real workspace.
+          if (!w.id || w.id === REMOTE_WS || remoteWsNow.get(w.id) === (w.name ?? null)) continue;
           const key = `ws:${w.id}`;
           const meta = w.name ?? '';
           if (pushed.get(key) === meta) continue;
@@ -94,14 +95,19 @@ export function createMirrorStateStore(connect: () => Promise<RamphastosSession>
 
         // Publish session-model edits upstream — the authority (desktop or
         // session host) owns name/workspaceId so every device renders the
-        // same list. Only send fields that changed since our last push.
+        // same list. Never push synthetic fallbacks: the 'remote' bucket is
+        // a display grouping for ungrouped ptys, and a name equal to the
+        // pty id is the fallback label — writing either back would
+        // overwrite real metadata from other devices (and ping-pong).
         const sessions = (state as { sessions?: { id: string; name?: string; workspaceId?: string; mainPtyId?: string }[] }).sessions ?? [];
         for (const sess of sessions) {
           const ptyId = sess.mainPtyId ?? sess.id;
-          const meta = JSON.stringify([sess.id, sess.workspaceId ?? null, sess.name ?? null]);
+          const wsId = sess.workspaceId && sess.workspaceId !== REMOTE_WS ? sess.workspaceId : null;
+          const name = sess.name && sess.name !== ptyId && sess.name !== sess.id ? sess.name : null;
+          const meta = JSON.stringify([sess.id, wsId, name]);
           if (pushed.get(ptyId) === meta) continue;
           pushed.set(ptyId, meta);
-          void s.invoke('/vm/setPtyMeta', [ptyId, sess.id, sess.workspaceId ?? null, sess.name ?? null, null])
+          void s.invoke('/vm/setPtyMeta', [ptyId, sess.id, wsId, name, null])
             .catch(() => pushed.delete(ptyId));
         }
       } catch {
