@@ -62,44 +62,63 @@ export function useAgentTasks(
 
     let running = true;
     let ws: WebSocket | null = null;
+    let retries = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
     void (async () => {
       const url = await tasksWsUrl();
       if (!running || !url) return;
-      const socket = new WebSocket(url);
-      ws = socket;
 
-      socket.onopen = () => {
-        socket.send(JSON.stringify({ type: 'subscribe', sessionId }));
-      };
+      const open = () => {
+        // Back off on failure and give up after a few tries — an
+        // unreachable origin (e.g. a self-signed ws endpoint the browser
+        // never accepted) would otherwise storm reconnects on every
+        // session/model churn.
+        if (retries >= 4) return;
+        const socket = new WebSocket(url);
+        ws = socket;
 
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.type === 'tasks') {
-            const payload = message.payload as TaskStateSnapshot;
-            if (running) {
-              setSnapshot(payload);
-              // status is process-driven; do not mark the session as running
-              // just because there are still tasks in the remote state.
-              updateSession(sessionId, {
-                tasks: toTasks(payload.tasks),
-                progress: computeProgress(payload.tasks),
-              });
+        socket.onopen = () => {
+          retries = 0;
+          socket.send(JSON.stringify({ type: 'subscribe', sessionId }));
+        };
+
+        socket.onclose = (ev) => {
+          if (!running || ev.code === 1000) return;
+          retries += 1;
+          if (retries < 4) retryTimer = setTimeout(open, 2000 * retries);
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            if (message.type === 'tasks') {
+              const payload = message.payload as TaskStateSnapshot;
+              if (running) {
+                setSnapshot(payload);
+                // status is process-driven; do not mark the session as running
+                // just because there are still tasks in the remote state.
+                updateSession(sessionId, {
+                  tasks: toTasks(payload.tasks),
+                  progress: computeProgress(payload.tasks),
+                });
+              }
             }
+          } catch {
+            // ignore malformed messages
           }
-        } catch {
-          // ignore malformed messages
-        }
-      };
+        };
 
-      socket.onerror = (error) => {
-        console.error('Tasks WebSocket error', error);
+        socket.onerror = (error) => {
+          console.error('Tasks WebSocket error', error);
+        };
       };
+      open();
     })().catch((e) => console.warn('Tasks WebSocket URL unavailable', e));
 
     return () => {
       running = false;
+      clearTimeout(retryTimer);
       ws?.close();
     };
   }, [sessionId, tasksWsUrl, updateSession, active]);
