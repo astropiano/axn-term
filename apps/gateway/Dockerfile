@@ -9,16 +9,16 @@ COPY Directory.Build.props ./
 COPY nuget.config ./
 COPY apps/gateway/*.csproj ./apps/gateway/
 
-# Sibling repos under a `libraries` build context (sibling checkouts
-# locally): ramphastos sources for the ProjectReference, plus its package
-# feeds — the nuget.config paths (../<repo>) resolve to /<repo> here.
+# Sibling repos under a `libraries` build context (dev/libraries locally):
+# ramphastos sources for the ProjectReference, plus its package feeds —
+# the nuget.config paths (../../libraries/...) resolve to /libraries here.
 # NuGet finds configs by walking up from each project's directory, so the
 # feed config sits beside the referenced projects too.
-COPY --from=libraries ramphastos/Directory.Packages.props /ramphastos/Directory.Packages.props
-COPY nuget.config /ramphastos/nuget.config
-COPY --from=libraries ramphastos/src /ramphastos/src
-COPY --from=libraries reflectiontools/src/packages /reflectiontools/src/packages
-COPY --from=libraries totalserializer/src/packages-local /totalserializer/src/packages-local
+COPY --from=libraries ramphastos/Directory.Packages.props /libraries/ramphastos/Directory.Packages.props
+COPY nuget.config /libraries/ramphastos/nuget.config
+COPY --from=libraries ramphastos/src /libraries/ramphastos/src
+COPY --from=libraries reflectiontools/src/packages /libraries/reflectiontools/src/packages
+COPY --from=libraries totalserializer/packages-local /libraries/totalserializer/packages-local
 
 RUN dotnet restore ./apps/gateway/AxnTerm.Gateway.csproj -p:TargetFramework=net10.0
 
@@ -38,5 +38,5 @@ COPY --from=build /app/publish .
 
 EXPOSE 8080
 
-ENV DOTNET_ENTRYPOINT="Astropiano.AxnTerm.Gateway.dll"
+ENV DOTNET_ENTRYPOINT="AxnTerm.Gateway.dll"
 ENTRYPOINT ["/bin/sh", "-c", "exec dotnet $DOTNET_ENTRYPOINT"]

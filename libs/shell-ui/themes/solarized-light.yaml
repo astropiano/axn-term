@@ -1,0 +1,61 @@
+# Solarized Light (ethanschoonover.com/solarized). Green, yellow and cyan
+# were at or under 3:1 on base3; they are darkened within their hue. Foreground
+# nudged to 6:1; secondary UI text was base1 (2.4:1) and is darkened.
+# Adjusted for legibility (hue kept, lightness moved):
+#   foreground: #657B83 -> #4F6066
+#   red: #DC322F -> #DA2825
+#   green: #859900 -> #687800
+#   yellow: #B58900 -> #8F6C00
+#   blue: #268BD2 -> #2076B2
+#   magenta: #D33682 -> #CF2D7C
+#   cyan: #2AA198 -> #217D76
+#   brightGreen: #859900 -> #839600
+#   brightYellow: #B58900 -> #B28700
+#   brightCyan: #2AA198 -> #299D94
+#   ui.textSecondary: #657B83 -> #586B72
+#   ui.accent: #268BD2 -> #1E6DA5
+id: solarized-light
+name: Solarized Light
+mode: light
+
+colors:
+  background: '#FDF6E3'
+  foreground: '#4F6066'
+  cursor: '#586E75'
+  cursorAccent: '#FDF6E3'
+  selectionBackground: '#EEE8D5'
+  selectionForeground: '#4F6066'
+
+  black: '#073642'
+  red: '#DA2825'
+  green: '#687800'
+  yellow: '#8F6C00'
+  blue: '#2076B2'
+  magenta: '#CF2D7C'
+  cyan: '#217D76'
+  white: '#93A1A1'
+
+  brightBlack: '#586E75'
+  brightRed: '#CB4B16'
+  brightGreen: '#839600'
+  brightYellow: '#B28700'
+  brightBlue: '#268BD2'
+  brightMagenta: '#6C71C4'
+  brightCyan: '#299D94'
+  brightWhite: '#EEE8D5'
+
+  orange: '#CB4B16'
+  violet: '#6C71C4'
+
+ui:
+  bg: '#EEE8D5'
+  bgSecondary: '#FDF6E3'
+  surface: '#FDF6E3'
+  surfaceHover: '#E4DCC4'
+  text: '#4F6066'
+  textSecondary: '#586B72'
+  textInverted: '#FDF6E3'
+  border: '#D3CBB3'
+  accent: '#1E6DA5'
+  accentHover: '#2AA198'
+  cursor: '#586E75'

@@ -6,8 +6,8 @@
 //
 // Needs a session host running (default http://localhost:7682), e.g.
 //   SESSION_HOST_PORT=7682 dotnet run --project apps/session-host -f net10.0
-// 'ramphastos-client' resolves through a node_modules symlink into the
-// sibling checkout (../ramphastos, sibling checkout) — created on demand below;
+// '@ramphastos/ramphastos-client' resolves through a node_modules symlink into the
+// sibling checkout (dev/libraries/ramphastos) — created on demand below;
 // rebuild the package when its sources change.
 
 import { existsSync, mkdirSync, symlinkSync } from "node:fs";
@@ -15,8 +15,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const link = path.join(repoRoot, "node_modules", "@astropiano", "ramphastos-client");
-const target = path.resolve(repoRoot, "../ramphastos/src/client/ramphastos-client");
+const link = path.join(repoRoot, "node_modules", "@ramphastos", "ramphastos-client");
+const target = path.resolve(repoRoot, "../../libraries/ramphastos/src/client/ramphastos-client");
 if (!existsSync(link)) {
   mkdirSync(path.dirname(link), { recursive: true });
   symlinkSync(target, link, "junction");

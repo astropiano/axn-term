@@ -1,4 +1,5 @@
 import type { Terminal } from '@xterm/xterm';
+import { SerializeAddon } from '@xterm/addon-serialize';
 
 /**
  * Live xterm instances keyed by session id. ShellTerminal registers itself so
@@ -22,6 +23,47 @@ export function keepPtyAlive(ptyId: string): void {
 
 export function takePtyKeepAlive(ptyId: string): boolean {
   return keptAlivePtys.delete(ptyId);
+}
+
+/**
+ * The terminal's scrollback and screen as one ANSI string (colors, modes and
+ * the alternate screen of a running TUI included), or undefined when the id
+ * has no live terminal. Used to carry a session's history into the window it
+ * moves to — the PTY itself stays put and only replays new output.
+ */
+export function serializeTerminal(id: string): string | undefined {
+  const term = terminals.get(id);
+  if (!term) return undefined;
+  try {
+    const addon = new SerializeAddon();
+    term.loadAddon(addon);
+    const data = addon.serialize();
+    addon.dispose();
+    return data || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// History handed over with a session that moved here from another window,
+// keyed like `terminals` (session id for the main shell, tab id for a
+// sub-shell). The terminal that reattaches to the PTY writes it once, before
+// any live output.
+const pendingReplays = new Map<string, string>();
+
+export function setPendingReplay(id: string, data: string): void {
+  pendingReplays.set(id, data);
+}
+
+export function takePendingReplay(id: string): string | undefined {
+  const data = pendingReplays.get(id);
+  pendingReplays.delete(id);
+  return data;
+}
+
+export function terminalSize(id: string): { cols: number; rows: number } | undefined {
+  const term = terminals.get(id);
+  return term ? { cols: term.cols, rows: term.rows } : undefined;
 }
 
 export function registerTerminal(sessionId: string, term: Terminal): void {
@@ -135,4 +177,31 @@ export function terminalAt(target: EventTarget | null): Terminal | undefined {
     if (term) return term;
   }
   return undefined;
+}
+
+/**
+ * Input handle for a PTY-backed view, keyed by registration id (session id
+ * for main shells, tab id for sub-shells). `send` injects bytes through the
+ * view's normal onData pipeline — hidden-command interception, sub-shell
+ * exit/re-run handling — instead of writing the PTY directly. Used by the
+ * touch key bar.
+ */
+export interface TerminalInput {
+  send: (data: string) => void;
+  /** Focus the terminal — also summons the soft keyboard on touch devices. */
+  focus: () => void;
+}
+
+const terminalInputs = new Map<string, TerminalInput>();
+
+export function registerTerminalInput(id: string, input: TerminalInput): void {
+  terminalInputs.set(id, input);
+}
+
+export function unregisterTerminalInput(id: string, input: TerminalInput): void {
+  if (terminalInputs.get(id) === input) terminalInputs.delete(id);
+}
+
+export function terminalInput(id: string): TerminalInput | undefined {
+  return terminalInputs.get(id);
 }

@@ -1,0 +1,48 @@
+# A dim variant of Axn Dark for long sessions: lifted warm grey instead of
+# near-black, lower overall contrast, desaturated accents. Turquoise accent;
+# coral still means "needs you".
+id: axn-dusk
+name: Axn Dusk
+mode: dark
+
+colors:
+  background: '#262221'
+  foreground: '#D8D1CC'
+  cursor: '#E9A3A9'
+  cursorAccent: '#262221'
+  selectionBackground: '#433B38'
+  selectionForeground: '#D8D1CC'
+
+  black: '#38322F'
+  red: '#E5747E'
+  green: '#7DBF8E'
+  yellow: '#D9B25E'
+  blue: '#7AAFD2'
+  magenta: '#C49ED8'
+  cyan: '#72BDBB'
+  white: '#BBB3AE'
+
+  brightBlack: '#8F8580'
+  brightRed: '#EEA0A7'
+  brightGreen: '#9FD3AC'
+  brightYellow: '#E6C887'
+  brightBlue: '#9CC6E2'
+  brightMagenta: '#D6BAE6'
+  brightCyan: '#9AD1CF'
+  brightWhite: '#ECE6E2'
+
+  orange: '#E8925A'
+  violet: '#C49ED8'
+
+ui:
+  bg: '#262221'
+  bgSecondary: '#2E2928'
+  surface: '#2E2928'
+  surfaceHover: '#38322F'
+  text: '#D8D1CC'
+  textSecondary: '#A69D98'
+  textInverted: '#262221'
+  border: '#4A4340'
+  accent: '#72BDBB'
+  accentHover: '#9AD1CF'
+  cursor: '#E9A3A9'

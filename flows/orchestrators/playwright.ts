@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-function findChromium(): string | undefined {
+export function findChromium(): string | undefined {
   // Cache root differs per OS: Linux uses ~/.cache/ms-playwright, macOS uses
   // ~/Library/Caches/ms-playwright. Try every root × executable layout.
   const caches = [

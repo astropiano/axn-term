@@ -1174,6 +1174,117 @@ export async function run(step, env) {
       return `claude restored: ${captured}`;
     }
 
+    // Write remote-control settings into the run's config.yaml. Runs inside
+    // the temp state dir, so the real ~/.axn-term/config.yaml is untouched.
+    // Values come from env: AXN_TERM_REMOTE_ISSUER / _HUB / _SESSION /
+    // _CLIENT_ID / _TOKEN (all optional).
+    case "remoteConfig": {
+      const stateDir = env.AXN_TERM_STATE_DIR;
+      if (!stateDir) throw new Error("AXN_TERM_STATE_DIR not set");
+      const lines = [];
+      if (env.AXN_TERM_REMOTE_ISSUER) lines.push(`remoteAuthIssuer: ${env.AXN_TERM_REMOTE_ISSUER}`);
+      if (env.AXN_TERM_REMOTE_CLIENT_ID) lines.push(`remoteAuthClientId: ${env.AXN_TERM_REMOTE_CLIENT_ID}`);
+      if (env.AXN_TERM_REMOTE_HUB) lines.push(`remoteAuthorityUrl: ${env.AXN_TERM_REMOTE_HUB}`);
+      if (env.AXN_TERM_REMOTE_SESSION) lines.push(`remoteAuthoritySession: ${env.AXN_TERM_REMOTE_SESSION}`);
+      if (env.AXN_TERM_REMOTE_TOKEN) lines.push(`remoteAuthorityToken: ${env.AXN_TERM_REMOTE_TOKEN}`);
+      writeFileSync(join(stateDir, "config.yaml"), lines.join("\n") + "\n");
+      // The config watch polls every ~1.5 s — give it a moment to apply.
+      await sleep(2500);
+      return `remote config written: ${lines.length} keys`;
+    }
+
+    // Trigger the app's real remoteAuth.signIn() (POST /remote-auth evals
+    // window.__axnRemoteAuth.signIn() in the webview), then poll
+    // GET /remote-auth until the device POST resolves — 'pending' means the
+    // device endpoint accepted client_id (exactly what the -H quoting bug
+    // broke). On 'error' we surface the app's own error text.
+    case "remoteSignIn": {
+      await rc(env, "/remote-auth", { method: "POST" });
+      const deadline = Date.now() + 20000;
+      let last;
+      while (Date.now() < deadline) {
+        const res = await rc(env, "/remote-auth");
+        const snap = JSON.parse(await res.text());
+        last = snap;
+        if (snap?.state === "pending") {
+          // Persist for later steps (Playwright approval + await).
+          env.AXN_TERM_REMOTE_USER_CODE = snap.userCode;
+          env.AXN_TERM_REMOTE_VERIFICATION_URI = snap.verificationUri;
+          return `sign-in pending: user_code=${snap.userCode} uri=${snap.verificationUri}`;
+        }
+        if (snap?.state === "error") {
+          throw new Error(`remote sign-in failed in-app: ${snap.error}`);
+        }
+        if (snap?.state === "signedIn") return `already signed in: ${snap.user}`;
+        await sleep(500);
+      }
+      throw new Error(`remote sign-in never reached pending: ${JSON.stringify(last)} ${logTail(env)}`);
+    }
+
+    // Approve the pending device grant in a real headless Chromium —
+    // replaces the human who would click through the verification page.
+    // Uses the verification URI the remoteSignIn step captured.
+    case "remoteApprove": {
+      const uri = env.AXN_TERM_REMOTE_VERIFICATION_URI;
+      if (!uri) throw new Error("AXN_TERM_REMOTE_VERIFICATION_URI not set — run remoteSignIn first");
+      const { chromium } = await import("playwright-core");
+      const { findChromium } = await import("../orchestrators/playwright.ts");
+      const executablePath = env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || findChromium();
+      if (!executablePath) throw new Error("no Playwright Chromium executable found");
+      const browser = await chromium.launch({ executablePath, headless: true });
+      try {
+        const context = await browser.newContext({ ignoreHTTPSErrors: true });
+        const page = await context.newPage();
+        await page.goto(uri, { waitUntil: "networkidle" });
+        console.log(`approve P1: ${page.url().slice(0, 100)}`);
+        // 1) Device page — the user_code entry form (prefilled when the URI
+        //    carries it) must be submitted first.
+        const code = page.locator('input[name="device_user_code"]');
+        if (await code.isVisible().catch(() => false)) {
+          if (!(await code.inputValue()).trim()) {
+            await code.fill(env.AXN_TERM_REMOTE_USER_CODE ?? "");
+          }
+          await page.locator('input[type="submit"], button[type="submit"]').first().click();
+          await page.waitForLoadState("networkidle");
+          console.log(`approve P2 (after code): ${page.url().slice(0, 100)}`);
+        }
+        // 2) Keycloak login (skipped when a session already exists).
+        const user = page.locator('input[name="username"]');
+        if (await user.isVisible().catch(() => false)) {
+          await user.fill(env.TEST_USER ?? "demo");
+          await page.locator('input[name="password"]').fill(env.TEST_PASSWORD ?? "changeme");
+          await page.locator("#kc-login").click();
+          await page.waitForLoadState("networkidle");
+          console.log(`approve P3 (after login): ${page.url().slice(0, 100)}`);
+        }
+        // 3) Approval form — click the "Yes" button specifically (a generic
+        //    submit selector can hit "No" first and silently deny the grant).
+        await page.locator('button:has-text("Yes"), input[type="submit"][value="Yes"]').first().click();
+        await page.waitForLoadState("networkidle");
+        console.log(`approve P4 (after Yes): ${page.url().slice(0, 100)} — ${(await page.locator('body').innerText()).slice(0, 80)}`);
+        return `device grant approved for ${env.TEST_USER ?? "demo"}`;
+      } finally {
+        await browser.close();
+      }
+    }
+
+    // Poll GET /remote-auth for a target state (default signedIn) — used
+    // after the device grant is approved in the browser.
+    case "remoteAuthAwait": {
+      const want = env.AXN_TERM_REMOTE_WANT ?? "signedIn";
+      const deadline = Date.now() + Number(env.AXN_TERM_REMOTE_TIMEOUT ?? 30000);
+      let last;
+      while (Date.now() < deadline) {
+        const res = await rc(env, "/remote-auth");
+        const snap = JSON.parse(await res.text());
+        last = snap;
+        if (snap?.state === want) return `remote auth ${want}: ${snap.user ?? ""}`.trim();
+        if (snap?.state === "error") throw new Error(`remote auth error: ${snap.error}`);
+        await sleep(500);
+      }
+      throw new Error(`remote auth never reached ${want}: ${JSON.stringify(last)} ${logTail(env)}`);
+    }
+
     default:
       throw new Error(`Unknown axn-term action: ${action}`);
   }

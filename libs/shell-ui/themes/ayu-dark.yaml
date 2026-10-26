@@ -1,29 +1,50 @@
+# Ayu Dark (github.com/ayu-theme). Magenta was Ayu's pale yellow (#FAE994),
+# indistinguishable from yellow in most CLIs; it now uses Ayu's purple. UI
+# colours from Ayu's editor palette.
+# Adjusted for legibility (hue kept, lightness moved):
+#   brightBlack: #686868 -> #696969
 id: ayu-dark
 name: Ayu Dark
 mode: dark
 
 colors:
-  background: '#0b0e14'
-  foreground: '#b3b1ad'
-  cursor: '#e6b450'
-  cursorAccent: '#0b0e14'
+  background: '#0B0E14'
+  foreground: '#BFBDB6'
+  cursor: '#E6B450'
+  cursorAccent: '#0B0E14'
   selectionBackground: '#273747'
-  selectionForeground: '#b3b1ad'
+  selectionForeground: '#BFBDB6'
 
-  black: '#01060e'
-  red: '#ea6c73'
-  green: '#91b362'
-  yellow: '#f9af4f'
-  blue: '#53bdfa'
-  magenta: '#fae994'
-  cyan: '#90e1c6'
-  white: '#c7c7c7'
+  black: '#11151C'
+  red: '#EA6C73'
+  green: '#91B362'
+  yellow: '#F9AF4F'
+  blue: '#53BDFA'
+  magenta: '#D2A6FF'
+  cyan: '#90E1C6'
+  white: '#C7C7C7'
 
-  brightBlack: '#686868'
-  brightRed: '#f07178'
-  brightGreen: '#c2d94c'
-  brightYellow: '#ffb454'
-  brightBlue: '#59c2ff'
-  brightMagenta: '#ffee99'
-  brightCyan: '#95e6cb'
-  brightWhite: '#ffffff'
+  brightBlack: '#696969'
+  brightRed: '#F07178'
+  brightGreen: '#AAD94C'
+  brightYellow: '#FFB454'
+  brightBlue: '#59C2FF'
+  brightMagenta: '#DFBFFF'
+  brightCyan: '#95E6CB'
+  brightWhite: '#FFFFFF'
+
+  orange: '#F97316'
+  violet: '#D2A6FF'
+
+ui:
+  bg: '#0B0E14'
+  bgSecondary: '#0D1017'
+  surface: '#0F131A'
+  surfaceHover: '#131721'
+  text: '#BFBDB6'
+  textSecondary: '#8A8986'
+  textInverted: '#0B0E14'
+  border: '#1E232B'
+  accent: '#E6B450'
+  accentHover: '#DAB76F'
+  cursor: '#E6B450'

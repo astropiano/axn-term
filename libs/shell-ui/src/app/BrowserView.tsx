@@ -8,6 +8,9 @@ import { ContextMenu, menuDividerClass, menuItemClass } from '../ContextMenu';
 import { PathActionMenu } from '../PathActionMenu';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
 import { revealLabel as platformRevealLabel } from '../platform';
+import { useContextMenuTrigger } from '../useContextMenuTrigger';
+import { useCoarsePointer } from '../useMediaQuery';
+import type { MenuPosition } from '../useContextMenuTrigger';
 
 interface BrowserViewProps {
   path: string;
@@ -30,6 +33,11 @@ function splitDirBase(p: string): { dir: string; base: string } {
 
 const HISTORY_LIMIT = 20;
 
+/**
+ * A file/dir row: tap selects (tapping the selected row opens it — the touch
+ * stand-in for double-click), double-click opens, long-press/right-click the
+ * path action menu.
+ */
 export function BrowserView({
   path,
   cwd,
@@ -68,6 +76,13 @@ export function BrowserView({
     index: 0,
   }));
   const listRef = useRef<HTMLDivElement>(null);
+  const coarsePointer = useCoarsePointer();
+  // Long-press on empty list space opens the same menu as right-click.
+  const listMenuTrigger = useContextMenuTrigger(
+    useCallback((pos: MenuPosition) => {
+      setMenu({ kind: 'background', x: pos.x, y: pos.y });
+    }, []),
+  );
 
   // Every user-driven navigation goes through here so it lands in history.
   const navigate = useCallback((next: string) => {
@@ -449,11 +464,15 @@ export function BrowserView({
         ref={listRef}
         tabIndex={0}
         onKeyDown={handleListKeyDown}
-        onContextMenu={(e) => {
-          // Entry buttons stopPropagation — this only fires on empty space.
-          e.preventDefault();
-          setMenu({ kind: 'background', x: e.clientX, y: e.clientY });
-        }}
+        // Entry rows stopPropagation — these fire only on empty space.
+        onContextMenu={listMenuTrigger.onContextMenu}
+        onMouseDown={listMenuTrigger.onMouseDown}
+        onMouseUp={listMenuTrigger.onMouseUp}
+        onMouseLeave={listMenuTrigger.onMouseLeave}
+        onTouchStart={listMenuTrigger.onTouchStart}
+        onTouchMove={listMenuTrigger.onTouchMove}
+        onTouchEnd={listMenuTrigger.onTouchEnd}
+        onTouchCancel={listMenuTrigger.onTouchCancel}
         className="min-h-0 flex-1 overflow-y-auto p-2 outline-none"
       >
         {loading && (
@@ -510,7 +529,10 @@ export function BrowserView({
               <li key={row.path} style={{ paddingLeft: `${row.depth * 14}px` }}>
                 <button
                   type="button"
-                  onClick={() => setSelected(row.path)}
+                  onClick={() => {
+                    setSelected(row.path);
+                    if (coarsePointer && selected === row.path) openEntry(row.entry, row.path);
+                  }}
                   onDoubleClick={() => openEntry(row.entry, row.path)}
                   onContextMenu={(e) => {
                     e.preventDefault();

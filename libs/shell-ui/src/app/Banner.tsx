@@ -2,6 +2,7 @@ import { AlertTriangle, ChevronLeft, ChevronRight, Info, Play, Trash2, X } from 
 
 import type { BannerLevel, SessionBanner, SessionBannerAction, ShellSession } from '../types';
 import type { SessionViewPlugin } from './session-plugins/plugin';
+import { useSettings } from '../SettingsProvider';
 
 const levelColor: Record<BannerLevel, string> = {
   info: 'var(--accent)',
@@ -63,11 +64,13 @@ export function Banner({
   onAction?: (actionId: string) => void;
   onDismiss?: () => void;
 }) {
+  const { settings } = useSettings();
   const Icon = level === 'info' ? Info : AlertTriangle;
   return (
     <div
       role="status"
       className="flex h-8 shrink-0 items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1 text-[11px] text-[var(--text-primary)]"
+      style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: levelColor[level] }} />
       {actions && actions.length > 0 && (

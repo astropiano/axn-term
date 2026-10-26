@@ -1,0 +1,56 @@
+# Gruvbox Light (github.com/morhetz/gruvbox). Uses Gruvbox's darker "faded"
+# accents for normal colours (the neutral ones are too light for text on bg0)
+# and the neutral accents for brights.
+# Adjusted for legibility (hue kept, lightness moved):
+#   green: #79740E -> #74700D
+#   yellow: #B57614 -> #976311
+#   cyan: #427B58 -> #417957
+#   brightBlack: #928374 -> #8C7D6E
+#   brightGreen: #98971A -> #8F8E19
+#   brightYellow: #D79921 -> #B6811C
+#   brightCyan: #689D6A -> #629764
+id: gruvbox-light
+name: Gruvbox Light
+mode: light
+
+colors:
+  background: '#FBF1C7'
+  foreground: '#3C3836'
+  cursor: '#3C3836'
+  cursorAccent: '#FBF1C7'
+  selectionBackground: '#D5C4A1'
+  selectionForeground: '#3C3836'
+
+  black: '#3C3836'
+  red: '#9D0006'
+  green: '#74700D'
+  yellow: '#976311'
+  blue: '#076678'
+  magenta: '#8F3F71'
+  cyan: '#417957'
+  white: '#7C6F64'
+
+  brightBlack: '#8C7D6E'
+  brightRed: '#CC241D'
+  brightGreen: '#8F8E19'
+  brightYellow: '#B6811C'
+  brightBlue: '#458588'
+  brightMagenta: '#B16286'
+  brightCyan: '#629764'
+  brightWhite: '#D5C4A1'
+
+  orange: '#AF3A03'
+  violet: '#8F3F71'
+
+ui:
+  bg: '#F2E5BC'
+  bgSecondary: '#FBF1C7'
+  surface: '#FBF1C7'
+  surfaceHover: '#EBDBB2'
+  text: '#3C3836'
+  textSecondary: '#665C54'
+  textInverted: '#FBF1C7'
+  border: '#D5C4A1'
+  accent: '#076678'
+  accentHover: '#427B58'
+  cursor: '#3C3836'

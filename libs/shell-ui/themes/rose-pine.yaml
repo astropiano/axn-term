@@ -1,0 +1,51 @@
+# Rosé Pine (rosepinetheme.com), main variant. Pine (green) was 3.3:1 on
+# base; it is lifted. UI layers from base, surface and overlay; accent iris.
+# Adjusted for legibility (hue kept, lightness moved):
+#   green: #31748F -> #3A8AAA
+#   brightBlack: #6E6A86 -> #706C89
+#   brightGreen: #31748F -> #3A8AAA
+id: rose-pine
+name: Rosé Pine
+mode: dark
+
+colors:
+  background: '#191724'
+  foreground: '#E0DEF4'
+  cursor: '#524F67'
+  cursorAccent: '#191724'
+  selectionBackground: '#403D52'
+  selectionForeground: '#E0DEF4'
+
+  black: '#26233A'
+  red: '#EB6F92'
+  green: '#3A8AAA'
+  yellow: '#F6C177'
+  blue: '#9CCFD8'
+  magenta: '#C4A7E7'
+  cyan: '#EBBCBA'
+  white: '#E0DEF4'
+
+  brightBlack: '#706C89'
+  brightRed: '#EB6F92'
+  brightGreen: '#3A8AAA'
+  brightYellow: '#F6C177'
+  brightBlue: '#9CCFD8'
+  brightMagenta: '#C4A7E7'
+  brightCyan: '#EBBCBA'
+  brightWhite: '#E0DEF4'
+
+  orange: '#F6C177'
+  violet: '#C4A7E7'
+
+ui:
+  bg: '#191724'
+  bgSecondary: '#1F1D2E'
+  surface: '#1F1D2E'
+  surfaceHover: '#26233A'
+  text: '#E0DEF4'
+  textSecondary: '#908CAA'
+  textInverted: '#191724'
+  border: '#403D52'
+  accent: '#C4A7E7'
+  accentHover: '#EBBCBA'
+  cursor: '#524F67'

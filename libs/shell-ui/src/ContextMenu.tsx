@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useSettings } from './SettingsProvider';
 
 /** Row style for context-menu items. */
 export const menuItemClass =
@@ -96,6 +97,7 @@ export function ContextMenu({
       document.removeEventListener('keydown', handleKey);
     };
   }, [onClose]);
+  const { settings } = useSettings();
 
   return createPortal(
     <div
@@ -108,7 +110,7 @@ export function ContextMenu({
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {children}
+      <div style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}>{children}</div>
     </div>,
     document.body,
   );

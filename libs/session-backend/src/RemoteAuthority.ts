@@ -1,5 +1,5 @@
 import { RamphastosAuthority, RamphastosStream } from '@ramphastos/ramphastos-client';
-import type { SessionBackend } from './types';
+import type { SessionBackend, Unsubscribe } from './types';
 
 /** One published terminal in the authority's replicated model. */
 export interface PublishedPty {
@@ -15,6 +15,14 @@ export interface PublishedPty {
   workspaceId?: string;
   sessionId?: string;
   kind?: 'session' | 'subshell' | 'detached';
+  /**
+   * App-level session status (idle/running/blocked/completed) — mirrors
+   * render it verbatim. Kept apart from the PTY-lifecycle `status`, which
+   * is only 'running' | 'exited'.
+   */
+  appStatus?: string;
+  /** Foreground process name, for the panel's process column. */
+  process?: string;
 }
 
 export interface RemoteAuthorityOptions {
@@ -35,6 +43,14 @@ export interface RemoteAuthorityOptions {
   /** Skip the SignalR negotiate POST — required through raw-WS proxies. */
   webSocketOnly?: boolean;
   backend: SessionBackend;
+  /**
+   * Scrollback source for `ptyTail` — the backend port has no history, so
+   * the desktop supplies the live terminal's serialized buffer; viewers
+   * replay it on attach instead of opening a black screen.
+   */
+  getScrollback?: (ptyId: string) => string | Uint8Array | undefined;
+  /** Live local terminal geometry — the owner's own size claim. */
+  getPtySize?: (ptyId: string) => { cols: number; rows: number } | undefined;
 }
 
 type PtyStatus = 'running' | 'exited';
@@ -62,10 +78,22 @@ export class RemoteAuthority {
   private authority?: RamphastosAuthority;
   private ptys = new Map<string, PtyEntry>();
   private workspaces = new Map<string, string | undefined>();
-  private streams = new Map<string, RamphastosStream>();
+  /** Per-client viewport claims: ptyId -> viewerId -> geometry. Every
+   *  active client (desktop owner, web, phone) is an equal claimant; the
+   *  effective PTY size is the smallest claim in the collection, and a
+   *  client's claim is removed when it leaves the session. */
+  private claims = new Map<string, Map<string, { cols: number; rows: number }>>();
+  private streams = new Map<string, Set<RamphastosStream>>();
+  /** Stream -> {ptyId, viewerId} so a stream close drops the right claim. */
+  private streamViewers = new WeakMap<RamphastosStream, { id: string; viewer: string }>();
   private outputUnsubs = new Map<string, () => void>();
+  /** Output captured before any viewer attaches — replayed on stream open
+   *  (remote-spawned PTYs have no xterm buffer for ptyTail to serialize). */
+  private outputBuffers = new Map<string, (string | Uint8Array)[]>();
   private backendUnsubs: (() => void)[] = [];
   private started = false;
+  private reconnecting = false;
+  private stateCbs = new Set<(state: string) => void>();
   private defaultShell = '/bin/sh';
   private readonly opts: RemoteAuthorityOptions;
 
@@ -101,9 +129,77 @@ export class RemoteAuthority {
     authority.onReady(() => this.publishSnapshot());
     this.subscribeBackendExit();
 
+    // The connection's token was baked into the URL at connect() time and
+    // JWTs expire — a dropped transport (gateway restart, network blip)
+    // must trigger a FULL reconnect with a fresh token, not a reuse of the
+    // dead connection. Without this the server reports authority_offline
+    // forever while our status stays stale-'connected'.
+    let reconnectGrace: ReturnType<typeof setTimeout> | undefined;
+    authority.onStateChange?.((state) => {
+      this.emitState(state);
+      if (state === 'ready') {
+        if (reconnectGrace) { clearTimeout(reconnectGrace); reconnectGrace = undefined; }
+        return;
+      }
+      if (!this.started || this.authority !== authority) return;
+      // 'closed' is the terminal state — reconnect now.
+      if (state === 'closed') { void this.reconnect(); return; }
+      // 'reconnecting' can livelock: SignalR keeps the transport up while
+      // our re-hello is denied (expired JWT baked into hello.auth) — the
+      // retries exhaust and the session stays offline forever. If a grace
+      // period passes without 'ready', drop the whole connection and
+      // reconnect with a fresh token.
+      if (state === 'reconnecting' && !reconnectGrace) {
+        reconnectGrace = setTimeout(() => {
+          reconnectGrace = undefined;
+          if (this.started && this.authority === authority) void this.reconnect();
+        }, 12000);
+      }
+    });
+
     // (Re-)publish after every (re)connect — onReady fires on first
     // connect and after each reconnect+resume.
     this.publishSnapshot();
+  }
+
+  /** Connection-state passthrough for status UIs ('ready'|'reconnecting'|'closed'). */
+  onStateChange(cb: (state: string) => void): Unsubscribe {
+    this.stateCbs.add(cb);
+    return () => this.stateCbs.delete(cb);
+  }
+
+  private emitState(state: string): void {
+    for (const cb of this.stateCbs) cb(state);
+  }
+
+  /**
+   * Tear down the dead connection and start() again with a fresh token —
+   * exponential backoff, bounded retries, then give up (status reflects
+   * it via onStateChange).
+   */
+  private async reconnect(): Promise<void> {
+    if (this.reconnecting) return;
+    this.reconnecting = true;
+    try {
+      for (let i = 0; this.started; i++) {
+        await new Promise((r) => setTimeout(r, Math.min(500 * 2 ** Math.min(i, 5), 15000)));
+        if (!this.started) return;
+        try {
+          this.started = false;
+          const stale = this.authority;
+          this.authority = undefined;
+          // Kill the zombie transport before re-helloing — the server
+          // rejects a second authority for an owned session.
+          await stale?.disconnect().catch(() => {});
+          await this.start();
+          return;
+        } catch (e) {
+          this.emitState(`reconnect-failed:${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    } finally {
+      this.reconnecting = false;
+    }
   }
 
   /**
@@ -124,7 +220,7 @@ export class RemoteAuthority {
       seen.add(p.id);
       const existing = this.ptys.get(p.id);
       if (existing) {
-        Object.assign(existing, { name: p.name, command: p.command, cwd: p.cwd ?? existing.cwd, workspaceId: p.workspaceId, sessionId: p.sessionId, kind: p.kind ?? existing.kind });
+        Object.assign(existing, { name: p.name, command: p.command, cwd: p.cwd ?? existing.cwd, workspaceId: p.workspaceId, sessionId: p.sessionId, kind: p.kind ?? existing.kind, appStatus: p.appStatus, process: p.process, cols: p.cols ?? this.opts.getPtySize?.(existing.id) ?? existing.cols, rows: p.rows ?? this.opts.getPtySize?.(existing.id) ?? existing.rows });
       } else {
         this.ptys.set(p.id, {
           ...p,
@@ -157,6 +253,8 @@ export class RemoteAuthority {
   // ---- model ----
 
   private snapshot(): Record<string, unknown> {
+    const viewportClaims: Record<string, Record<string, { cols: number; rows: number }>> = {};
+    for (const [id, m] of this.claims) viewportClaims[id] = Object.fromEntries(m);
     return {
       device: 'desktop',
       hostname: hostname(),
@@ -164,6 +262,7 @@ export class RemoteAuthority {
       defaultShell: this.defaultShell,
       ptys: [...this.ptys.values()].map(publicEntry),
       workspaces: [...this.workspaces].map(([id, name]) => ({ id, name })),
+      viewportClaims,
     };
   }
 
@@ -181,10 +280,49 @@ export class RemoteAuthority {
 
   private removePty(id: string, reason: string): void {
     this.ptys.delete(id);
+    this.outputBuffers.delete(id);
     this.outputUnsubs.get(id)?.();
     this.outputUnsubs.delete(id);
-    this.streams.get(id)?.close(reason);
+    for (const s of this.streams.get(id) ?? []) s.close(reason);
     this.streams.delete(id);
+    this.claims.delete(id);
+  }
+
+  /** Smallest geometry among all claims plus the owner's live size. */
+  private effectiveSize(id: string): { cols: number; rows: number } | undefined {
+    const e = this.ptys.get(id);
+    const own = this.opts.getPtySize?.(id)
+      ?? (e?.cols && e.rows ? { cols: e.cols, rows: e.rows } : undefined);
+    const m = this.claims.get(id);
+    if ((!m || m.size === 0) && !own) return undefined;
+    let cols = own?.cols ?? Infinity;
+    let rows = own?.rows ?? Infinity;
+    for (const c of m?.values() ?? []) {
+      cols = Math.min(cols, c.cols);
+      rows = Math.min(rows, c.rows);
+    }
+    return { cols, rows };
+  }
+
+  private applyEffectiveSize(id: string): void {
+    const size = this.effectiveSize(id);
+    if (size) this.opts.backend.resize(id, size.cols, size.rows);
+  }
+
+  private dropClaim(id: string, viewer: string): void {
+    const m = this.claims.get(id);
+    if (!m?.delete(viewer)) return;
+    if (!m.size) this.claims.delete(id);
+    this.applyEffectiveSize(id);
+    this.patchClaims();
+  }
+
+  private patchClaims(): void {
+    const value: Record<string, Record<string, { cols: number; rows: number }>> = {};
+    for (const [id, m] of this.claims) value[id] = Object.fromEntries(m);
+    this.authority?.publishPatch([
+      { op: 'replace', path: '/viewportClaims', value },
+    ]);
   }
 
   // ---- streams (demand-driven: nothing flows while nobody watches) ----
@@ -195,21 +333,31 @@ export class RemoteAuthority {
    * wire until a remote actually opens a stream.
    */
   private handleStreamRequest(name: string): boolean | { direction: 'duplex' } {
-    return name.startsWith('pty:') && this.ptys.has(name.slice(4))
+    const id = streamPtyRef(name).id;
+    return id !== undefined && this.ptys.has(id)
       ? { direction: 'duplex' }
       : false;
   }
 
   private onStreamAnnounced(s: RamphastosStream): void {
-    if (!s.name.startsWith('pty:')) return;
-    const id = s.name.slice(4);
+    const ref = streamPtyRef(s.name);
+    if (ref.id === undefined) return;
+    const { id, viewer } = ref;
     if (!this.ptys.has(id)) {
       s.close('gone');
       return;
     }
-    this.streams.set(id, s);
+    this.streamViewers.set(s, { id, viewer });
+    let set = this.streams.get(id);
+    if (!set) { set = new Set(); this.streams.set(id, set); }
+    set.add(s);
+    const buffered = this.outputBuffers.get(id);
+    if (buffered?.length) {
+      for (const d of buffered) s.write(d);
+      this.outputBuffers.delete(id);
+    }
     s.onData((data) => this.opts.backend.write(id, decodeUtf8(data)));
-    s.onClose((reason) => this.onStreamClosed(id, reason));
+    s.onClose((reason) => this.onStreamClosed(s, reason));
     this.subscribeOutput(id);
   }
 
@@ -218,17 +366,41 @@ export class RemoteAuthority {
     this.outputUnsubs.set(
       id,
       this.opts.backend.onOutput(id, (data) => {
-        this.streams.get(id)?.write(data);
+        const set = this.streams.get(id);
+        if (set?.size) { for (const s of set) s.write(data); return; }
+        const buf = this.outputBuffers.get(id) ?? [];
+        buf.push(data);
+        if (buf.length > 256) buf.splice(0, buf.length - 256);
+        this.outputBuffers.set(id, buf);
       }),
     );
   }
 
-  private onStreamClosed(id: string, _reason?: string): void {
-    this.streams.delete(id);
-    // A closed pty stream means the terminal is done — same semantic as
-    // AxnHostVm's /ws disconnect. Leave model cleanup to the next reflect
-    // or the exit callback.
-    this.opts.backend.close(id);
+  private onStreamClosed(s: RamphastosStream, _reason?: string): void {
+    const ref = this.streamViewers.get(s);
+    this.streamViewers.delete(s);
+    if (!ref) return;
+    const { id, viewer } = ref;
+    const set = this.streams.get(id);
+    set?.delete(s);
+    if (!set?.size) {
+      this.streams.delete(id);
+      // Release the output pipe so a re-attaching viewer resubscribes.
+      this.outputUnsubs.get(id)?.();
+      this.outputUnsubs.delete(id);
+    }
+    const entry = this.ptys.get(id);
+    // Only PTYs this authority spawned may die with their stream — a
+    // mirrored PTY belongs to the local session; a viewer detach, page
+    // reload, or reconnect must never kill it (AxnHostVm's hosted semantic
+    // does not transfer to the desktop mirror).
+    if (entry?.remote && !set?.size) {
+      this.opts.backend.close(id);
+      return;
+    }
+    // This client's claim leaves the collection — the PTY relaxes to the
+    // smallest width still claimed (or the owner's own geometry).
+    if (viewer) this.dropClaim(id, viewer);
   }
 
   private subscribeBackendExit(): void {
@@ -247,8 +419,9 @@ export class RemoteAuthority {
     this.patchPtys();
     // Keep the entry — viewers see the dead terminal until it is removed
     // (state save for sessions, closePty for remote-spawned).
-    this.streams.get(id)?.close(code !== null ? `exited:${code}` : 'exited');
+    for (const s of this.streams.get(id) ?? []) s.close(code !== null ? `exited:${code}` : 'exited');
     this.streams.delete(id);
+    this.claims.delete(id);
     this.outputUnsubs.get(id)?.();
     this.outputUnsubs.delete(id);
   }
@@ -270,8 +443,12 @@ export class RemoteAuthority {
         );
       case 'closePty': {
         const id = String(a[0]);
-        if (!this.ptys.has(id)) return noSuchPty(id);
-        backend.close(id);
+        const entry = this.ptys.get(id);
+        if (!entry) return noSuchPty(id);
+        // A remote close kills only what it spawned — a mirrored PTY is
+        // owned by the local session; "closing" it remotely detaches and
+        // removes it from the mirror until the next model reflect.
+        if (entry.remote) backend.close(id);
         this.removePty(id, 'closed');
         this.patchPtys();
         return { ok: true };
@@ -282,11 +459,46 @@ export class RemoteAuthority {
         if ('error' in r) return r;
         const cols = num(a[1]) ?? 80;
         const rows = num(a[2]) ?? 24;
-        backend.resize(id, cols, rows);
-        r.cols = cols;
-        r.rows = rows;
-        this.patchPtys();
+        // Remote-owned PTYs take the viewer's geometry directly.
+        if (r.remote) {
+          backend.resize(id, cols, rows);
+          r.cols = cols;
+          r.rows = rows;
+          this.patchPtys();
+          return { ok: true };
+        }
+        // Mirrored PTY: this is a viewport claim, not a size command. The
+        // PTY takes the smallest geometry across all active claimants.
+        const viewer = a[3] === undefined ? 'anon' : String(a[3]);
+        let m = this.claims.get(id);
+        if (!m) { m = new Map(); this.claims.set(id, m); }
+        m.set(viewer, { cols, rows });
+        this.applyEffectiveSize(id);
+        this.patchClaims();
         return { ok: true };
+      }
+      case 'unclaimViewport': {
+        // A client left the session (hidden/paused) — remove its claim.
+        const id = String(a[0]);
+        const viewer = a[1] === undefined ? 'anon' : String(a[1]);
+        this.dropClaim(id, viewer);
+        return { ok: true };
+      }
+      case 'pauseViewport': {
+        // Drop every claim held by this client.
+        const viewer = a[0] === undefined ? 'anon' : String(a[0]);
+        for (const id of [...this.claims.keys()]) this.dropClaim(id, viewer);
+        return { ok: true };
+      }
+      case 'resumeViewport':
+        return { ok: true };
+      case 'ptyTail': {
+        const r = this.requirePty(String(a[0]));
+        if ('error' in r) return r;
+        const data = this.opts.getScrollback?.(String(a[0]));
+        const bytes =
+          typeof data === 'string' ? new TextEncoder().encode(data) : data;
+        return { ok: true, data: bytes?.length ? toB64(bytes) : undefined };
       }
       case 'ptyCwd': {
         const r = this.requirePty(String(a[0]));
@@ -410,6 +622,9 @@ export class RemoteAuthority {
       status: 'running', remote: true, kind: 'detached',
       spawnedAt: new Date().toISOString(),
     });
+    // Subscribe immediately — output emitted before a viewer attaches is
+    // buffered and replayed on stream open instead of being lost.
+    this.subscribeOutput(id);
     this.patchPtys();
     return { ok: true, spawned: true, id };
   }
@@ -435,6 +650,7 @@ function publicEntry(e: PtyEntry): Record<string, unknown> {
     cols: e.cols ?? 80, rows: e.rows ?? 24,
     status: e.status, exitCode: e.exitCode ?? null,
     workspaceId: e.workspaceId, sessionId: e.sessionId, kind: e.kind,
+    appStatus: e.appStatus, process: e.process,
     spawnedAt: e.spawnedAt,
   };
   // undefined is not a JSON value — drop it so the server's patch applier
@@ -442,6 +658,16 @@ function publicEntry(e: PtyEntry): Record<string, unknown> {
   for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
   return o;
 }
+
+/** `pty:<id>@<viewer>` -> parts (viewer optional for older clients). */
+const streamPtyRef = (name: string): { id?: string; viewer: string } => {
+  if (!name.startsWith('pty:')) return { viewer: '' };
+  const ref = name.slice(4);
+  const at = ref.lastIndexOf('@');
+  return at >= 0
+    ? { id: ref.slice(0, at), viewer: ref.slice(at + 1) }
+    : { id: ref, viewer: '' };
+};
 
 const num = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined;

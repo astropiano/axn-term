@@ -71,13 +71,16 @@ devin:
 # git-status:
 #   show-in-header: true    # branch + status indicators in the session header
 
+# Merge/pull requests: glab-mr (GitLab, needs 'glab auth login') and gh-pr
+# (GitHub, needs 'gh auth login'). Both are on by default and stay hidden
+# while their CLI is not installed; a repo only queries its own forge.
 # glab-mr:
-#   show-in-header: true    # MR info in the session header
+#   show-in-panel: true     # MR info under the session
 #   # refresh-interval-seconds: 120
 #   # hostname: gitlab.example.com
 
 # gh-pr:
-#   show-in-header: true    # PR info in the session header
+#   show-in-panel: true     # PR info under the session
 #   # refresh-interval-seconds: 120
 #   # hostname: github.enterprise.example.com  (GHES)
 `;

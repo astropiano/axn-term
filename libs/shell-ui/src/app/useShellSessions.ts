@@ -47,6 +47,32 @@ function createDefaultSession(workspaceId: string, index = 1): ShellSession {
   };
 }
 
+/**
+ * Plugin banners are runtime UI state, not session data — a persisted banner
+ * would resurface on restored sessions long after it stopped being true.
+ * Strip the reserved `banner` key from every plugin's pluginState slice
+ * (on save so state.json never carries it, on load to clean files written
+ * by versions that did).
+ */
+function stripPersistedBanners(
+  pluginState: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!pluginState) return pluginState;
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [key, slice] of Object.entries(pluginState)) {
+    if (slice && typeof slice === 'object' && 'banner' in (slice as Record<string, unknown>)) {
+      const rest = { ...(slice as Record<string, unknown>) };
+      delete rest.banner;
+      next[key] = rest;
+      changed = true;
+    } else {
+      next[key] = slice;
+    }
+  }
+  return changed ? next : pluginState;
+}
+
 function isWindowState(value: unknown): value is WindowState {
   return (
     typeof value === 'object' &&
@@ -73,7 +99,20 @@ async function writeWindowState(store: ShellStateStore, windowId: string, state:
   await store.save(windowId, state);
 }
 
-export function useShellSessions(windowId: string, stateStore: ShellStateStore) {
+export interface UseShellSessionsOptions {
+  /**
+   * Boot without the default session when the window has no saved state —
+   * a window opened for a session tear-off, waiting to adopt that session.
+   * `workspaceName` names its single workspace.
+   */
+  startEmpty?: { workspaceName?: string };
+}
+
+export function useShellSessions(
+  windowId: string,
+  stateStore: ShellStateStore,
+  options: UseShellSessionsOptions = {},
+) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [sessions, setSessions] = useState<ShellSession[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
@@ -82,8 +121,21 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
   const [pluginData, setPluginData] = useState<Record<string, unknown>>({});
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  /** True when this window booted empty for a tear-off (no saved state). */
+  const [startedEmpty, setStartedEmpty] = useState(false);
+  const startEmptyRef = useRef(options.startEmpty);
   /** Set when the backend loaded state.json.bak because state.json failed. */
   const [stateNotice, setStateNotice] = useState<string | null>(null);
+  /** True when `stateNotice` is our own "waiting for remote" banner — so a
+   * later mirror update can clear it without touching other notices. */
+  const waitingNoticeRef = useRef(false);
+  const setWaitingNotice = useCallback(
+    (waiting: boolean, message?: string) => {
+      waitingNoticeRef.current = waiting;
+      setStateNotice(waiting ? (message ?? null) : null);
+    },
+    [setStateNotice],
+  );
 
   const workspacesRef = useRef(workspaces);
   const sessionsRef = useRef(sessions);
@@ -215,7 +267,9 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
       const state: WindowState = {
         id: windowIdRef.current,
         workspaces: workspacesRef.current,
-        sessions: sessionsRef.current,
+        sessions: sessionsRef.current.map((s) =>
+          s.pluginState ? { ...s, pluginState: stripPersistedBanners(s.pluginState) } : s,
+        ),
         selectedWorkspaceId: selectedWorkspaceIdRef.current,
         selectedSessionId: selectedSessionIdRef.current,
         pluginTabs: pluginTabsRef.current,
@@ -252,14 +306,23 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
     loadWindowState(stateStore, windowId)
       .then((saved) => {
         if (cancelled) return;
+        // A tear-off window with no saved state boots without a shell: the
+        // session it was opened for arrives by adoption.
+        const bootEmpty = !saved && startEmptyRef.current !== undefined;
         const initial: WindowState = saved ?? {
           id: windowId,
-          workspaces: [createDefaultWorkspace()],
+          workspaces: [
+            bootEmpty && startEmptyRef.current?.workspaceName
+              ? { ...createDefaultWorkspace(), name: startEmptyRef.current.workspaceName }
+              : createDefaultWorkspace(),
+          ],
           sessions: [],
         };
         const defaultWorkspace = initial.workspaces[0] ?? createDefaultWorkspace();
         let workspaceSessions = initial.sessions.filter((s) => s.workspaceId === defaultWorkspace.id);
-        if (workspaceSessions.length === 0) {
+        // Attach-only mirrors (remote mode) never spawn a local session —
+        // an empty model means the authority hasn't published anything yet.
+        if (workspaceSessions.length === 0 && !bootEmpty && !stateStore.attachOnly) {
           workspaceSessions = [createDefaultSession(defaultWorkspace.id)];
         }
         const allSessions = [
@@ -274,6 +337,7 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
           status: 'idle' as const,
           progress: 0,
           tasks: [],
+          pluginState: stripPersistedBanners(s.pluginState),
           agentInput: undefined,
         }));
 
@@ -286,7 +350,7 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
         }
 
         const fallbackWorkspace = defaultWorkspace.id;
-        const fallbackSession = workspaceSessions[0].id;
+        const fallbackSession = workspaceSessions[0]?.id ?? '';
         const selectedSessionId =
           saved?.selectedSessionId && allSessions.some((s) => s.id === saved.selectedSessionId)
             ? saved.selectedSessionId
@@ -303,6 +367,13 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
         setPluginDataWithRef(() => initial.pluginData ?? {});
         setSelectedWorkspaceIdWithRef(selectedWorkspaceId);
         setSelectedSessionIdWithRef(selectedSessionId);
+        setStartedEmpty(bootEmpty);
+        if (stateStore.attachOnly && allSessions.length === 0) {
+          setWaitingNotice(
+            true,
+            'Waiting for remote sessions — the desktop is not publishing (check Settings → Remote).',
+          );
+        }
         setLoaded(true);
 
         if (!saved) {
@@ -311,6 +382,21 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
       })
       .catch(() => {
         if (cancelled) return;
+        if (stateStore.attachOnly) {
+          // Remote mirror unreachable/empty — surface a waiting state
+          // instead of spawning a phantom local session.
+          const workspace = createDefaultWorkspace();
+          setWorkspacesWithRef(() => [workspace]);
+          setSessionsWithRef(() => []);
+          setSelectedWorkspaceIdWithRef(workspace.id);
+          setSelectedSessionIdWithRef('');
+          setWaitingNotice(
+            true,
+            'No remote sessions — the desktop is not publishing yet (check Settings → Remote).',
+          );
+          setLoaded(true);
+          return;
+        }
         const workspace = createDefaultWorkspace();
         const session = createDefaultSession(workspace.id);
         setWorkspacesWithRef(() => [workspace]);
@@ -335,6 +421,7 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
         if (!fresh) return;
         setWorkspacesWithRef(() => fresh.workspaces);
         setSessionsWithRef(() => fresh.sessions);
+        if (fresh.sessions.length > 0 && waitingNoticeRef.current) setWaitingNotice(false);
         if (!fresh.sessions.some((s) => s.id === selectedSessionIdRef.current)) {
           setSelectedSessionIdWithRef(fresh.sessions[0]?.id ?? '');
         }
@@ -853,6 +940,7 @@ export function useShellSessions(windowId: string, stateStore: ShellStateStore) 
     appendSessionOutput,
     closeSession,
     loaded,
+    startedEmpty,
     saveNow,
     importWindowState,
     stateNotice,

@@ -1,4 +1,5 @@
 import type { ControlReply, Unsubscribe } from '@axn-term/session-backend';
+import type { WindowBootIntent } from './app/sessionTearOff';
 
 export const isMac =
   /mac/i.test(navigator.platform ?? '') ||
@@ -34,6 +35,12 @@ export interface ShellStateStore {
    * the UI re-loads without a restart. Absent on all local stores.
    */
   watch?(windowId: string, cb: () => void): Unsubscribe;
+  /**
+   * Attach-only mirror (remote mode): the UI must NEVER synthesize or spawn
+   * sessions — an empty/failed load means "wait for the authority", not
+   * "create a fresh session". Cloud/hosted stores leave this unset.
+   */
+  attachOnly?: boolean;
 }
 
 /** YAML persistence for plugin settings (plugins.yaml content). */
@@ -79,6 +86,15 @@ export interface AppConfigStore {
   watch?(cb: (yaml: string | null) => void): Unsubscribe;
 }
 
+/** Options for a window opened by tearing a session out of another one. */
+export interface NewWindowOptions {
+  boot?: WindowBootIntent;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+}
+
 /**
  * Window/OS integration — desktop supplies real Tauri window ops; web
  * implementations omit what a browser tab cannot do.
@@ -96,8 +112,21 @@ export interface ShellWindow {
   destroy(): Promise<void>;
   /** Close without destroying state — web: no-op (tabs can't self-close). */
   close?(): void;
-  /** Spawn another app window (desktop only; web: new browser tab by user). */
-  createWindow?(): void;
+  /** Bring this window to the front (after a session moved into it). */
+  focus?(): void;
+  /**
+   * Spawn another app window (desktop only; web: new browser tab by user).
+   * Resolves the new window's id. `options` open it for a session tear-off:
+   * `boot` is handed to the new window as its `bootIntent`, placement is a
+   * logical screen position/size (ignored where the compositor places windows).
+   */
+  createWindow?(options?: NewWindowOptions): Promise<string>;
+  /**
+   * Why this window was opened, when another window opened it for a session
+   * tear-off (desktop: parsed from the window URL's fragment). Absent for
+   * windows the user opened or restored.
+   */
+  bootIntent?: WindowBootIntent | null;
   /** Delete this window's persisted state, then destroy. Used by "close & remove". */
   deleteState?(): Promise<void>;
   /** Fired when the OS shuts the process down — skip confirmation. */
@@ -126,6 +155,8 @@ export interface ShellPlatform {
   stateStore: ShellStateStore;
   pluginSettingsStore: PluginSettingsStore;
   workspaceSetStorage: WorkspaceSetStorage;
+  /** Installed font family names for settings suggestions; absent → no hints. */
+  listFonts?(): Promise<string[]>;
   /** Import/export of the app config — settings modal "Import"/"Export". */
   configFileStorage: FileTransfer;
   /**
@@ -136,6 +167,32 @@ export interface ShellPlatform {
    */
   configStore?: AppConfigStore;
   window?: ShellWindow;
+  /**
+   * Live remote-authority (publish) status — desktop only, present once
+   * Remote control is configured. `state` is 'idle' while not publishing.
+   */
+  remoteAuthorityStatus?: {
+    get(): { state: 'idle' | 'connecting' | 'connected' | 'failed'; error?: string };
+    subscribe(cb: () => void): () => void;
+  };
+  /**
+   * OIDC sign-in for remote publishing — desktop only. 'pending' carries
+   * the device-flow user code + verification URI to show/open.
+   */
+  remoteAuth?: {
+    get(): {
+      state: 'signedOut' | 'pending' | 'signedIn' | 'error';
+      user?: string;
+      error?: string;
+      userCode?: string;
+      verificationUri?: string;
+    };
+    subscribe(cb: () => void): () => void;
+    signIn(): Promise<void>;
+    signOut(): Promise<void>;
+    /** Fresh access token for the authority hello; undefined when signed out. */
+    getAccessToken?(): Promise<string | undefined>;
+  };
   /**
    * Close the window when the last session is closed. True on desktop;
    * false/absent on web (a browser tab should never self-close).

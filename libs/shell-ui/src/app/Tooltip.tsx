@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useSettings } from '../SettingsProvider';
 
 const SHOW_DELAY_MS = 400;
 const GAP = 6;
@@ -22,8 +23,13 @@ export function TooltipHost() {
   const bubbleRef = useRef<HTMLDivElement>(null);
   const targetRef = useRef<Element | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { settings } = useSettings();
 
   useEffect(() => {
+    // Touch devices have no hover — a tap on a `data-tip` element would show
+    // a sticky bubble until the next tap. Skip tooltips entirely there.
+    const coarse = window.matchMedia('(pointer: coarse)');
+    if (coarse.matches) return;
     const hide = () => {
       targetRef.current = null;
       clearTimeout(timerRef.current);
@@ -95,7 +101,9 @@ export function TooltipHost() {
       className="pointer-events-none fixed z-[70] max-w-64 whitespace-pre-line break-words rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] leading-snug text-[var(--text-primary)] shadow-lg"
       style={pos ? { left: pos.left, top: pos.top } : { left: 0, top: 0, visibility: 'hidden' }}
     >
-      {anchor.text}
+      <span className="block" style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}>
+        {anchor.text}
+      </span>
     </div>,
     document.body,
   );

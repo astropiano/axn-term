@@ -191,7 +191,7 @@ describe('parsePatterns', () => {
 });
 
 describe('dirsForRepo', () => {
-  const patterns = parsePatterns('*: .local-drafts; axn-.*: .ai; tcal: hw-notes');
+  const patterns = parsePatterns('*: .local-drafts; axn-.*: .ai; myapp: hw-notes');
 
   it('matches against any repo name (checkout dir or remote)', () => {
     expect(dirsForRepo(patterns, ['axn-term-feat-foo', 'axn-term'])).toEqual([

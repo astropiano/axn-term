@@ -5,11 +5,15 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import {
+  encodeBootIntent,
   loadExternalPlugins,
+  parseBootIntent,
+  settingsFromYaml,
   type ShellPlatform,
   type LogLevel,
 } from '@axn-term/shell-ui';
 import type { Unsubscribe } from '@axn-term/session-backend';
+import { createRemoteAuth } from './remoteAuth';
 import { desktopWorkspaceSetStorage } from './workspaceSetStorage';
 
 const appWindow = getCurrentWindow();
@@ -117,6 +121,7 @@ export const desktopPlatform: ShellPlatform = {
     },
   },
   autoCloseWhenEmpty: true,
+  listFonts: () => invoke<string[]>('list_fonts'),
   window: {
     id: appWindow.label,
     // Tauri fires close requests on the OS close button; preventDefault first
@@ -130,7 +135,20 @@ export const desktopPlatform: ShellPlatform = {
       ),
     destroy: () => appWindow.destroy(),
     close: () => void appWindow.close().catch(() => {}),
-    createWindow: () => void invoke('create_window').catch(() => {}),
+    focus: () => void appWindow.setFocus().catch(() => {}),
+    createWindow: (options) =>
+      invoke<string>('create_window', {
+        options: options
+          ? {
+              boot: options.boot ? encodeBootIntent(options.boot) : undefined,
+              x: options.x,
+              y: options.y,
+              width: options.width,
+              height: options.height,
+            }
+          : undefined,
+      }),
+    bootIntent: parseBootIntent(window.location.hash),
     deleteState: () => invoke('delete_window_state', { windowId: appWindow.label }),
     onOsShutdown: (cb) => syncSub(listen<void>('os-shutdown', () => cb())),
     onCloseWindow: (cb) =>
@@ -165,3 +183,20 @@ export const desktopPlatform: ShellPlatform = {
         invoke<string>('read_external_plugin_file', { dir, name }),
     }),
 };
+
+// OIDC device-flow sign-in for remote publishing — issuer/client come from
+// config.yaml (Settings → Remote). Reads lazily via the configStore seam.
+desktopPlatform.remoteAuth = createRemoteAuth(async () => {
+  const yaml = await desktopPlatform.configStore?.load().catch(() => null);
+  const s = yaml ? (settingsFromYaml(yaml) ?? {}) : {};
+  return { issuer: s.remoteAuthIssuer, clientId: s.remoteAuthClientId };
+});
+// Remote-control seam: flow tests trigger signIn() and read the state via
+// the app's remote-control server (POST /remote-auth, GET /remote-auth).
+(window as unknown as { __axnRemoteAuth?: typeof desktopPlatform.remoteAuth }).__axnRemoteAuth =
+  desktopPlatform.remoteAuth;
+desktopPlatform.remoteAuth.subscribe(() => {
+  void invoke('remote_auth_report', {
+    snapshot: JSON.stringify(desktopPlatform.remoteAuth!.get()),
+  }).catch(() => {});
+});

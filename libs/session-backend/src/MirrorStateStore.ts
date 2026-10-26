@@ -5,6 +5,8 @@ import type { RamphastosSession } from '@ramphastos/ramphastos-client';
  * (not imported) because session-backend must not depend on shell-ui.
  */
 export interface MirrorStateStore {
+  /** See ShellStateStore.attachOnly — set for remote (attach-only) mirrors. */
+  attachOnly?: boolean;
   load(windowId: string): Promise<unknown>;
   save(windowId: string, state: unknown): Promise<void>;
   delete?(windowId: string): Promise<void>;
@@ -21,6 +23,9 @@ interface ReplicaPty {
   workspaceId?: string;
   sessionId?: string;
   kind?: string;
+  /** App-level session status published by the authority (idle/running/…). */
+  appStatus?: string;
+  process?: string;
 }
 
 interface ReplicaWorkspace { id: string; name?: string }
@@ -44,7 +49,10 @@ const REMOTE_WS = 'remote';
  * re-derives state, so the phone sees terminals appear/close/exit as the
  * desktop changes them.
  */
-export function createMirrorStateStore(connect: () => Promise<RamphastosSession>): MirrorStateStore {
+export function createMirrorStateStore(
+  connect: () => Promise<RamphastosSession>,
+  opts?: { attachOnly?: boolean },
+): MirrorStateStore {
   const layoutKey = (id: string | undefined) => `axn-mirror:${id ?? 'session'}`;
   // Last meta we pushed per pty — avoids re-invoking on our own echo.
   const pushed = new Map<string, string>();
@@ -59,6 +67,7 @@ export function createMirrorStateStore(connect: () => Promise<RamphastosSession>
   };
 
   return {
+    attachOnly: opts?.attachOnly,
     async load(windowId) {
       const session = await connect();
       return mirrorWindowState(session, windowId, readLayout(layoutKey(session.sessionId)));
@@ -109,6 +118,25 @@ export function createMirrorStateStore(connect: () => Promise<RamphastosSession>
           pushed.set(ptyId, meta);
           void s.invoke('/vm/setPtyMeta', [ptyId, sess.id, wsId, name, null])
             .catch(() => pushed.delete(ptyId));
+        }
+
+        // Publish plugin state upstream — the generic shared plane: anything
+        // a plugin stores via updateAppState (`pluginData`) or
+        // updatePluginState (`pluginState`) mirrors to every device. Keys:
+        // `app:<plugin>` and `sess:<sessionId>:<plugin>`.
+        const pushPluginState = (key: string, value: unknown) => {
+          const data = JSON.stringify(value ?? null);
+          const pk = `ps:${key}`;
+          if (pushed.get(pk) === data) return;
+          pushed.set(pk, data);
+          void s.invoke('/vm/setPluginState', [key, data])
+            .catch(() => pushed.delete(pk));
+        };
+        const pluginData = (state as { pluginData?: Record<string, unknown> }).pluginData ?? {};
+        for (const [pid, value] of Object.entries(pluginData)) pushPluginState(`app:${pid}`, value);
+        for (const sess of sessions) {
+          const ps = (sess as { pluginState?: Record<string, unknown> }).pluginState ?? {};
+          for (const [pid, value] of Object.entries(ps)) pushPluginState(`sess:${sess.id}:${pid}`, value);
         }
       } catch {
         // offline/disconnected — layout loss is acceptable
@@ -171,6 +199,28 @@ function mirrorWindowState(
     collapsed: localWs.get(id)?.collapsed,
   }));
 
+  // Shared plugin-state plane: `app:<plugin>` → window pluginData,
+  // `sess:<sessionId>:<plugin>` → per-session pluginState.
+  const pluginData: Record<string, unknown> = {};
+  const sessionPluginStates = new Map<string, Record<string, unknown>>();
+  for (const ps of ((vm.pluginStates as { key?: string; data?: string }[] | undefined) ?? [])) {
+    if (!ps?.key || typeof ps.data !== 'string') continue;
+    let value: unknown = null;
+    try { value = JSON.parse(ps.data); } catch { /* opaque */ }
+    if (ps.key.startsWith('app:')) {
+      pluginData[ps.key.slice(4)] = value;
+    } else if (ps.key.startsWith('sess:')) {
+      const rest = ps.key.slice(5);
+      const sep = rest.indexOf(':');
+      if (sep < 0) continue;
+      const sid = rest.slice(0, sep);
+      const pid = rest.slice(sep + 1);
+      const bag = sessionPluginStates.get(sid) ?? {};
+      bag[pid] = value;
+      sessionPluginStates.set(sid, bag);
+    }
+  }
+
   const sessions = mains.map((p) => {
     const sessionId = p.sessionId ?? p.id;
     return {
@@ -186,7 +236,17 @@ function mirrorWindowState(
       progress: 0,
       output: '',
       cwd: p.cwd,
-      status: p.status === 'exited' ? ('completed' as const) : ('idle' as const),
+      // App status wins (the authority publishes the session's real
+      // idle/running/blocked/completed); the PTY lifecycle is only a
+      // fallback so an exited PTY still shows completed.
+      status:
+        p.status === 'exited' || p.appStatus === 'completed'
+          ? ('completed' as const)
+          : p.appStatus === 'running' || p.appStatus === 'blocked'
+            ? (p.appStatus as 'running' | 'blocked')
+            : ('idle' as const),
+      process: p.process,
+      pluginState: sessionPluginStates.get(sessionId) ?? {},
       editors: subs
         .filter((t) => (t.sessionId ?? t.workspaceId) === sessionId)
         .map((t) => ({
@@ -206,6 +266,7 @@ function mirrorWindowState(
     sessions,
     selectedWorkspaceId: layout?.selectedWorkspaceId,
     selectedSessionId: layout?.selectedSessionId,
+    pluginData,
     // Surface the authority's identity for the UI (window title / banner).
     remoteDevice: vm.device,
     remoteHostname: vm.hostname,

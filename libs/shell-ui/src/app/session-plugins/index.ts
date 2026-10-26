@@ -6,7 +6,10 @@ import { ghPrPlugin } from './ghPr';
 import { devinPlugin } from './devinTasks';
 import { claudePlugin } from './claude';
 import { codexPlugin } from './codex';
+
 import { antigravityPlugin } from './antigravity';
+
+import { opencodePlugin } from './opencode';
 import { devWorkflowPlugin } from './devWorkflow';
 import { vibePlugin } from './vibe';
 import { progressPlugin } from './progress';
@@ -34,7 +37,10 @@ export { ghPrPlugin } from './ghPr';
 export { devinPlugin } from './devinTasks';
 export { claudePlugin } from './claude';
 export { codexPlugin } from './codex';
+
 export { antigravityPlugin } from './antigravity';
+
+export { opencodePlugin } from './opencode';
 export { devWorkflowPlugin } from './devWorkflow';
 export { vibePlugin } from './vibe';
 export { progressPlugin } from './progress';
@@ -56,7 +62,10 @@ const defaultPlugins: SessionViewPlugin[] = [
   devinPlugin,
   claudePlugin,
   codexPlugin,
+
   antigravityPlugin,
+
+  opencodePlugin,
   devWorkflowPlugin,
   vibePlugin,
   progressPlugin,

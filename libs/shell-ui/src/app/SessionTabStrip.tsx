@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useLingui } from '@lingui/react/macro';
 import { Eye, FileText, Folder, GitBranch, SquareTerminal, Terminal, X } from 'lucide-react';
 import type { EditorTab } from '../types';
 import { defaultTabLabel } from './subshellPromote';
+import { useSettings } from '../SettingsProvider';
 
 /**
  * A session's tab strip: `shell` pinned leftmost, then its sub-view tabs —
@@ -24,14 +26,19 @@ export function SessionTabStrip({
   onReorder: (dragId: string, targetId: string) => void;
   onCloseTab: (tabId: string) => void;
 }) {
+  const { t } = useLingui();
   const [tabDragId, setTabDragId] = useState<string | null>(null);
   const [tabDropId, setTabDropId] = useState<string | null>(null);
+  const { settings } = useSettings();
   return (
-    <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1">
+    <div
+      className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1"
+      style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
+    >
       <button
         type="button"
         onClick={() => onSelect('shell')}
-        data-tip="Shell"
+        data-tip={t`Shell`}
         className={`flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[11px] transition ${
           activeTab === 'shell'
             ? 'bg-[var(--surface)] text-[var(--text-primary)]'
@@ -39,7 +46,7 @@ export function SessionTabStrip({
         }`}
       >
         <SquareTerminal className="h-3.5 w-3.5" />
-        shell
+        {t`shell`}
       </button>
       {editors.map((ed) => (
         <div

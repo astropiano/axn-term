@@ -51,6 +51,9 @@ struct AppState {
     /// Keep a bounded output tail per session — only read by the
     /// remote-control server, so only kept while it runs.
     capture_output: bool,
+    /// Last remoteAuth snapshot the frontend reported — only read by the
+    /// remote-control `GET /remote-auth` endpoint.
+    remote_auth: Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -60,6 +63,7 @@ impl AppState {
             state_file_lock: Mutex::new(()),
             window_counter: AtomicU64::new(0),
             capture_output,
+            remote_auth: Mutex::new(None),
         }
     }
 }
@@ -293,10 +297,83 @@ fn next_window_id(counter: &AtomicU64, is_used: impl Fn(&str) -> bool) -> String
     }
 }
 
+/// Extras for a window opened by tearing a session out of another window.
+/// Every field is optional; `create_window` without options opens a plain
+/// 800×600 window like Ctrl/⌘+N.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NewWindowOptions {
+    /// URL fragment for the new window's frontend (`axn-boot=…`, built by
+    /// `encodeBootIntent`). Only URL-safe characters pass — it is spliced
+    /// into the window URL.
+    boot: Option<String>,
+    /// Logical screen position of the window's top-left corner (where the
+    /// session was dropped). Ignored by Wayland compositors, which place
+    /// windows themselves.
+    x: Option<f64>,
+    y: Option<f64>,
+    /// Logical inner size — the source window's, like a browser tab drag.
+    width: Option<f64>,
+    height: Option<f64>,
+}
+
+const DEFAULT_WINDOW_SIZE: (f64, f64) = (800.0, 600.0);
+
+/// The boot fragment when it is short and URL-safe (the frontend
+/// percent-encodes its JSON), else None.
+fn boot_fragment(raw: Option<&str>) -> Option<&str> {
+    let raw = raw?;
+    let ok = !raw.is_empty()
+        && raw.len() <= 2048
+        && raw
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-._~%=&".contains(&b));
+    ok.then_some(raw)
+}
+
+/// Requested inner size, clamped to something a window can sensibly have.
+fn window_size(width: Option<f64>, height: Option<f64>) -> (f64, f64) {
+    match (width, height) {
+        (Some(w), Some(h)) if w.is_finite() && h.is_finite() => {
+            (w.clamp(400.0, 8192.0), h.clamp(300.0, 8192.0))
+        }
+        _ => DEFAULT_WINDOW_SIZE,
+    }
+}
+
+/// Requested position when both coordinates are plausible screen values.
+fn window_position(x: Option<f64>, y: Option<f64>) -> Option<(f64, f64)> {
+    match (x, y) {
+        (Some(x), Some(y))
+            if x.is_finite() && y.is_finite() && x.abs() <= 32768.0 && y.abs() <= 32768.0 =>
+        {
+            Some((x, y))
+        }
+        _ => None,
+    }
+}
+
 fn create_window_internal<M: Manager<Wry>>(manager: &M, label: &str) -> Result<(), String> {
-    let window = tauri::WebviewWindowBuilder::new(manager, label, WebviewUrl::App("index.html".into()))
+    create_window_with(manager, label, &NewWindowOptions::default())
+}
+
+fn create_window_with<M: Manager<Wry>>(
+    manager: &M,
+    label: &str,
+    options: &NewWindowOptions,
+) -> Result<(), String> {
+    let url = match boot_fragment(options.boot.as_deref()) {
+        Some(boot) => format!("index.html#{}", boot),
+        None => "index.html".to_string(),
+    };
+    let (width, height) = window_size(options.width, options.height);
+    let mut builder = tauri::WebviewWindowBuilder::new(manager, label, WebviewUrl::App(url.into()))
         .title("axn-term")
-        .inner_size(800.0, 600.0)
+        .inner_size(width, height);
+    if let Some((x, y)) = window_position(options.x, options.y) {
+        builder = builder.position(x, y);
+    }
+    let window = builder
         .visible(false)
         // The app has no native file-drop target; the default wry drop
         // handler registers the webview as an OS-level drop destination,
@@ -2198,6 +2275,122 @@ fn write_kv_store(store: &serde_json::Map<String, JsonValue>) -> Result<(), Stri
 /// Small persisted key-value store for UI-side caches (e.g. agent review
 /// explanations). The store is a single JSON object at ~/.axn-term/kv.json.
 #[tauri::command]
+fn list_fonts() -> Vec<String> {
+    use std::collections::BTreeSet;
+    let mut names = BTreeSet::new();
+
+    // macOS: real family names via AppKit's font manager (osascript wraps it
+    // without a new crate dep).
+    #[cfg(target_os = "macos")]
+    if let Ok(out) = std::process::Command::new("osascript")
+        .args([
+            "-e",
+            "use framework \"AppKit\"",
+            "-e",
+            "set f to NSFontManager's sharedFontManager()'s availableFontFamilies() as text",
+            "-e",
+            "return f",
+        ])
+        .output()
+    {
+        if out.status.success() {
+            for name in String::from_utf8_lossy(&out.stdout).split(',') {
+                let n = name.trim();
+                if !n.is_empty() {
+                    names.insert(n.to_string());
+                }
+            }
+        }
+    }
+
+    // Linux: fc-list when fontconfig is present.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if names.is_empty() {
+        if let Ok(out) = std::process::Command::new("fc-list")
+            .args([":", "family"])
+            .output()
+        {
+            if out.status.success() {
+                for line in String::from_utf8_lossy(&out.stdout).lines() {
+                    for name in line.split(',') {
+                        let n = name.trim();
+                        if !n.is_empty() {
+                            names.insert(n.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback / Windows: font dir stems.
+    if names.is_empty() {
+        let mut dirs: Vec<std::path::PathBuf> = vec![
+            "/Library/Fonts".into(),
+            "/System/Library/Fonts".into(),
+            "/usr/local/share/fonts".into(),
+            "/usr/share/fonts".into(),
+        ];
+        if let Some(home) = std::env::var_os("HOME") {
+            let home = std::path::PathBuf::from(home);
+            dirs.push(home.join("Library/Fonts"));
+            dirs.push(home.join(".local/share/fonts"));
+        }
+        if let Ok(win) = std::env::var("WINDIR") {
+            dirs.push(std::path::PathBuf::from(win).join("Fonts"));
+        }
+        const WEIGHT_SUFFIXES: &[&str] = &[
+            "regular", "bold", "italic", "oblique", "light", "thin", "black",
+            "medium", "semibold", "demibold", "extrabold", "ultrabold", "heavy",
+            "book", "roman", "narrow", "condensed", "expanded", "ultralight",
+            "extralight", "var", "vf",
+        ];
+        fn visit(path: &std::path::Path, names: &mut BTreeSet<String>, depth: u8) {
+            if depth > 2 {
+                return;
+            }
+            let Ok(entries) = std::fs::read_dir(path) else { return };
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    visit(&p, names, depth + 1);
+                    continue;
+                }
+                let ext = p
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_lowercase());
+                if !matches!(ext.as_deref(), Some("ttf") | Some("otf") | Some("ttc")) {
+                    continue;
+                }
+                let Some(stem) = p.file_stem().and_then(|s| s.to_str()) else {
+                    continue;
+                };
+                let mut base = stem.to_string();
+                if let Some(idx) = base.rfind(|c: char| c == '-' || c == '_') {
+                    if WEIGHT_SUFFIXES.contains(&base[idx + 1..].to_lowercase().as_str()) {
+                        base.truncate(idx);
+                    }
+                }
+                let base = base.trim().to_string();
+                if !base.is_empty() {
+                    names.insert(base);
+                }
+            }
+        }
+        for dir in &dirs {
+            visit(dir, &mut names, 0);
+        }
+    }
+
+    // Bundled webfonts always exist — offer them even if not installed.
+    for bundled in ["Monaspace Neon", "Fira Code"] {
+        names.insert(bundled.to_string());
+    }
+    names.into_iter().collect()
+}
+
+#[tauri::command]
 fn kv_get(key: String) -> Result<Option<String>, String> {
     Ok(read_kv_store()
         .get(&key)
@@ -2218,12 +2411,45 @@ fn kv_set(key: String, value: Option<String>) -> Result<(), String> {
     write_kv_store(&store)
 }
 
+/// OS-keychain backed secret store (macOS Keychain, Windows Credential
+/// Manager, Linux Secret Service) — used for the remote-auth refresh token.
+const SECURE_SERVICE: &str = "dev.axn-term.axn-term";
+
 #[tauri::command]
-fn create_window(app: AppHandle) -> Result<String, String> {
+fn secure_get(key: String) -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new(SECURE_SERVICE, &key).map_err(|e| e.to_string())?;
+    match entry.get_password() {
+        Ok(v) => Ok(Some(v)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+fn remote_auth_report(state: State<'_, AppState>, snapshot: String) {
+    if let Ok(mut guard) = state.remote_auth.lock() {
+        *guard = Some(snapshot);
+    }
+}
+
+#[tauri::command]
+fn secure_set(key: String, value: Option<String>) -> Result<(), String> {
+    let entry = keyring::Entry::new(SECURE_SERVICE, &key).map_err(|e| e.to_string())?;
+    match value {
+        Some(v) => entry.set_password(&v).map_err(|e| e.to_string()),
+        None => match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        },
+    }
+}
+
+#[tauri::command]
+fn create_window(app: AppHandle, options: Option<NewWindowOptions>) -> Result<String, String> {
     let id = next_window_id(&app.state::<AppState>().window_counter, |id| {
         app.get_webview_window(id).is_some()
     });
-    create_window_internal(&app, &id)?;
+    create_window_with(&app, &id, &options.unwrap_or_default())?;
     Ok(id)
 }
 
@@ -2390,6 +2616,29 @@ fn handle_remote_control_request(
 
     match (req.method(), url.as_str()) {
         (Method::Get, "/health") => Response::from_string("ok"),
+
+        (Method::Get, "/remote-auth") => {
+            match state.remote_auth.lock() {
+                Ok(guard) => Response::from_string(
+                    guard.clone().unwrap_or_else(|| "null".to_string()),
+                ),
+                Err(e) => Response::from_string(format!("lock error: {}", e)),
+            }
+        }
+
+        (Method::Post, "/remote-auth") => {
+            // Trigger signIn() inside the webview — the real remoteAuth path
+            // (plugin_exec curl hop), so flow tests exercise the same code
+            // a user pressing "Sign in…" runs.
+            let windows = app_handle.webview_windows();
+            match windows.values().next() {
+                Some(w) => {
+                    let _ = w.eval("window.__axnRemoteAuth?.signIn?.({ openBrowser: false })");
+                    Response::from_string("ok")
+                }
+                None => Response::from_string("no webview window"),
+            }
+        }
 
         (Method::Get, "/state") => match read_shell_state() {
             Ok(loaded) => match serde_json::to_string(&loaded.state) {
@@ -2575,8 +2824,67 @@ pub fn run() {
                 )?;
                 app_menu.remove_at(0)?;
                 app_menu.insert(&about, 0)?;
+                let prefs = tauri::menu::MenuItem::with_id(
+                    handle,
+                    "axn-preferences",
+                    "Preferences\u{2026}",
+                    true,
+                    Some("CmdOrCtrl+,"),
+                )?;
+                app_menu.insert(&prefs, 2)?;
+                app_menu.insert(&tauri::menu::PredefinedMenuItem::separator(handle)?, 3)?;
+            }
+            #[cfg(target_os = "macos")]
+            {
+                // View menu — UI zoom (frontend listens for the "menu-zoom" event).
+                use tauri::menu::{MenuItem, PredefinedMenuItem, Submenu};
+                let view = Submenu::with_items(
+                    handle,
+                    "View",
+                    true,
+                    &[
+                        &MenuItem::with_id(handle, "axn-zoom-in", "Zoom In", true, Some("CmdOrCtrl+="))?,
+                        &MenuItem::with_id(handle, "axn-zoom-out", "Zoom Out", true, Some("CmdOrCtrl+-"))?,
+                        &PredefinedMenuItem::separator(handle)?,
+                        &MenuItem::with_id(handle, "axn-zoom-reset", "Actual Size", true, Some("CmdOrCtrl+0"))?,
+                        &PredefinedMenuItem::separator(handle)?,
+                        &MenuItem::with_id(handle, "axn-reload", "Reload", true, Some("CmdOrCtrl+Shift+R"))?,
+                    ],
+                )?;
+                menu.append(&view)?;
             }
             Ok(menu)
+        })
+        .on_menu_event(|app, event| {
+            match event.id().0.as_str() {
+                "axn-zoom-in" => {
+                    let _ = app.emit("menu-zoom", "in");
+                }
+                "axn-zoom-out" => {
+                    let _ = app.emit("menu-zoom", "out");
+                }
+                "axn-zoom-reset" => {
+                    let _ = app.emit("menu-zoom", "reset");
+                }
+                "axn-reload" => {
+                    let _ = app.emit("menu-reload", ());
+                }
+                "axn-preferences" => {
+                    if let Some(w) = app.get_webview_window("settings") {
+                        let _ = w.set_focus();
+                    } else {
+                        let _ = tauri::WebviewWindowBuilder::new(
+                            app,
+                            "settings",
+                            tauri::WebviewUrl::App("index.html#axn-settings".into()),
+                        )
+                        .title("axn-term — Settings")
+                        .inner_size(720.0, 780.0)
+                        .build();
+                    }
+                }
+                _ => return,
+            }
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
@@ -2700,6 +3008,7 @@ pub fn run() {
             write_plugins,
             read_config,
             write_config,
+            list_fonts,
             kv_get,
             kv_set,
             list_external_plugins,
@@ -2710,6 +3019,9 @@ pub fn run() {
             set_subshell_parent,
             plugin_exec,
             create_window,
+            secure_get,
+            remote_auth_report,
+            secure_set,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -2737,6 +3049,54 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod new_window_options_tests {
+    use super::*;
+
+    #[test]
+    fn boot_fragment_accepts_only_url_safe_text() {
+        assert_eq!(
+            boot_fragment(Some("axn-boot=%7B%22kind%22%3A%22tear-off%22%7D")),
+            Some("axn-boot=%7B%22kind%22%3A%22tear-off%22%7D")
+        );
+        assert_eq!(boot_fragment(None), None);
+        assert_eq!(boot_fragment(Some("")), None);
+        // Anything that could break out of the fragment or the URL is refused.
+        assert_eq!(boot_fragment(Some("axn-boot=x\"><script>")), None);
+        assert_eq!(boot_fragment(Some("a#b")), None);
+        assert_eq!(boot_fragment(Some("a b")), None);
+        assert_eq!(boot_fragment(Some("a/../b")), None);
+        assert_eq!(boot_fragment(Some(&"a".repeat(2049))), None);
+    }
+
+    #[test]
+    fn window_size_clamps_and_defaults() {
+        assert_eq!(window_size(Some(1200.0), Some(700.0)), (1200.0, 700.0));
+        assert_eq!(window_size(Some(10.0), Some(10.0)), (400.0, 300.0));
+        assert_eq!(window_size(Some(1e9), Some(1e9)), (8192.0, 8192.0));
+        assert_eq!(window_size(Some(f64::NAN), Some(500.0)), DEFAULT_WINDOW_SIZE);
+        assert_eq!(window_size(Some(900.0), None), DEFAULT_WINDOW_SIZE);
+    }
+
+    #[test]
+    fn window_position_needs_both_plausible_coordinates() {
+        assert_eq!(window_position(Some(-120.0), Some(40.0)), Some((-120.0, 40.0)));
+        assert_eq!(window_position(Some(10.0), None), None);
+        assert_eq!(window_position(Some(f64::INFINITY), Some(0.0)), None);
+        assert_eq!(window_position(Some(1e6), Some(0.0)), None);
+    }
+
+    #[test]
+    fn options_deserialize_from_camel_case_and_default_when_absent() {
+        let o: NewWindowOptions =
+            serde_json::from_str(r#"{"boot":"axn-boot=x","x":1,"y":2,"width":300,"height":400}"#).unwrap();
+        assert_eq!(o.boot.as_deref(), Some("axn-boot=x"));
+        assert_eq!((o.x, o.y, o.width, o.height), (Some(1.0), Some(2.0), Some(300.0), Some(400.0)));
+        let empty: NewWindowOptions = serde_json::from_str("{}").unwrap();
+        assert!(empty.boot.is_none() && empty.x.is_none() && empty.width.is_none());
+    }
 }
 
 #[cfg(test)]

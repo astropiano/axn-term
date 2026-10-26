@@ -1,11 +1,13 @@
 import { GitFork } from 'lucide-react';
+import { t } from '@lingui/core/macro';
+import { i18n } from '../../i18n';
 import type {
   PluginApi,
   RepoMenuItem,
   SessionViewContext,
   SessionViewPlugin,
 } from './plugin';
-import type { Workspace } from '../../types';
+import type { SessionBanner, Workspace } from '../../types';
 import { shellQuote } from '../../shellQuote';
 
 type Ctx = SessionViewContext & PluginApi;
@@ -15,6 +17,8 @@ interface WorktreeState {
   worktree?: { repoRoot: string; path: string; branch: string };
   /** The user answered "don't ask again" on the isolation banner. */
   dismissed?: boolean;
+  /** This plugin's session banner (merged by `setBanner`). */
+  banner?: SessionBanner | null;
 }
 
 interface WorktreesSettings {
@@ -289,6 +293,7 @@ export const worktreesPlugin: SessionViewPlugin = {
   ],
 
   onSessionOpen: (ctx) => {
+    clearStaleIsolationBanner(ctx);
     const dir = normPath(ctx.session.cwd);
     const pending = pendingWorktrees.get(dir);
     if (pending) {
@@ -327,10 +332,10 @@ export const worktreesPlugin: SessionViewPlugin = {
     // exec, so it runs once per session (kindChecks cache); the banner is
     // raised at most once per session (nudged) since its ✕ can't call back.
     if (settingsOf(ctx).suggestIsolation === false) return;
+    clearStaleIsolationBanner(ctx);
     const s = stateOf(ctx);
     if (s.dismissed || s.worktree || nudged.has(ctx.session.id)) return;
     const proc = (ctx.session.process ?? '').toLowerCase();
-    if (!proc) return;
     const agent = parseAgentList(settingsOf(ctx).agents).find((a) => proc.includes(a));
     if (!agent) return;
     nudged.add(ctx.session.id);
@@ -383,11 +388,11 @@ export const worktreesPlugin: SessionViewPlugin = {
     if (wt) {
       return [
         {
-          label: 'Review worktree changes',
+          label: i18n._(t`Review worktree changes`),
           onClick: () => ctx.openTab({ path: wt.path, kind: 'git' }),
         },
         {
-          label: 'Remove worktree',
+          label: i18n._(t`Remove worktree`),
           onClick: () => void removeWorktree(ctx, wt, false),
         },
       ];
@@ -418,7 +423,7 @@ export const worktreesPlugin: SessionViewPlugin = {
     if (!wt) return null;
     return (
       <span
-        className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-purple-400"
+        className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--violet)]"
         data-tip={`worktree ${wt.branch}\n${wt.path}`}
       >
         <GitFork className="h-2.5 w-2.5 shrink-0" />
@@ -439,12 +444,27 @@ export const worktreesPlugin: SessionViewPlugin = {
   },
 };
 
+/**
+ * The isolation banner persists in pluginState (across agent exits and app
+ * restarts). Clear it once no configured agent is foreground — and un-nudge,
+ * since an auto-clear is not a dismissal: a later agent run may nudge again.
+ */
+function clearStaleIsolationBanner(ctx: Ctx): void {
+  const s = stateOf(ctx);
+  if (!s.banner?.actions?.some((a) => a.id === 'isolate')) return;
+  const proc = (ctx.session.process ?? '').toLowerCase();
+  const agent = parseAgentList(settingsOf(ctx).agents).find((a) => proc.includes(a));
+  if (agent) return;
+  ctx.setBanner(null);
+  nudged.delete(ctx.session.id);
+}
+
 function raiseIsolationBanner(ctx: Ctx, agent: string) {
   ctx.setBanner({
     level: 'warning',
-    message: `${agent} is running in the main checkout — isolate it in a worktree?`,
-    actions: [{ id: 'isolate', label: 'New worktree session' }],
-    trailingActions: [{ id: 'never-isolate', label: "Don't ask again" }],
+    message: i18n._(t`${agent} is running in the main checkout — isolate it in a worktree?`),
+    actions: [{ id: 'isolate', label: i18n._(t`New worktree session`) }],
+    trailingActions: [{ id: 'never-isolate', label: i18n._(t`Don't ask again`) }],
   });
 }
 
@@ -458,8 +478,8 @@ async function removeWorktree(
   } catch (e) {
     ctx.setBanner({
       level: 'error',
-      message: `worktree remove failed (dirty?): ${String(e)}`,
-      actions: [{ id: 'remove-force', label: 'Force remove' }],
+      message: i18n._(t`worktree remove failed (dirty?): ${String(e)}`),
+      actions: [{ id: 'remove-force', label: i18n._(t`Force remove`) }],
     });
     return;
   }
@@ -467,7 +487,7 @@ async function removeWorktree(
   removedWorktrees.set(ctx.session.id, wt);
   ctx.setBanner({
     level: 'info',
-    message: `worktree removed — branch ${wt.branch} kept`,
-    actions: [{ id: 'remove-branch', label: `Delete ${wt.branch}` }],
+    message: i18n._(t`worktree removed — branch ${wt.branch} kept`),
+    actions: [{ id: 'remove-branch', label: i18n._(t`Delete ${wt.branch}`) }],
   });
 }

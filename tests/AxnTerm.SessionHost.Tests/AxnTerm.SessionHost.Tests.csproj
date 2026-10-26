@@ -3,7 +3,7 @@
   <PropertyGroup>
     <!-- The session host only targets net10.0 (Porta.Pty). -->
     <TargetFrameworks>net10.0</TargetFrameworks>
-    <RootNamespace>Astropiano.AxnTerm.SessionHost.Tests</RootNamespace>
+    <RootNamespace>AxnTerm.SessionHost.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>

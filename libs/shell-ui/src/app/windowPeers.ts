@@ -36,6 +36,16 @@ export interface AdoptRequest {
   requestId: string;
   workspaceId: string;
   session: ShellSession;
+  /**
+   * Insert before this session in the target workspace (a drop between two
+   * rows); absent or null appends.
+   */
+  beforeSessionId?: string | null;
+  /**
+   * The moving session's terminal history (serialized xterm buffers keyed by
+   * session id / sub-shell tab id) — the target's terminals start with it.
+   */
+  replay?: Record<string, string>;
 }
 
 export interface AdoptAck {

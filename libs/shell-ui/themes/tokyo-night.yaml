@@ -1,0 +1,51 @@
+# Tokyo Night (github.com/enkia/tokyo-night-vscode-theme). Bright black was
+# 1.9:1; it is lifted to 3.5:1. UI layers from Tokyo Night's sidebar and
+# highlight colours, accent blue.
+# Adjusted for legibility (hue kept, lightness moved):
+#   brightBlack: #414868 -> #646F9E
+#   ui.textSecondary: #787C99 -> #7B7F9B
+id: tokyo-night
+name: Tokyo Night
+mode: dark
+
+colors:
+  background: '#1A1B26'
+  foreground: '#C0CAF5'
+  cursor: '#C0CAF5'
+  cursorAccent: '#1A1B26'
+  selectionBackground: '#33467C'
+  selectionForeground: '#C0CAF5'
+
+  black: '#15161E'
+  red: '#F7768E'
+  green: '#9ECE6A'
+  yellow: '#E0AF68'
+  blue: '#7AA2F7'
+  magenta: '#BB9AF7'
+  cyan: '#7DCFFF'
+  white: '#A9B1D6'
+
+  brightBlack: '#646F9E'
+  brightRed: '#F7768E'
+  brightGreen: '#9ECE6A'
+  brightYellow: '#E0AF68'
+  brightBlue: '#7AA2F7'
+  brightMagenta: '#BB9AF7'
+  brightCyan: '#7DCFFF'
+  brightWhite: '#C0CAF5'
+
+  orange: '#FF9E64'
+  violet: '#BB9AF7'
+
+ui:
+  bg: '#16161E'
+  bgSecondary: '#1A1B26'
+  surface: '#1A1B26'
+  surfaceHover: '#292E42'
+  text: '#C0CAF5'
+  textSecondary: '#7B7F9B'
+  textInverted: '#1A1B26'
+  border: '#2A2F45'
+  accent: '#7AA2F7'
+  accentHover: '#8FAEF6'
+  cursor: '#C0CAF5'

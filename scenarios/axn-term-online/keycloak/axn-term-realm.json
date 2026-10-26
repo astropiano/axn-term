@@ -66,6 +66,32 @@
         "configure": true,
         "manage": true
       }
+    },
+    {
+      "clientId": "axn-term-desktop",
+      "name": "Axn Term Desktop",
+      "description": "Desktop app \u2014 device-flow sign-in for remote publishing",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "redirectUris": [],
+      "webOrigins": [],
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "publicClient": true,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "attributes": {
+        "use.refresh.tokens": "true",
+        "oauth2.device.authorization.grant.enabled": "true",
+        "access.token.lifespan": "3600"
+      },
+      "access": {
+        "view": true,
+        "configure": true,
+        "manage": true
+      }
     }
   ],
   "users": [

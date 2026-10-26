@@ -186,3 +186,103 @@ export const Panel: Story = {
     </div>
   ),
 };
+
+/**
+ * Full panel with several workspaces and sessions in mixed states — running,
+ * idle, attention flags, a collapsed workspace — with one session selected
+ * mid-list so the selection styling is visible next to plain rows.
+ */
+export const PanelWithSelection: Story = {
+  args: { session: baseSession },
+  render: () => (
+    <div className="h-[480px] w-64 overflow-hidden border border-[var(--border)]">
+      <SessionPanel
+        workspaces={[
+          { id: 'w1', name: 'main' },
+          { id: 'w2', name: 'axn-dev' },
+          { id: 'w3', name: 'scratch', collapsed: true },
+        ]}
+        sessions={[
+          baseSession,
+          {
+            ...baseSession,
+            id: 's2',
+            name: 'axn-term · build',
+            process: 'vite',
+            status: 'running',
+            output: 'vite dev serving on 5173',
+          },
+          {
+            ...baseSession,
+            id: 's3',
+            name: 'axn-term · tests',
+            process: 'vitest',
+            status: 'running',
+            pluginState: attentionPluginState('devin', {
+              level: 'warning',
+              message: 'quiet for 45s — possibly finished',
+            }),
+          },
+          {
+            ...baseSession,
+            id: 's4',
+            workspaceId: 'w2',
+            name: 'storybook',
+            process: 'node',
+            status: 'running',
+          },
+          {
+            ...baseSession,
+            id: 's5',
+            workspaceId: 'w2',
+            name: 'scratch shell',
+            process: undefined,
+            status: 'idle',
+          },
+          {
+            ...baseSession,
+            id: 's6',
+            workspaceId: 'w2',
+            name: 'axn-term · devin review',
+            pluginState: attentionPluginState('devin', {
+              level: 'critical',
+              message: 'rebase conflict',
+            }),
+          },
+          {
+            ...baseSession,
+            id: 's7',
+            workspaceId: 'w3',
+            name: 'collapsed ws session',
+          },
+        ]}
+        selectedSessionId="s2"
+        taskState={null}
+        onSelectWorkspace={() => {}}
+        onSelectSession={() => {}}
+        onAddWorkspace={() => {}}
+        onSaveWorkspaceSet={() => {}}
+        onLoadWorkspaceSet={() => {}}
+        onRenameWorkspace={() => {}}
+        onDeleteWorkspace={() => {}}
+        onToggleWorkspace={() => {}}
+        onAddSession={() => {}}
+        onMoveSession={() => {}}
+        onReorderWorkspace={() => {}}
+        onMoveWorkspace={() => {}}
+        onRenameSession={() => {}}
+        onDuplicateSession={() => {}}
+        onCloseSession={() => {}}
+        updateSession={() => {}}
+        mergePluginState={() => {}}
+        plugins={[devinStub, gitStub]}
+        onOpenBrowser={() => {}}
+        onOpenTab={() => {}}
+        pluginData={{}}
+        mergePluginData={() => {}}
+        onOpenSubShell={() => {}}
+        onTurnIntoWorkspace={() => {}}
+      />
+    </div>
+  ),
+};

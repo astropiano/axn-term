@@ -31,6 +31,11 @@ export interface SessionCommandDeps {
   renameSession: (sessionId: string, name: string) => void;
   updateSession: (sessionId: string, patch: Partial<ShellSession>) => void;
   pathDeps: Parameters<typeof completePathArg>[0];
+  /**
+   * Move a session into a new window of its own (`axn-session-window`);
+   * resolves an error message or null. Absent where windows can't be opened.
+   */
+  tearOffSession?: (sessionId: string) => Promise<string | null>;
 }
 
 /**
@@ -88,6 +93,15 @@ export function useSessionCommands(input: SessionCommandDeps) {
             (w) => w.name.toLowerCase() === arg.toLowerCase(),
           );
           deps.current.moveSessionToWorkspace(sessionId, existing?.id ?? deps.current.addWorkspace(arg));
+          return false;
+        }
+        case 'axn-session-window': {
+          const tearOff = deps.current.tearOffSession;
+          if (!tearOff) return 'echo "axn-session-window: new windows are not available here"';
+          if (deps.current.sessionsRef.current.length <= 1) {
+            return 'echo "axn-session-window: this is the only session in its window"';
+          }
+          void tearOff(sessionId);
           return false;
         }
         case 'axn-session-up': {
@@ -202,7 +216,7 @@ export function useSessionCommands(input: SessionCommandDeps) {
         })();
       }
       if (
-        /^\s*(axn-session(?:-mv|-up|-down)?|axn-workspace-up|axn-workspace-down)(?:\s|$)/.test(
+        /^\s*(axn-session(?:-mv|-up|-down|-window)?|axn-workspace-up|axn-workspace-down)(?:\s|$)/.test(
           line,
         )
       ) {

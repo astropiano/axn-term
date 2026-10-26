@@ -1,3 +1,5 @@
+import { t } from '@lingui/core/macro';
+import { i18n } from '../../i18n';
 import { useEffect, useState } from 'react';
 import { load as loadYaml, dump as dumpYaml } from 'js-yaml';
 import { ChevronLeft, ChevronRight, Columns3, Loader2, Play, Workflow } from 'lucide-react';
@@ -7,6 +9,7 @@ import { usePluginSettings } from '../PluginSettingsProvider';
 import { WorkspacePicker } from '../../WorkspacePicker';
 import { axnLog } from '../log';
 import { promptArg, shellQuote, shellWord } from '../../shellQuote';
+import { forgeOfRemote } from './forge';
 import { pickFromList } from '../pickerHost';
 import { resolvePersona, agentLauncherFor } from './agentRegistry';
 import type { AgentLaunchTools } from './agentRegistry';
@@ -841,6 +844,8 @@ export interface MrParsedRef {
   host?: string;
   /** git fetch ref for the head commit (`merge-requests/N/head`, `pull/N/head`). */
   fetchRef?: string;
+  /** The sigil of a bare ref: `!` (GitLab MR) or `#` (GitHub PR). */
+  sigil?: '!' | '#';
 }
 
 export function parseMrRef(value: string): MrParsedRef | undefined {
@@ -860,8 +865,23 @@ export function parseMrRef(value: string): MrParsedRef | undefined {
     return { iid: gh[3], url: v, project: gh[2], host: gh[1], fetchRef: `pull/${gh[3]}/head` };
   }
   const bare = /^(?:([\w./~-]+)\s*)?([!#])(\d+)$/.exec(v);
-  if (bare) return { iid: bare[3], project: bare[1] };
+  if (bare) return { iid: bare[3], project: bare[1], sigil: bare[2] as '!' | '#' };
   return undefined;
+}
+
+/**
+ * The head ref to fetch for a review: what the URL names; for a bare ref
+ * `#N` is a GitHub PR (`pull/N/head`) and `!N` a GitLab MR, except that a
+ * `!N` typed in a GitHub checkout can only mean its PR.
+ */
+export function reviewFetchRef(
+  ref: MrParsedRef | undefined,
+  iid: number,
+  remote: string | undefined,
+): string {
+  if (ref?.fetchRef) return ref.fetchRef;
+  const github = ref?.sigil === '#' || forgeOfRemote(remote) === 'github';
+  return github ? `pull/${iid}/head` : `merge-requests/${iid}/head`;
 }
 
 /**
@@ -1765,9 +1785,9 @@ export async function startMrReview(
  * Fetch the merge/pull-request head ref into a fresh worktree, open a
  * session there and stage the workflow binding (vars pre-filled) so
  * `onSessionOpen` adopts it. GitLab heads live under
- * `merge-requests/<iid>/head`, GitHub's under `pull/<iid>/head`; a bare
- * `!123`/`#45` ref falls back to the GitLab shape, flipped by an obvious
- * github remote.
+ * `merge-requests/<iid>/head`, GitHub's under `pull/<iid>/head`; for a bare
+ * ref see `reviewFetchRef` (`#45` → GitHub, `!123` → GitLab unless the
+ * checkout is on GitHub).
  */
 async function reviewMr(
   api: Ctx,
@@ -1780,11 +1800,7 @@ async function reviewMr(
   const slug = `mr-${mr.iid}`;
   const dir = worktreeDirFor(root, slug);
   const branch = worktreeBranchFor(slug);
-  const fetchRef =
-    ref?.fetchRef ??
-    (api.session?.repo?.remote?.includes('github')
-      ? `pull/${mr.iid}/head`
-      : `merge-requests/${mr.iid}/head`);
+  const fetchRef = reviewFetchRef(ref, mr.iid, api.session?.repo?.remote);
   try {
     // Fetch the target branch in the same call so `origin/<target>` is a
     // usable compare base for the worktree's git tab (`axn-git origin/N`).
@@ -2409,7 +2425,7 @@ function DevWorkflowView({
                                   : 'session closed — remove card'
                               }
                               onClick={remove}
-                              className="text-[10px] text-[var(--text-secondary)] transition hover:text-red-400"
+                              className="text-[10px] text-[var(--text-secondary)] transition hover:text-[var(--red)]"
                             >
                               remove
                             </button>
@@ -2456,9 +2472,9 @@ function DevWorkflowView({
                                         <span
                                           className={`ml-auto shrink-0 font-bold ${
                                             check.status === 'ok'
-                                              ? 'text-green-500'
+                                              ? 'text-[var(--green)]'
                                               : check.status === 'failed'
-                                                ? 'text-red-400'
+                                                ? 'text-[var(--red)]'
                                                 : 'text-[var(--text-secondary)]'
                                           }`}
                                         >
@@ -2581,7 +2597,9 @@ export const devWorkflowPlugin: SessionViewPlugin = {
         if (!root) {
           return echo('axn-mr-review: session is not inside a git repository');
         }
-        const github = ref.host?.includes('github') === true || raw.startsWith('#');
+        // URL form: GitHub (incl. GHES hosts) is the `/pull/N` shape.
+        const github =
+          reviewFetchRef(ref, Number(ref.iid), ctx.session.repo?.remote).startsWith('pull/');
         const mr: MrRef = {
           iid: Number(ref.iid),
           reference: github ? `#${ref.iid}` : `!${ref.iid}`,
@@ -2730,7 +2748,7 @@ export const devWorkflowPlugin: SessionViewPlugin = {
       // One row opening a searchable workflow picker, not a row per workflow.
       return [
         {
-          label: 'Start workflow…',
+          label: i18n._(t`Start workflow…`),
           onClick: () =>
             void pickFromList({
               title: 'Start workflow',

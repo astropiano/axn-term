@@ -1,4 +1,5 @@
 import Keycloak from 'keycloak-js';
+import { ConnectionGate } from './ConnectionGate';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 export interface KeycloakContextValue {
@@ -34,19 +35,38 @@ const keycloak =
 let keycloakInitPromise: Promise<boolean> | null = null;
 
 export function KeycloakProvider({ children }: { children: ReactNode }) {
+  const anonymous = new URLSearchParams(window.location.search).has('anonymous');
+  return (
+    <ConnectionGate endpoints={[anonymous ? null : keycloakUrl]}>
+      <KeycloakProviderInner>{children}</KeycloakProviderInner>
+    </ConnectionGate>
+  );
+}
+
+function KeycloakProviderInner({ children }: { children: ReactNode }) {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!keycloak) {
-      // No IdP configured — dev mode: run authenticated without a token so
-      // LAN/dev testing works (server side must allow anonymous hellos).
+    // ?anonymous=1 skips the IdP — remote-control attaches against a
+    // hub/gateway with AllowAnonymous must not bounce through keycloak
+    // (its cert/origin may not be trusted on the device → white screen).
+    const skip =
+      !keycloak ||
+      new URLSearchParams(window.location.search).has('anonymous');
+    if (skip) {
       setAuthenticated(true);
       return;
     }
 
-    keycloakInitPromise ??= keycloak.init({ onLoad: 'check-sso' });
+    keycloakInitPromise ??= keycloak.init({
+      onLoad: 'check-sso',
+      // The login-status iframe hangs forever on mobile Safari (third-party
+      // cookie blocking → init promise never resolves → eternal "Loading…").
+      // We only need explicit login + updateToken, not SSO session watching.
+      checkLoginIframe: false,
+    });
 
     keycloakInitPromise
       .then((auth) => {
@@ -59,6 +79,14 @@ export function KeycloakProvider({ children }: { children: ReactNode }) {
         console.error('Keycloak init failed', err);
         setAuthenticated(false);
       });
+
+    // Backstop: if init never settles (hung iframe/network), show the
+    // login button instead of "Loading…" forever.
+    const timeout = setTimeout(
+      () => setAuthenticated((a) => (a === null ? false : a)),
+      10000,
+    );
+    return () => clearTimeout(timeout);
   }, []);
 
   const login = useCallback(() => {

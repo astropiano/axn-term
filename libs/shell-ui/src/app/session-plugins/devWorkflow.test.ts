@@ -22,6 +22,7 @@ import {
   envPrefix,
   expandVars,
   parseMrRef,
+  reviewFetchRef,
   parseStartVars,
   parseWorkflows,
   parseWorkflowVars,
@@ -1310,9 +1311,26 @@ describe('workflow vars', () => {
       project: 'acme/ui',
       fetchRef: 'pull/45/head',
     });
-    expect(parseMrRef('!12')).toMatchObject({ iid: '12' });
+    expect(parseMrRef('!12')).toMatchObject({ iid: '12', sigil: '!' });
+    expect(parseMrRef('#45')).toMatchObject({ iid: '45', sigil: '#' });
     expect(parseMrRef('group/proj!77')).toMatchObject({ iid: '77', project: 'group/proj' });
     expect(parseMrRef('not an mr')).toBeUndefined();
+  });
+
+  it('picks the review fetch ref per forge', () => {
+    const gh = 'git@github.com:acme/ui.git';
+    const gl = 'git@gitlab.com:group/proj.git';
+    // URLs name their own ref — also on a GHES host.
+    expect(reviewFetchRef(parseMrRef('https://ghe.acme.io/a/b/pull/7'), 7, gl)).toBe('pull/7/head');
+    expect(
+      reviewFetchRef(parseMrRef('https://gitlab.com/g/p/-/merge_requests/9'), 9, gh),
+    ).toBe('merge-requests/9/head');
+    // Bare refs: `#N` is a GitHub PR, `!N` a GitLab MR unless the checkout is on GitHub.
+    expect(reviewFetchRef(parseMrRef('#45'), 45, gl)).toBe('pull/45/head');
+    expect(reviewFetchRef(parseMrRef('#45'), 45, undefined)).toBe('pull/45/head');
+    expect(reviewFetchRef(parseMrRef('!12'), 12, gl)).toBe('merge-requests/12/head');
+    expect(reviewFetchRef(parseMrRef('!12'), 12, gh)).toBe('pull/12/head');
+    expect(reviewFetchRef(undefined, 3, 'https://github.com/a/b')).toBe('pull/3/head');
   });
 
   it('expands kind:mr vars into <key>_* companions', () => {

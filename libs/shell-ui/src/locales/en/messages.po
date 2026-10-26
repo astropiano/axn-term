@@ -37,7 +37,7 @@ msgstr "Cancel"
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2473
+#: libs/shell-ui/src/app/ShellApp.tsx:2135
 msgid "Close tab"
 msgstr "Close tab"
 
@@ -45,9 +45,9 @@ msgstr "Close tab"
 msgid "Config file"
 msgstr "Config file"
 
-#: libs/shell-ui/src/app/AppContextMenu.tsx:80
-#: libs/shell-ui/src/app/AppContextMenu.tsx:102
-#: libs/shell-ui/src/app/AppContextMenu.tsx:116
+#: libs/shell-ui/src/app/AppContextMenu.tsx:82
+#: libs/shell-ui/src/app/AppContextMenu.tsx:104
+#: libs/shell-ui/src/app/AppContextMenu.tsx:118
 #: libs/shell-ui/src/PathActionMenu.tsx:215
 msgid "Copy"
 msgstr "Copy"
@@ -74,7 +74,7 @@ msgstr "Could not parse the file as YAML."
 msgid "current"
 msgstr "current"
 
-#: libs/shell-ui/src/app/AppContextMenu.tsx:95
+#: libs/shell-ui/src/app/AppContextMenu.tsx:97
 msgid "Cut"
 msgstr "Cut"
 
@@ -215,9 +215,18 @@ msgstr "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an 
 msgid "Move “{sessionName}” to workspace"
 msgstr "Move “{sessionName}” to workspace"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:754
+#: libs/shell-ui/src/app/SessionPanel.tsx:861
+msgid "Move to new window"
+msgstr "Move to new window"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:845
 msgid "Move to workspace…"
 msgstr "Move to workspace…"
+
+#. placeholder {0}: workspace.name
+#: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:46
+msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
+msgstr "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:68
 msgid "New workspace “{name}” in this window"
@@ -268,8 +277,8 @@ msgstr "Open preview in a tab"
 msgid "Panel font"
 msgstr "Panel font"
 
-#: libs/shell-ui/src/app/AppContextMenu.tsx:82
-#: libs/shell-ui/src/app/AppContextMenu.tsx:104
+#: libs/shell-ui/src/app/AppContextMenu.tsx:84
+#: libs/shell-ui/src/app/AppContextMenu.tsx:106
 msgid "Paste"
 msgstr "Paste"
 
@@ -297,7 +306,7 @@ msgstr "Process"
 msgid "Reload view"
 msgstr "Reload view"
 
-#: libs/shell-ui/src/app/AppContextMenu.tsx:127
+#: libs/shell-ui/src/app/AppContextMenu.tsx:129
 #: libs/shell-ui/src/app/ErrorBoundary.tsx:72
 msgid "Reload window"
 msgstr "Reload window"
@@ -333,8 +342,8 @@ msgstr "Search workspaces or windows…"
 msgid "Search…"
 msgstr "Search…"
 
-#: libs/shell-ui/src/app/AppContextMenu.tsx:88
-#: libs/shell-ui/src/app/AppContextMenu.tsx:109
+#: libs/shell-ui/src/app/AppContextMenu.tsx:90
+#: libs/shell-ui/src/app/AppContextMenu.tsx:111
 msgid "Select all"
 msgstr "Select all"
 
@@ -426,3 +435,171 @@ msgstr "Use system default"
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
 msgid "Window {0}"
 msgstr "Window {0}"
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "New workspace"
+msgstr "New workspace"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Save workspace set"
+msgstr "Save workspace set"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Load workspace set"
+msgstr "Load workspace set"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "shell"
+msgstr "shell"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Shell"
+msgstr "Shell"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "System"
+msgstr "System"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Expand"
+msgstr "Expand"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Collapse"
+msgstr "Collapse"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "New session in workspace"
+msgstr "New session in workspace"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Delete workspace"
+msgstr "Delete workspace"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Reset to process name"
+msgstr "Reset to process name"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "New worktree session"
+msgstr "New worktree session"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Don't ask again"
+msgstr "Don't ask again"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Force remove"
+msgstr "Force remove"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Review worktree changes"
+msgstr "Review worktree changes"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Remove worktree"
+msgstr "Remove worktree"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "New session with agent…"
+msgstr "New session with agent…"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Start workflow…"
+msgstr "Start workflow…"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "{agent} is running in the main checkout — isolate it in a worktree?"
+msgstr "{agent} is running in the main checkout — isolate it in a worktree?"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "worktree remove failed (dirty?): {0}"
+msgstr "worktree remove failed (dirty?): {0}"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "worktree removed — branch {0} kept"
+msgstr "worktree removed — branch {0} kept"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Delete {0}"
+msgstr "Delete {0}"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx
+msgid "Resume {0} session{1}"
+msgstr "Resume {0} session{1}"
+
+#. : libs/shell-ui/src/app/SettingsModal.tsx
+msgid "UI zoom"
+msgstr "UI zoom"
+
+#. : libs/shell-ui/src/app/SettingsModal.tsx
+msgid "Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size."
+msgstr "Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size."
+
+msgid "Remote control"
+msgstr "Remote control"
+
+msgid "Session name on the hub (optional)"
+msgstr "Session name on the hub (optional)"
+
+msgid "User token (optional)"
+msgstr "User token (optional)"
+
+msgid "Publish this window's terminals to a /remote hub \u2014 other devices attach via the web app with ?remote=<session>."
+msgstr "Publish this window's terminals to a /remote hub \u2014 other devices attach via the web app with ?remote=<session>."
+
+msgid "Hub URL"
+msgstr "Hub URL"
+
+msgid "Session name"
+msgstr "Session name"
+
+msgid "User token"
+msgstr "User token"
+
+msgid "optional"
+msgstr "optional"
+
+msgid "Publishing \u2014 connected"
+msgstr "Publishing \u2014 connected"
+
+msgid "Connecting\u2026"
+msgstr "Connecting\u2026"
+
+msgid "Failed: {0}"
+msgstr "Failed: {0}"
+
+msgid "Not publishing"
+msgstr "Not publishing"
+
+msgid "Remote"
+msgstr "Remote"
+
+msgid "Account"
+msgstr "Account"
+
+msgid "Server URL"
+msgstr "Server URL"
+
+msgid "Client ID"
+msgstr "Client ID"
+
+msgid "Signed in as {0}"
+msgstr "Signed in as {0}"
+
+msgid "Sign out"
+msgstr "Sign out"
+
+msgid "Enter code {0} in the browser to finish sign-in."
+msgstr "Enter code {0} in the browser to finish sign-in."
+
+msgid "Sign in…"
+msgstr "Sign in…"
+
+msgid "Not signed in"
+msgstr "Not signed in"
+
+msgid "OIDC client"
+msgstr "OIDC client"
+
+msgid "axn-term-desktop (default)"
+msgstr "axn-term-desktop (default)"

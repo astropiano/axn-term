@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Remote control to LAN hubs (self-signed dev CA or plain ws://)
+		     must not be blocked by ATS — this only relaxes web-content
+		     loads (fetch/WebSocket), not the app's own networking. -->
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>axn-term runs shells and tools that need to reach devices on your local network.</string>
 	<key>NSBonjourServices</key>

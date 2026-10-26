@@ -101,6 +101,15 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
     });
     editorRef.current = editor;
 
+    // automaticLayout is off (it polls) — relayout on real container size
+    // changes instead: orientation flips, sidebar toggles, keyboard open.
+    const container = containerRef.current;
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => editor.layout())
+        : null;
+    if (container) resizeObserver?.observe(container);
+
     const changeSub = editor.onDidChangeModelContent(() => {
       if (!dirtyRef.current) markDirty(true);
     });
@@ -122,6 +131,7 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
 
     return () => {
       disposed = true;
+      resizeObserver?.disconnect();
       changeSub.dispose();
       editor.dispose();
       editorRef.current = null;

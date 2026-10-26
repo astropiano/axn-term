@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { countScenarios, parseAxnDevList } from './axnDev';
 
 const LIST_OUTPUT = `Global scenarios:
-  demo-mock                     \x1b[90m○ stopped\x1b[0m — Full-stack mock: API server + hardware emulator
+  demo-mock                     \x1b[90m○ stopped\x1b[0m — Full-stack mock: API server + hardware EPD emulator
   demo-full                     \x1b[32m● running\x1b[0m — Single-port full stack with Caddy routing
-    app                  http://app.localhost:8091
+    store                http://store.localhost:8091
     user-management      http://usermgmt.localhost:8091
   term-dev                 \x1b[90m○ stopped\x1b[0m
 
@@ -45,7 +45,7 @@ describe('parseAxnDevList', () => {
     const demoFull = sections[0].scenarios[1];
     expect(demoFull.running).toBe(true);
     expect(demoFull.endpoints).toEqual([
-      { label: 'app', url: 'http://app.localhost:8091' },
+      { label: 'store', url: 'http://store.localhost:8091' },
       { label: 'user-management', url: 'http://usermgmt.localhost:8091' },
     ]);
     const storybook = sections[1].scenarios[1];
@@ -93,5 +93,134 @@ describe('parseAxnDevList', () => {
     expect(parseAxnDevList('No scenarios found. Configure repos in ~/.axn-dev/config.yaml')).toEqual(
       [],
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --json parsing, tag matching, tag tree
+// ---------------------------------------------------------------------------
+
+import {
+  buildTagTree,
+  parseAxnDevListJson,
+  scenarioMatches,
+  tagMatches,
+} from './axnDev';
+import type { AxnDevScenario } from './axnDev';
+
+describe('parseAxnDevListJson', () => {
+  const sample = JSON.stringify({
+    sections: [
+      {
+        label: 'global',
+        scope: 'global',
+        scenarios: [
+          {
+            name: 'app1-mock',
+            path: '/repos/integration/scenarios/app1-mock',
+            running: true,
+            description: 'Full stack',
+            tags: ['myapp', 'e2e/mock'],
+            endpoints: [{ label: 'devtools', url: 'http://localhost:8091' }],
+          },
+        ],
+      },
+      {
+        label: 'axn-term',
+        scope: 'project',
+        scenarios: [
+          {
+            name: 'dev',
+            path: '/wt/axn-term-x/scenarios/dev',
+            running: false,
+            description: 'Dev stack',
+            tags: [],
+            worktree: { branch: 'feat/x', path: '/wt/axn-term-x' },
+            endpoints: [],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('parses sections with tags, paths and worktrees', () => {
+    const sections = parseAxnDevListJson(sample)!;
+    expect(sections).toHaveLength(2);
+    expect(sections[0].scope).toBe('global');
+    const s = sections[0].scenarios[0];
+    expect(s.tags).toEqual(['myapp', 'e2e/mock']);
+    expect(s.path).toBe('/repos/integration/scenarios/app1-mock');
+    expect(s.endpoints[0].url).toBe('http://localhost:8091');
+    const p = sections[1].scenarios[0];
+    expect(p.repo).toBe('axn-term');
+    expect(p.worktree).toEqual({ branch: 'feat/x', path: '/wt/axn-term-x' });
+    expect(p.key).toContain('/wt/axn-term-x');
+  });
+
+  it('returns null for non-JSON output (old CLI)', () => {
+    expect(parseAxnDevListJson('Global scenarios:\n  foo ● running\n')).toBeNull();
+    expect(parseAxnDevListJson('not json at all')).toBeNull();
+    expect(parseAxnDevListJson('{"foo": 1}')).toBeNull();
+  });
+});
+
+describe('tagMatches / scenarioMatches', () => {
+  const sc = (over: Partial<AxnDevScenario>): AxnDevScenario => ({
+    key: 'k',
+    name: 'app1-mock',
+    scope: 'global',
+    running: false,
+    description: 'Full stack',
+    tags: [],
+    endpoints: [],
+    ...over,
+  });
+
+  it('matches tag prefix and path segments like axn-dev serve', () => {
+    expect(tagMatches('myapp/e2e', 'myapp')).toBe(true);
+    expect(tagMatches('myapp', 'myapp')).toBe(true);
+    expect(tagMatches('myapp/e2e', 'e2e')).toBe(false); // prefix only, not substring
+    expect(tagMatches('myapp', 'myapp/e2e')).toBe(false);
+  });
+
+  it('scenarioMatches hits name, description and tags', () => {
+    expect(scenarioMatches(sc({ tags: ['myapp/e2e'] }), 'myapp')).toBe(true);
+    expect(scenarioMatches(sc({}), 'app1')).toBe(true);
+    expect(scenarioMatches(sc({}), 'full stack')).toBe(true);
+    expect(scenarioMatches(sc({ tags: ['api'] }), 'web')).toBe(false);
+    expect(scenarioMatches(sc({}), '')).toBe(true);
+  });
+});
+
+describe('buildTagTree', () => {
+  const sc = (key: string, tags: string[], running = false): AxnDevScenario => ({
+    key,
+    name: key,
+    scope: 'global',
+    running,
+    description: '',
+    tags,
+    endpoints: [],
+  });
+
+  it('groups slash-separated tags into folders, untagged first', () => {
+    const tree = buildTagTree([
+      sc('a', ['myapp/e2e'], true),
+      sc('b', ['myapp']),
+      sc('c', []),
+    ]);
+    expect(tree.scenarios.map((s) => s.key)).toEqual(['c']); // untagged at root
+    const app = tree.children.find((n) => n.segment === 'myapp')!;
+    expect(app.total).toBe(2);
+    expect(app.running).toBe(1);
+    const e2e = app.children.find((n) => n.segment === 'e2e')!;
+    expect(e2e.scenarios.map((s) => s.key)).toEqual(['a']);
+    expect(e2e.total).toBe(1);
+  });
+
+  it('multi-tagged scenarios appear under each tag', () => {
+    const tree = buildTagTree([sc('x', ['a', 'b/c'])]);
+    expect(tree.children.map((n) => n.segment)).toEqual(['a', 'b']);
+    expect(tree.children[1].children[0].scenarios[0].key).toBe('x');
   });
 });

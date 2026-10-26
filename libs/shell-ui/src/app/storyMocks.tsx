@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import type { MemoryStats, SessionBackend, ShellPlatform, ShellServices } from '@axn-term/session-backend';
 import { AlertOctagon, AlertTriangle, Menu, Settings } from 'lucide-react';
 import type { ShellSession } from '../types';
-import { SessionBackendProvider, ShellPlatformProvider, bindShellServices } from '../services';
+import { SessionBackendProvider, ShellPlatformProvider, ShellServicesProvider, bindShellServices } from '../services';
 import { SettingsProvider } from '../SettingsProvider';
 import { PluginSettingsProvider } from './PluginSettingsProvider';
 import { MemoryStatsProvider } from './useMemoryStats';
@@ -47,9 +47,9 @@ const STORY_MEM_STATS: MemoryStats = {
 };
 
 const STORY_AXN_DEV_LIST = `Global scenarios:
-  demo-mock                     ○ stopped — Full-stack mock: API server + hardware emulator
+  demo-mock                     ○ stopped — Full-stack mock: API server + hardware EPD emulator
   demo-full                     ● running — Single-port full stack with Caddy routing
-    app                  http://app.localhost:8091
+    store                http://store.localhost:8091
     user-management      http://usermgmt.localhost:8091
 
 Project scenarios:
@@ -300,11 +300,13 @@ export function StoryShellProviders({ children }: { children: ReactNode }) {
   return (
     <SessionBackendProvider backend={storyBackend}>
       <ShellPlatformProvider platform={storyPlatform}>
-        <SettingsProvider>
-          <PluginSettingsProvider store={storyPlatform.pluginSettingsStore}>
-            {children}
-          </PluginSettingsProvider>
-        </SettingsProvider>
+        <ShellServicesProvider services={storyServices} fileReader={() => undefined}>
+          <SettingsProvider>
+            <PluginSettingsProvider store={storyPlatform.pluginSettingsStore}>
+              {children}
+            </PluginSettingsProvider>
+          </SettingsProvider>
+        </ShellServicesProvider>
       </ShellPlatformProvider>
     </SessionBackendProvider>
   );
@@ -375,6 +377,7 @@ export function StoryRail({
           return (
             <div key={plugin.id} className="mt-3">
               {plugin.renderRail!({
+                backend: storyBackend,
                 pluginSettings: storyPluginSettings[settingsKey],
                 setAppAttention: (attention) => setAppAttention(plugin.id, attention),
                 viewActive: activeId === plugin.id,

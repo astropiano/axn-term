@@ -7,9 +7,9 @@
 // Needs a session host running (default http://localhost:7682), e.g.
 //   SESSION_HOST_PORT=7682 dotnet run --project apps/session-host -f net10.0
 // The ramphastos-client is imported from the sibling checkout
-// (../ramphastos, sibling checkout) — built dist, no package install required.
+// (dev/libraries/ramphastos) — built dist, no package install required.
 
-import { RamphastosSession } from "../../ramphastos/src/client/ramphastos-client/dist/index.js";
+import { RamphastosSession } from "../../../libraries/ramphastos/src/client/ramphastos-client/dist/index.js";
 
 const BASE = process.argv[2] ?? "http://localhost:7682";
 const URL = `${BASE}/ramphastos`;

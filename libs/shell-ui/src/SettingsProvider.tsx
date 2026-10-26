@@ -245,7 +245,11 @@ export function SettingsProvider({
   }, [settings]);
 
   useEffect(() => {
-    activateLanguage(settings.language ?? 'en');
+    const apply = () => activateLanguage(settings.language ?? 'system');
+    apply();
+    // 'system' follows the OS/browser language live
+    window.addEventListener('languagechange', apply);
+    return () => window.removeEventListener('languagechange', apply);
   }, [settings.language]);
 
   const setTheme = useCallback((theme: ThemeMode) => {

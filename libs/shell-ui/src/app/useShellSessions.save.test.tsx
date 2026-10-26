@@ -97,3 +97,53 @@ it('keeps state dirty and retries when a save fails', async () => {
   expect(error).toHaveBeenCalled();
   error.mockRestore();
 });
+
+it('does not persist plugin banners — stripped on save, stripped on load', async () => {
+  const { store, pending } = controlledStore();
+  await mount(store);
+  await tick();
+  await act(async () => pending.shift()!.resolve());
+
+  await act(async () =>
+    hook.mergePluginState('s1', 'worktrees', {
+      worktree: { path: '/x' },
+      banner: { level: 'warning', message: 'devin is running in the main checkout' },
+    }),
+  );
+  await tick();
+
+  const last = vi.mocked(store.save).mock.calls.at(-1)![1] as WindowState;
+  const slice = last.sessions[0].pluginState?.worktrees as Record<string, unknown>;
+  // The rest of the slice persists; the runtime banner does not.
+  expect(slice.worktree).toEqual({ path: '/x' });
+  expect(slice).not.toHaveProperty('banner');
+  // In memory the banner stays — only the persisted copy is stripped.
+  const live = hook.sessions[0].pluginState?.worktrees as Record<string, unknown>;
+  expect(live.banner).toBeTruthy();
+});
+
+it('strips banners persisted by older versions on load', async () => {
+  const legacy: WindowState = {
+    ...saved,
+    sessions: [
+      {
+        ...saved.sessions[0],
+        pluginState: {
+          worktrees: {
+            worktree: { path: '/x' },
+            banner: { level: 'warning', message: 'devin is running' },
+          },
+        },
+      },
+    ],
+  };
+  const store: ShellStateStore = {
+    load: () => Promise.resolve(legacy),
+    save: () => Promise.resolve(),
+    delete: () => Promise.resolve(),
+  };
+  await mount(store);
+  const slice = hook.sessions[0].pluginState?.worktrees as Record<string, unknown>;
+  expect(slice.worktree).toEqual({ path: '/x' });
+  expect(slice).not.toHaveProperty('banner');
+});

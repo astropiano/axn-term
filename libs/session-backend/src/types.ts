@@ -102,6 +102,12 @@ export interface SessionBackend {
   /** Raw input bytes for the PTY. Fire-and-forget. */
   write(sessionId: string, data: string): void;
   resize(sessionId: string, cols: number, rows: number): void;
+  /**
+   * Viewer stopped looking at this PTY — remote backends close the pull
+   * stream so the authority can relax shared geometry back to the owner's
+   * size. Absent on local backends (nothing shared to relax).
+   */
+  releasePty?(sessionId: string): void;
   close(sessionId: string): void;
   /** Raw PTY output. Must be subscribed before createSession to avoid losing early output. */
   onOutput(sessionId: string, cb: (data: Uint8Array) => void): Unsubscribe;

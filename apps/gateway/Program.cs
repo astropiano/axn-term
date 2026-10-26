@@ -151,6 +151,7 @@ builder.Services.AddRamphastos(
     {
         opts.AuthorizeHello = hello =>
         {
+            Console.WriteLine($"[remote] hello role={hello.Role} session={hello.Session} anon={remoteAllowAnonymous}");
             if (remoteAllowAnonymous)
             {
                 return true;
@@ -158,6 +159,7 @@ builder.Services.AddRamphastos(
             var sub = ValidateJwt(hello.Auth);
             if (sub is null)
             {
+                Console.WriteLine("[remote] hello denied: jwt invalid");
                 return false;
             }
             if (hello.Role == "authority")
@@ -187,10 +189,13 @@ app.Services.GetRequiredService<SessionHostContainerService>();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Client-authoritative hub — see the AddRamphastos registration above.
-// Deliberately NOT RequireAuthorization: hello-level token check instead
-// (desktops have no JWT).
-app.MapRamphastos("/remote");
+// Client-authoritative "remote" hub (desktop mirror) — see AddRamphastos
+// above. Deliberately NOT RequireAuthorization: hello-level token check
+// instead (desktops have no JWT). Hub__RemoteEnabled toggles the surface.
+if (builder.Configuration.GetValue("Hub__RemoteEnabled", true))
+{
+    app.MapRamphastos("/remote");
+}
 app.UseWebSockets(new WebSocketOptions
 {
     KeepAliveInterval = WebSocketProxy.KeepAliveInterval,
@@ -202,15 +207,18 @@ app.UseWebSockets(new WebSocketOptions
 // instead of typing session ids. Owner-scoped — same sub check as the
 // viewer hello. In AllowAnonymous dev mode the endpoint still requires a
 // JWT (there is no owner to match otherwise).
-app.MapGet("/remote/sessions", [Microsoft.AspNetCore.Authorization.Authorize] (ClaimsPrincipal user) =>
+if (builder.Configuration.GetValue("Hub__RemoteEnabled", true))
 {
-    var sub = user.FindFirst("sub")?.Value
-        ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-    var sessions = sub is null
-        ? Array.Empty<string>()
-        : sessionOwners.Where(kv => kv.Value == sub).Select(kv => kv.Key).ToArray();
-    return Results.Ok(new { sessions });
-});
+    app.MapGet("/remote/sessions", [Microsoft.AspNetCore.Authorization.Authorize] (ClaimsPrincipal user) =>
+    {
+        var sub = user.FindFirst("sub")?.Value
+            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var sessions = sub is null
+            ? Array.Empty<string>()
+            : sessionOwners.Where(kv => kv.Value == sub).Select(kv => kv.Key).ToArray();
+        return Results.Ok(new { sessions });
+    });
+}
 
 app.MapGet("/", () => "axn-term session gateway");
 app.MapGet("/healthz", () => Results.Ok());
@@ -281,11 +289,15 @@ app.Map("/ws", [Microsoft.AspNetCore.Authorization.Authorize] async (
     }
 });
 
-// Ramphastos hub on the session host — one multiplexed connection carrying
+// "cloud" hub on the session host — one multiplexed connection carrying
 // the synced projection, commands and pty:<id> streams. The proxy forwards
 // raw WebSocket frames only, so clients must connect with the SignalR
-// WebSockets transport and skipNegotiation.
-app.Map("/ramphastos", [Microsoft.AspNetCore.Authorization.Authorize] async (
+// WebSockets transport and skipNegotiation. /ramphastos kept as an alias.
+// Hub__CloudEnabled toggles the surface.
+if (builder.Configuration.GetValue("Hub__CloudEnabled", true))
+{
+    foreach (var cloudPath in new[] { "/cloud", "/ramphastos" })
+    app.Map(cloudPath, [Microsoft.AspNetCore.Authorization.Authorize] async (
     HttpContext context,
     SessionHostContainerService hosts,
     ILogger<Program> logger,
@@ -307,10 +319,11 @@ app.Map("/ramphastos", [Microsoft.AspNetCore.Authorization.Authorize] async (
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "WebSocket /ramphastos failed for user {UserId}", userId);
+        logger.LogError(ex, "WebSocket cloud hub failed for user {UserId}", userId);
         context.Abort();
     }
-});
+    });
+}
 
 // Recreate my session host: drops the container; the next /ws connect
 // spawns a fresh one. Persistent volumes (home, nix store) are kept —

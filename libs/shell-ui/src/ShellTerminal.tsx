@@ -7,7 +7,7 @@ import { placeHoverCard } from './hoverCardPlacement';
 import type { ShellSession } from './types';
 import { useSettings } from './SettingsProvider';
 import { getXtermColors, resolveShellFont } from './themes';
-import { registerTerminal, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites } from './terminalRegistry';
+import { registerTerminal, takePendingReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, type TerminalInput } from './terminalRegistry';
 import { applyTerminalRenderer, repaintTerminal, safely } from './terminalRenderer';
 import { acquirePty } from './ptyLifetime';
 import { foregroundStatusPatch } from './foregroundStatus';
@@ -26,6 +26,7 @@ import { agentInputPluginFor, agentInputPluginForTitle } from './app/session-plu
 import { createHiddenCommandInput } from './app/hiddenCommands';
 import { isAppNavigationShortcut, isReloadShortcut } from './app/shortcuts';
 import { useShellServices } from './services';
+import { axnLog } from './app/log';
 
 import '@xterm/xterm/css/xterm.css';
 
@@ -202,6 +203,28 @@ export function ShellTerminal({
     isVisibleRef.current = isVisible;
   }, [isVisible]);
 
+  // The GPU renderer is attached only while the terminal is on screen —
+  // hiding disposes it, returning the WebGL context to the pool.
+  useEffect(() => {
+    const term = terminal.current;
+    if (!term) return;
+    if (isVisible && !rendererCleanupRef.current) {
+      rendererCleanupRef.current = applyTerminalRenderer(
+        term,
+        settings.terminalRenderer,
+      ).dispose;
+      repaintTerminal(term);
+    } else if (!isVisible) {
+      if (rendererCleanupRef.current) {
+        safely('renderer detach', () => rendererCleanupRef.current?.());
+        rendererCleanupRef.current = null;
+      }
+      // Hidden viewer: release the pty stream so the authority can relax
+      // the shared geometry back to the owner's size.
+      backend.releasePty?.(session.mainPtyId ?? session.id);
+    }
+  }, [isVisible]);
+
   useEffect(() => {
     agentInputRef.current = session.agentInput;
   }, [session.agentInput]);
@@ -224,26 +247,67 @@ export function ShellTerminal({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(terminalRef.current);
+    // xterm@6 teardown race: refresh callbacks registered via
+    // addRefreshCallback (Viewport._sync et al.) run inside xterm's own
+    // rAF — once the renderer is torn down (WebGL context loss, fast
+    // remote remount) `renderService.dimensions` dereferences the dead
+    // renderer and throws an uncatchable pageerror that kills the view.
+    // Wrap every registered callback so the throw is logged, not fatal.
+    // The patch itself must never throw — a readonly/renamed internals
+    // shape must not kill the rest of the mount.
+    safely('patch refresh callbacks', () => {
+      const core = (term as unknown as { _core?: { _renderService?: { addRefreshCallback?: (cb: FrameRequestCallback) => number } } })._core;
+      const rs = core?._renderService;
+      const orig = rs?.addRefreshCallback?.bind(rs);
+      if (rs && orig) {
+        rs.addRefreshCallback = (cb: FrameRequestCallback) =>
+          orig((time) => {
+            try {
+              cb(time);
+            } catch (e) {
+              axnLog('warn', 'terminal', `refresh callback failed: ${e instanceof Error ? e.message : String(e)}`);
+            }
+          });
+      }
+    });
     const unregisterElement = registerTerminalElement(terminalRef.current, term);
     // OSC 52: TUIs with their own mouse selection (Claude Code) copy this way
     const clipboardWrites = handleClipboardWrites(term, (text) => {
       void Promise.resolve(services.copyText(text)).catch(() => {});
     });
     registerTerminal(session.id, term);
-    rendererCleanupRef.current = applyTerminalRenderer(
-      term,
-      settings.terminalRenderer,
-    ).dispose;
+    // A session moved in from another window: show its history first — the
+    // output listener attaches later, so live output follows in order.
+    const replay = takePendingReplay(session.id);
+    if (replay) term.write(replay);
+    // GPU renderers are demand-driven: hidden terminals keep xterm's DOM
+    // renderer so a wall of mounted sessions doesn't exhaust the WebGL
+    // context pool (iOS kills the whole webview past ~16 contexts).
+    if (isVisibleRef.current) {
+      rendererCleanupRef.current = applyTerminalRenderer(
+        term,
+        settings.terminalRenderer,
+      ).dispose;
+    }
 
+    // fit() reads _renderService.dimensions — undefined once the terminal
+    // is disposed or before open() (remote mirrors remount fast); a throw
+    // here escapes as an uncaught pageerror, so keep it inside safely.
+    const safeFit = () => safely('fit', () => fit.fit());
+    const proposeDims = () => {
+      let d: ReturnType<FitAddon['proposeDimensions']>;
+      safely('proposeDimensions', () => { d = fit.proposeDimensions(); });
+      return d;
+    };
     const fitWindow = () => {
-      if (isVisibleRef.current) fit.fit();
+      if (isVisibleRef.current) safeFit();
     };
     window.addEventListener('resize', fitWindow);
 
     let resizeObserver: ResizeObserver | undefined;
     if ('ResizeObserver' in window) {
       resizeObserver = new ResizeObserver(() => {
-        if (isVisibleRef.current) fit.fit();
+        if (isVisibleRef.current) safeFit();
       });
       resizeObserver.observe(terminalRef.current);
     }
@@ -290,6 +354,7 @@ export function ShellTerminal({
     let onData: { dispose: () => void } | null = null;
     let onResize: { dispose: () => void } | null = null;
     let onTitleChange: { dispose: () => void } | null = null;
+    let inputHandle: TerminalInput | null = null;
     let linkProviderDisposable: { dispose: () => void } | null = null;
     let onSelectionMouseUp: ((event: MouseEvent) => void) | null = null;
     let unlisten: Unsubscribe | null = null;
@@ -307,7 +372,7 @@ export function ShellTerminal({
     const shell = settings.defaultShell?.trim() || undefined;
     const pty = acquirePty(backend, ptyId, () => {
       const dims = isVisibleRef.current
-        ? (fit.fit(), fit.proposeDimensions())
+        ? (safeFit(), proposeDims())
         : undefined;
       return backend.createSession(ptyId, {
         shell,
@@ -389,7 +454,7 @@ export function ShellTerminal({
         };
 
         onResize = term.onResize(({ cols, rows }) => {
-          backend.resize(ptyId, cols, rows);
+          if (isVisibleRef.current) backend.resize(ptyId, cols, rows);
         });
 
         // The spawn-time fit can run on a hidden (display:none) or not yet
@@ -398,8 +463,10 @@ export function ShellTerminal({
         // nearly column-less ("text staffed to the left"). Re-fit now and push
         // the live size once, so the PTY converges on the real dimensions even
         // if an early onResize event was missed before the handler bound.
-        if (isVisibleRef.current) fit.fit();
-        backend.resize(ptyId, term.cols, term.rows);
+        if (isVisibleRef.current) {
+          safeFit();
+          backend.resize(ptyId, term.cols, term.rows);
+        }
 
         // Turn path-like tokens in the buffer into hoverable links. When the
         // mouse dwells on a resolved file, a preview card with an Edit button
@@ -487,7 +554,12 @@ export function ShellTerminal({
                         if (event.button !== 0) return;
                         services.openExternal(stat.path);
                       }
-                    : () => {},
+                    : // A tap/click on a file link pops the action card right
+                      // away — the only way to reach it on touch, and a
+                      // shortcut to Edit/Preview on desktop.
+                      (event) => {
+                        showHoverCard(event, stat, isUrl, 0);
+                      },
                   decorations: { pointerCursor: true, underline: true },
                 };
                 // Files always get the preview card; a reconstructed URL gets
@@ -625,7 +697,10 @@ export function ShellTerminal({
           return true;
         });
 
-        onData = term.onData((data) => {
+        // Shared input path: xterm's onData and the touch key bar both feed
+        // through here so hidden-command interception and the post-Enter cwd
+        // poll apply identically to injected keys.
+        const sendInput = (data: string) => {
           if (hiddenInput(data)) return;
 
           backend.write(ptyId, data);
@@ -637,12 +712,17 @@ export function ShellTerminal({
               if (active) void pollCwd();
             }, 120);
           }
-        });
+        };
+        onData = term.onData(sendInput);
+        inputHandle = { send: sendInput, focus: () => term.focus() };
+        registerTerminalInput(sessionId, inputHandle);
 
-        if (isVisibleRef.current) fit.fit();
-        // onResize only fires on a size *change*; push the current size
-        // unconditionally so the PTY is never left at the spawn dimensions.
-        backend.resize(ptyId, term.cols, term.rows);
+        if (isVisibleRef.current) {
+          safeFit();
+          // onResize only fires on a size *change*; push the current size
+          // unconditionally so the PTY is never left at the spawn dimensions.
+          backend.resize(ptyId, term.cols, term.rows);
+        }
 
         processInterval = setInterval(async () => {
           try {
@@ -684,9 +764,11 @@ export function ShellTerminal({
           clearInterval(processInterval);
           processInterval = null;
         }
-      } catch {
+      } catch (e) {
+        console.error(`[shell] session "${session.name}" (${ptyId}) failed to start`, e);
         if (!active) return;
         term.writeln(`\r\nFailed to start shell session "${session.name}".`);
+        term.writeln(`\r\n${e instanceof Error ? e.message : String(e)}`);
       }
     })();
 
@@ -723,6 +805,7 @@ export function ShellTerminal({
       // WebGL addon can throw.
       safely('renderer', () => rendererCleanupRef.current?.());
       rendererCleanupRef.current = null;
+      if (inputHandle) unregisterTerminalInput(sessionId, inputHandle);
       safely('terminal', () => term.dispose());
       terminal.current = null;
       fitAddon.current = null;
@@ -745,7 +828,7 @@ export function ShellTerminal({
     terminal.current.options.fontFamily = shellFont.family;
     terminal.current.options.fontSize = shellFont.size;
     if (isVisibleRef.current) fitAddon.current?.fit();
-  }, [activeTheme, settings.shellFontFamily, settings.shellFontSize]);
+  }, [activeTheme, settings.shellFontFamily, settings.shellFontSize, settings.uiZoom]);
 
   // Renderer changes hot-swap the addon on the live terminal — the PTY effect
   // above can't react (its teardown would kill the session). Skipped on mount:
@@ -755,6 +838,9 @@ export function ShellTerminal({
       rendererMountedRef.current = true;
       return;
     }
+    // Hidden terminals hold no GPU renderer — the visibility effect applies
+    // the latest choice when the terminal comes back on screen.
+    if (!isVisibleRef.current) return;
     rendererCleanupRef.current?.();
     rendererCleanupRef.current = terminal.current
       ? applyTerminalRenderer(terminal.current, settings.terminalRenderer).dispose

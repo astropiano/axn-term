@@ -1,3 +1,5 @@
+import { t } from '@lingui/core/macro';
+import { i18n } from '../../i18n';
 import { axnLog } from '../log';
 import type { SessionViewContext, PluginApi, RepoMenuItem } from './plugin';
 
@@ -144,7 +146,7 @@ export function agentResumeMenuItem(
   if (latestAgentLast()?.agent !== agent) return [];
   return [
     {
-      label: `Resume ${agent} session${last.name ? ` '${last.name}'` : ''}`,
+      label: i18n._(t`Resume ${agent} session${last.name ? ` '${last.name}'` : ''}`),
       onClick: () => {
         void (async () => {
           let line = last.command;

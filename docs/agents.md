@@ -75,6 +75,7 @@ program use `axn-term session …` above:
 - `axn-session [path]` — open a new session in the current workspace (`.` or
   no argument uses the session cwd).
 - `axn-session-mv <workspace>` — move the session to another workspace.
+- `axn-session-window` — move the session into a new window of its own.
 - `axn-sh [command|dir]` — open a sub-shell tab (one-shot command or
   interactive shell).
 - `axn-edit <path>` — open a file in the built-in editor tab.

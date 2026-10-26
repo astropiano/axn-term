@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fragment } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fragment, type CSSProperties } from 'react';
 import { ContextMenu } from '../ContextMenu';
-import { Plus, Save, FolderOpen, FolderCog, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight } from 'lucide-react';
+import { Plus, Save, FolderOpen, FolderCog, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow } from 'lucide-react';
 import { Trans, useLingui } from '@lingui/react/macro';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
@@ -12,12 +12,20 @@ import { AttentionDot } from './AttentionDot';
 import { sessionAttention, summarizeAttention } from './attention';
 import { IconButton } from './IconButton';
 import { sanitizeSvgIcon } from './sanitizeSvg';
+import { useContextMenuTrigger } from '../useContextMenuTrigger';
+import type { MenuPosition } from '../useContextMenuTrigger';
 import type { AgentCli, ShellSession, Workspace } from '../types';
 import { ptyIdOf } from '../types';
 import type { RepoMenuItem, SessionViewPlugin } from './session-plugins/plugin';
 import type { TaskStateSnapshot } from './useAgentTasks';
 import { SetDefaultFolderModal } from './SetDefaultFolderModal';
 import { InvalidDefaultFolderModal } from './InvalidDefaultFolderModal';
+import {
+  createDragExitTracker,
+  dragEndedOutside,
+  tearOffPlacement,
+  type TearOffPlacement,
+} from './sessionTearOff';
 
 interface SessionPanelProps {
   workspaces: Workspace[];
@@ -60,6 +68,22 @@ interface SessionPanelProps {
   onTurnIntoWorkspace: (sessionId: string) => void;
   pluginData: Record<string, unknown>;
   mergePluginData: (key: string, patch: Record<string, unknown>) => void;
+  /** Moves a session into a new window of its own; absent where windows can't be opened. */
+  onMoveToNewWindow?: (sessionId: string) => void;
+  /** A session row started dragging (announced to the other windows). */
+  onSessionDragStart?: (sessionId: string) => void;
+  /** A session row drag ended — `outside` when it ended beyond this window. */
+  onSessionDragEnd?: (sessionId: string, end: SessionDragEndInfo) => void;
+  /** A session another window is dragging; the panel accepts its drop. */
+  foreignDrag?: { sessionId: string; name: string } | null;
+  /** Take the foreign session at this spot; true when claimed. */
+  onForeignDrop?: (workspaceId: string, beforeSessionId: string | null) => boolean;
+}
+
+export interface SessionDragEndInfo {
+  dropEffect: string;
+  outside: boolean;
+  placement: TearOffPlacement;
 }
 
 const statusColor: Record<string, string> = {
@@ -75,83 +99,6 @@ const statusLabel: Record<string, string> = {
   blocked: 'blocked',
   completed: 'completed',
 };
-
-const LONG_PRESS_MS = 600;
-
-interface MenuPosition {
-  x: number;
-  y: number;
-}
-
-function useContextMenuTrigger(onOpen: (pos: MenuPosition) => void) {
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const didLongPress = useRef(false);
-
-  const startLongPress = useCallback(
-    (x: number, y: number) => {
-      didLongPress.current = false;
-      longPressTimer.current = setTimeout(() => {
-        didLongPress.current = true;
-        onOpen({ x, y });
-      }, LONG_PRESS_MS);
-    },
-    [onOpen],
-  );
-
-  const cancelLongPress = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  }, []);
-
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      onOpen({ x: e.clientX, y: e.clientY });
-    },
-    [onOpen],
-  );
-
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      startLongPress(e.clientX, e.clientY);
-    },
-    [startLongPress],
-  );
-
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      const touch = e.touches[0];
-      startLongPress(touch?.clientX ?? 0, touch?.clientY ?? 0);
-    },
-    [startLongPress],
-  );
-
-  const wrapClick = useCallback(
-    <T extends React.MouseEvent>(handler?: (e: T) => void) =>
-      (e: T) => {
-        if (didLongPress.current) {
-          didLongPress.current = false;
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-        handler?.(e);
-      },
-    [],
-  );
-
-  return {
-    onContextMenu: handleContextMenu,
-    onMouseDown: handleMouseDown,
-    onMouseUp: cancelLongPress,
-    onMouseLeave: cancelLongPress,
-    onTouchStart: handleTouchStart,
-    onTouchEnd: cancelLongPress,
-    wrapClick,
-  };
-}
 
 // Inline rename editing for the workspace header — triggered programmatically
 // from the workspace context menu, so it must not swallow pointer events the
@@ -244,8 +191,9 @@ export function PanelSearch({ value, onChange }: { value: string; onChange: (v: 
 }
 
 function AddWorkspaceButton({ onClick }: { onClick: () => void }) {
+  const { t } = useLingui();
   return (
-    <IconButton onClick={onClick} title="New workspace">
+    <IconButton onClick={onClick} title={t`New workspace`}>
       <Plus className="h-3.5 w-3.5" />
     </IconButton>
   );
@@ -465,6 +413,7 @@ function WorkspaceHeader({
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: (e: React.DragEvent) => void;
 }) {
+  const { t } = useLingui();
   const { editing, input, startEdit } = useEditableName(workspace.name, onRename);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition>({ x: 0, y: 0 });
@@ -474,7 +423,9 @@ function WorkspaceHeader({
     onMouseUp: cancelLongPress,
     onMouseLeave,
     onTouchStart,
+    onTouchMove,
     onTouchEnd,
+    onTouchCancel,
     wrapClick,
   } = useContextMenuTrigger((pos) => {
     setMenuPos(pos);
@@ -500,7 +451,9 @@ function WorkspaceHeader({
         onMouseUp={cancelLongPress}
         onMouseLeave={onMouseLeave}
         onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchCancel}
         data-tip={`${workspace.name} (drag to reorder, right-click for options)`}
       >
       <button
@@ -509,7 +462,7 @@ function WorkspaceHeader({
           e.stopPropagation();
           onToggle();
         }}
-        data-tip={isCollapsed ? 'Expand' : 'Collapse'}
+        data-tip={isCollapsed ? t`Expand` : t`Collapse`}
         aria-label={isCollapsed ? 'Expand' : 'Collapse'}
         className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
       >
@@ -537,9 +490,9 @@ function WorkspaceHeader({
           e.stopPropagation();
           onAddSession();
         }}
-        data-tip="New session in workspace"
+        data-tip={t`New session in workspace`}
         aria-label="New session in workspace"
-        className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] opacity-0 transition hover:bg-[var(--surface)] hover:text-[var(--accent)] group-hover:opacity-100"
+        className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] opacity-0 transition hover:bg-[var(--surface)] hover:text-[var(--accent)] group-hover:opacity-100 pointer-coarse:opacity-100"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
@@ -550,9 +503,9 @@ function WorkspaceHeader({
             e.stopPropagation();
             onDelete();
           }}
-          data-tip="Delete workspace"
+          data-tip={t`Delete workspace`}
           aria-label="Delete workspace"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] opacity-0 transition hover:bg-[var(--surface)] hover:text-[var(--red)] group-hover:opacity-100"
+          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] opacity-0 transition hover:bg-[var(--surface)] hover:text-[var(--red)] group-hover:opacity-100 pointer-coarse:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -589,6 +542,8 @@ interface SessionContextMenuProps {
   onRename: (name: string) => void;
   /** Opens the "Move to workspace" picker; absent hides the row. */
   onRequestMove?: () => void;
+  /** Moves the session into a new window; absent hides the row. */
+  onMoveToNewWindow?: () => void;
   onSubShell: () => void;
   onBrowse: () => void;
   /** Copies the shell's live working directory; absent where it can't be read. */
@@ -606,6 +561,7 @@ function SessionContextMenu({
   onDuplicate,
   onRename,
   onRequestMove,
+  onMoveToNewWindow,
   onSubShell,
   onBrowse,
   onCopyPath,
@@ -613,6 +569,7 @@ function SessionContextMenu({
   onTurnIntoWorkspace,
   pluginItems,
 }: SessionContextMenuProps) {
+  const { t } = useLingui();
   const [renaming, setRenaming] = useState(false);
   // A foreground process makes "Close session" a kill — confirm inline
   // inside the menu instead of closing without a word.
@@ -712,7 +669,7 @@ function SessionContextMenu({
         {session.customName && (
           <button
             type="button"
-            data-tip="Reset to process name"
+            data-tip={t`Reset to process name`}
             aria-label="Reset to process name"
             onClick={resetName}
             className="shrink-0 rounded p-1 text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
@@ -818,6 +775,22 @@ function SessionContextMenu({
           >
             <MoveRight className="h-3.5 w-3.5 shrink-0" />
             <Trans>Move to workspace…</Trans>
+          </button>
+        </>
+      )}
+      {onMoveToNewWindow && (
+        <>
+          {!onRequestMove && <div className="my-1 h-px bg-[var(--border)]" />}
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onMoveToNewWindow();
+            }}
+            className={itemClass}
+          >
+            <AppWindow className="h-3.5 w-3.5 shrink-0" />
+            <Trans>Move to new window</Trans>
           </button>
         </>
       )}
@@ -949,6 +922,7 @@ export function SessionItem({
   taskState,
   onSelect,
   onRequestMove,
+  onMoveToNewWindow,
   onRename,
   onDuplicate,
   onCloseSession,
@@ -977,6 +951,8 @@ export function SessionItem({
   onSelect: () => void;
   /** Opens the "Move to workspace" picker for this session. */
   onRequestMove?: () => void;
+  /** Moves this session into a new window; absent hides the menu row. */
+  onMoveToNewWindow?: () => void;
   onRename: (name: string) => void;
   onDuplicate: () => void;
   onCloseSession: () => void;
@@ -1016,7 +992,7 @@ export function SessionItem({
   const { pluginSettings } = usePluginSettings();
   const { settings } = useSettings();
   const attention = summarizeAttention(sessionAttention(session, plugins));
-  const { onContextMenu, onMouseDown, onMouseUp, onMouseLeave, onTouchStart, onTouchEnd, wrapClick } =
+  const { onContextMenu, onMouseDown, onMouseUp, onMouseLeave, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, wrapClick } =
     useContextMenuTrigger((pos) => {
       setMenuPos(pos);
       setMenuOpen(true);
@@ -1060,9 +1036,9 @@ export function SessionItem({
         onClick={onSelect}
         onDragOver={onDragOver}
         onDrop={onDrop}
-        className={`mb-1 cursor-pointer rounded border transition ${
+        className={`relative mb-1 cursor-pointer rounded border transition ${
           isSelected
-            ? 'border-[var(--border)] bg-[var(--surface)] shadow-[inset_2px_0_0_var(--accent)]'
+            ? 'border-[var(--border)] border-l-0 bg-[var(--surface)] pl-px shadow-[inset_2px_0_0_var(--accent)]'
             : 'border-transparent hover:bg-[var(--surface)]'
         }${isDragging ? ' opacity-40' : ''}${dropBefore ? ' shadow-[inset_0_2px_0_var(--accent)]' : ''}`}
         data-tip={[session.name, ...rowTips].join('\n')}
@@ -1076,7 +1052,9 @@ export function SessionItem({
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseLeave}
           onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
+          onTouchCancel={onTouchCancel}
           onClick={wrapClick()}
           className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-xs text-[var(--text-primary)]"
         >
@@ -1234,6 +1212,7 @@ export function SessionItem({
           onDuplicate={onDuplicate}
           onRename={onRename}
           onRequestMove={onRequestMove}
+          onMoveToNewWindow={onMoveToNewWindow}
           onCloseSession={onCloseSession}
           onSubShell={() => onOpenSubShell(session.id)}
           onTurnIntoWorkspace={
@@ -1303,7 +1282,14 @@ export function SessionPanel({
   onTurnIntoWorkspace,
   pluginData,
   mergePluginData,
+  onMoveToNewWindow,
+  onSessionDragStart,
+  onSessionDragEnd,
+  foreignDrag,
+  onForeignDrop,
 }: SessionPanelProps) {
+  const { t } = useLingui();
+  const { settings } = useSettings();
   const [dragSessionId, setDragSessionId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{
     workspaceId: string;
@@ -1367,6 +1353,10 @@ export function SessionPanel({
     })();
   };
 
+  // New session in a workspace: the defaultFolder is only checked now, never
+  // when it is set — a path that doesn't resolve to a directory raises the
+  // invalid-folder modal (fix it, or open in the home folder) instead of a
+  // dead terminal.
   const handleAddSession = (workspace: Workspace) => {
     const folder = workspace.defaultFolder?.trim();
     if (!folder) {
@@ -1376,6 +1366,8 @@ export function SessionPanel({
     const rep = representativeSession(workspace) ?? sessions[0];
     const pty = rep ? ptyIdOf(rep) : undefined;
     if (!pty || !backend.statPath) {
+      // No way to verify (no live session / backend can't stat) — attempt the
+      // spawn; the terminal surfaces the failure as before.
       onAddSession(workspace.id, folder);
       return;
     }
@@ -1388,16 +1380,39 @@ export function SessionPanel({
       .catch(() => onAddSession(workspace.id, folder));
   };
 
+  // Whether a session drag left the window — a drag that ends outside every
+  // window tears the session off into a new one.
+  const exitTrackerRef = useRef<ReturnType<typeof createDragExitTracker> | null>(null);
+
   const handleDragStart = (e: React.DragEvent, sessionId: string) => {
     e.dataTransfer.setData('application/x-axn-session', sessionId);
     e.dataTransfer.effectAllowed = 'move';
     setDragSessionId(sessionId);
+    exitTrackerRef.current?.stop();
+    exitTrackerRef.current = createDragExitTracker(document);
+    exitTrackerRef.current.start();
+    onSessionDragStart?.(sessionId);
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = (e: React.DragEvent, sessionId: string) => {
     setDragSessionId(null);
     setDropTarget(null);
+    const left = exitTrackerRef.current?.stop() ?? false;
+    exitTrackerRef.current = null;
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    onSessionDragEnd?.(sessionId, {
+      dropEffect: e.dataTransfer?.dropEffect ?? 'none',
+      outside: dragEndedOutside(e, viewport, left),
+      placement: tearOffPlacement(e, viewport),
+    });
   };
+
+  // The session being dragged — one of ours, or one another window drags
+  // over this panel.
+  const activeDragId = dragSessionId ?? foreignDrag?.sessionId ?? null;
+  useEffect(() => {
+    if (!foreignDrag && !dragSessionId) setDropTarget(null);
+  }, [foreignDrag, dragSessionId]);
 
   const handleWorkspaceDragStart = (e: React.DragEvent, workspaceId: string) => {
     e.dataTransfer.setData('application/x-axn-workspace', workspaceId);
@@ -1439,7 +1454,7 @@ export function SessionPanel({
     workspaceId: string,
     beforeSessionId: string,
   ) => {
-    if (!dragSessionId || dragSessionId === beforeSessionId) return;
+    if (!activeDragId || activeDragId === beforeSessionId) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
@@ -1447,7 +1462,7 @@ export function SessionPanel({
   };
 
   const handleWorkspaceDragOver = (e: React.DragEvent, workspaceId: string) => {
-    if (!dragSessionId) return;
+    if (!activeDragId) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDropTarget({ workspaceId, beforeSessionId: null });
@@ -1458,7 +1473,15 @@ export function SessionPanel({
     workspaceId: string,
     beforeSessionId: string | null,
   ) => {
-    if (!dragSessionId) return;
+    if (!dragSessionId) {
+      // A session dragged in from another window: ask it over.
+      if (!foreignDrag || !onForeignDrop) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onForeignDrop(workspaceId, beforeSessionId);
+      setDropTarget(null);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     if (dragSessionId !== beforeSessionId) {
@@ -1480,21 +1503,41 @@ export function SessionPanel({
     : workspaces;
 
   return (
-    <div className="flex h-full w-full flex-col border-r border-[var(--border)] bg-[var(--bg)]">
+    <div
+      className="flex h-full w-full flex-col border-r border-[var(--border)] bg-[var(--bg)]"
+      style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
+    >
       <div className="flex h-8 shrink-0 items-center justify-between gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1">
         <div className="flex items-center gap-1">
           <AddWorkspaceButton onClick={onAddWorkspace} />
-          <IconButton title="Save workspace set" onClick={onSaveWorkspaceSet}>
+          <IconButton title={t`Save workspace set`} onClick={onSaveWorkspaceSet}>
             <Save className="h-3.5 w-3.5" />
           </IconButton>
-          <IconButton title="Load workspace set" onClick={onLoadWorkspaceSet}>
+          <IconButton title={t`Load workspace set`} onClick={onLoadWorkspaceSet}>
             <FolderOpen className="h-3.5 w-3.5" />
           </IconButton>
         </div>
         <PanelSearch value={query} onChange={setQuery} />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2">
+      {/* panelFontSize scales the list only — the h-8 header strip must keep
+          its native metrics to stay aligned with the session tab strip. */}
+      <div
+        className="flex-1 overflow-y-auto p-2"
+        style={{
+          // Setting the VAR (not just fontFamily) makes the configured panel
+          // font reach font-mono utility classes inside too — otherwise
+          // font-family: var(--font-mono) on rows beats inherited styles and
+          // the setting appears to do nothing. Unset -> theme --font-mono.
+          ...((settings.panelFontFamily?.trim()
+            ? {
+                '--font-mono': settings.panelFontFamily.trim(),
+                fontFamily: settings.panelFontFamily.trim(),
+              }
+            : {}) as CSSProperties),
+          zoom: settings.panelFontSize ? settings.panelFontSize / 12 : undefined,
+        }}
+      >
         {visibleWorkspaces.map((workspace, index) => {
           const workspaceSessions = sessions.filter(
             (s) => s.workspaceId === workspace.id && (!q || matchesFilter(s.name)),
@@ -1571,6 +1614,11 @@ export function SessionPanel({
                         onRequestMove={
                           onRequestMoveSession ? () => onRequestMoveSession(session.id) : undefined
                         }
+                        onMoveToNewWindow={
+                          onMoveToNewWindow && sessions.length > 1
+                            ? () => onMoveToNewWindow(session.id)
+                            : undefined
+                        }
                         onRename={(name) => onRenameSession(session.id, name)}
                         onDuplicate={() => onDuplicateSession(session.id)}
                         onCloseSession={() => onCloseSession(session.id)}
@@ -1591,7 +1639,7 @@ export function SessionPanel({
                           dropTarget.workspaceId === workspace.id
                         }
                         onDragStart={(e) => handleDragStart(e, session.id)}
-                        onDragEnd={handleDragEnd}
+                        onDragEnd={(e) => handleDragEnd(e, session.id)}
                         onDragOver={(e) =>
                           handleSessionDragOver(e, workspace.id, session.id)
                         }

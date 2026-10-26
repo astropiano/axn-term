@@ -10,9 +10,12 @@ import {
   getScreenLines,
   handleClipboardWrites,
   registerTerminal,
+  takePendingReplay,
   registerTerminalElement,
   takePtyKeepAlive,
   unregisterTerminal,
+  registerTerminalInput,
+  unregisterTerminalInput,
 } from '../terminalRegistry';
 import { tabTaskPatch } from './subShellTasks';
 import { agentInputPluginFor } from './session-plugins/agentHookBridge';
@@ -139,6 +142,9 @@ export function SubShellView({
     });
     // keyed by the tab id: screen scans (subShellTasks.ts) read this PTY's view
     registerTerminal(tab.id, t);
+    // A tab moved in with its session from another window: history first.
+    const replay = takePendingReplay(tab.id);
+    if (replay) t.write(replay);
     // App navigation shortcuts must bubble to ShellApp's window listener
     // instead of becoming escape sequences.
     t.attachCustomKeyEventHandler(
@@ -146,10 +152,14 @@ export function SubShellView({
     );
     term.current = t;
     fitAddon.current = fit;
-    rendererCleanupRef.current = applyTerminalRenderer(
-      t,
-      settings.terminalRenderer,
-    ).dispose;
+    // GPU renderers are demand-driven (see ShellTerminal) — a hidden tab
+    // keeps the DOM renderer instead of holding a WebGL context.
+    if (isVisibleRef.current) {
+      rendererCleanupRef.current = applyTerminalRenderer(
+        t,
+        settings.terminalRenderer,
+      ).dispose;
+    }
 
     const fitWindow = () => {
       if (isVisibleRef.current) fit.fit();
@@ -242,7 +252,10 @@ export function SubShellView({
         onCompleteInputRef.current?.(sessionRef.current.id, line, tab.id) ??
         Promise.resolve([]),
     });
-    const onData = t.onData((data) => {
+    // Shared input path — the touch key bar sends through this too, so
+    // hidden commands, exit-state re-run (Enter) and Esc-to-close all behave
+    // exactly like typed input.
+    const sendInput = (data: string) => {
       if (!exitedRef.current) {
         if (hiddenInput(data)) return;
         backend.write(tab.id, data);
@@ -254,7 +267,10 @@ export function SubShellView({
       } else if (data === '\x1b') {
         onCloseRef.current?.();
       }
-    });
+    };
+    const onData = t.onData(sendInput);
+    const inputHandle = { send: sendInput, focus: () => t.focus() };
+    registerTerminalInput(tab.id, inputHandle);
 
     const onResize = t.onResize(({ cols, rows }) => {
       backend.resize(tab.id, cols, rows);
@@ -403,6 +419,7 @@ export function SubShellView({
       // WebGL addon can throw.
       safely('sub-shell renderer', () => rendererCleanupRef.current?.());
       rendererCleanupRef.current = null;
+      unregisterTerminalInput(tab.id, inputHandle);
       safely('sub-shell terminal', () => t.dispose());
       term.current = null;
       fitAddon.current = null;
@@ -416,7 +433,7 @@ export function SubShellView({
     term.current.options.fontFamily = shellFont.family;
     term.current.options.fontSize = shellFont.size;
     if (isVisibleRef.current) fitAddon.current?.fit();
-  }, [activeTheme, settings.shellFontFamily, settings.shellFontSize]);
+  }, [activeTheme, settings.shellFontFamily, settings.shellFontSize, settings.uiZoom]);
 
   // Renderer changes hot-swap the addon on the live terminal — recreating the
   // PTY would kill the sub-shell. Skipped on mount; the PTY effect applies
@@ -426,11 +443,29 @@ export function SubShellView({
       rendererMountedRef.current = true;
       return;
     }
+    if (!isVisibleRef.current) return;
     rendererCleanupRef.current?.();
     rendererCleanupRef.current = term.current
       ? applyTerminalRenderer(term.current, settings.terminalRenderer).dispose
       : null;
   }, [settings.terminalRenderer]);
+
+  // Attach the GPU renderer only while visible — hiding disposes it and
+  // returns the WebGL context to the pool (see ShellTerminal).
+  useEffect(() => {
+    const t = term.current;
+    if (!t) return;
+    if (isVisible && !rendererCleanupRef.current) {
+      rendererCleanupRef.current = applyTerminalRenderer(
+        t,
+        settings.terminalRenderer,
+      ).dispose;
+      repaintTerminal(t);
+    } else if (!isVisible && rendererCleanupRef.current) {
+      safely('renderer detach', () => rendererCleanupRef.current?.());
+      rendererCleanupRef.current = null;
+    }
+  }, [isVisible]);
 
   // Spawn lazily on first activation so restored tabs don't all fork at once.
   useEffect(() => {

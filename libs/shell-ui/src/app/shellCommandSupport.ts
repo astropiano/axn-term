@@ -13,6 +13,7 @@ export const AXN_BUILTIN_COMMANDS = [
   'axn-install',
   'axn-session',
   'axn-session-mv',
+  'axn-session-window',
   'axn-session-up',
   'axn-session-down',
   'axn-session-summary',
@@ -36,7 +37,7 @@ export const AXN_ARG_COMMANDS = new Set([
 ]);
 
 export const AXN_BUILTIN_RE =
-  /^\s*(axn-session(?:-mv|-up|-down)?|axn-workspace-up|axn-workspace-down|axn-focus)(?:\s+(.*?))?\s*$/;
+  /^\s*(axn-session(?:-mv|-up|-down|-window)?|axn-workspace-up|axn-workspace-down|axn-focus)(?:\s+(.*?))?\s*$/;
 
 /** Filesystem completion for a path argument token; returns full lines. */
 export async function completePathArg(

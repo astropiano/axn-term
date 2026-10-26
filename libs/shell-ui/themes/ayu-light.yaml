@@ -1,0 +1,63 @@
+# Ayu Light (github.com/ayu-theme). Its yellows, cyans and blues were too pale
+# for text on white (down to 1.8:1); they keep their hue and are darkened. White
+# was pure white on a near-white background; it is a mid grey now.
+# Adjusted for legibility (hue kept, lightness moved):
+#   foreground: #5C6166 -> #52575B
+#   red: #E65050 -> #E02828
+#   green: #6CBF43 -> #48822C
+#   yellow: #E6BA7E -> #9F691F
+#   blue: #399EE6 -> #1878BD
+#   magenta: #A37ACC -> #8F5DC1
+#   cyan: #4CBF99 -> #2E8166
+#   brightRed: #F07171 -> #EF6565
+#   brightGreen: #86B300 -> #779F00
+#   brightYellow: #F2AE49 -> #CE810F
+#   brightBlue: #55B4D4 -> #319EC2
+#   brightCyan: #4CBF99 -> #3AA380
+#   ui.textSecondary: #85888B -> #6F7275
+#   ui.accent: #FA8D3E -> #BB5205
+id: ayu-light
+name: Ayu Light
+mode: light
+
+colors:
+  background: '#FCFCFC'
+  foreground: '#52575B'
+  cursor: '#FF9940'
+  cursorAccent: '#FCFCFC'
+  selectionBackground: '#E6EAF0'
+  selectionForeground: '#52575B'
+
+  black: '#41474D'
+  red: '#E02828'
+  green: '#48822C'
+  yellow: '#9F691F'
+  blue: '#1878BD'
+  magenta: '#8F5DC1'
+  cyan: '#2E8166'
+  white: '#8A9199'
+
+  brightBlack: '#787B80'
+  brightRed: '#EF6565'
+  brightGreen: '#779F00'
+  brightYellow: '#CE810F'
+  brightBlue: '#319EC2'
+  brightMagenta: '#A37ACC'
+  brightCyan: '#3AA380'
+  brightWhite: '#ADAEB1'
+
+  orange: '#F97316'
+  violet: '#8F5DC1'
+
+ui:
+  bg: '#F8F9FA'
+  bgSecondary: '#FCFCFC'
+  surface: '#FCFCFC'
+  surfaceHover: '#EEF0F2'
+  text: '#52575B'
+  textSecondary: '#6F7275'
+  textInverted: '#FCFCFC'
+  border: '#DCDFE3'
+  accent: '#BB5205'
+  accentHover: '#9B541F'
+  cursor: '#FF9940'

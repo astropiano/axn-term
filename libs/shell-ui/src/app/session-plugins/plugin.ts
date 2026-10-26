@@ -41,6 +41,14 @@ export interface PluginApi {
    */
   waitForSessionOutput: (timeoutMs?: number) => Promise<boolean>;
   /**
+   * Poll the live session's foreground process (`session.process`, argv
+   * basename — e.g. /^devin/i) until it matches or `timeoutMs` elapses.
+   * Shared "agent really running" wait — restore overlays must clear on
+   * this, not on command injection (agentInput flags the typed line while
+   * the process poll has not seen the agent yet).
+   */
+  waitForProcess: (pattern: RegExp, timeoutMs?: number) => Promise<boolean>;
+  /**
    * Resolves the session's *actual* current working directory by asking the
    * backend for the shell process' cwd. Unlike `session.cwd` — which is only
    * refreshed while the session is visible and can be stale or missing for
@@ -808,6 +816,16 @@ export function createPluginApi(
     setRestoring: (label: string | null) =>
       setSessionRestoring(session.id, plugin.id, label),
     waitForSessionOutput: createWaitForSessionOutput(deps.backend, ptyId),
+    waitForProcess: (pattern, timeoutMs = 30_000) =>
+      new Promise((resolve) => {
+        const start = Date.now();
+        const tick = () => {
+          if (pattern.test(live().process ?? '')) return resolve(true);
+          if (Date.now() - start >= timeoutMs) return resolve(false);
+          setTimeout(tick, 300);
+        };
+        tick();
+      }),
     getCwd,
     getTty: () => deps.backend.getTty?.(ptyId).catch(() => null) ?? Promise.resolve(null),
     openBrowser,

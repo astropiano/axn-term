@@ -1,0 +1,48 @@
+# High-contrast Axn for bright rooms, small fonts and low vision: every ANSI
+# colour, bright black included, reads at 7:1 or more (WCAG AAA). Visible
+# borders and a strong selection.
+id: axn-contrast
+name: Axn Contrast
+mode: dark
+
+colors:
+  background: '#0A0807'
+  foreground: '#FFFFFF'
+  cursor: '#FF9AA3'
+  cursorAccent: '#0A0807'
+  selectionBackground: '#4A3F3B'
+  selectionForeground: '#FFFFFF'
+
+  black: '#3A3330'
+  red: '#FF8A94'
+  green: '#5FE597'
+  yellow: '#FFD35C'
+  blue: '#86C8FF'
+  magenta: '#E3AEFF'
+  cyan: '#6FE7E7'
+  white: '#EDEDED'
+
+  brightBlack: '#B5ACA8'
+  brightRed: '#FFB3BA'
+  brightGreen: '#93F2B8'
+  brightYellow: '#FFE38F'
+  brightBlue: '#B3DCFF'
+  brightMagenta: '#EFCCFF'
+  brightCyan: '#A6F2F2'
+  brightWhite: '#FFFFFF'
+
+  orange: '#FFA463'
+  violet: '#E3AEFF'
+
+ui:
+  bg: '#0A0807'
+  bgSecondary: '#15110F'
+  surface: '#15110F'
+  surfaceHover: '#2A2421'
+  text: '#FFFFFF'
+  textSecondary: '#D6CFCB'
+  textInverted: '#0A0807'
+  border: '#7A706B'
+  accent: '#86C8FF'
+  accentHover: '#B3DCFF'
+  cursor: '#FF9AA3'
