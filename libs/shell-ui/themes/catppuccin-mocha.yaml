@@ -1,29 +1,50 @@
+# Catppuccin Mocha (catppuccin.com). UI colours from Mocha's mantle, crust and
+# surface layers, accent mauve. Bright black was surface2 (2.5:1); it is lifted
+# toward overlay1 so comments stay readable.
+# Adjusted for legibility (hue kept, lightness moved):
+#   brightBlack: #585B70 -> #70738E
 id: catppuccin-mocha
 name: Catppuccin Mocha
 mode: dark
 
 colors:
-  background: '#1e1e2e'
-  foreground: '#cdd6f4'
-  cursor: '#f5e0dc'
-  cursorAccent: '#1e1e2e'
-  selectionBackground: '#585b70'
-  selectionForeground: '#cdd6f4'
+  background: '#1E1E2E'
+  foreground: '#CDD6F4'
+  cursor: '#F5E0DC'
+  cursorAccent: '#1E1E2E'
+  selectionBackground: '#45475A'
+  selectionForeground: '#CDD6F4'
 
-  black: '#45475a'
-  red: '#f38ba8'
-  green: '#a6e3a1'
-  yellow: '#f9e2af'
-  blue: '#89b4fa'
-  magenta: '#f5c2e7'
-  cyan: '#94e2d5'
-  white: '#bac2de'
+  black: '#45475A'
+  red: '#F38BA8'
+  green: '#A6E3A1'
+  yellow: '#F9E2AF'
+  blue: '#89B4FA'
+  magenta: '#F5C2E7'
+  cyan: '#94E2D5'
+  white: '#BAC2DE'
 
-  brightBlack: '#585b70'
-  brightRed: '#f38ba8'
-  brightGreen: '#a6e3a1'
-  brightYellow: '#f9e2af'
-  brightBlue: '#89b4fa'
-  brightMagenta: '#f5c2e7'
-  brightCyan: '#94e2d5'
-  brightWhite: '#a6adc8'
+  brightBlack: '#70738E'
+  brightRed: '#F38BA8'
+  brightGreen: '#A6E3A1'
+  brightYellow: '#F9E2AF'
+  brightBlue: '#89B4FA'
+  brightMagenta: '#F5C2E7'
+  brightCyan: '#94E2D5'
+  brightWhite: '#A6ADC8'
+
+  orange: '#FAB387'
+  violet: '#CBA6F7'
+
+ui:
+  bg: '#181825'
+  bgSecondary: '#1E1E2E'
+  surface: '#1E1E2E'
+  surfaceHover: '#313244'
+  text: '#CDD6F4'
+  textSecondary: '#A6ADC8'
+  textInverted: '#1E1E2E'
+  border: '#45475A'
+  accent: '#CBA6F7'
+  accentHover: '#B4BEFE'
+  cursor: '#F5E0DC'

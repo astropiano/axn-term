@@ -1,3 +1,5 @@
+import { t } from '@lingui/core/macro';
+import { i18n } from '../../i18n';
 import { Bot, Play } from 'lucide-react';
 import type { ShellSession, Workspace } from '../../types';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
@@ -34,9 +36,29 @@ import {
 
 type Ctx = SessionViewContext & PluginApi;
 
-/** Personas yaml is the source of truth — re-parse on every ctx touch. */
-function syncRegistry(settings: unknown): void {
-  registerPersonas(parsePersonas(settings));
+/** Personas yaml is the source of truth — re-parse on every ctx touch.
+ * The owning device publishes its personas through appState so remote
+ * devices without a local plugins.yaml render the same agents view. */
+function syncRegistry(settings: unknown): AgentPersona[] {
+  const personas = parsePersonas(settings);
+  registerPersonas(personas);
+  return personas;
+}
+
+function publishPersonas(ctx: Ctx): void {
+  const personas = syncRegistry(ctx.pluginSettings);
+  const shared = (ctx.appState as { personas?: AgentPersona[] } | undefined)?.personas;
+  if (personas.length && JSON.stringify(personas) !== JSON.stringify(shared)) {
+    ctx.updateAppState?.({ personas });
+  }
+}
+
+/** Local personas win; devices without plugins.yaml fall back to the
+ * shared list published upstream. */
+function resolvePersonas(settings: unknown, appState: unknown): AgentPersona[] {
+  const local = parsePersonas(settings);
+  if (local.length) return local;
+  return ((appState as { personas?: AgentPersona[] } | undefined)?.personas ?? local);
 }
 
 const echo = (msg: string) => `echo ${JSON.stringify(msg)}`;
@@ -154,6 +176,7 @@ function PersonaCard({
 
 function AgentsView({
   pluginSettings,
+  appState,
   sessions,
   workspaces,
   sessionApi,
@@ -161,13 +184,14 @@ function AgentsView({
   close,
 }: {
   pluginSettings: unknown;
+  appState?: unknown;
   sessions: ShellSession[];
   workspaces: Workspace[];
   sessionApi: (id: string) => Ctx | undefined;
   selectSession: (id: string) => void;
   close: () => void;
 }) {
-  const personas = parsePersonas(pluginSettings);
+  const personas = resolvePersonas(pluginSettings, appState);
   const api = sessions.length > 0 ? sessionApi(sessions[0].id) : undefined;
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
@@ -304,7 +328,7 @@ export const agentsPlugin: SessionViewPlugin = {
   defaultEnabled: true,
 
   onSessionOpen: (ctx) => {
-    syncRegistry(ctx.pluginSettings);
+    publishPersonas(ctx);
     const queue = pendingLaunches.get(ctx.session.name);
     const persona = queue?.shift();
     if (!persona) return;
@@ -324,7 +348,7 @@ export const agentsPlugin: SessionViewPlugin = {
   },
 
   onOutput: (ctx) => {
-    syncRegistry(ctx.pluginSettings);
+    publishPersonas(ctx);
   },
 
   commands: [
@@ -369,7 +393,7 @@ export const agentsPlugin: SessionViewPlugin = {
     if (listPersonas().length === 0) return [];
     return [
       {
-        label: 'New session with agent…',
+        label: i18n._(t`New session with agent…`),
         onClick: () =>
           void pickPersona().then((persona) => persona && launchPersonaSession(ctx, persona)),
       },
@@ -381,7 +405,7 @@ export const agentsPlugin: SessionViewPlugin = {
     if (!workspace.defaultFolder || listPersonas().length === 0) return [];
     return [
       {
-        label: 'New session with agent…',
+        label: i18n._(t`New session with agent…`),
         onClick: () =>
           void pickPersona().then(
             (persona) => persona && launchPersonaSession(ctx, persona, workspace.defaultFolder),
@@ -390,8 +414,8 @@ export const agentsPlugin: SessionViewPlugin = {
     ];
   },
 
-  renderRail: ({ pluginSettings, viewActive, toggleView }) => {
-    const personas = parsePersonas(pluginSettings);
+  renderRail: ({ pluginSettings, appState, viewActive, toggleView }) => {
+    const personas = resolvePersonas(pluginSettings, appState);
     return (
       <button
         type="button"
@@ -413,9 +437,10 @@ export const agentsPlugin: SessionViewPlugin = {
     );
   },
 
-  renderView: ({ pluginSettings, sessions, workspaces, sessionApi, selectSession, close }) => (
+  renderView: ({ pluginSettings, appState, sessions, workspaces, sessionApi, selectSession, close }) => (
     <AgentsView
       pluginSettings={pluginSettings}
+      appState={appState}
       sessions={sessions}
       workspaces={workspaces}
       sessionApi={sessionApi}

@@ -1,0 +1,451 @@
+msgid ""
+msgstr ""
+"Language: ja\n"
+
+msgid "Remove icon"
+msgstr "アイコンを削除"
+
+msgid "Unable to read file"
+msgstr "ファイルを読み取れません"
+
+msgid "Switch to {0}"
+msgstr "{0} に切り替え"
+
+msgid "Process"
+msgstr "プロセス"
+
+msgid "Open"
+msgstr "開く"
+
+msgid "Light"
+msgstr "ライト"
+
+msgid "Stored in ~/.axn-term/plugins.yaml"
+msgstr "~/.axn-term/plugins.yaml に保存"
+
+msgid "Open in home folder"
+msgstr "ホームフォルダで開く"
+
+msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
+msgstr "「{0}」の新しいセッションはこのフォルダで開始されます。空欄でホームディレクトリを使用。"
+
+msgid "No icons configured — every session shows the default terminal icon."
+msgstr "アイコン未設定 — すべてのセッションにデフォルトのターミナルアイコンが表示されます。"
+
+msgid "Import replaces all settings with the picked config.yaml."
+msgstr "インポートするとすべての設定が選択した config.yaml で置き換えられます。"
+
+msgid "New workspace “{name}” in this window"
+msgstr "このウィンドウの新しいワークスペース「{name}」"
+
+msgid "Terminal renderer"
+msgstr "ターミナルレンダラー"
+
+msgid "current"
+msgstr "現在"
+
+msgid "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
+msgstr "実行ファイル名を Lucide アイコン（例: Bot、SquareTerminal）または SVG タグにマッピングします。"
+
+msgid "Stored in browser localStorage"
+msgstr "ブラウザの localStorage に保存"
+
+msgid "Leave empty to use the system $SHELL."
+msgstr "空欄にするとシステムの $SHELL を使用します。"
+
+msgid "Copy URL"
+msgstr "URL をコピー"
+
+msgid "Export…"
+msgstr "エクスポート…"
+
+msgid "Theme"
+msgstr "テーマ"
+
+msgid "Not a valid config.yaml — expected a YAML mapping."
+msgstr "有効な config.yaml ではありません — YAML マッピングが必要です。"
+
+msgid "Directory"
+msgstr "ディレクトリ"
+
+msgid "Dark theme"
+msgstr "ダークテーマ"
+
+msgid "Paste"
+msgstr "貼り付け"
+
+msgid "Enable devin task parser"
+msgstr "Devin タスクパーサーを有効化"
+
+msgid "requires {0}{1}"
+msgstr "要 {0}{1}"
+
+msgid "Preview unavailable"
+msgstr "プレビューできません"
+
+msgid "Edit icon"
+msgstr "アイコンを編集"
+
+msgid "Fix the path or open the session in your home folder."
+msgstr "パスを修正するか、ホームフォルダでセッションを開いてください。"
+
+msgid "axn-term hit an unexpected error"
+msgstr "axn-term で予期しないエラーが発生しました"
+
+msgid "Open preview in a tab"
+msgstr "タブでプレビューを開く"
+
+msgid "Reload view"
+msgstr "ビューを再読み込み"
+
+msgid "Session icons"
+msgstr "セッションアイコン"
+
+msgid "Shell font"
+msgstr "シェルフォント"
+
+msgid "Filter sessions…"
+msgstr "セッションを絞り込む…"
+
+msgid "Render session summaries (set via axn-session-summary)"
+msgstr "セッションサマリーを表示（axn-session-summary で設定）"
+
+msgid "disabled"
+msgstr "無効"
+
+msgid "No matches."
+msgstr "一致する項目がありません。"
+
+msgid "Loading…"
+msgstr "読み込み中…"
+
+msgid "Imported."
+msgstr "インポートしました。"
+
+msgid "Reload window"
+msgstr "ウィンドウを再読み込み"
+
+msgid "Open in workspace"
+msgstr "ワークスペースで開く"
+
+msgid "Auto"
+msgstr "自動"
+
+msgid "Import…"
+msgstr "インポート…"
+
+msgid "Window {0}"
+msgstr "ウィンドウ {0}"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "File previews"
+msgstr "ファイルプレビュー"
+
+msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
+msgstr "セッション/ワークスペースパネルのフォント。サイズはデフォルト 12px 基準でスケールします。"
+
+msgid "permissions:"
+msgstr "権限:"
+
+msgid "Auto (WebGL → canvas → DOM)"
+msgstr "自動（WebGL → canvas → DOM）"
+
+msgid "This view hit an unexpected error"
+msgstr "このビューで予期しないエラーが発生しました"
+
+msgid "no workspaces"
+msgstr "ワークスペースなし"
+
+msgid "General"
+msgstr "一般"
+
+msgid "Stored in ~/.axn-term/config.yaml"
+msgstr "~/.axn-term/config.yaml に保存"
+
+msgid "file preview"
+msgstr "ファイルプレビュー"
+
+msgid "Default folder"
+msgstr "デフォルトフォルダ"
+
+msgid "enabled"
+msgstr "有効"
+
+msgid "Could not parse the file as YAML."
+msgstr "ファイルを YAML として解析できませんでした。"
+
+msgid "Increase font size"
+msgstr "フォントサイズを大きく"
+
+msgid "Move to new window"
+msgstr "新しいウィンドウへ移動"
+
+msgid "Cut"
+msgstr "切り取り"
+
+msgid "Search workspaces or windows…"
+msgstr "ワークスペースまたはウィンドウを検索…"
+
+msgid "session plugin"
+msgstr "セッションプラグイン"
+
+msgid "Cancel"
+msgstr "キャンセル"
+
+msgid "Light theme"
+msgstr "ライトテーマ"
+
+msgid "This plugin declares no settings."
+msgstr "このプラグインは設定を宣言していません。"
+
+msgid "Edit"
+msgstr "編集"
+
+msgid "Export failed."
+msgstr "エクスポートに失敗しました。"
+
+msgid "Copy"
+msgstr "コピー"
+
+msgid "Copy selection"
+msgstr "選択範囲をコピー"
+
+msgid "Search…"
+msgstr "検索…"
+
+msgid "Move to workspace…"
+msgstr "ワークスペースへ移動…"
+
+msgid "Panel font"
+msgstr "パネルフォント"
+
+msgid "Invalid default folder"
+msgstr "無効なデフォルトフォルダ"
+
+msgid "Use system default"
+msgstr "システムデフォルトを使用"
+
+msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
+msgstr "ターミナルのセルレンダラー。「自動」は GPU（WebGL）を使い自動フォールバックします。描画不具合時は canvas/DOM を強制してください。"
+
+msgid "No workspaces match."
+msgstr "一致するワークスペースがありません。"
+
+msgid "sandboxed — no permissions (no shell, files or terminal access)"
+msgstr "サンドボックス — 権限なし（シェル、ファイル、ターミナルへのアクセス不可）"
+
+msgid "Plugins"
+msgstr "プラグイン"
+
+msgid "Decrease font size"
+msgstr "フォントサイズを小さく"
+
+msgid "Font size (px)"
+msgstr "フォントサイズ（px）"
+
+msgid "Dark"
+msgstr "ダーク"
+
+msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
+msgstr "Lucide アイコン名（例: <0>GitFork</0>）またはインライン SVG タグ（例: <1>{SVG_HINT_EXAMPLE}</1>）"
+
+msgid "Main window"
+msgstr "メインウィンドウ"
+
+msgid "The default folder of “{0}” does not exist:"
+msgstr "「{0}」のデフォルトフォルダが存在しません:"
+
+msgid "Close tab"
+msgstr "タブを閉じる"
+
+msgid "Preview"
+msgstr "プレビュー"
+
+msgid "Session plugins"
+msgstr "セッションプラグイン"
+
+msgid "Set default folder…"
+msgstr "デフォルトフォルダを設定…"
+
+msgid "Default shell"
+msgstr "デフォルトシェル"
+
+msgid "Terminal font family and size in px. Empty uses the built-in monospace stack at 14px."
+msgstr "ターミナルのフォントファミリーとサイズ（px）。空欄は内蔵モノスペーススタック 14px を使用。"
+
+msgid "Config file"
+msgstr "設定ファイル"
+
+msgid "Save"
+msgstr "保存"
+
+msgid "This window"
+msgstr "このウィンドウ"
+
+msgid "Language"
+msgstr "言語"
+
+msgid "Binary file"
+msgstr "バイナリファイル"
+
+msgid "Select all"
+msgstr "すべて選択"
+
+msgid "Exported."
+msgstr "エクスポートしました。"
+
+msgid "New workspace “{trimmed}” in this window"
+msgstr "このウィンドウの新しいワークスペース「{trimmed}」"
+
+msgid "unmet, plugin disabled"
+msgstr "未充足、プラグイン無効"
+
+msgid "Add icon"
+msgstr "アイコンを追加"
+
+msgid "Move “{sessionName}” to workspace"
+msgstr "「{sessionName}」をワークスペースへ移動"
+
+msgid "Copy Path"
+msgstr "パスをコピー"
+
+msgid "New workspace"
+msgstr "新しいワークスペース"
+
+msgid "Save workspace set"
+msgstr "ワークスペースセットを保存"
+
+msgid "Load workspace set"
+msgstr "ワークスペースセットを読み込む"
+
+msgid "shell"
+msgstr "shell"
+
+msgid "Shell"
+msgstr "シェル"
+
+msgid "System"
+msgstr "システム"
+
+msgid "Expand"
+msgstr "展開"
+
+msgid "Collapse"
+msgstr "折りたたむ"
+
+msgid "New session in workspace"
+msgstr "ワークスペースで新しいセッション"
+
+msgid "Delete workspace"
+msgstr "ワークスペースを削除"
+
+msgid "Reset to process name"
+msgstr "プロセス名に戻す"
+
+msgid "New worktree session"
+msgstr "新しい worktree セッション"
+
+msgid "Don't ask again"
+msgstr "再度確認しない"
+
+msgid "Force remove"
+msgstr "強制削除"
+
+msgid "Review worktree changes"
+msgstr "worktree の変更を確認"
+
+msgid "Remove worktree"
+msgstr "worktree を削除"
+
+msgid "New session with agent…"
+msgstr "エージェントで新しいセッション…"
+
+msgid "Start workflow…"
+msgstr "ワークフローを開始…"
+
+msgid "{agent} is running in the main checkout — isolate it in a worktree?"
+msgstr "{agent} がメインチェックアウトで実行中 — worktree に隔離しますか？"
+
+msgid "worktree remove failed (dirty?): {0}"
+msgstr "worktree の削除に失敗（dirty?）: {0}"
+
+msgid "worktree removed — branch {0} kept"
+msgstr "worktree を削除 — ブランチ {0} は保持"
+
+msgid "Delete {0}"
+msgstr "{0} を削除"
+
+msgid "Resume {0} session{1}"
+msgstr "{0} セッション{1}を再開"
+
+
+msgid "Remote control"
+msgstr "\u30ea\u30e2\u30fc\u30c8\u30b3\u30f3\u30c8\u30ed\u30fc\u30eb"
+
+msgid "Session name on the hub (optional)"
+msgstr "\u30cf\u30d6\u4e0a\u306e\u30bb\u30c3\u30b7\u30e7\u30f3\u540d\uff08\u4efb\u610f\uff09"
+
+msgid "User token (optional)"
+msgstr "\u30e6\u30fc\u30b6\u30fc\u30c8\u30fc\u30af\u30f3\uff08\u4efb\u610f\uff09"
+
+msgid "Publish this window's terminals to a /remote hub \u2014 other devices attach via the web app with ?remote=<session>."
+msgstr "\u3053\u306e\u30a6\u30a3\u30f3\u30c9\u30a6\u306e\u30bf\u30fc\u30df\u30ca\u30eb\u3092 /remote \u30cf\u30d6\u306b\u516c\u958b\u3057\u307e\u3059 \u2014 \u4ed6\u306e\u30c7\u30d0\u30a4\u30b9\u306f ?remote=<session> \u3067 Web \u30a2\u30d7\u30ea\u7d4c\u7531\u3067\u63a5\u7d9a\u3057\u307e\u3059\u3002"
+
+msgid "Hub URL"
+msgstr "\u30cf\u30d6 URL"
+
+msgid "Session name"
+msgstr "\u30bb\u30c3\u30b7\u30e7\u30f3\u540d"
+
+msgid "User token"
+msgstr "\u30e6\u30fc\u30b6\u30fc\u30c8\u30fc\u30af\u30f3"
+
+msgid "optional"
+msgstr "\u4efb\u610f"
+
+msgid "Publishing \u2014 connected"
+msgstr "\u516c\u958b\u4e2d \u2014 \u63a5\u7d9a\u6e08\u307f"
+
+msgid "Connecting\u2026"
+msgstr "\u63a5\u7d9a\u4e2d\u2026"
+
+msgid "Failed: {0}"
+msgstr "\u5931\u6557\uff1a{0}"
+
+msgid "Not publishing"
+msgstr "\u672a\u516c\u958b"
+
+msgid "Remote"
+msgstr "リモート"
+
+msgid "Account"
+msgstr "アカウント"
+
+msgid "Server URL"
+msgstr "サーバーURL"
+
+msgid "Client ID"
+msgstr "クライアントID"
+
+msgid "Signed in as {0}"
+msgstr "{0} としてサインイン中"
+
+msgid "Sign out"
+msgstr "サインアウト"
+
+msgid "Enter code {0} in the browser to finish sign-in."
+msgstr "ブラウザでコード {0} を入力してサインインを完了してください。"
+
+msgid "Sign in…"
+msgstr "サインイン…"
+
+msgid "Not signed in"
+msgstr "未サインイン"
+
+msgid "OIDC client"
+msgstr "OIDCクライアント"
+
+msgid "axn-term-desktop (default)"
+msgstr "axn-term-desktop（デフォルト）"

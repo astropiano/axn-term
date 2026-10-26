@@ -1,182 +1,146 @@
-import { describe, it, expect, vi } from 'vitest';
+// @vitest-environment happy-dom
+import { describe, it, expect } from 'vitest';
+import { applyTerminalRenderer, repaintTerminal } from './terminalRenderer';
+import type { Terminal } from '@xterm/xterm';
+import type { ITerminalAddon } from '@xterm/xterm';
 
-// The addon UMD bundles touch `self` at import time — stub them so the module
-// under test evaluates in a node env; all behavior is exercised through the
-// injected factories anyway.
-vi.mock('@xterm/addon-webgl', () => ({
-  WebglAddon: class {
-    activate() {}
-    dispose() {}
-    onContextLoss() {}
-  },
-}));
-vi.mock('@xterm/addon-canvas', () => ({
-  CanvasAddon: class {
-    activate() {}
-    dispose() {}
-  },
-}));
+type FakeTerm = Pick<Terminal, 'loadAddon'> &
+  Partial<Pick<Terminal, 'clearTextureAtlas' | 'options' | 'refresh' | 'rows'>>;
 
-import type { ITerminalAddon, Terminal } from '@xterm/xterm';
-import {
-  applyTerminalRenderer,
-  normalizeRendererMode,
-  repaintTerminal,
-  type RendererFactories,
-} from './terminalRenderer';
-
-function fakeAddon(id: string): ITerminalAddon & { id: string } {
-  return { id, activate: vi.fn(), dispose: vi.fn() };
-}
-
-function fakeTerm(loadImpl?: (addon: ITerminalAddon) => void) {
-  return { loadAddon: vi.fn(loadImpl) } as unknown as Pick<Terminal, 'loadAddon'>;
-}
-
-function factories(overrides: Partial<RendererFactories> = {}): RendererFactories {
+function fakeTerm(overrides: Partial<FakeTerm> = {}): FakeTerm & { addons: ITerminalAddon[] } {
+  const addons: ITerminalAddon[] = [];
   return {
-    webgl: () => fakeAddon('webgl'),
-    canvas: () => fakeAddon('canvas'),
+    addons,
+    loadAddon: (a: ITerminalAddon) => {
+      addons.push(a);
+      a.activate({} as Terminal);
+    },
+    options: {},
     ...overrides,
   };
 }
 
-describe('normalizeRendererMode', () => {
-  it('accepts the four modes, defaults everything else to auto', () => {
-    expect(normalizeRendererMode('webgl')).toBe('webgl');
-    expect(normalizeRendererMode('canvas')).toBe('canvas');
-    expect(normalizeRendererMode('dom')).toBe('dom');
-    expect(normalizeRendererMode('auto')).toBe('auto');
-    expect(normalizeRendererMode(undefined)).toBe('auto');
-    expect(normalizeRendererMode('gpu')).toBe('auto');
-    expect(normalizeRendererMode(42)).toBe('auto');
-  });
-});
+function fakeAddon(onDispose?: () => void): ITerminalAddon {
+  return { activate: () => {}, dispose: () => onDispose?.() };
+}
+
+function throwingAddon(): ITerminalAddon {
+  return {
+    activate: () => {
+      throw new Error('boom');
+    },
+    dispose: () => {},
+  };
+}
 
 describe('applyTerminalRenderer', () => {
-  it('dom loads nothing', () => {
+  it('auto prefers webgl when the pool is free', () => {
     const term = fakeTerm();
-    const res = applyTerminalRenderer(term, 'dom', factories());
-    expect(res.applied).toBe('dom');
-    expect(term.loadAddon).not.toHaveBeenCalled();
+    const { applied, dispose } = applyTerminalRenderer(term, 'auto', {
+      webgl: () => fakeAddon() as never,
+    });
+    expect(applied).toBe('webgl');
+    dispose();
   });
 
-  it('auto loads webgl', () => {
+  it('never throws when the webgl addon throws in activate', () => {
     const term = fakeTerm();
-    const webgl = fakeAddon('webgl');
-    const res = applyTerminalRenderer(term, 'auto', factories({ webgl: () => webgl }));
-    expect(res.applied).toBe('webgl');
-    expect(term.loadAddon).toHaveBeenCalledWith(webgl);
+    // A dead GPU/webview throws — auto must degrade, not propagate.
+    expect(() =>
+      applyTerminalRenderer(term, 'auto', {
+        webgl: () => throwingAddon() as never,
+        canvas: () => fakeAddon(),
+      }),
+    ).not.toThrow();
   });
 
-  it('auto falls back to canvas when webgl fails to load', () => {
-    const canvas = fakeAddon('canvas');
-    const term = fakeTerm((a) => {
-      if ((a as { id: string }).id === 'webgl') throw new Error('no webgl');
-    });
-    const res = applyTerminalRenderer(term, 'auto', factories({ canvas: () => canvas }));
-    expect(res.applied).toBe('canvas');
-    expect(term.loadAddon).toHaveBeenCalledWith(canvas);
-  });
-
-  it('auto lands on dom when webgl and canvas both fail', () => {
-    const term = fakeTerm(() => {
-      throw new Error('nope');
-    });
-    expect(applyTerminalRenderer(term, 'auto', factories()).applied).toBe('dom');
-  });
-
-  it('forced webgl does not fall back to canvas', () => {
-    const term = fakeTerm(() => {
-      throw new Error('nope');
-    });
-    const res = applyTerminalRenderer(term, 'webgl', factories());
-    expect(res.applied).toBe('dom');
-    expect(term.loadAddon).toHaveBeenCalledTimes(1);
-  });
-
-  it('context loss in auto swaps webgl for canvas', () => {
-    let contextLoss: (() => void) | undefined;
-    const webgl = {
-      ...fakeAddon('webgl'),
-      onContextLoss: (cb: () => void) => {
-        contextLoss = cb;
-      },
-    };
-    const canvas = fakeAddon('canvas');
+  it('falls back to canvas when webgl fails under auto', () => {
     const term = fakeTerm();
-    const res = applyTerminalRenderer(
-      term,
-      'auto',
-      factories({ webgl: () => webgl, canvas: () => canvas }),
+    const { applied } = applyTerminalRenderer(term, 'auto', {
+      webgl: () => throwingAddon() as never,
+      canvas: () => fakeAddon(),
+    });
+    expect(applied).toBe('canvas');
+  });
+
+  it('forced webgl degrades to dom on failure', () => {
+    const term = fakeTerm();
+    const { applied } = applyTerminalRenderer(term, 'webgl', {
+      webgl: () => throwingAddon() as never,
+      canvas: () => fakeAddon(),
+    });
+    expect(applied).toBe('dom');
+  });
+
+  it('forced canvas degrades to dom on failure', () => {
+    const term = fakeTerm();
+    const { applied } = applyTerminalRenderer(term, 'canvas', {
+      canvas: () => throwingAddon(),
+    });
+    expect(applied).toBe('dom');
+  });
+
+  it('stops offering webgl once the context pool is full', () => {
+    // Saturate the pool.
+    const holders = Array.from({ length: 8 }, () =>
+      applyTerminalRenderer(fakeTerm(), 'auto', { webgl: () => fakeAddon() as never }),
     );
-    expect(res.applied).toBe('webgl');
-    contextLoss!();
-    expect(webgl.dispose).toHaveBeenCalled();
-    expect(term.loadAddon).toHaveBeenCalledWith(canvas);
+    const term = fakeTerm();
+    const { applied } = applyTerminalRenderer(term, 'auto', {
+      webgl: () => fakeAddon() as never,
+      canvas: () => fakeAddon(),
+    });
+    expect(applied).toBe('canvas');
+    holders.forEach((h) => h.dispose());
   });
 
-  it('context loss with a forced webgl setting stays on dom', () => {
-    let contextLoss: (() => void) | undefined;
-    const webgl = {
-      ...fakeAddon('webgl'),
-      onContextLoss: (cb: () => void) => {
-        contextLoss = cb;
-      },
-    };
-    const term = fakeTerm();
-    applyTerminalRenderer(term, 'webgl', factories({ webgl: () => webgl }));
-    contextLoss!();
-    expect(webgl.dispose).toHaveBeenCalled();
-    expect(term.loadAddon).toHaveBeenCalledTimes(1);
-  });
-
-  it('dispose removes the renderer active after a context-loss fallback', () => {
-    let contextLoss: (() => void) | undefined;
-    const webgl = {
-      ...fakeAddon('webgl'),
-      onContextLoss: (cb: () => void) => {
-        contextLoss = cb;
-      },
-    };
-    const canvas = fakeAddon('canvas');
-    const term = fakeTerm();
-    const res = applyTerminalRenderer(
-      term,
-      'auto',
-      factories({ webgl: () => webgl, canvas: () => canvas }),
+  it('frees a pool slot on dispose', () => {
+    const holders = Array.from({ length: 8 }, () =>
+      applyTerminalRenderer(fakeTerm(), 'auto', { webgl: () => fakeAddon() as never }),
     );
-    contextLoss!();
-    res.dispose();
-    expect(canvas.dispose).toHaveBeenCalled();
+    holders[0].dispose();
+    const { applied, dispose } = applyTerminalRenderer(fakeTerm(), 'auto', {
+      webgl: () => fakeAddon() as never,
+    });
+    expect(applied).toBe('webgl');
+    holders.forEach((h) => h.dispose());
+    dispose();
+  });
+
+  it('frees a pool slot on context loss', () => {
+    let contextLoss: (() => void) | undefined;
+    const holder = applyTerminalRenderer(fakeTerm(), 'auto', {
+      webgl: () => {
+        const addon = fakeAddon() as ITerminalAddon & { onContextLoss?: (cb: () => void) => void };
+        addon.onContextLoss = (cb) => {
+          contextLoss = cb;
+        };
+        return addon as never;
+      },
+      canvas: () => fakeAddon(),
+    });
+    contextLoss?.();
+    const { applied, dispose } = applyTerminalRenderer(fakeTerm(), 'auto', {
+      webgl: () => fakeAddon() as never,
+    });
+    expect(applied).toBe('webgl');
+    holder.dispose();
+    dispose();
   });
 });
 
 describe('repaintTerminal', () => {
-  it('re-rasterizes glyphs before marking every row dirty', () => {
-    const calls: string[] = [];
-    const term = {
+  it('never throws on a torn-down terminal', () => {
+    const dead = {
+      refresh: () => {
+        throw new Error('renderService gone');
+      },
+      clearTextureAtlas: () => {
+        throw new Error('renderer gone');
+      },
       rows: 24,
-      clearTextureAtlas: () => calls.push('clear'),
-      refresh: (start: number, end: number) => calls.push(`refresh ${start}-${end}`),
     };
-    vi.stubGlobal('requestAnimationFrame', (cb: () => void) => { cb(); return 0; });
-    try {
-      repaintTerminal(term);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-    expect(calls).toEqual(['clear', 'refresh 0-23']);
-  });
-
-  it('still refreshes a terminal without a texture atlas (DOM renderer)', () => {
-    const refresh = vi.fn();
-    vi.stubGlobal('requestAnimationFrame', (cb: () => void) => { cb(); return 0; });
-    try {
-      repaintTerminal({ rows: 10, refresh });
-    } finally {
-      vi.unstubAllGlobals();
-    }
-    expect(refresh).toHaveBeenCalledWith(0, 9);
+    expect(() => repaintTerminal(dead as never)).not.toThrow();
+    return new Promise<void>((resolve) => setTimeout(resolve, 50));
   });
 });

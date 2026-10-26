@@ -48,8 +48,8 @@ const statusIcons: Record<VibeTaskStatus, string> = {
 const statusClasses: Record<VibeTaskStatus, string> = {
   pending: 'text-[var(--text-secondary)]',
   running: 'text-[var(--accent)]',
-  completed: 'text-emerald-500',
-  blocked: 'text-red-500',
+  completed: 'text-[var(--green)]',
+  blocked: 'text-[var(--red)]',
 };
 
 function parseVibeStatusSymbol(symbol: string): VibeTaskStatus {
@@ -501,7 +501,7 @@ function VibeRow({ ctx }: { ctx: SessionViewContext & PluginApi }): ReactNode {
   const session = ctx.getSession();
   if (!sessionNameRequiresAttention(session.name)) return null;
   return (
-    <span className="text-[10px] text-red-500" data-tip="Session name indicates action required">
+    <span className="text-[10px] text-[var(--red)]" data-tip="Session name indicates action required">
       !
     </span>
   );

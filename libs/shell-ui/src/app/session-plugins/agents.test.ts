@@ -254,6 +254,51 @@ describe('agents plugin', () => {
     expect(agentsPlugin.renderRow!(makeCtx())).toBeNull();
   });
 
+  it('builds workspace and session menus without writing application state', () => {
+    const updateAppState = vi.fn();
+    const ctx = makeCtx({ pluginSettings: personasSettings, updateAppState });
+    for (let render = 0; render < 20; render++) {
+      agentsPlugin.workspaceMenuItems!(ctx, { id: 'w1', name: 'Work', defaultFolder: '/repo' });
+      agentsPlugin.sessionMenuItems!(ctx);
+    }
+    expect(updateAppState).not.toHaveBeenCalled();
+    expect(resolvePersona('reviewer')).toMatchObject({ cli: 'devin' });
+  });
+
+  it('publishes personas once across session-open and output notifications until settings change', () => {
+    const appState: Record<string, unknown> = {};
+    const updateAppState = vi.fn((patch: Record<string, unknown>) => Object.assign(appState, patch));
+    const ctx = makeCtx({ pluginSettings: personasSettings, appState, updateAppState });
+    agentsPlugin.onSessionOpen!(ctx);
+    for (let chunk = 0; chunk < 20; chunk++) agentsPlugin.onOutput!(ctx, 'output');
+    expect(updateAppState).toHaveBeenCalledTimes(1);
+    expect(appState.personas).toEqual(parsePersonas(personasSettings));
+    ctx.pluginSettings = { personas: { replacement: 'claude' } };
+    agentsPlugin.onOutput!(ctx, 'output');
+    expect(updateAppState).toHaveBeenCalledTimes(2);
+    expect(appState.personas).toEqual(parsePersonas(ctx.pluginSettings));
+  });
+
+  it('does not republish persisted personas after a JSON round-trip', () => {
+    const updateAppState = vi.fn();
+    const ctx = makeCtx({
+      pluginSettings: personasSettings,
+      appState: JSON.parse(JSON.stringify({ personas: parsePersonas(personasSettings) })),
+      updateAppState,
+    });
+    agentsPlugin.onSessionOpen!(ctx);
+    agentsPlugin.onOutput!(ctx, 'output');
+    expect(updateAppState).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite mirrored personas when local settings are absent', () => {
+    const updateAppState = vi.fn();
+    const ctx = makeCtx({ appState: { personas: parsePersonas(personasSettings) }, updateAppState });
+    agentsPlugin.onSessionOpen!(ctx);
+    agentsPlugin.onOutput!(ctx, 'output');
+    expect(updateAppState).not.toHaveBeenCalled();
+  });
+
   it('syncs the registry from its settings on ctx touches', () => {
     const ctx = makeCtx({ pluginSettings: personasSettings });
     agentsPlugin.onSessionOpen!(ctx);

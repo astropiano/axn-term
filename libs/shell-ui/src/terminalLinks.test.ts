@@ -220,7 +220,7 @@ describe('extendWrappedUrl', () => {
       mrRow('keycloak-theme', '!9 (https://gitlab.acme.io/dev/keycloak-theme/-/', 'Logo pinned top'),
       mrRow('', 'merge_requests/9)', 'centred below'),
       mrRow('frontend-app', '!75 (https://gitlab.acme.io/dev/frontend-app/-/merg', 'realm: Dev →'),
-      mrRow('', 'e_requests/75)', 'docs update'),
+      mrRow('', 'e_requests/75)', 'store'),
       mrRow('backend-svc', '!34 (https://gitlab.acme.io/dev/backend-svc/-/merge_r', 'realm rename'),
       mrRow('', 'equests/34)', ''),
       mrRow('integ-tests', '!19 (https://gitlab.acme.io/dev/integ-tests/-/merge_req', 'full rename'),

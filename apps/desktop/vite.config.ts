@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import monacoEditorPlugin from "vite-plugin-monaco-editor-esm";
 
 // @ts-expect-error process is a nodejs global
@@ -13,6 +14,7 @@ const cacheDir = process.env.VITE_CACHE_DIR;
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [
+    tailwindcss(),
     monacoEditorPlugin({
       // Workers are prebuilt with esbuild instead of going through the Rollup
       // pipeline; keep this in sync with the feature languages in
@@ -46,12 +48,11 @@ export default defineConfig(async () => ({
       "@axn-term/plugin-sdk": fileURLToPath(
         new URL("../../libs/plugin-sdk/src/index.ts", import.meta.url),
       ),
-      // Sibling checkout (../ramphastos, astropiano layout); containers
-      // mount the same tree at /ramphastos — the relative depth resolves.
-      // Points at the built dist entry — rebuild the client package there.
+      // Sibling checkout (dev/libraries/ramphastos); containers mount
+      // the same tree at /libraries — the relative depth resolves there.
       "@ramphastos/ramphastos-client": fileURLToPath(
         new URL(
-          "../../../ramphastos/src/client/ramphastos-client/dist/index.js",
+          "../../../ramphastos/src/client/ramphastos-client",
           import.meta.url,
         ),
       ),

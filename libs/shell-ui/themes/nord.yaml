@@ -1,0 +1,53 @@
+# Nord (nordtheme.com). Polar Night backgrounds, Snow Storm text, Frost
+# accents. Bright black is nord3's brightened comment shade, lifted to 3.5:1.
+# Adjusted for legibility (hue kept, lightness moved):
+#   red: #BF616A -> #CF8990
+#   magenta: #B48EAD -> #B691AF
+#   brightBlack: #616E88 -> #7D89A2
+#   brightRed: #BF616A -> #CF8990
+#   brightMagenta: #B48EAD -> #B691AF
+id: nord
+name: Nord
+mode: dark
+
+colors:
+  background: '#2E3440'
+  foreground: '#D8DEE9'
+  cursor: '#D8DEE9'
+  cursorAccent: '#2E3440'
+  selectionBackground: '#434C5E'
+  selectionForeground: '#D8DEE9'
+
+  black: '#3B4252'
+  red: '#CF8990'
+  green: '#A3BE8C'
+  yellow: '#EBCB8B'
+  blue: '#81A1C1'
+  magenta: '#B691AF'
+  cyan: '#88C0D0'
+  white: '#E5E9F0'
+
+  brightBlack: '#7D89A2'
+  brightRed: '#CF8990'
+  brightGreen: '#A3BE8C'
+  brightYellow: '#EBCB8B'
+  brightBlue: '#81A1C1'
+  brightMagenta: '#B691AF'
+  brightCyan: '#8FBCBB'
+  brightWhite: '#ECEFF4'
+
+  orange: '#D08770'
+  violet: '#B48EAD'
+
+ui:
+  bg: '#2A303C'
+  bgSecondary: '#2E3440'
+  surface: '#3B4252'
+  surfaceHover: '#434C5E'
+  text: '#D8DEE9'
+  textSecondary: '#A5AFC2'
+  textInverted: '#2E3440'
+  border: '#4C566A'
+  accent: '#88C0D0'
+  accentHover: '#A0C9D8'
+  cursor: '#D8DEE9'

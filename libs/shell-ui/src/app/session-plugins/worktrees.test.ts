@@ -465,6 +465,94 @@ describe('agent isolation banner', () => {
     worktreesPlugin.onBannerAction!(h.ctx, 'never-isolate');
     expect((h.store.worktrees as { dismissed?: boolean }).dismissed).toBe(true);
   });
+
+  it('clears the banner once the agent is no longer foreground', async () => {
+    const h = makeHarness({ process: 'devin' });
+    worktreesPlugin.onOutput!(h.ctx, 'chunk');
+    await flush();
+    await flush();
+    expect(
+      (h.banners.at(-1) as { message: string }).message,
+    ).toContain('devin');
+
+    // Agent exits — the shell is foreground again (process undefined).
+    h.session.process = undefined;
+    h.banners.length = 0;
+    worktreesPlugin.onOutput!(h.ctx, 'chunk2');
+    await flush();
+    expect(h.banners.at(-1)).toBeNull();
+  });
+
+  it('clears a restored banner on a session without an agent', async () => {
+    const h = makeHarness(
+      { process: undefined },
+      {
+        banner: {
+          level: 'warning',
+          message: 'devin is running in the main checkout',
+          actions: [{ id: 'isolate', label: 'New worktree session' }],
+        },
+      },
+    );
+    worktreesPlugin.onOutput!(h.ctx, 'chunk');
+    await flush();
+    expect(h.banners.at(-1)).toBeNull();
+  });
+
+  it('clears a restored banner on session open, before any output', async () => {
+    const h = makeHarness(
+      { process: undefined },
+      {
+        banner: {
+          level: 'warning',
+          message: 'devin is running in the main checkout',
+          actions: [{ id: 'isolate', label: 'New worktree session' }],
+        },
+      },
+    );
+    worktreesPlugin.onSessionOpen!(h.ctx);
+    await flush();
+    expect(h.banners.at(-1)).toBeNull();
+  });
+
+  it('keeps the banner while the agent is still foreground', async () => {
+    const h = makeHarness(
+      { process: 'devin' },
+      {
+        banner: {
+          level: 'warning',
+          message: 'devin is running in the main checkout',
+          actions: [{ id: 'isolate', label: 'New worktree session' }],
+        },
+      },
+    );
+    worktreesPlugin.onSessionOpen!(h.ctx);
+    worktreesPlugin.onOutput!(h.ctx, 'chunk');
+    await flush();
+    await flush();
+    // Never cleared — it may re-raise (this session was never nudged), but
+    // no null is pushed while the agent is still foreground.
+    expect(h.banners.every((b) => b !== null)).toBe(true);
+    expect(
+      (h.store.worktrees as { banner?: unknown }).banner,
+    ).not.toBeNull();
+  });
+
+  it('leaves unrelated banners alone', async () => {
+    const h = makeHarness(
+      { process: undefined },
+      {
+        banner: {
+          level: 'info',
+          message: 'worktree removed',
+          actions: [{ id: 'remove-branch', label: 'Delete wt/x' }],
+        },
+      },
+    );
+    worktreesPlugin.onOutput!(h.ctx, 'chunk');
+    await flush();
+    expect(h.banners).toHaveLength(0);
+  });
 });
 
 describe('rowTip', () => {

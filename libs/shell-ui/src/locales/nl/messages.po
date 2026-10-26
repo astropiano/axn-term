@@ -1,0 +1,451 @@
+msgid ""
+msgstr ""
+"Language: nl\n"
+
+msgid "Remove icon"
+msgstr "Icoon verwijderen"
+
+msgid "Unable to read file"
+msgstr "Bestand kon niet worden gelezen"
+
+msgid "Switch to {0}"
+msgstr "Naar {0} wisselen"
+
+msgid "Process"
+msgstr "Proces"
+
+msgid "Open"
+msgstr "Openen"
+
+msgid "Light"
+msgstr "Licht"
+
+msgid "Stored in ~/.axn-term/plugins.yaml"
+msgstr "Opgeslagen in ~/.axn-term/plugins.yaml"
+
+msgid "Open in home folder"
+msgstr "In homemap openen"
+
+msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
+msgstr "Nieuwe sessies in „{0}“ starten in deze map. Leeg laten voor je homemap."
+
+msgid "No icons configured — every session shows the default terminal icon."
+msgstr "Geen iconen geconfigureerd — elke sessie toont het standaard terminalicoon."
+
+msgid "Import replaces all settings with the picked config.yaml."
+msgstr "Importeren vervangt alle instellingen door de gekozen config.yaml."
+
+msgid "New workspace “{name}” in this window"
+msgstr "Nieuwe workspace „{name}“ in dit venster"
+
+msgid "Terminal renderer"
+msgstr "Terminalrenderer"
+
+msgid "current"
+msgstr "huidig"
+
+msgid "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
+msgstr "Koppel programmanamen aan een Lucide-icoon (bijv. Bot, SquareTerminal) of een SVG-tag."
+
+msgid "Stored in browser localStorage"
+msgstr "Opgeslagen in localStorage van de browser"
+
+msgid "Leave empty to use the system $SHELL."
+msgstr "Leeg laten om de systeem-$SHELL te gebruiken."
+
+msgid "Copy URL"
+msgstr "URL kopiëren"
+
+msgid "Export…"
+msgstr "Exporteren…"
+
+msgid "Theme"
+msgstr "Thema"
+
+msgid "Not a valid config.yaml — expected a YAML mapping."
+msgstr "Geen geldige config.yaml — YAML-mapping verwacht."
+
+msgid "Directory"
+msgstr "Map"
+
+msgid "Dark theme"
+msgstr "Donker thema"
+
+msgid "Paste"
+msgstr "Plakken"
+
+msgid "Enable devin task parser"
+msgstr "Devin-taakparser inschakelen"
+
+msgid "requires {0}{1}"
+msgstr "vereist {0}{1}"
+
+msgid "Preview unavailable"
+msgstr "Voorbeeld niet beschikbaar"
+
+msgid "Edit icon"
+msgstr "Icoon bewerken"
+
+msgid "Fix the path or open the session in your home folder."
+msgstr "Corrigeer het pad of open de sessie in je homemap."
+
+msgid "axn-term hit an unexpected error"
+msgstr "axn-term liep tegen een onverwachte fout aan"
+
+msgid "Open preview in a tab"
+msgstr "Voorbeeld in een tabblad openen"
+
+msgid "Reload view"
+msgstr "Weergave herladen"
+
+msgid "Session icons"
+msgstr "Sessie-iconen"
+
+msgid "Shell font"
+msgstr "Shell-lettertype"
+
+msgid "Filter sessions…"
+msgstr "Sessies filteren…"
+
+msgid "Render session summaries (set via axn-session-summary)"
+msgstr "Sessiesamenvattingen tonen (via axn-session-summary)"
+
+msgid "disabled"
+msgstr "uitgeschakeld"
+
+msgid "No matches."
+msgstr "Geen resultaten."
+
+msgid "Loading…"
+msgstr "Laden…"
+
+msgid "Imported."
+msgstr "Geïmporteerd."
+
+msgid "Reload window"
+msgstr "Venster herladen"
+
+msgid "Open in workspace"
+msgstr "In workspace openen"
+
+msgid "Auto"
+msgstr "Auto"
+
+msgid "Import…"
+msgstr "Importeren…"
+
+msgid "Window {0}"
+msgstr "Venster {0}"
+
+msgid "Settings"
+msgstr "Instellingen"
+
+msgid "File previews"
+msgstr "Bestandsvoorbeelden"
+
+msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
+msgstr "Lettertype van het sessie-/workspacepaneel. De grootte schaalt ten opzichte van de 12px-standaard."
+
+msgid "permissions:"
+msgstr "machtigingen:"
+
+msgid "Auto (WebGL → canvas → DOM)"
+msgstr "Auto (WebGL → canvas → DOM)"
+
+msgid "This view hit an unexpected error"
+msgstr "Deze weergave liep tegen een onverwachte fout aan"
+
+msgid "no workspaces"
+msgstr "geen workspaces"
+
+msgid "General"
+msgstr "Algemeen"
+
+msgid "Stored in ~/.axn-term/config.yaml"
+msgstr "Opgeslagen in ~/.axn-term/config.yaml"
+
+msgid "file preview"
+msgstr "bestandsvoorbeeld"
+
+msgid "Default folder"
+msgstr "Standaardmap"
+
+msgid "enabled"
+msgstr "ingeschakeld"
+
+msgid "Could not parse the file as YAML."
+msgstr "Het bestand kon niet als YAML worden gelezen."
+
+msgid "Increase font size"
+msgstr "Lettergrootte vergroten"
+
+msgid "Move to new window"
+msgstr "Naar nieuw venster verplaatsen"
+
+msgid "Cut"
+msgstr "Knippen"
+
+msgid "Search workspaces or windows…"
+msgstr "Workspaces of vensters zoeken…"
+
+msgid "session plugin"
+msgstr "sessie-plugin"
+
+msgid "Cancel"
+msgstr "Annuleren"
+
+msgid "Light theme"
+msgstr "Licht thema"
+
+msgid "This plugin declares no settings."
+msgstr "Deze plugin declareert geen instellingen."
+
+msgid "Edit"
+msgstr "Bewerken"
+
+msgid "Export failed."
+msgstr "Exporteren mislukt."
+
+msgid "Copy"
+msgstr "Kopiëren"
+
+msgid "Copy selection"
+msgstr "Selectie kopiëren"
+
+msgid "Search…"
+msgstr "Zoeken…"
+
+msgid "Move to workspace…"
+msgstr "Naar workspace verplaatsen…"
+
+msgid "Panel font"
+msgstr "Paneellettertype"
+
+msgid "Invalid default folder"
+msgstr "Ongeldige standaardmap"
+
+msgid "Use system default"
+msgstr "Systeemstandaard gebruiken"
+
+msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
+msgstr "Cell-renderer voor terminals. Auto gebruikt de GPU (WebGL) en valt automatisch terug. Forceer canvas/DOM bij weergavefouten."
+
+msgid "No workspaces match."
+msgstr "Geen workspaces gevonden."
+
+msgid "sandboxed — no permissions (no shell, files or terminal access)"
+msgstr "gesandboxt — geen machtigingen (geen shell-, bestands- of terminaltoegang)"
+
+msgid "Plugins"
+msgstr "Plugins"
+
+msgid "Decrease font size"
+msgstr "Lettergrootte verkleinen"
+
+msgid "Font size (px)"
+msgstr "Lettergrootte (px)"
+
+msgid "Dark"
+msgstr "Donker"
+
+msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
+msgstr "Een Lucide-iconaam (bijv. <0>GitFork</0>) of een inline SVG-tag, bijv. <1>{SVG_HINT_EXAMPLE}</1>"
+
+msgid "Main window"
+msgstr "Hoofdvenster"
+
+msgid "The default folder of “{0}” does not exist:"
+msgstr "De standaardmap van „{0}“ bestaat niet:"
+
+msgid "Close tab"
+msgstr "Tabblad sluiten"
+
+msgid "Preview"
+msgstr "Voorbeeld"
+
+msgid "Session plugins"
+msgstr "Sessie-plugins"
+
+msgid "Set default folder…"
+msgstr "Standaardmap instellen…"
+
+msgid "Default shell"
+msgstr "Standaard-shell"
+
+msgid "Terminal font family and size in px. Empty uses the built-in monospace stack at 14px."
+msgstr "Lettertypefamilie en -grootte van de terminal in px. Leeg gebruikt de ingebouwde monospace-stack op 14px."
+
+msgid "Config file"
+msgstr "Configuratiebestand"
+
+msgid "Save"
+msgstr "Opslaan"
+
+msgid "This window"
+msgstr "Dit venster"
+
+msgid "Language"
+msgstr "Taal"
+
+msgid "Binary file"
+msgstr "Binair bestand"
+
+msgid "Select all"
+msgstr "Alles selecteren"
+
+msgid "Exported."
+msgstr "Geëxporteerd."
+
+msgid "New workspace “{trimmed}” in this window"
+msgstr "Nieuwe workspace „{trimmed}“ in dit venster"
+
+msgid "unmet, plugin disabled"
+msgstr "niet vervuld, plugin uitgeschakeld"
+
+msgid "Add icon"
+msgstr "Icoon toevoegen"
+
+msgid "Move “{sessionName}” to workspace"
+msgstr "„{sessionName}“ naar workspace verplaatsen"
+
+msgid "Copy Path"
+msgstr "Pad kopiëren"
+
+msgid "New workspace"
+msgstr "Nieuwe workspace"
+
+msgid "Save workspace set"
+msgstr "Workspace-set opslaan"
+
+msgid "Load workspace set"
+msgstr "Workspace-set laden"
+
+msgid "shell"
+msgstr "shell"
+
+msgid "Shell"
+msgstr "Shell"
+
+msgid "System"
+msgstr "Systeem"
+
+msgid "Expand"
+msgstr "Uitklappen"
+
+msgid "Collapse"
+msgstr "Inklappen"
+
+msgid "New session in workspace"
+msgstr "Nieuwe sessie in workspace"
+
+msgid "Delete workspace"
+msgstr "Workspace verwijderen"
+
+msgid "Reset to process name"
+msgstr "Terugzetten naar procesnaam"
+
+msgid "New worktree session"
+msgstr "Nieuwe worktree-sessie"
+
+msgid "Don't ask again"
+msgstr "Niet opnieuw vragen"
+
+msgid "Force remove"
+msgstr "Geforceerd verwijderen"
+
+msgid "Review worktree changes"
+msgstr "Worktree-wijzigingen bekijken"
+
+msgid "Remove worktree"
+msgstr "Worktree verwijderen"
+
+msgid "New session with agent…"
+msgstr "Nieuwe sessie met agent…"
+
+msgid "Start workflow…"
+msgstr "Workflow starten…"
+
+msgid "{agent} is running in the main checkout — isolate it in a worktree?"
+msgstr "{agent} draait in de hoofd-checkout — isoleren in een worktree?"
+
+msgid "worktree remove failed (dirty?): {0}"
+msgstr "Worktree verwijderen mislukt (dirty?): {0}"
+
+msgid "worktree removed — branch {0} kept"
+msgstr "worktree verwijderd — branch {0} behouden"
+
+msgid "Delete {0}"
+msgstr "{0} verwijderen"
+
+msgid "Resume {0} session{1}"
+msgstr "{0}-sessie{1} hervatten"
+
+
+msgid "Remote control"
+msgstr "Afstandsbediening"
+
+msgid "Session name on the hub (optional)"
+msgstr "Sessienaam op de hub (optioneel)"
+
+msgid "User token (optional)"
+msgstr "Gebruikerstoken (optioneel)"
+
+msgid "Publish this window's terminals to a /remote hub \u2014 other devices attach via the web app with ?remote=<session>."
+msgstr "Publiceert de terminals van dit venster naar een /remote-hub \u2014 andere apparaten verbinden via de web-app met ?remote=<session>."
+
+msgid "Hub URL"
+msgstr "Hub-URL"
+
+msgid "Session name"
+msgstr "Sessienaam"
+
+msgid "User token"
+msgstr "Gebruikerstoken"
+
+msgid "optional"
+msgstr "optioneel"
+
+msgid "Publishing \u2014 connected"
+msgstr "Gepubliceerd \u2014 verbonden"
+
+msgid "Connecting\u2026"
+msgstr "Verbinden\u2026"
+
+msgid "Failed: {0}"
+msgstr "Mislukt: {0}"
+
+msgid "Not publishing"
+msgstr "Niet gepubliceerd"
+
+msgid "Remote"
+msgstr "Op afstand"
+
+msgid "Account"
+msgstr "Account"
+
+msgid "Server URL"
+msgstr "Server-URL"
+
+msgid "Client ID"
+msgstr "Client-ID"
+
+msgid "Signed in as {0}"
+msgstr "Ingelogd als {0}"
+
+msgid "Sign out"
+msgstr "Uitloggen"
+
+msgid "Enter code {0} in the browser to finish sign-in."
+msgstr "Voer code {0} in de browser in om het inloggen af te ronden."
+
+msgid "Sign in…"
+msgstr "Inloggen…"
+
+msgid "Not signed in"
+msgstr "Niet ingelogd"
+
+msgid "OIDC client"
+msgstr "OIDC-client"
+
+msgid "axn-term-desktop (default)"
+msgstr "axn-term-desktop (standaard)"

@@ -3,9 +3,9 @@
   <PropertyGroup>
     <!-- Porta.Pty only ships a net10.0 assembly. -->
     <TargetFrameworks>net10.0</TargetFrameworks>
-    <RootNamespace>Astropiano.AxnTerm.SessionHost</RootNamespace>
-    <AssemblyName>Astropiano.AxnTerm.SessionHost</AssemblyName>
-    <PackageId>Astropiano.AxnTerm.SessionHost</PackageId>
+    <RootNamespace>AxnTerm.SessionHost</RootNamespace>
+    <AssemblyName>AxnTerm.SessionHost</AssemblyName>
+    <PackageId>AxnTerm.SessionHost</PackageId>
     <Version>0.1.0</Version>
     <Authors>axn-term</Authors>
     <Company>axn-term</Company>
@@ -21,8 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Sibling checkout: ../ramphastos, astropiano layout (see nuget.config
-         feeds). In the session-host Dockerfile the same tree lands at /ramphastos. -->
+    <!-- Sibling checkout: dev/libraries/ramphastos (see nuget.config feeds).
+         In the session-host Dockerfile the same tree lands at /libraries. -->
     <ProjectReference Include="../../../ramphastos/src/Ramphastos.Server/Ramphastos.Server.csproj" />
   </ItemGroup>
 

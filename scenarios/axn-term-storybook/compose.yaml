@@ -18,8 +18,14 @@ services:
     container_name: axn-term-storybook
     restart: unless-stopped
     working_dir: /app/apps/desktop
-    command: >
-      /app/apps/desktop/node_modules/.bin/storybook dev -p 6006 --host 0.0.0.0 --ci --no-open
+    # Sync deps on start: the anonymous node_modules volumes keep their
+    # seeded content across repo edits, so a package added after the image
+    # was built would be missing (e.g. @fontsource fonts -> Vite CSS errors
+    # and stories hanging on load). pnpm install is cheap when up to date.
+    command:
+      - sh
+      - -c
+      - cd /app && CI=true pnpm install --frozen-lockfile && cd apps/desktop && exec node_modules/.bin/storybook dev -p 6006 --host 0.0.0.0 --ci --no-open
     environment:
       NODE_ENV: "development"
       CHOKIDAR_USEPOLLING: "true"

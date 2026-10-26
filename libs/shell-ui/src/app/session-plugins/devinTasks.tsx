@@ -30,8 +30,8 @@ const statusIcons: Record<DevinTaskStatus, string> = {
 const statusClasses: Record<DevinTaskStatus, string> = {
   pending: 'text-[var(--text-secondary)]',
   running: 'text-[var(--accent)]',
-  completed: 'text-emerald-500',
-  blocked: 'text-red-500',
+  completed: 'text-[var(--green)]',
+  blocked: 'text-[var(--red)]',
 };
 
 function parseStatusSymbol(symbol: string): DevinTaskStatus {

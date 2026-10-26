@@ -1,5 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { bindAppRuntime } from '../appRuntime';
 import {
+  currentMrOverview,
+  mrListCommand,
+  mrOverviewCommand,
+  refreshMrOverview,
+  resetMrOverview,
   glabMrPlugin,
   openThreads,
   myOpenThreads,
@@ -195,5 +205,64 @@ describe('rowTip', () => {
   it('mirrors the badge visibility gate', () => {
     expect(glabMrPlugin.rowTip?.(ctx({ showInTitle: false }))).toBeNull();
     expect(glabMrPlugin.rowTip?.(ctx({}, []))).toBeNull();
+  });
+});
+
+describe('glab command lines', () => {
+  /** Run through a real sh with a stub `glab` that prints its argv. */
+  function argvOf(command: string, cwd: string): string[] {
+    const dir = mkdtempSync(join(tmpdir(), 'axn-glab-stub-'));
+    writeFileSync(join(dir, 'glab'), '#!/bin/sh\nprintf \'%s\\0\' "$@"\n');
+    chmodSync(join(dir, 'glab'), 0o755);
+    const res = spawnSync('/bin/sh', ['-c', command], {
+      cwd,
+      env: { PATH: `${dir}:/usr/bin:/bin` },
+      encoding: 'utf8',
+    });
+    expect(res.status).toBe(0);
+    return res.stdout.split('\0').slice(0, -1);
+  }
+
+  it('passes a hostile branch name (valid in git) as one literal argument', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'axn-glab-cwd-'));
+    const branch = '$(touch${IFS}pwned)';
+    expect(argvOf(mrListCommand(branch), cwd).slice(0, 3)).toEqual(['mr', 'list', '-s']);
+    expect(argvOf(mrListCommand(branch), cwd)[3]).toBe(branch);
+    expect(existsSync(join(cwd, 'pwned'))).toBe(false);
+  });
+
+  it('sends the overview query and hostname as single arguments', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'axn-glab-cwd-'));
+    const argv = argvOf(mrOverviewCommand('gitlab.acme.io'), cwd);
+    expect(argv.slice(0, 4)).toEqual(['api', 'graphql', '--hostname', 'gitlab.acme.io']);
+    expect(argv[5]).toMatch(/^query=query \{ currentUser \{/);
+  });
+});
+
+describe('refreshMrOverview failures', () => {
+  afterEach(() => {
+    bindAppRuntime(null);
+    resetMrOverview();
+  });
+
+  const runtime = (exec: () => Promise<string>) =>
+    bindAppRuntime({ exec, statPath: async () => null, resolveSessionId: () => null });
+
+  it.each([
+    ['axn-term: glab is not installed', 'missing'],
+    ['{"errors":[{"message":"Invalid token"}]}glab: Invalid token', 'signed-out'],
+    ['glab: 502 Bad Gateway', 'error'],
+  ] as const)('classifies %j as %s', async (message, failure) => {
+    runtime(async () => {
+      throw new Error(message);
+    });
+    await refreshMrOverview();
+    expect(currentMrOverview()).toMatchObject({ status: 'error', failure });
+  });
+
+  it('treats an anonymous answer (currentUser null) as signed out', async () => {
+    runtime(async () => JSON.stringify({ data: { currentUser: null } }));
+    await refreshMrOverview();
+    expect(currentMrOverview()).toMatchObject({ status: 'error', failure: 'signed-out' });
   });
 });

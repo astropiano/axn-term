@@ -1,0 +1,59 @@
+# Rosé Pine Dawn (rosepinetheme.com), the light variant. Gold, rose and foam
+# were too pale for text on base; they are darkened within their hue. Black and
+# white swapped to the light-theme convention (black = text tone).
+# Adjusted for legibility (hue kept, lightness moved):
+#   foreground: #575279 -> #534E73
+#   red: #B4637A -> #AD546D
+#   yellow: #EA9D34 -> #9E6210
+#   blue: #56949F -> #467881
+#   magenta: #907AA9 -> #7E649B
+#   cyan: #D7827E -> #C3443E
+#   brightYellow: #EA9D34 -> #C77C15
+#   brightCyan: #D7827E -> #D2716C
+#   ui.textSecondary: #797593 -> #6A6683
+#   ui.accent: #907AA9 -> #785F93
+id: rose-pine-dawn
+name: Rosé Pine Dawn
+mode: light
+
+colors:
+  background: '#FAF4ED'
+  foreground: '#534E73'
+  cursor: '#9893A5'
+  cursorAccent: '#FAF4ED'
+  selectionBackground: '#DFDAD9'
+  selectionForeground: '#534E73'
+
+  black: '#575279'
+  red: '#AD546D'
+  green: '#286983'
+  yellow: '#9E6210'
+  blue: '#467881'
+  magenta: '#7E649B'
+  cyan: '#C3443E'
+  white: '#9893A5'
+
+  brightBlack: '#797593'
+  brightRed: '#B4637A'
+  brightGreen: '#286983'
+  brightYellow: '#C77C15'
+  brightBlue: '#56949F'
+  brightMagenta: '#907AA9'
+  brightCyan: '#D2716C'
+  brightWhite: '#CECACD'
+
+  orange: '#EA9D34'
+  violet: '#907AA9'
+
+ui:
+  bg: '#F2E9E1'
+  bgSecondary: '#FFFAF3'
+  surface: '#FFFAF3'
+  surfaceHover: '#F4EDE8'
+  text: '#534E73'
+  textSecondary: '#6A6683'
+  textInverted: '#FAF4ED'
+  border: '#DFDAD9'
+  accent: '#785F93'
+  accentHover: '#286983'
+  cursor: '#9893A5'

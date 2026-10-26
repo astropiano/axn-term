@@ -56,3 +56,24 @@ axn-term.{$AXN_DOMAIN:localhost}:{$SCENARIO_PORT:8092}, axn-term-gateway.{$AXN_D
 	tls {$AXN_TLS:-off}
 	reverse_proxy gateway:8080
 }
+
+# mDNS (.local) access — DHCP-proof counterpart of the raw-IP blocks:
+# <hostname>.local resolves via Bonjour on Mac/iOS even when the DHCP lease
+# changes, and the same internal CA signs the name cert (a trusted root
+# stays trusted). SNI disambiguates these from the IP sites on the same ports.
+{$AXN_LAN_NAME:-axn-term.local}:{$SCENARIO_PORT:8092} {
+	tls {$AXN_TLS:-off}
+	reverse_proxy shell:5176
+}
+
+{$AXN_LAN_NAME:-axn-term.local}:{$AXN_KC_PORT:-18093} {
+	tls {$AXN_TLS:-off}
+	reverse_proxy keycloak:8082 {
+		header_up Host {http.request.hostport}
+	}
+}
+
+{$AXN_LAN_NAME:-axn-term.local}:{$AXN_GW_PORT:-18094} {
+	tls {$AXN_TLS:-off}
+	reverse_proxy gateway:8080
+}

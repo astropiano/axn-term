@@ -362,14 +362,14 @@ function fileLetter(status: string): string {
 }
 
 const LETTER_COLOR: Record<string, string> = {
-  M: 'text-yellow-500',
-  A: 'text-emerald-500',
-  D: 'text-red-500',
-  R: 'text-blue-400',
-  C: 'text-blue-400',
-  T: 'text-yellow-500',
-  U: 'text-red-500',
-  '?': 'text-orange-500',
+  M: 'text-[var(--yellow)]',
+  A: 'text-[var(--green)]',
+  D: 'text-[var(--red)]',
+  R: 'text-[var(--blue)]',
+  C: 'text-[var(--blue)]',
+  T: 'text-[var(--yellow)]',
+  U: 'text-[var(--red)]',
+  '?': 'text-[var(--orange)]',
 };
 
 // ---------------------------------------------------------------------------
@@ -1072,7 +1072,7 @@ export function GitInspectView({
             type="button"
             data-tip={action === 'stage' ? 'Stage' : 'Unstage'}
             aria-label={action === 'stage' ? 'Stage' : 'Unstage'}
-            className="hidden h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--accent)] group-hover:flex"
+            className="hidden h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--accent)] group-hover:flex pointer-coarse:flex"
             onClick={(e) => {
               e.stopPropagation();
               if (action === 'stage') void stage([f.path]);
@@ -1130,11 +1130,11 @@ export function GitInspectView({
     <div className="flex h-full w-full flex-col bg-[var(--terminal-bg)]">
       {/* toolbar */}
       <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
-        <GitBranch className="h-3.5 w-3.5 text-cyan-500" />
+        <GitBranch className="h-3.5 w-3.5 text-[var(--cyan)]" />
         <span className="truncate font-semibold text-[11px] text-[var(--text-primary)]">
           {repoName}
         </span>
-        <span className="max-w-48 truncate font-mono text-[10px] text-cyan-500">
+        <span className="max-w-48 truncate font-mono text-[10px] text-[var(--cyan)]">
           {branch === 'HEAD' ? '(detached)' : branch}
         </span>
         {base && (
@@ -1150,7 +1150,7 @@ export function GitInspectView({
           {root}
         </span>
         {hasChanges && (
-          <span className="shrink-0 font-mono text-[9px] text-yellow-500">
+          <span className="shrink-0 font-mono text-[9px] text-[var(--yellow)]">
             {status!.staged.length + status!.unstaged.length + status!.untracked.length + status!.conflicted.length}{' '}
             changed
           </span>

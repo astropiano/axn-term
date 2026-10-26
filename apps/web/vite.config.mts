@@ -21,18 +21,22 @@ export default defineConfig(() => {
       // Host header carries the deployment domain (e.g.
       // axn-term.192.168.x.x.nip.io); vite's DNS-rebinding check 403s it.
       // ".domain" covers the service subdomains (axn-term-*, …);
-      // AXN_LAN_IP allows raw-IP access (https://<ip>:<port>).
+      // AXN_LAN_IP allows raw-IP access (https://<ip>:<port>), AXN_LAN_NAME
+      // the mDNS <host>.local name.
       allowedHosts: (() => {
         const hosts = [
           ...(process.env.AXN_DOMAIN ? [`.${process.env.AXN_DOMAIN}`] : []),
           ...(process.env.AXN_LAN_IP ? [process.env.AXN_LAN_IP] : []),
+          ...(process.env.AXN_LAN_NAME ? [process.env.AXN_LAN_NAME] : []),
+          // mDNS (<host>.local) — dev server only fronts LAN scenarios.
+          '.local',
         ];
         return hosts.length ? hosts : undefined;
       })(),
       fs: {
         allow: [
           '../..',
-          // Sibling-repo ramphastos-client sources (../ramphastos checkout).
+          // Sibling-repo ramphastos-client sources (dev/libraries mount).
           fileURLToPath(new URL('../../../ramphastos', import.meta.url)),
         ],
       },
@@ -82,15 +86,6 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        // Sibling checkout (../ramphastos, astropiano layout); containers
-        // mount the same tree at /ramphastos — the relative depth resolves.
-        // Points at the built dist entry — rebuild the client package there.
-        '@ramphastos/ramphastos-client': fileURLToPath(
-          new URL(
-            '../../../ramphastos/src/client/ramphastos-client/dist/index.js',
-            import.meta.url,
-          ),
-        ),
         // monaco-editor's exports map blocks deep `esm/` imports; resolve them
         // straight to the filesystem so monaco.main.ts can pick a trimmed
         // language set.

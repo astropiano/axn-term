@@ -64,6 +64,9 @@ export class RemoteBackend implements SessionBackend {
   private subshellExitCbs = new Set<(ptyId: string, exitCode: number | null) => void>();
   private subshells = new Set<string>();
   private parents = new Map<string, string>();
+  private remoteSpawned = new Set<string>();
+  /** This device's identity in the per-session width-claims collection. */
+  private viewerId = crypto.randomUUID();
   private streamWaiters = new Map<string, { resolve: (s: RamphastosStream) => void; reject: (e: Error) => void }[]>();
 
   private opts: RemoteBackendOptions;
@@ -243,23 +246,47 @@ export class RemoteBackend implements SessionBackend {
     // Server-authoritative sessions announce pty:* streams eagerly, so a
     // pull there would create a second, idle stream — skip it.
     if (this.session?.vmType === 'client' && this.streamWaiters.get(id)?.length === 1) {
-      this.session.openStream(`pty:${id}`, { direction: 'duplex' })
-        .then((s) => this.adoptStream(id, s))
-        .catch(() => {});
+      this.pullStream(id);
     }
     return promise;
+  }
+
+  /**
+   * Pull a pty stream from the authority. The request can race the remote
+   * spawn — the authority rejects 'pty:<id>' while its createPty is still
+   * in flight — so a transient stream_rejected is retried a few times
+   * before giving up to the waiter's timeout.
+   */
+  private pullStream(id: string, attempt = 0): void {
+    this.session?.openStream(`pty:${id}@${this.viewerId}`, { direction: 'duplex' })
+      .then((s) => this.adoptStream(id, s))
+      .catch((e) => {
+        if (attempt < 5 && this.streamWaiters.has(id) && !this.ptys.get(id)?.stream) {
+          setTimeout(() => this.pullStream(id, attempt + 1), 250);
+        } else {
+          console.error(`[remote] openStream pty:${id} failed`, e);
+        }
+      });
   }
 
   // ---- SessionBackend ----
 
   async createSession(clientId: string, opts: PtySpawnOptions): Promise<boolean> {
-    const session = await this.connect();
+    const session = await this.connect().catch((e) => {
+      console.error(`[remote] connect failed for ${clientId}`, e);
+      throw e;
+    });
     const result = await invoke(session, 'createPty', clientId, opts.cols, opts.rows,
       opts.shell ? `exec ${opts.shell}` : undefined, opts.cwd,
       clientId, undefined, undefined, 'session');
-    if (result.ok !== true) throw new Error(String(result.error ?? 'createPty failed'));
+    if (result.ok !== true) {
+      const err = new Error(String(result.error ?? 'createPty failed'));
+      console.error(`[remote] createPty ${clientId} rejected`, result);
+      throw err;
+    }
     this.ptys.set(clientId, this.ptys.get(clientId) ?? {});
     await this.waitForStream(clientId);
+    if (result.spawned === true) this.remoteSpawned.add(clientId);
     return result.spawned === true;
   }
 
@@ -278,18 +305,35 @@ export class RemoteBackend implements SessionBackend {
   private lastRows = 0;
   private viewportPaused = false;
 
+  /**
+   * Viewer released the pty from view — closing its stream lets the
+   * authority relax the geometry back to the desktop's size. Remote-spawned
+   * PTYs are skipped: closing their stream would kill them outright.
+   */
+  releasePty(clientId: string): void {
+    // Drop this device's width claim even when no stream was attached —
+    // the authority recomputes the session's effective (smallest) size.
+    void this.session?.invoke('/vm/unclaimViewport', [clientId, this.viewerId]);
+    if (this.remoteSpawned.has(clientId)) return;
+    const entry = this.ptys.get(clientId);
+    const s = entry?.stream;
+    if (!s) return;
+    delete entry!.stream;
+    s.close('hidden');
+  }
+
   resize(clientId: string, cols: number, rows: number): void {
     this.lastCols = cols;
     this.lastRows = rows;
     if (this.viewportPaused) return;
-    void this.session?.invoke('/vm/resizePty', [clientId, cols, rows]);
+    void this.session?.invoke('/vm/resizePty', [clientId, cols, rows, this.viewerId]);
   }
 
   setViewportPaused(paused: boolean): void {
     this.viewportPaused = paused;
     void this.session?.invoke(
       paused ? '/vm/pauseViewport' : '/vm/resumeViewport',
-      paused ? [] : [this.lastCols || 80, this.lastRows || 24],
+      paused ? [this.viewerId] : [this.viewerId, this.lastCols || 80, this.lastRows || 24],
     );
   }
 
@@ -314,22 +358,40 @@ export class RemoteBackend implements SessionBackend {
     // its scrollback before live frames (streams carry no history).
     if (!this.tailsFetched.has(clientId)) {
       this.tailsFetched.add(clientId);
-      void this.invoke('ptyTail', clientId)
-        .then((r) => {
-          const b64 = r.data as string | undefined;
-          if (!b64) return;
-          const bin = atob(b64);
-          const bytes = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-          for (const l of this.outputListeners.get(clientId) ?? []) l(bytes);
-        })
-        .catch(() => this.tailsFetched.delete(clientId));
+      void this.fetchTail(clientId).catch((e) => {
+        console.error(`[remote] ptyTail ${clientId} failed`, e);
+        this.tailsFetched.delete(clientId);
+      });
     }
     // Attaching to a pre-existing PTY on an authority session: no stream
     // was ever announced — pull it so the listener actually gets data.
-    if (this.session?.vmType === 'client' && !this.ptys.get(clientId)?.stream)
-      void this.waitForStream(clientId).catch(() => {});
+    if (!this.ptys.get(clientId)?.stream)
+      void this.ensureStream(clientId).catch(() => {});
     return () => set.delete(cb);
+  }
+
+  /**
+   * Wait for the connection, then invoke ptyTail. Listeners register while
+   * the hub session is still connecting — an immediate invoke would reject
+   * with 'not connected' and the replay would never happen (black terminal).
+   */
+  private async fetchTail(clientId: string): Promise<void> {
+    const session = await this.connect();
+    const r = await invoke(session, 'ptyTail', clientId);
+    const b64 = r.data as string | undefined;
+    if (!b64) return;
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    for (const l of this.outputListeners.get(clientId) ?? []) l(bytes);
+  }
+
+  /** Pull the pty stream once connected (authority sessions are
+   * demand-driven; server-authoritative sessions announce eagerly). */
+  private async ensureStream(clientId: string): Promise<void> {
+    const session = await this.connect();
+    if (session.vmType === 'client' && !this.ptys.get(clientId)?.stream)
+      await this.waitForStream(clientId);
   }
 
   /** Notified when a session's stream closes (PTY exited or closed). */
@@ -453,9 +515,14 @@ export class RemoteBackend implements SessionBackend {
         // kind=subshell; sessionId = owning session (resolve through the
         // parents chain in case the parent is itself a promoted subshell)
         this.sessionIdOf(opts.parentId), undefined, undefined, 'subshell');
-      if (result.ok !== true) throw new Error(String(result.error ?? 'createPty failed'));
+      if (result.ok !== true) {
+        const err = new Error(String(result.error ?? 'createPty failed'));
+        console.error(`[remote] createPty ${ptyId} rejected`, result);
+        throw err;
+      }
       this.ptys.set(ptyId, this.ptys.get(ptyId) ?? {});
       await this.waitForStream(ptyId);
+      if (result.spawned === true) this.remoteSpawned.add(ptyId);
       return result.spawned === true;
     } catch (e) {
       this.subshells.delete(ptyId);
@@ -533,5 +600,6 @@ async function invoke(
 }
 
 function ptyIdOf(streamName: string): string | undefined {
-  return streamName.startsWith('pty:') ? streamName.slice(4) : undefined;
+  const ref = streamName.startsWith('pty:') ? streamName.slice(4) : undefined;
+  return ref?.split('@')[0];
 }

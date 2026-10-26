@@ -7,7 +7,7 @@
 //
 // Needs a session host running (default http://localhost:7682), e.g.
 //   SESSION_HOST_PORT=7682 dotnet run --project apps/session-host -f net10.0
-// 'ramphastos-client' resolves through the node_modules symlink created by
+// '@ramphastos/ramphastos-client' resolves through the node_modules symlink created by
 // remote-backend-e2e.mjs (recreated here if absent).
 
 import { existsSync, mkdirSync, symlinkSync } from "node:fs";
@@ -15,8 +15,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const link = path.join(repoRoot, "node_modules", "@astropiano", "ramphastos-client");
-const target = path.resolve(repoRoot, "../ramphastos/src/client/ramphastos-client");
+const link = path.join(repoRoot, "node_modules", "@ramphastos", "ramphastos-client");
+const target = path.resolve(repoRoot, "../../libraries/ramphastos/src/client/ramphastos-client");
 if (!existsSync(link)) {
   mkdirSync(path.dirname(link), { recursive: true });
   symlinkSync(target, link, "junction");
@@ -150,6 +150,25 @@ check("watch fires on upstream patch", watched > 0);
 unwatch();
 const winState2 = await store.load("win-1");
 check("mirror picks up new session", winState2.sessions.some((s) => s.id === "local-2"));
+
+// ---- mirror ownership: a viewer must never kill a desktop PTY ----
+// Attach a stream to the mirrored pty, then drop it — desktop keeps it.
+controller.onOutput("local-1", () => {});
+await sleep(400);
+const localStream = controller.ptys.get("local-1")?.stream;
+check("viewer stream attached to mirrored pty", Boolean(localStream));
+localStream?.close("reload");
+await sleep(400);
+check("stream detach does not kill mirrored pty", !fake.closedWith.includes("local-1"),
+  JSON.stringify(fake.closedWith));
+
+// A remote closePty detaches a mirrored pty too — it must not reach the
+// backend (the desktop owns that session's lifecycle).
+controller.close("local-1");
+await sleep(400);
+check("remote closePty does not kill mirrored pty", !fake.closedWith.includes("local-1"),
+  JSON.stringify(fake.closedWith));
+check("replica drops remotely-closed mirrored pty", !vmv.ptys.some((p) => p.id === "local-1"));
 
 // ---- close path ----
 controller.close("rpty-1");

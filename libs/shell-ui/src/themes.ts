@@ -68,6 +68,8 @@ export interface AppSettings {
   panelFontFamily?: string;
   /** Panel font size in px — scales the panel relative to its 12px base. */
   panelFontSize?: number;
+  /** Overall UI chrome scale in percent (100 = native). Excludes terminals. */
+  uiZoom?: number;
   /** Render `session.summary` (set via `axn-session-summary`) in the panel. */
   sessionSummaries?: boolean;
   /**
@@ -76,19 +78,37 @@ export interface AppSettings {
    */
   terminalRenderer?: 'auto' | 'webgl' | 'canvas' | 'dom';
   /** UI language — one of the locales bundled in libs/shell-ui (`en`, `ko`). */
-  language?: 'en' | 'ko';
+  language?: 'system' | 'en' | 'ko' | 'de' | 'fr' | 'it' | 'nl' | 'zh' | 'ja';
   /**
    * Extra directories (absolute or `~/…`) the desktop file views — axn-edit,
    * axn-browse, axn-preview — may read and write, on top of `$HOME`. Applied
    * live when added; a removed root stays allowed until the app restarts.
    */
   fileAccessRoots?: string[];
+  /**
+   * Remote authority — publish this window's terminals to a Ramphastos
+   * /remote hub so remote viewers (e.g. a phone browser) can attach and
+   * drive them. Applied on app start.
+   */
+  remoteAuthorityUrl?: string;
+  /** Session id under which terminals are mirrored on the hub. */
+  remoteAuthoritySession?: string;
+  /** Optional user JWT for identity-bound hubs (anonymous dev hubs: unset). */
+  remoteAuthorityToken?: string;
+  /**
+   * OIDC issuer for remote sign-in, e.g.
+   * https://<host>:<port>/realms/axn-term — signs the desktop in so the hub
+   * binds mirrored sessions to the account (multi-user isolation).
+   */
+  remoteAuthIssuer?: string;
+  /** OIDC public client id used for the device-flow sign-in. */
+  remoteAuthClientId?: string;
 }
 
 export const defaultSettings: AppSettings = {
-  theme: 'auto',
-  lightTheme: 'solarized-light',
-  darkTheme: 'solarized-dark',
+  theme: 'dark',
+  lightTheme: 'axn-light',
+  darkTheme: 'axn-dark',
   defaultShell: '',
   devinTaskParserEnabled: true,
   sessionSummaries: true,
@@ -126,33 +146,34 @@ function normalizeTheme(raw: unknown): ThemeDefinition | null {
   };
 }
 
+// Used only if the bundled theme files fail to load: Axn Dark's terminal colours.
 const fallbackTheme: ThemeDefinition = {
-  id: 'solarized-dark',
-  name: 'Solarized Dark',
+  id: 'axn-dark',
+  name: 'Axn Dark',
   mode: 'dark',
   colors: {
-    background: '#002b36',
-    foreground: '#839496',
-    cursor: '#93a1a1',
-    cursorAccent: '#002b36',
-    selectionBackground: '#073642',
-    selectionForeground: '#839496',
-    black: '#073642',
-    red: '#dc322f',
-    green: '#859900',
-    yellow: '#b58900',
-    blue: '#268bd2',
-    magenta: '#d33682',
-    cyan: '#2aa198',
-    white: '#eee8d5',
-    brightBlack: '#002b36',
-    brightRed: '#cb4b16',
-    brightGreen: '#586e75',
-    brightYellow: '#657b83',
-    brightBlue: '#839496',
-    brightMagenta: '#6c71c4',
-    brightCyan: '#93a1a1',
-    brightWhite: '#fdf6e3',
+    background: '#141110',
+    foreground: '#E9E5E2',
+    cursor: '#F0A3AA',
+    cursorAccent: '#141110',
+    selectionBackground: '#3A3330',
+    selectionForeground: '#E9E5E2',
+    black: '#2A2523',
+    red: '#F45B69',
+    green: '#3DBB72',
+    yellow: '#E3B341',
+    blue: '#4F9FD0',
+    magenta: '#C08FD8',
+    cyan: '#59C3C3',
+    white: '#CFC9C5',
+    brightBlack: '#877D79',
+    brightRed: '#F0A3AA',
+    brightGreen: '#6FD396',
+    brightYellow: '#F0C869',
+    brightBlue: '#82C6DC',
+    brightMagenta: '#D8B4F0',
+    brightCyan: '#A2D7D7',
+    brightWhite: '#F7F4F2',
   },
 };
 
@@ -173,8 +194,8 @@ export const themeDefinitions: ThemeDefinition[] = Object.entries(themeFiles)
 
 export const themeMap = new Map(themeDefinitions.map((t) => [t.id, t]));
 
-export const defaultAutoDarkThemeId = 'solarized-dark';
-export const defaultAutoLightThemeId = 'solarized-light';
+export const defaultAutoDarkThemeId = 'axn-dark';
+export const defaultAutoLightThemeId = 'axn-light';
 export const defaultThemeId = defaultAutoDarkThemeId;
 
 export function getTheme(id: string | undefined): ThemeDefinition {
@@ -190,10 +211,11 @@ export function getEffectiveMode(mode: ThemeMode): EffectiveTheme {
 
 export function resolveTheme(settings: AppSettings): ThemeDefinition {
   const mode = getEffectiveMode(settings.theme);
-  const id = mode === 'dark'
-    ? (settings.darkTheme ?? defaultAutoDarkThemeId)
-    : (settings.lightTheme ?? defaultAutoLightThemeId);
-  return getTheme(id);
+  const fallbackId = mode === 'dark' ? defaultAutoDarkThemeId : defaultAutoLightThemeId;
+  const id = mode === 'dark' ? settings.darkTheme : settings.lightTheme;
+  // A stored id whose theme no longer ships (renamed or removed)
+  // falls back to the default of the same mode, not to a dark theme.
+  return getTheme(id && themeMap.has(id) ? id : fallbackId);
 }
 
 export const defaultShellFontFamily =
@@ -204,10 +226,13 @@ export const defaultShellFontSize = 14;
 export function resolveShellFont(settings: AppSettings): { family: string; size: number } {
   return {
     family: settings.shellFontFamily?.trim() || defaultShellFontFamily,
-    size:
-      settings.shellFontSize && settings.shellFontSize > 0
+    // xterm fontSize wants integer px.
+    size: Math.round(
+      (settings.shellFontSize && settings.shellFontSize > 0
         ? settings.shellFontSize
-        : defaultShellFontSize,
+        : defaultShellFontSize) *
+        (settings.uiZoom && settings.uiZoom > 0 ? settings.uiZoom / 100 : 1),
+    ),
   };
 }
 

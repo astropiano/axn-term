@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { msg } from '@lingui/core/macro';
 import type { MessageDescriptor } from '@lingui/core';
 import { Trans, useLingui } from '@lingui/react/macro';
@@ -10,6 +10,7 @@ import { usePluginSettings } from './PluginSettingsProvider';
 import type { AppSettings, ThemeMode } from '../themes';
 import { themeDefinitions } from '../themes';
 import { useSessionBackend, useShellPlatform } from '../services';
+import { availableLocales, localeNames } from '../i18n';
 import { getSessionViewPlugins, isPluginEnabled, pluginDependencies } from './session-plugins';
 import type { PluginSettingField, SessionViewPlugin } from './session-plugins';
 import { isSandboxedPlugin } from './session-plugins/sandbox';
@@ -49,6 +50,7 @@ function ThemeToggle() {
 interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
+  embedded?: boolean;
 }
 
 const modeMessages: Record<ThemeMode, MessageDescriptor> = {
@@ -95,36 +97,37 @@ function ThemeSelect({
   );
 }
 
-type SettingsTab = 'general' | 'plugins';
+type SettingsTab = 'general' | 'remote' | 'plugins';
 
 const tabs: { id: SettingsTab; label: MessageDescriptor }[] = [
   { id: 'general', label: msg`General` },
+  { id: 'remote', label: msg`Remote` },
   { id: 'plugins', label: msg`Plugins` },
 ];
 
-export function SettingsModal({ open, onClose }: SettingsModalProps) {
+export function SettingsModal({ open, onClose, embedded }: SettingsModalProps) {
   const { t } = useLingui();
   const [tab, setTab] = useState<SettingsTab>('general');
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || embedded) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, embedded]);
 
   if (!open) return null;
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={onClose}
-    >
+  const panel = (
       <div
-        className="flex h-[480px] w-[620px] max-w-[92vw] flex-col rounded border border-[var(--border)] bg-[var(--surface)] shadow-lg"
-        onClick={(e) => e.stopPropagation()}
+        className={
+          embedded
+            ? 'flex h-full w-full flex-col bg-[var(--surface)]'
+            : 'flex h-[480px] w-[620px] max-w-[92vw] max-h-[calc(100dvh-2rem)] flex-col rounded border border-[var(--border)] bg-[var(--surface)] shadow-lg'
+        }
+        onClick={embedded ? undefined : (e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 pt-3">
           <div className="flex items-end gap-3">
@@ -148,19 +151,30 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               ))}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="pb-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-          >
-            esc
-          </button>
+          {!embedded && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="pb-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            >
+              esc
+            </button>
+          )}
         </div>
 
         <div className="flex min-h-0 flex-1">
-          {tab === 'general' ? <GeneralTab /> : <PluginsTab />}
+          {tab === 'general' ? <GeneralTab /> : tab === 'remote' ? <RemoteTab /> : <PluginsTab />}
         </div>
       </div>
+  );
+
+  if (embedded) return panel;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
+      {panel}
     </div>
   );
 }
@@ -177,6 +191,7 @@ function FontSizeInput({
   fallback,
   min,
   max,
+  stepSize = 1,
   onChange,
 }: {
   value: number | undefined;
@@ -184,11 +199,13 @@ function FontSizeInput({
   fallback: number;
   min: number;
   max: number;
+  /** Button step (1 for px sizes, 10 for uiZoom %). */
+  stepSize?: number;
   onChange: (next: number | undefined) => void;
 }) {
   const { t } = useLingui();
   const step = (delta: number) =>
-    onChange(Math.min(max, Math.max(min, (value ?? fallback) + delta)));
+    onChange(Math.min(max, Math.max(min, (value ?? fallback) + delta * stepSize)));
   const buttonClass =
     'flex h-6 w-5 shrink-0 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40';
   return (
@@ -206,10 +223,14 @@ function FontSizeInput({
         type="number"
         min={min}
         max={max}
-        step={1}
+        step={stepSize}
         value={value ?? ''}
         onChange={(e) =>
-          onChange(e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))
+          onChange(
+            e.currentTarget.value === ''
+              ? undefined
+              : Math.min(max, Math.max(min, Number(e.currentTarget.value))),
+          )
         }
         placeholder={String(fallback)}
         className="w-10 rounded border border-[var(--border)] bg-[var(--bg)] px-1 py-1 text-center text-xs text-[var(--text-primary)] outline-none [appearance:textfield] focus:border-[var(--accent)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
@@ -339,14 +360,18 @@ function GeneralTab() {
           <Trans>Language</Trans>
         </label>
         <select
-          value={settings.language ?? 'en'}
+          value={settings.language ?? 'system'}
           onChange={(e) =>
             updateSettings({ language: e.currentTarget.value as AppSettings['language'] })
           }
           className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
         >
-          <option value="en">English</option>
-          <option value="ko">한국어</option>
+          <option value="system">{t`System`}</option>
+          {availableLocales.map((loc) => (
+            <option key={loc} value={loc}>
+              {localeNames[loc]}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -382,12 +407,10 @@ function GeneralTab() {
       <div className="mb-4">
         <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Shell font</Trans></label>
         <div className="flex gap-2">
-          <input
-            type="text"
+          <FontFamilyInput
             value={settings.shellFontFamily ?? ''}
-            onChange={(e) => updateSettings({ shellFontFamily: e.currentTarget.value })}
-            placeholder='"Monaspace Neon Var", Fira Code, …'
-            className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            onCommit={(v) => updateSettings({ shellFontFamily: v })}
+            placeholder="Monaspace Neon, Fira Code, …"
           />
           <FontSizeInput
             value={settings.shellFontSize}
@@ -405,12 +428,10 @@ function GeneralTab() {
       <div className="mb-4">
         <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Panel font</Trans></label>
         <div className="flex gap-2">
-          <input
-            type="text"
+          <FontFamilyInput
             value={settings.panelFontFamily ?? ''}
-            onChange={(e) => updateSettings({ panelFontFamily: e.currentTarget.value })}
-            placeholder="Inter, system-ui, …"
-            className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            onCommit={(v) => updateSettings({ panelFontFamily: v })}
+            placeholder="Monaspace Neon, Inter, …"
           />
           <FontSizeInput
             value={settings.panelFontSize}
@@ -422,6 +443,21 @@ function GeneralTab() {
         </div>
         <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
           <Trans>Font for the session/workspace panel. Size scales it relative to the 12px default.</Trans>
+        </p>
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>UI zoom</Trans></label>
+        <FontSizeInput
+          value={settings.uiZoom}
+          fallback={100}
+          min={50}
+          max={200}
+          stepSize={10}
+          onChange={(uiZoom) => updateSettings({ uiZoom })}
+        />
+        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+          <Trans>Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size.</Trans>
         </p>
       </div>
 
@@ -518,6 +554,153 @@ function GeneralTab() {
           {platform.configStore
             ? t`Stored in ~/.axn-term/config.yaml`
             : t`Stored in browser localStorage`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const SIGNED_OUT = { state: 'signedOut' as const };
+
+function RemoteTab() {
+  const { t } = useLingui();
+  const { settings, updateSettings } = useSettings();
+  const platform = useShellPlatform();
+  const remoteAuth = platform.remoteAuth;
+  const auth = useSyncExternalStore(
+    useCallback((cb: () => void) => remoteAuth?.subscribe(cb) ?? (() => {}), [remoteAuth]),
+    // useSyncExternalStore needs a STABLE snapshot — a fresh object literal
+    // per get() re-renders forever.
+    useCallback(() => remoteAuth?.get() ?? SIGNED_OUT, [remoteAuth]),
+  );
+  const inputCls =
+    'min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]';
+  const rowCls = 'flex items-center gap-2';
+  const labelCls = 'w-24 shrink-0 text-xs text-[var(--text-secondary)]';
+  const btnCls =
+    'rounded border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--text-primary)] hover:border-[var(--accent)] disabled:opacity-50';
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div className="mb-4">
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Account</Trans></label>
+        <div className="flex flex-col gap-1.5">
+          <div className={rowCls}>
+            <span className={labelCls}><Trans>Server URL</Trans></span>
+            <input
+              type="text"
+              value={settings.remoteAuthIssuer ?? ''}
+              onChange={(e) =>
+                updateSettings({ remoteAuthIssuer: e.currentTarget.value || undefined })
+              }
+              placeholder="https://<host>:<port>/realms/axn-term"
+              aria-label={t`Server URL`}
+              className={inputCls}
+            />
+          </div>
+          <div className={rowCls}>
+            <span className={labelCls}><Trans>OIDC client</Trans></span>
+            <input
+              type="text"
+              value={settings.remoteAuthClientId ?? ''}
+              onChange={(e) =>
+                updateSettings({ remoteAuthClientId: e.currentTarget.value || undefined })
+              }
+              placeholder={t`axn-term-desktop (default)`}
+              aria-label={t`OIDC client`}
+              className={inputCls}
+            />
+          </div>
+          {remoteAuth ? (
+            <div className="mt-1">
+              {auth.state === 'signedIn' ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    <Trans>Signed in as {auth.user ?? ''}</Trans>
+                  </span>
+                  <button type="button" className={btnCls} onClick={() => void remoteAuth.signOut()}>
+                    <Trans>Sign out</Trans>
+                  </button>
+                </div>
+              ) : auth.state === 'pending' ? (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    <Trans>Enter code {auth.userCode ?? ''} in the browser to finish sign-in.</Trans>
+                  </span>
+                  {auth.verificationUri ? (
+                    <span className="select-all break-all text-[10px] text-[var(--text-secondary)]">
+                      {auth.verificationUri}
+                    </span>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className={btnCls}
+                    disabled={!settings.remoteAuthIssuer}
+                    onClick={() => void remoteAuth.signIn()}
+                  >
+                    <Trans>Sign in…</Trans>
+                  </button>
+                  {auth.state === 'error' ? (
+                    <span className="text-xs text-[var(--error,#e05)]">{auth.error}</span>
+                  ) : settings.remoteAuthIssuer ? (
+                    <span className="text-xs text-[var(--text-secondary)]"><Trans>Not signed in</Trans></span>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Remote control</Trans></label>
+        <div className="flex flex-col gap-1.5">
+          <div className={rowCls}>
+            <span className={labelCls}><Trans>Hub URL</Trans></span>
+            <input
+              type="text"
+              value={settings.remoteAuthorityUrl ?? ''}
+              onChange={(e) =>
+                updateSettings({ remoteAuthorityUrl: e.currentTarget.value || undefined })
+              }
+              placeholder="ws://<gateway>:<port>/remote"
+              aria-label={t`Hub URL`}
+              className={inputCls}
+            />
+          </div>
+          <div className={rowCls}>
+            <span className={labelCls}><Trans>Session name</Trans></span>
+            <input
+              type="text"
+              value={settings.remoteAuthoritySession ?? ''}
+              onChange={(e) =>
+                updateSettings({ remoteAuthoritySession: e.currentTarget.value || undefined })
+              }
+              placeholder={t`optional`}
+              className={inputCls}
+            />
+          </div>
+          <div className={rowCls}>
+            <span className={labelCls}><Trans>User token</Trans></span>
+            <input
+              type="text"
+              value={settings.remoteAuthorityToken ?? ''}
+              onChange={(e) =>
+                updateSettings({ remoteAuthorityToken: e.currentTarget.value || undefined })
+              }
+              placeholder={t`optional`}
+              className={inputCls}
+            />
+          </div>
+        </div>
+        {settings.remoteAuthorityUrl && platform.remoteAuthorityStatus ? (
+          <RemoteAuthorityStatusLine status={platform.remoteAuthorityStatus} />
+        ) : null}
+        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+          <Trans>Publish this window's terminals to a /remote hub — other devices attach via the web app with ?remote=&lt;session&gt;.</Trans>
         </p>
       </div>
     </div>
@@ -889,4 +1072,144 @@ function SessionIconEditor({
       )}
     </div>
   );
+}
+
+/**
+ * Font existence check: draw the probe string in "family, monospace" and
+ * compare widths with plain monospace — a missing font falls back to the
+ * same glyph run and measures identically. Reliable for system fonts where
+ * document.fonts.check() reports false positives.
+ */
+let fontProbeCtx: CanvasRenderingContext2D | null | undefined;
+function fontFamilyExists(family: string): boolean {
+  const quoted = family.trim().replace(/"/g, '');
+  if (!quoted) return true;
+  try {
+    if (document.fonts?.check?.(`12px "${quoted}"`)) return true;
+  } catch {
+    /* fall through to canvas */
+  }
+  if (fontProbeCtx === undefined) {
+    fontProbeCtx = document.createElement('canvas').getContext('2d');
+  }
+  if (!fontProbeCtx) return true;
+  const probe = 'mmmmmmmmmmWWW';
+  fontProbeCtx.font = '72px monospace';
+  const base = fontProbeCtx.measureText(probe).width;
+  fontProbeCtx.font = `72px "${quoted}", monospace`;
+  return Math.abs(fontProbeCtx.measureText(probe).width - base) > 0.01;
+}
+
+/**
+ * Font family field: commits only a name that resolves to an installed (or
+ * bundled) font — while typing, invalid names show a hint and keep the last
+ * valid setting. When the platform can enumerate fonts (desktop font dirs,
+ * Chromium queryLocalFonts) it also offers datalist suggestions.
+ */
+function FontFamilyInput({
+  value,
+  onCommit,
+  placeholder,
+}: {
+  value: string;
+  onCommit: (family: string) => void;
+  placeholder: string;
+}) {
+  const platform = useShellPlatform();
+  const [text, setText] = useState(value);
+  const [missing, setMissing] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const listId = useRef(`axn-fonts-${Math.random().toString(36).slice(2, 8)}`);
+
+  // External value changes (config file edits, other tabs) update the field.
+  useEffect(() => setText(value), [value]);
+
+  const evaluate = (raw: string) => {
+    const family = raw.trim();
+    if (!family) {
+      setMissing(false);
+      onCommit('');
+      return;
+    }
+    if (fontFamilyExists(family)) {
+      setMissing(false);
+      onCommit(family);
+    } else {
+      // Not installed — keep showing what the user typed but do NOT write it
+      // into settings (the renderer keeps the last valid font).
+      setMissing(true);
+    }
+  };
+
+  const loadSuggestions = () => {
+    if (suggestions.length || !platform.listFonts) return;
+    platform
+      .listFonts()
+      .then(setSuggestions)
+      .catch(() => {});
+  };
+
+  return (
+    <div className="min-w-0 flex-1">
+      <input
+        type="text"
+        list={listId.current}
+        value={text}
+        onFocus={loadSuggestions}
+        onChange={(e) => {
+          const v = e.currentTarget.value;
+          setText(v);
+          clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => evaluate(v), 400);
+        }}
+        onBlur={(e) => {
+          clearTimeout(debounceRef.current);
+          evaluate(e.currentTarget.value);
+        }}
+        placeholder={placeholder}
+        className={`w-full rounded border bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)] ${
+          missing ? 'border-[var(--orange)]' : 'border-[var(--border)]'
+        }`}
+      />
+      <datalist id={listId.current}>
+        {suggestions.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+      {missing && (
+        <p className="mt-0.5 text-[10px] text-[var(--orange)]">
+          <Trans>Font not installed — keeping the previous font.</Trans>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RemoteAuthorityStatusLine({
+  status,
+}: {
+  status: NonNullable<ReturnType<typeof useShellPlatform>['remoteAuthorityStatus']>;
+}) {
+  const { t } = useLingui();
+  // subscribe/get are object methods — passing them unbound leaves `this`
+  // undefined inside the store (this._state), which crashed the modal.
+  const subscribe = useCallback((cb: () => void) => status.subscribe(cb), [status]);
+  const get = useCallback(() => status.get(), [status]);
+  const s = useSyncExternalStore(subscribe, get);
+  const color =
+    s.state === 'connected'
+      ? 'text-[var(--green)]'
+      : s.state === 'failed'
+        ? 'text-[var(--error,#e05)]'
+        : 'text-[var(--text-secondary)]';
+  const label =
+    s.state === 'connected'
+      ? t`Publishing — connected`
+      : s.state === 'connecting'
+        ? t`Connecting…`
+        : s.state === 'failed'
+          ? t`Failed: ${s.error ?? ''}`
+          : t`Not publishing`;
+  return <p className={`mt-1 text-[10px] ${color}`}>{label}</p>;
 }

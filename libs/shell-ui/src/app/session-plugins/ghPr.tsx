@@ -11,6 +11,15 @@ import {
 } from 'lucide-react';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
+import { shellQuote } from '../../shellQuote';
+import {
+  classifyCliError,
+  forgeCliCommand,
+  forgeOfRemote,
+  forgeRailMode,
+  remoteOwner,
+  type CliFailure,
+} from './forge';
 import {
   mergeMine,
   mrNeedsAction,
@@ -99,7 +108,7 @@ const sessionTimers = new Map<string, number>();
 const sessionLastFetch = new Map<string, number>();
 const sessionLastKey = new Map<string, string>();
 
-interface RawPrListItem {
+export interface RawPrListItem {
   number?: number;
   title?: string;
   isDraft?: boolean;
@@ -108,6 +117,57 @@ interface RawPrListItem {
   mergeStateStatus?: string;
   reviewDecision?: string;
   statusCheckRollup?: unknown;
+  isCrossRepository?: boolean;
+  headRepositoryOwner?: { login?: string } | null;
+}
+
+const PR_LIST_FIELDS =
+  'number,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,isCrossRepository,headRepositoryOwner';
+
+/** `gh pr list` for the PRs whose head is `branch` (branch single-quoted: git allows `$(…)` in names). */
+export function prListCommand(branch: string): string {
+  return forgeCliCommand('gh', `pr list --head ${shellQuote(branch)} --json ${PR_LIST_FIELDS} -L 10`);
+}
+
+/**
+ * `gh pr list --head <branch>` matches the branch *name* in any fork, so a
+ * session on `main` of a popular repo would pick up strangers' fork PRs
+ * whose branch is also called `main`. Keep same-repo PRs, and fork PRs only
+ * when the head fork belongs to one of `owners` (the owners of the remotes
+ * this checkout pushes to). Owners compare case-insensitively.
+ */
+export function ownPrs(list: RawPrListItem[], owners: Iterable<string>): RawPrListItem[] {
+  const allowed = new Set([...owners].map((o) => o.toLowerCase()));
+  return list.filter(
+    (item) =>
+      !item.isCrossRepository ||
+      allowed.has((item.headRepositoryOwner?.login ?? '').toLowerCase()),
+  );
+}
+
+/**
+ * Owners of the remotes the session's branch can be pushed to: origin
+ * (`repo.remote`) plus the branch's own tracking/push remote (a fork remote
+ * in a triangular workflow). Only resolved when a fork PR needs checking.
+ */
+async function pushOwners(
+  ctx: SessionViewContext & PluginApi,
+  root: string,
+  branch: string,
+  origin: string | undefined,
+): Promise<string[]> {
+  const owners = [remoteOwner(origin)];
+  const b = shellQuote(`branch.${branch}`);
+  try {
+    const url = await ctx.exec(
+      `r=$(git config --get ${b}.pushRemote || git config --get remote.pushDefault || git config --get ${b}.remote) && git remote get-url "$r"`,
+      root,
+    );
+    owners.push(remoteOwner(url));
+  } catch {
+    // no tracking remote — origin only
+  }
+  return owners.filter((o): o is string => !!o);
 }
 
 interface RawThreadsResponse {
@@ -117,6 +177,27 @@ interface RawThreadsResponse {
       { reviewThreads?: { nodes?: { isResolved?: boolean }[] } } | null
     >;
   };
+}
+
+/**
+ * The batched review-threads query for `numbers`. The query is single-quoted:
+ * it is full of GraphQL `$variables`, which `sh` would expand (to nothing)
+ * inside double quotes.
+ */
+export function threadsCommand(numbers: number[]): string {
+  const vars = numbers.map((_, i) => `$n${i}: Int!`).join(', ');
+  const body = numbers
+    .map(
+      (_, i) =>
+        `p${i}: pullRequest(number: $n${i}) { reviewThreads(first: 100) { nodes { isResolved } } }`,
+    )
+    .join(' ');
+  const varArgs = numbers.map((n, i) => `-F n${i}=${Math.trunc(n)}`).join(' ');
+  const query = `query($owner: String!, $name: String!, ${vars}) { repository(owner: $owner, name: $name) { ${body} } }`;
+  return forgeCliCommand(
+    'gh',
+    `api graphql -F 'owner={owner}' -F 'name={repo}' ${varArgs} -f query=${shellQuote(query)}`,
+  );
 }
 
 /**
@@ -133,19 +214,7 @@ async function fetchThreadsResolved(
   const resolved = new Map<number, boolean>();
   if (numbers.length === 0) return resolved;
   try {
-    const vars = numbers.map((_, i) => `$n${i}: Int!`).join(', ');
-    const body = numbers
-      .map(
-        (_, i) =>
-          `p${i}: pullRequest(number: $n${i}) { reviewThreads(first: 100) { nodes { isResolved } } }`,
-      )
-      .join(' ');
-    const varArgs = numbers.map((n, i) => `-F n${i}=${n}`).join(' ');
-    const query = `query($owner: String!, $name: String!, ${vars}) { repository(owner: $owner, name: $name) { ${body} } }`;
-    const out = await ctx.exec(
-      `gh api graphql -F 'owner={owner}' -F 'name={repo}' ${varArgs} -f query=${JSON.stringify(query)}`,
-      root,
-    );
+    const out = await ctx.exec(threadsCommand(numbers), root);
     const repo = (JSON.parse(out) as RawThreadsResponse).data?.repository ?? {};
     numbers.forEach((n, i) => {
       const nodes = repo[`p${i}`]?.reviewThreads?.nodes;
@@ -163,7 +232,9 @@ async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
   const branch = session.repo?.branch;
   const had =
     (((ctx.pluginState as { prs?: SessionPr[] } | undefined)?.prs?.length) ?? 0) > 0;
-  if (!root || !branch) {
+  const hostname = (ctx.pluginSettings as { hostname?: unknown } | undefined)?.hostname;
+  // A repo on GitLab is glab-mr's — don't spawn gh for it on every refresh.
+  if (!root || !branch || forgeOfRemote(session.repo?.remote, { github: hostname }) === 'gitlab') {
     if (had) ctx.updatePluginState({ prs: [] });
     return;
   }
@@ -173,16 +244,16 @@ async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
 
   let list: RawPrListItem[];
   try {
-    const out = await ctx.exec(
-      `gh pr list --head ${JSON.stringify(branch)} --json number,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup -L 10`,
-      root,
-    );
+    const out = await ctx.exec(prListCommand(branch), root);
     const parsed = JSON.parse(out || '[]') as unknown;
     list = Array.isArray(parsed) ? (parsed as RawPrListItem[]) : [];
   } catch {
     // gh missing, not authenticated, or the repo is not on GitHub — leave
     // the previous state untouched.
     return;
+  }
+  if (list.some((item) => item.isCrossRepository)) {
+    list = ownPrs(list, await pushOwners(ctx, root, branch, session.repo?.remote));
   }
 
   // Review threads come from one batched graphql call (list/view JSON
@@ -241,7 +312,11 @@ function scheduleSessionRefresh(
 // PR overview — `gh api graphql` search for assigned/authored/review PRs
 // ---------------------------------------------------------------------------
 
-const PR_FRAGMENT = `... on PullRequest { number title url isDraft mergeable headRefName baseRefName updatedAt reviewDecision author { login } assignees(first: 20) { nodes { login } } reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } } repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } reviewThreads(first: 100) { nodes { isResolved comments(first: 50) { nodes { author { login } } } } } reviews(last: 30, states: APPROVED) { nodes { author { login } } } }`;
+// Sized for GitHub's 500,000-node query limit (3 searches × 40 PRs × 50
+// threads × 20 comments ≈ 120k nodes; threads(100) × comments(50) was 620k
+// and failed every refresh). `comments(last:)`: mrWaitingForMe looks at the
+// newest note of a thread.
+const PR_FRAGMENT = `... on PullRequest { number title url isDraft mergeable headRefName baseRefName updatedAt reviewDecision author { login } assignees(first: 20) { nodes { login } } reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } } repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } reviewThreads(first: 50) { nodes { isResolved comments(last: 20) { nodes { author { login } } } } } reviews(last: 30, states: APPROVED) { nodes { author { login } } } }`;
 
 const PR_OVERVIEW_QUERY = `query {
   viewer { login }
@@ -253,6 +328,8 @@ const PR_OVERVIEW_QUERY = `query {
 export interface PrOverview {
   status: 'idle' | 'loading' | 'ready' | 'error';
   error?: string;
+  /** Why the last refresh failed; kept through `loading` so the rail doesn't flicker. */
+  failure?: CliFailure;
   username?: string;
   /** Assigned to me, or authored by me with no assignee yet. */
   mine: GhPrItem[];
@@ -346,24 +423,34 @@ export function normalizePr(raw: RawGqlPr): GhPrItem {
 
 let refreshInFlight: Promise<void> | null = null;
 
+/** The app-wide overview command (`--hostname` for GHES). */
+export function overviewCommand(hostname?: unknown): string {
+  const host =
+    typeof hostname === 'string' && hostname.trim() ? ` --hostname ${shellQuote(hostname.trim())}` : '';
+  // One line, single-quoted: no literal newlines or shell expansion inside.
+  const query = PR_OVERVIEW_QUERY.replace(/\s+/g, ' ');
+  return forgeCliCommand('gh', `api graphql${host} -f query=${shellQuote(query)}`);
+}
+
+/** The current overview snapshot (outside React). */
+export function currentPrOverview(): PrOverview {
+  return overview;
+}
+
+/** Test seam: drop the cached overview. */
+export function resetPrOverview(): void {
+  setOverview({ status: 'idle', mine: [], review: [] });
+}
+
 export function refreshPrOverview(settings?: {
   hostname?: unknown;
 }): Promise<void> {
   refreshInFlight ??= (async () => {
     setOverview({ ...overview, status: 'loading' });
     try {
-      const hostname =
-        typeof settings?.hostname === 'string' && settings.hostname
-          ? ` --hostname ${JSON.stringify(settings.hostname)}`
-          : '';
-      // plugin_exec runs `sh -c`: collapse the query to one line so the
-      // double-quoted argument carries no literal newlines.
-      const query = PR_OVERVIEW_QUERY.replace(/\s+/g, ' ');
       const rt = appRuntime();
       if (!rt) throw new Error('no session available for gh');
-      const out = await rt.exec(
-        `gh api graphql${hostname} -f query=${JSON.stringify(query)}`,
-      );
+      const out = await rt.exec(overviewCommand(settings?.hostname));
       const parsed = JSON.parse(out) as {
         data?: {
           viewer?: { login?: string };
@@ -388,10 +475,12 @@ export function refreshPrOverview(settings?: {
         fetchedAt: Date.now(),
       });
     } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
       setOverview({
         ...overview,
         status: 'error',
-        error: e instanceof Error ? e.message : String(e),
+        error,
+        failure: classifyCliError('gh', error),
       });
     }
   })().finally(() => {
@@ -405,10 +494,10 @@ export function refreshPrOverview(settings?: {
 // ---------------------------------------------------------------------------
 
 const checksColor: Record<string, string> = {
-  success: 'text-emerald-500',
-  failed: 'text-red-500',
-  pending: 'text-yellow-500',
-  running: 'text-blue-500',
+  success: 'text-[var(--green)]',
+  failed: 'text-[var(--red)]',
+  pending: 'text-[var(--yellow)]',
+  running: 'text-[var(--blue)]',
   canceled: 'text-[var(--text-secondary)]',
 };
 
@@ -467,10 +556,10 @@ function SessionPrs({ ctx }: { ctx: SessionViewContext & PluginApi }) {
                 <span className="rounded bg-slate-500/20 px-1 text-slate-600">draft</span>
               )}
               {pr.conflicts && (
-                <span className="rounded bg-red-500/20 px-1 text-red-600">conflicts</span>
+                <span className="rounded bg-[color-mix(in_srgb,var(--red)_20%,transparent)] px-1 text-[var(--red)]">conflicts</span>
               )}
               {pr.reviewDecision === 'changes_requested' && (
-                <span className="flex items-center gap-0.5 text-red-500">
+                <span className="flex items-center gap-0.5 text-[var(--red)]">
                   <GitPullRequestClosed className="h-3 w-3" />
                   changes requested
                 </span>
@@ -522,9 +611,14 @@ function GhPrRail({
   const me = data.username ?? '';
   const mineAction = data.mine.filter((m) => prNeedsAction(m)).length;
   const reviewWaiting = data.review.filter((m) => mrWaitingForMe(m, me)).length;
+  const mode = forgeRailMode(data);
+  // No gh (or nothing fetched yet): a GitLab-only user sees no GitHub icon.
+  if (mode === 'hidden') return null;
 
   const title =
-    data.status === 'error'
+    mode === 'signed-out'
+      ? 'GitHub pull requests — not signed in.\nRun `gh auth login` in a shell to see your PRs here.'
+      : mode === 'error'
       ? `pull requests unavailable\ngh: ${data.error ?? 'unknown error'}\nCheck \`gh auth status\` in a shell.`
       : [
           `${mineAction}/${data.mine.length} assigned/authored PRs need action (open threads, conflicts, failing checks, changes requested or approved)`,
@@ -545,8 +639,8 @@ function GhPrRail({
           : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
       }`}
     >
-      <GitPullRequest className="h-3.5 w-3.5" />
-      {data.status === 'error' ? (
+      <GitPullRequest className={`h-3.5 w-3.5${mode === 'signed-out' ? ' opacity-50' : ''}`} />
+      {mode === 'signed-out' ? null : mode === 'error' ? (
         <AlertTriangle className="h-3 w-3 text-[var(--red)]" />
       ) : (
         <>
@@ -560,7 +654,7 @@ function GhPrRail({
           </span>
           <span
             className={`select-none text-[8px] font-bold leading-none ${
-              reviewWaiting > 0 ? 'text-cyan-500' : ''
+              reviewWaiting > 0 ? 'text-[var(--cyan)]' : ''
             }`}
             data-tip="review requested"
           >
@@ -619,13 +713,13 @@ function PrRow({ pr, badge, env }: { pr: GhPrItem; badge?: string; env: MrRowEnv
           </span>
         )}
         {pr.conflicts && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-red-500">
+          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
             <AlertTriangle className="h-3 w-3" />
             conflicts
           </span>
         )}
         {pr.reviewDecision === 'changes_requested' && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-red-500">
+          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
             <GitPullRequestClosed className="h-3 w-3" />
             changes
           </span>
@@ -642,7 +736,7 @@ function PrRow({ pr, badge, env }: { pr: GhPrItem; badge?: string; env: MrRowEnv
           </span>
         )}
         {pr.approved && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-emerald-500">
+          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--green)]">
             <Check className="h-3 w-3" />
             approved
           </span>
@@ -753,9 +847,28 @@ function GhPrView({ close, env }: { close: () => void; env: MrRowEnv }) {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {data.status === 'error' ? (
+        {data.status === 'error' && data.failure !== 'error' ? (
           <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
-            <div className="mb-1 font-semibold text-red-500">failed to load pull requests</div>
+            <div className="mb-1 font-semibold">
+              {data.failure === 'missing' ? 'GitHub CLI not installed' : 'Not signed in to GitHub'}
+            </div>
+            <div className="text-[var(--text-secondary)]">
+              {data.failure === 'missing' ? (
+                <>
+                  Install <code className="text-[var(--accent)]">gh</code> (https://cli.github.com), then
+                  run <code className="text-[var(--accent)]">gh auth login</code>.
+                </>
+              ) : (
+                <>
+                  Run <code className="text-[var(--accent)]">gh auth login</code> in a shell to see your
+                  pull requests here.
+                </>
+              )}
+            </div>
+          </div>
+        ) : data.status === 'error' ? (
+          <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
+            <div className="mb-1 font-semibold text-[var(--red)]">failed to load pull requests</div>
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
             <div className="text-[var(--text-secondary)]">
               Check <code className="text-[var(--accent)]">gh auth status</code> in a shell.

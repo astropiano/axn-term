@@ -116,12 +116,12 @@ function RepoMenu({
 
 function repoIndicators(repo: RepoInfo): { color: string; text: string }[] {
   const indicators: { color: string; text: string }[] = [];
-  if (repo.remoteBranchMissing) indicators.push({ color: 'text-red-500', text: '×' });
-  if (repo.ahead > 0) indicators.push({ color: 'text-emerald-500', text: `↑${repo.ahead}` });
-  if (repo.behind > 0) indicators.push({ color: 'text-red-500', text: `↓${repo.behind}` });
-  if (repo.dirty) indicators.push({ color: 'text-yellow-500', text: '~' });
-  if (repo.untracked > 0) indicators.push({ color: 'text-orange-500', text: `?${repo.untracked}` });
-  if (indicators.length === 0) indicators.push({ color: 'text-emerald-500', text: '✓' });
+  if (repo.remoteBranchMissing) indicators.push({ color: 'text-[var(--red)]', text: '×' });
+  if (repo.ahead > 0) indicators.push({ color: 'text-[var(--green)]', text: `↑${repo.ahead}` });
+  if (repo.behind > 0) indicators.push({ color: 'text-[var(--red)]', text: `↓${repo.behind}` });
+  if (repo.dirty) indicators.push({ color: 'text-[var(--yellow)]', text: '~' });
+  if (repo.untracked > 0) indicators.push({ color: 'text-[var(--orange)]', text: `?${repo.untracked}` });
+  if (indicators.length === 0) indicators.push({ color: 'text-[var(--green)]', text: '✓' });
   return indicators;
 }
 
@@ -160,7 +160,7 @@ function GitStatus({
       </div>
       <div className="flex min-w-0 items-center gap-2 overflow-hidden">
         <span
-          className={`min-w-0 truncate ${repo.branch ? 'text-cyan-500' : 'text-yellow-500'}`}
+          className={`min-w-0 truncate ${repo.branch ? 'text-[var(--cyan)]' : 'text-[var(--yellow)]'}`}
           data-tip={branch}
         >
           {branch}
@@ -223,7 +223,7 @@ function GitStatusRow({
           if (e.button === 2) e.stopPropagation();
         }}
       >
-        <GitBranch className="h-2.5 w-2.5 shrink-0 text-cyan-500" />
+        <GitBranch className="h-2.5 w-2.5 shrink-0 text-[var(--cyan)]" />
         <span className="flex shrink-0 items-center gap-0.5">
           {repoIndicators(repo).map((ind, i) => (
             <span key={i} className={ind.color}>

@@ -29,6 +29,7 @@
     "notification:allow-request-permission",
     "notification:allow-notify",
     "core:window:allow-close",
+    "core:window:allow-set-focus",
     "core:window:allow-destroy"
   ]
 }

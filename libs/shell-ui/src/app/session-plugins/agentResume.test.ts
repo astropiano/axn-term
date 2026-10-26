@@ -17,7 +17,10 @@ import {
 import { devinPlugin } from './devinTasks';
 import { claudePlugin } from './claude';
 import { codexPlugin } from './codex';
+
 import { antigravityPlugin } from './antigravity';
+
+import { opencodePlugin } from './opencode';
 import { vibePlugin } from './vibe';
 
 type Ctx = SessionViewContext & PluginApi;
@@ -370,6 +373,66 @@ describe('codex / antigravity plugins', () => {
       command: `cd '/repo' && agy -c`,
       at: expect.any(Number),
     });
+  });
+
+  it('opencode records the generic -c resume on process end', async () => {
+    const h = makeCtx('opencode');
+    opencodePlugin.onProcessEnd?.(h.ctx);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(lastOf(h)).toEqual({
+      name: undefined,
+      cwd: '/repo',
+      command: `cd '/repo' && opencode -c`,
+      at: expect.any(Number),
+    });
+  });
+
+  it('opencode records the hinted ses_ id on process end', async () => {
+    const output = 'done.\nContinue the session with: opencode -s ses_abc123\n$ ';
+    const h = makeCtx('opencode', { output });
+    opencodePlugin.onProcessEnd?.(h.ctx);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(lastOf(h)).toEqual({
+      name: 'ses_abc123',
+      cwd: '/repo',
+      command: `cd '/repo' && opencode -s ses_abc123`,
+      at: expect.any(Number),
+    });
+  });
+
+  it('opencode session-list capture only adopts ids touched in this run', async () => {
+    const h = makeCtx('opencode', {}, {
+      pluginState: { opencodeSeen: true, opencodeStartedAt: Date.now() },
+    });
+    // stale "newest" session from another opencode instance → falls back
+    (h.ctx as { exec: (c: string) => Promise<string> }).exec = async () =>
+      JSON.stringify([{ id: 'ses_other99', updated: Date.now() - 3_600_000 }]);
+    opencodePlugin.onProcessEnd?.(h.ctx);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(lastOf(h)).toEqual({
+      name: undefined,
+      cwd: '/repo',
+      command: `cd '/repo' && opencode -c`,
+      at: expect.any(Number),
+    });
+
+    // fresh one → adopted as the named record
+    (h.ctx as { exec: (c: string) => Promise<string> }).exec = async () =>
+      JSON.stringify([{ id: 'ses_fresh42', updated: Date.now() }]);
+    opencodePlugin.onProcessEnd?.(h.ctx);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(lastOf(h)).toMatchObject({
+      name: 'ses_fresh42',
+      command: `cd '/repo' && opencode -s ses_fresh42`,
+    });
+  });
+
+  it('opencode adopts a manually launched -s id and clears it on fresh launch', () => {
+    const h = makeCtx('opencode');
+    opencodePlugin.onCommand?.(h.ctx, 'opencode -s ses_manual9');
+    expect(h.ctx.pluginState).toMatchObject({ opencodeSessionId: 'ses_manual9' });
+    opencodePlugin.onCommand?.(h.ctx, 'opencode');
+    expect(h.ctx.pluginState).toMatchObject({ opencodeSessionId: undefined });
   });
 
   it('antigravity records the captured --conversation id on process end', () => {

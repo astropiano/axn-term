@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - remote auth: device flow + JWT-bound /remote hello">
+    <description>
+      Reproduces the desktop remote-control auth path headlessly against the
+      running axn-term-online scenario: the axn-term-desktop client must get a
+      device_code from the device endpoint, a JWT must be mintable for the
+      demo account, and /remote must deny anonymous hellos while accepting
+      JWT-bound authority hellos (AllowAnonymous=false).
+      Plain listeners: keycloak :18096, gateway :18095 (no TLS needed).
+    </description>
+    <scenarios>
+      <scenario name="axn-term-online" service="shell" adapter="tsAdapter" />
+    </scenarios>
+    <setup>
+      <env>
+        <var name="TEST_USER" value="demo" />
+        <var name="TEST_PASSWORD" value="changeme" />
+        <var name="REMOTE_CLIENT_ID" value="axn-term-desktop" />
+        <!-- plain (non-TLS) listeners — see compose AXN_*_PLAIN_PORT -->
+        <var name="REMOTE_KC_URL" value="http://127.0.0.1:18096/realms/axn-term" />
+        <var name="REMOTE_GW_URL" value="http://127.0.0.1:18095/remote" />
+      </env>
+    </setup>
+    <steps>
+      <step src="steps/remote-auth.ts"
+            description="Device flow + JWT mint + /remote hello deny/accept" />
+      <assert that="exitCode" value="0" description="all assertions in the step pass" />
+      <assert that="contains" value="remote auth flow passed" description="step reports success" />
+    </steps>
+  </flow>
+</flows>

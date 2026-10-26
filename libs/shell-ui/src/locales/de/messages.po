@@ -1,0 +1,451 @@
+msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "Remove icon"
+msgstr "Icon entfernen"
+
+msgid "Unable to read file"
+msgstr "Datei konnte nicht gelesen werden"
+
+msgid "Switch to {0}"
+msgstr "Zu {0} wechseln"
+
+msgid "Process"
+msgstr "Prozess"
+
+msgid "Open"
+msgstr "Öffnen"
+
+msgid "Light"
+msgstr "Hell"
+
+msgid "Stored in ~/.axn-term/plugins.yaml"
+msgstr "Gespeichert in ~/.axn-term/plugins.yaml"
+
+msgid "Open in home folder"
+msgstr "Im Home-Ordner öffnen"
+
+msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
+msgstr "Neue Sessions in „{0}“ starten in diesem Ordner. Leer lassen für das Home-Verzeichnis."
+
+msgid "No icons configured — every session shows the default terminal icon."
+msgstr "Keine Icons konfiguriert — jede Session zeigt das Standard-Terminal-Icon."
+
+msgid "Import replaces all settings with the picked config.yaml."
+msgstr "Der Import ersetzt alle Einstellungen durch die gewählte config.yaml."
+
+msgid "New workspace “{name}” in this window"
+msgstr "Neuer Workspace „{name}“ in diesem Fenster"
+
+msgid "Terminal renderer"
+msgstr "Terminal-Renderer"
+
+msgid "current"
+msgstr "aktuell"
+
+msgid "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
+msgstr "Ordne Programmnamen einem Lucide-Icon (z. B. Bot, SquareTerminal) oder einem SVG-Tag zu."
+
+msgid "Stored in browser localStorage"
+msgstr "Im localStorage des Browsers gespeichert"
+
+msgid "Leave empty to use the system $SHELL."
+msgstr "Leer lassen, um die System-$SHELL zu nutzen."
+
+msgid "Copy URL"
+msgstr "URL kopieren"
+
+msgid "Export…"
+msgstr "Exportieren…"
+
+msgid "Theme"
+msgstr "Theme"
+
+msgid "Not a valid config.yaml — expected a YAML mapping."
+msgstr "Keine gültige config.yaml — YAML-Mapping erwartet."
+
+msgid "Directory"
+msgstr "Verzeichnis"
+
+msgid "Dark theme"
+msgstr "Dunkles Theme"
+
+msgid "Paste"
+msgstr "Einfügen"
+
+msgid "Enable devin task parser"
+msgstr "Devin-Task-Parser aktivieren"
+
+msgid "requires {0}{1}"
+msgstr "benötigt {0}{1}"
+
+msgid "Preview unavailable"
+msgstr "Vorschau nicht verfügbar"
+
+msgid "Edit icon"
+msgstr "Icon bearbeiten"
+
+msgid "Fix the path or open the session in your home folder."
+msgstr "Korrigiere den Pfad oder öffne die Session im Home-Ordner."
+
+msgid "axn-term hit an unexpected error"
+msgstr "In axn-term ist ein unerwarteter Fehler aufgetreten"
+
+msgid "Open preview in a tab"
+msgstr "Vorschau in einem Tab öffnen"
+
+msgid "Reload view"
+msgstr "Ansicht neu laden"
+
+msgid "Session icons"
+msgstr "Session-Icons"
+
+msgid "Shell font"
+msgstr "Shell-Schrift"
+
+msgid "Filter sessions…"
+msgstr "Sessions filtern…"
+
+msgid "Render session summaries (set via axn-session-summary)"
+msgstr "Session-Zusammenfassungen anzeigen (via axn-session-summary)"
+
+msgid "disabled"
+msgstr "deaktiviert"
+
+msgid "No matches."
+msgstr "Keine Treffer."
+
+msgid "Loading…"
+msgstr "Laden…"
+
+msgid "Imported."
+msgstr "Importiert."
+
+msgid "Reload window"
+msgstr "Fenster neu laden"
+
+msgid "Open in workspace"
+msgstr "In Workspace öffnen"
+
+msgid "Auto"
+msgstr "Auto"
+
+msgid "Import…"
+msgstr "Importieren…"
+
+msgid "Window {0}"
+msgstr "Fenster {0}"
+
+msgid "Settings"
+msgstr "Einstellungen"
+
+msgid "File previews"
+msgstr "Dateivorschauen"
+
+msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
+msgstr "Schrift für das Session-/Workspace-Panel. Die Größe skaliert relativ zum 12px-Standard."
+
+msgid "permissions:"
+msgstr "Berechtigungen:"
+
+msgid "Auto (WebGL → canvas → DOM)"
+msgstr "Auto (WebGL → Canvas → DOM)"
+
+msgid "This view hit an unexpected error"
+msgstr "In dieser Ansicht ist ein unerwarteter Fehler aufgetreten"
+
+msgid "no workspaces"
+msgstr "keine Workspaces"
+
+msgid "General"
+msgstr "Allgemein"
+
+msgid "Stored in ~/.axn-term/config.yaml"
+msgstr "Gespeichert in ~/.axn-term/config.yaml"
+
+msgid "file preview"
+msgstr "Dateivorschau"
+
+msgid "Default folder"
+msgstr "Standardordner"
+
+msgid "enabled"
+msgstr "aktiviert"
+
+msgid "Could not parse the file as YAML."
+msgstr "Die Datei konnte nicht als YAML gelesen werden."
+
+msgid "Increase font size"
+msgstr "Schriftgröße vergrößern"
+
+msgid "Move to new window"
+msgstr "In neues Fenster verschieben"
+
+msgid "Cut"
+msgstr "Ausschneiden"
+
+msgid "Search workspaces or windows…"
+msgstr "Workspaces oder Fenster suchen…"
+
+msgid "session plugin"
+msgstr "Session-Plugin"
+
+msgid "Cancel"
+msgstr "Abbrechen"
+
+msgid "Light theme"
+msgstr "Helles Theme"
+
+msgid "This plugin declares no settings."
+msgstr "Dieses Plugin deklariert keine Einstellungen."
+
+msgid "Edit"
+msgstr "Bearbeiten"
+
+msgid "Export failed."
+msgstr "Export fehlgeschlagen."
+
+msgid "Copy"
+msgstr "Kopieren"
+
+msgid "Copy selection"
+msgstr "Auswahl kopieren"
+
+msgid "Search…"
+msgstr "Suchen…"
+
+msgid "Move to workspace…"
+msgstr "In Workspace verschieben…"
+
+msgid "Panel font"
+msgstr "Panel-Schrift"
+
+msgid "Invalid default folder"
+msgstr "Ungültiger Standardordner"
+
+msgid "Use system default"
+msgstr "Systemstandard verwenden"
+
+msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
+msgstr "Cell-Renderer für Terminals. Auto nutzt die GPU (WebGL) und fällt automatisch zurück. Canvas/DOM erzwingen bei Darstellungsfehlern."
+
+msgid "No workspaces match."
+msgstr "Keine Workspaces gefunden."
+
+msgid "sandboxed — no permissions (no shell, files or terminal access)"
+msgstr "sandboxed — keine Berechtigungen (kein Shell-, Datei- oder Terminalzugriff)"
+
+msgid "Plugins"
+msgstr "Plugins"
+
+msgid "Decrease font size"
+msgstr "Schriftgröße verkleinern"
+
+msgid "Font size (px)"
+msgstr "Schriftgröße (px)"
+
+msgid "Dark"
+msgstr "Dunkel"
+
+msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
+msgstr "Ein Lucide-Icon-Name (z. B. <0>GitFork</0>) oder ein Inline-SVG-Tag, z. B. <1>{SVG_HINT_EXAMPLE}</1>"
+
+msgid "Main window"
+msgstr "Hauptfenster"
+
+msgid "The default folder of “{0}” does not exist:"
+msgstr "Der Standardordner von „{0}“ existiert nicht:"
+
+msgid "Close tab"
+msgstr "Tab schließen"
+
+msgid "Preview"
+msgstr "Vorschau"
+
+msgid "Session plugins"
+msgstr "Session-Plugins"
+
+msgid "Set default folder…"
+msgstr "Standardordner festlegen…"
+
+msgid "Default shell"
+msgstr "Standard-Shell"
+
+msgid "Terminal font family and size in px. Empty uses the built-in monospace stack at 14px."
+msgstr "Terminal-Schriftfamilie und -größe in px. Leer nutzt den eingebauten Monospace-Stack mit 14px."
+
+msgid "Config file"
+msgstr "Konfigurationsdatei"
+
+msgid "Save"
+msgstr "Speichern"
+
+msgid "This window"
+msgstr "Dieses Fenster"
+
+msgid "Language"
+msgstr "Sprache"
+
+msgid "Binary file"
+msgstr "Binärdatei"
+
+msgid "Select all"
+msgstr "Alles auswählen"
+
+msgid "Exported."
+msgstr "Exportiert."
+
+msgid "New workspace “{trimmed}” in this window"
+msgstr "Neuer Workspace „{trimmed}“ in diesem Fenster"
+
+msgid "unmet, plugin disabled"
+msgstr "nicht erfüllt, Plugin deaktiviert"
+
+msgid "Add icon"
+msgstr "Icon hinzufügen"
+
+msgid "Move “{sessionName}” to workspace"
+msgstr "„{sessionName}“ in Workspace verschieben"
+
+msgid "Copy Path"
+msgstr "Pfad kopieren"
+
+msgid "New workspace"
+msgstr "Neuer Workspace"
+
+msgid "Save workspace set"
+msgstr "Workspace-Set speichern"
+
+msgid "Load workspace set"
+msgstr "Workspace-Set laden"
+
+msgid "shell"
+msgstr "Shell"
+
+msgid "Shell"
+msgstr "Shell"
+
+msgid "System"
+msgstr "System"
+
+msgid "Expand"
+msgstr "Aufklappen"
+
+msgid "Collapse"
+msgstr "Zuklappen"
+
+msgid "New session in workspace"
+msgstr "Neue Session im Workspace"
+
+msgid "Delete workspace"
+msgstr "Workspace löschen"
+
+msgid "Reset to process name"
+msgstr "Auf Prozessname zurücksetzen"
+
+msgid "New worktree session"
+msgstr "Neue Worktree-Session"
+
+msgid "Don't ask again"
+msgstr "Nicht erneut fragen"
+
+msgid "Force remove"
+msgstr "Entfernen erzwingen"
+
+msgid "Review worktree changes"
+msgstr "Worktree-Änderungen prüfen"
+
+msgid "Remove worktree"
+msgstr "Worktree entfernen"
+
+msgid "New session with agent…"
+msgstr "Neue Session mit Agent…"
+
+msgid "Start workflow…"
+msgstr "Workflow starten…"
+
+msgid "{agent} is running in the main checkout — isolate it in a worktree?"
+msgstr "{agent} läuft im Haupt-Checkout — in einem Worktree isolieren?"
+
+msgid "worktree remove failed (dirty?): {0}"
+msgstr "Worktree-Entfernen fehlgeschlagen (dirty?): {0}"
+
+msgid "worktree removed — branch {0} kept"
+msgstr "Worktree entfernt — Branch {0} bleibt erhalten"
+
+msgid "Delete {0}"
+msgstr "{0} löschen"
+
+msgid "Resume {0} session{1}"
+msgstr "{0}-Session{1} fortsetzen"
+
+
+msgid "Remote control"
+msgstr "Fernsteuerung"
+
+msgid "Session name on the hub (optional)"
+msgstr "Sitzungsname auf dem Hub (optional)"
+
+msgid "User token (optional)"
+msgstr "Benutzer-Token (optional)"
+
+msgid "Publish this window's terminals to a /remote hub \u2014 other devices attach via the web app with ?remote=<session>."
+msgstr "Ver\u00f6ffentlicht die Terminals dieses Fensters auf einem /remote-Hub \u2014 andere Ger\u00e4te verbinden sich \u00fcber die Web-App mit ?remote=<session>."
+
+msgid "Hub URL"
+msgstr "Hub-URL"
+
+msgid "Session name"
+msgstr "Sitzungsname"
+
+msgid "User token"
+msgstr "Benutzer-Token"
+
+msgid "optional"
+msgstr "optional"
+
+msgid "Publishing \u2014 connected"
+msgstr "Ver\u00f6ffentlicht \u2014 verbunden"
+
+msgid "Connecting\u2026"
+msgstr "Verbinde\u2026"
+
+msgid "Failed: {0}"
+msgstr "Fehlgeschlagen: {0}"
+
+msgid "Not publishing"
+msgstr "Wird nicht ver\u00f6ffentlicht"
+
+msgid "Remote"
+msgstr "Fernsteuerung"
+
+msgid "Account"
+msgstr "Konto"
+
+msgid "Server URL"
+msgstr "Server-URL"
+
+msgid "Client ID"
+msgstr "Client-ID"
+
+msgid "Signed in as {0}"
+msgstr "Angemeldet als {0}"
+
+msgid "Sign out"
+msgstr "Abmelden"
+
+msgid "Enter code {0} in the browser to finish sign-in."
+msgstr "Gib den Code {0} im Browser ein, um die Anmeldung abzuschließen."
+
+msgid "Sign in…"
+msgstr "Anmelden…"
+
+msgid "Not signed in"
+msgstr "Nicht angemeldet"
+
+msgid "OIDC client"
+msgstr "OIDC-Client"
+
+msgid "axn-term-desktop (default)"
+msgstr "axn-term-desktop (Standard)"

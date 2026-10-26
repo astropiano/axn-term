@@ -1,29 +1,52 @@
+# Gruvbox Dark (github.com/morhetz/gruvbox). Normal red was 2.7:1 on bg0; it
+# is lifted. UI colours from Gruvbox's bg0_h/bg1/bg2 layers, accent yellow.
+# Adjusted for legibility (hue kept, lightness moved):
+#   red: #CC241D -> #E8655F
+#   blue: #458588 -> #509B9E
+#   magenta: #B16286 -> #BE7C9A
+#   brightRed: #FB4934 -> #FB5441
 id: gruvbox-dark
 name: Gruvbox Dark
 mode: dark
 
 colors:
   background: '#282828'
-  foreground: '#ebdbb2'
-  cursor: '#ebdbb2'
+  foreground: '#EBDBB2'
+  cursor: '#EBDBB2'
   cursorAccent: '#282828'
-  selectionBackground: '#665c54'
-  selectionForeground: '#ebdbb2'
+  selectionBackground: '#504945'
+  selectionForeground: '#EBDBB2'
 
   black: '#282828'
-  red: '#cc241d'
-  green: '#98971a'
-  yellow: '#d79921'
-  blue: '#458588'
-  magenta: '#b16286'
-  cyan: '#689d6a'
-  white: '#a89984'
+  red: '#E8655F'
+  green: '#98971A'
+  yellow: '#D79921'
+  blue: '#509B9E'
+  magenta: '#BE7C9A'
+  cyan: '#689D6A'
+  white: '#A89984'
 
   brightBlack: '#928374'
-  brightRed: '#fb4934'
-  brightGreen: '#b8bb26'
-  brightYellow: '#fabd2f'
-  brightBlue: '#83a598'
-  brightMagenta: '#d3869b'
-  brightCyan: '#8ec07c'
-  brightWhite: '#ebdbb2'
+  brightRed: '#FB5441'
+  brightGreen: '#B8BB26'
+  brightYellow: '#FABD2F'
+  brightBlue: '#83A598'
+  brightMagenta: '#D3869B'
+  brightCyan: '#8EC07C'
+  brightWhite: '#EBDBB2'
+
+  orange: '#FE8019'
+  violet: '#D3869B'
+
+ui:
+  bg: '#1D2021'
+  bgSecondary: '#282828'
+  surface: '#282828'
+  surfaceHover: '#3C3836'
+  text: '#EBDBB2'
+  textSecondary: '#A89984'
+  textInverted: '#282828'
+  border: '#504945'
+  accent: '#FABD2F'
+  accentHover: '#F5C656'
+  cursor: '#EBDBB2'

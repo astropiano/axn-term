@@ -37,7 +37,7 @@ msgstr "취소"
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "터미널의 셀 렌더러입니다. 자동은 GPU(WebGL)를 사용하고 자동으로 폴백합니다. 렌더링 문제가 있으면 캔버스/DOM으로 고정하세요."
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2473
+#: libs/shell-ui/src/app/ShellApp.tsx:2135
 msgid "Close tab"
 msgstr "탭 닫기"
 
@@ -45,9 +45,9 @@ msgstr "탭 닫기"
 msgid "Config file"
 msgstr "설정 파일"
 
-#: libs/shell-ui/src/app/AppContextMenu.tsx:80
-#: libs/shell-ui/src/app/AppContextMenu.tsx:102
-#: libs/shell-ui/src/app/AppContextMenu.tsx:116
+#: libs/shell-ui/src/app/AppContextMenu.tsx:82
+#: libs/shell-ui/src/app/AppContextMenu.tsx:104
+#: libs/shell-ui/src/app/AppContextMenu.tsx:118
 #: libs/shell-ui/src/PathActionMenu.tsx:215
 msgid "Copy"
 msgstr "복사"
@@ -74,7 +74,7 @@ msgstr "파일을 YAML로 파싱할 수 없습니다."
 msgid "current"
 msgstr "현재"
 
-#: libs/shell-ui/src/app/AppContextMenu.tsx:95
+#: libs/shell-ui/src/app/AppContextMenu.tsx:97
 msgid "Cut"
 msgstr "잘라내기"
 
@@ -215,9 +215,18 @@ msgstr "실행 파일 이름을 Lucide 아이콘(예: Bot, SquareTerminal) 또�
 msgid "Move “{sessionName}” to workspace"
 msgstr "“{sessionName}”을(를) 워크스페이스로 이동"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:754
+#: libs/shell-ui/src/app/SessionPanel.tsx:861
+msgid "Move to new window"
+msgstr "새 창으로 이동"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:845
 msgid "Move to workspace…"
 msgstr "워크스페이스로 이동…"
+
+#. placeholder {0}: workspace.name
+#: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:46
+msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
+msgstr "“{0}”의 새 세션은 이 폴더에서 시작합니다. 비워 두면 홈 디렉터리를 사용합니다."
 
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:68
 msgid "New workspace “{name}” in this window"
@@ -268,8 +277,8 @@ msgstr "탭에서 미리보기 열기"
 msgid "Panel font"
 msgstr "패널 글꼴"
 
-#: libs/shell-ui/src/app/AppContextMenu.tsx:82
-#: libs/shell-ui/src/app/AppContextMenu.tsx:104
+#: libs/shell-ui/src/app/AppContextMenu.tsx:84
+#: libs/shell-ui/src/app/AppContextMenu.tsx:106
 msgid "Paste"
 msgstr "붙여넣기"
 
@@ -297,7 +306,7 @@ msgstr "프로세스"
 msgid "Reload view"
 msgstr "보기 다시 불러오기"
 
-#: libs/shell-ui/src/app/AppContextMenu.tsx:127
+#: libs/shell-ui/src/app/AppContextMenu.tsx:129
 #: libs/shell-ui/src/app/ErrorBoundary.tsx:72
 msgid "Reload window"
 msgstr "창 다시 불러오기"
@@ -333,8 +342,8 @@ msgstr "워크스페이스 또는 창 검색…"
 msgid "Search…"
 msgstr "검색…"
 
-#: libs/shell-ui/src/app/AppContextMenu.tsx:88
-#: libs/shell-ui/src/app/AppContextMenu.tsx:109
+#: libs/shell-ui/src/app/AppContextMenu.tsx:90
+#: libs/shell-ui/src/app/AppContextMenu.tsx:111
 msgid "Select all"
 msgstr "모두 선택"
 
@@ -426,3 +435,148 @@ msgstr "시스템 기본값 사용"
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
 msgid "Window {0}"
 msgstr "창 {0}"
+msgid "New workspace"
+msgstr "새 워크스페이스"
+
+msgid "Save workspace set"
+msgstr "워크스페이스 세트 저장"
+
+msgid "Load workspace set"
+msgstr "워크스페이스 세트 불러오기"
+
+msgid "shell"
+msgstr "shell"
+
+msgid "Shell"
+msgstr "셸"
+
+msgid "System"
+msgstr "시스템"
+
+msgid "Expand"
+msgstr "펼치기"
+
+msgid "Collapse"
+msgstr "접기"
+
+msgid "New session in workspace"
+msgstr "워크스페이스에서 새 세션"
+
+msgid "Delete workspace"
+msgstr "워크스페이스 삭제"
+
+msgid "Reset to process name"
+msgstr "프로세스 이름으로 재설정"
+
+msgid "New worktree session"
+msgstr "새 워크트리 세션"
+
+msgid "Don't ask again"
+msgstr "다시 묻지 않기"
+
+msgid "Force remove"
+msgstr "강제 삭제"
+
+msgid "Review worktree changes"
+msgstr "워크트리 변경 사항 검토"
+
+msgid "Remove worktree"
+msgstr "워크트리 삭제"
+
+msgid "New session with agent…"
+msgstr "에이전트로 새 세션…"
+
+msgid "Start workflow…"
+msgstr "워크플로 시작…"
+
+msgid "{agent} is running in the main checkout — isolate it in a worktree?"
+msgstr "{agent}이(가) 메인 체크아웃에서 실행 중 — 워크트리로 격리할까요?"
+
+msgid "worktree remove failed (dirty?): {0}"
+msgstr "워크트리 삭제 실패 (변경 사항 있음?): {0}"
+
+msgid "worktree removed — branch {0} kept"
+msgstr "워크트리 삭제됨 — 브랜치 {0} 유지"
+
+msgid "Delete {0}"
+msgstr "{0} 삭제"
+
+msgid "Resume {0} session{1}"
+msgstr "{0} 세션{1} 재개"
+
+#. : libs/shell-ui/src/app/SettingsModal.tsx
+msgid "UI zoom"
+msgstr "UI zoom"
+
+#. : libs/shell-ui/src/app/SettingsModal.tsx
+msgid "Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size."
+msgstr "Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size."
+
+msgid "Remote control"
+msgstr "\uc6d0\uaca9 \uc81c\uc5b4"
+
+msgid "Session name on the hub (optional)"
+msgstr "\ud5c8\ube0c\uc758 \uc138\uc158 \uc774\ub984(\uc120\ud0dd \uc0ac\ud56d)"
+
+msgid "User token (optional)"
+msgstr "\uc0ac\uc6a9\uc790 \ud1a0\ud070(\uc120\ud0dd \uc0ac\ud56d)"
+
+msgid "Publish this window's terminals to a /remote hub \u2014 other devices attach via the web app with ?remote=<session>."
+msgstr "\uc774 \ucc3d\uc758 \ud130\ubbf8\ub110\uc744 /remote \ud5c8\ube0c\uc5d0 \uac8c\uc2dc\ud569\ub2c8\ub2e4 \u2014 \ub2e4\ub978 \uae30\uae30\ub294 ?remote=<session>\uc73c\ub85c \uc6f9 \uc571\uc744 \ud1b5\ud574 \uc5f0\uacb0\ud569\ub2c8\ub2e4."
+
+msgid "Hub URL"
+msgstr "\ud5c8\ube0c URL"
+
+msgid "Session name"
+msgstr "\uc138\uc158 \uc774\ub984"
+
+msgid "User token"
+msgstr "\uc0ac\uc6a9\uc790 \ud1a0\ud070"
+
+msgid "optional"
+msgstr "\uc120\ud0dd \uc0ac\ud56d"
+
+msgid "Publishing \u2014 connected"
+msgstr "\uac8c\uc2dc \uc911 \u2014 \uc5f0\uacb0\ub428"
+
+msgid "Connecting\u2026"
+msgstr "\uc5f0\uacb0 \uc911\u2026"
+
+msgid "Failed: {0}"
+msgstr "\uc2e4\ud328: {0}"
+
+msgid "Not publishing"
+msgstr "\uac8c\uc2dc \uc548 \ud568"
+
+msgid "Remote"
+msgstr "원격"
+
+msgid "Account"
+msgstr "계정"
+
+msgid "Server URL"
+msgstr "서버 URL"
+
+msgid "Client ID"
+msgstr "クライアント ID"
+
+msgid "Signed in as {0}"
+msgstr "{0}(으)로 로그인됨"
+
+msgid "Sign out"
+msgstr "로그아웃"
+
+msgid "Enter code {0} in the browser to finish sign-in."
+msgstr "브라우저에서 코드 {0}을(를) 입력하여 로그인을 완료하세요."
+
+msgid "Sign in…"
+msgstr "로그인…"
+
+msgid "Not signed in"
+msgstr "로그인되지 않음"
+
+msgid "OIDC client"
+msgstr "OIDC 클라이언트"
+
+msgid "axn-term-desktop (default)"
+msgstr "axn-term-desktop (기본값)"

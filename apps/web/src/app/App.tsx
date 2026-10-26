@@ -4,19 +4,31 @@ import type { FileReader } from '@axn-term/session-backend';
 import { browserServices, WsBackend } from '@axn-term/session-backend';
 import { RemoteBackend, createMirrorStateStore } from '@axn-term/session-backend/remote';
 import { KeycloakProvider, useKeycloak } from './KeycloakContext';
+import { ConnectionGate } from './ConnectionGate';
 import { browserPlatform } from './platform';
 
 const wsUrlBase = import.meta.env.VITE_SHELL_WS_URL as string | undefined;
-// When set, drive terminals through the Ramphastos hub instead of per-PTY
-// /ws sockets — e.g. ws://<gateway>/ramphastos (WS-only proxy) or
-// http://<host>:7682/ramphastos (direct session host).
-const ramphastosUrl = import.meta.env.VITE_RAMPHASTOS_URL as string | undefined;
+// "cloud" mode — drive terminals through the hosted session-host hub
+// instead of per-PTY /ws sockets — e.g. wss://<gateway>/cloud (WS-only
+// proxy) or http://<host>:7682/ramphastos (direct session host).
+// VITE_RAMPHASTOS_URL kept as a deprecated alias.
+// `||` not `??`: compose injects these as empty strings when unset, and ''
+// must not win over a real fallback (or produce a falsy hub that silently
+// lands on the local /ws backend).
+const cloudUrl = ((import.meta.env.VITE_CLOUD_URL ||
+  import.meta.env.VITE_RAMPHASTOS_URL) || undefined) as string | undefined;
 // Client-authoritative mirror: attach to a desktop's mirrored session on the
 // /remote hub. ?remote=<session-id> in the URL wins over the env so a mobile
 // browser can pick a desktop without a rebuild.
-const remoteHubUrl = import.meta.env.VITE_REMOTE_URL as string | undefined;
+const remoteHubUrl =
+  new URLSearchParams(window.location.search).get('hub') ||
+  (import.meta.env.VITE_REMOTE_URL as string | undefined) ||
+  // Default: the mirror hub on the same gateway that serves /ws — /remote is
+  // the authority/viewer endpoint, NOT /ramphastos (the hosted session host,
+  // which would silently create a fresh container session).
+  (wsUrlBase ? wsUrlBase.replace(/\/ws\/?$/, '/remote') : undefined);
 const remoteSessionId =
-  new URLSearchParams(window.location.search).get('remote') ??
+  new URLSearchParams(window.location.search).get('remote') ||
   (import.meta.env.VITE_REMOTE_SESSION as string | undefined);
 
 function AppContent() {
@@ -24,8 +36,10 @@ function AppContent() {
 
   // Mirror mode wins when a remote session id is present: attach to the
   // desktop-authoritative session on the /remote hub and render the
-  // mirrored model instead of local browser sessions.
-  const hubUrl = remoteSessionId ? (remoteHubUrl ?? ramphastosUrl) : ramphastosUrl;
+  // mirrored model instead of local browser sessions. Never fall back to
+  // the cloud hub — that endpoint creates container PTYs, which is
+  // exactly the wrong thing for a viewer.
+  const hubUrl = remoteSessionId ? remoteHubUrl : cloudUrl;
   const backend = useMemo(
     () =>
       hubUrl
@@ -52,7 +66,12 @@ function AppContent() {
       // The session list is the authority's model (desktop via /remote, or
       // the session host's AxnHostVm in hosted mode), not browser state —
       // every attached device renders the same sessions.
-      p.stateStore = createMirrorStateStore(() => backend.ramphastosSession());
+      p.stateStore = createMirrorStateStore(() => backend.ramphastosSession(), {
+        // Remote mode is attach-only: never synthesize/spawn sessions — the
+        // desktop authority owns the model. Cloud mode keeps host-created
+        // sessions, so the flag stays off there.
+        attachOnly: Boolean(remoteSessionId),
+      });
     }
     return p;
   }, [username, backend]);
@@ -114,13 +133,15 @@ function AppContent() {
   }
 
   return (
-    <ShellApp
-      backend={backend}
-      services={browserServices}
-      platform={platform}
-      fileReader={fileReader}
-      tasksWsUrl={tasksWsUrl}
-    />
+    <ConnectionGate endpoints={[hubUrl ?? wsUrlBase]}>
+      <ShellApp
+        backend={backend}
+        services={browserServices}
+        platform={platform}
+        fileReader={fileReader}
+        tasksWsUrl={tasksWsUrl}
+      />
+    </ConnectionGate>
   );
 }
 

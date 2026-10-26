@@ -9,9 +9,13 @@ env:
   # client enforces PKCE S256, and crypto.subtle only exists in secure
   # contexts). Clients must accept the cert once (or trust the CA from
   # `docker exec axn-term-online-caddy cat /data/caddy/pki/authorities/local/root.crt`).
-  # Set these to your LAN box before deploying; unset falls back to
-  # localhost defaults in compose.yaml / service URLs. e.g.
-  # AXN_LAN_IP: "192.168.1.5"
+  #
+  # Machine identity is local — set AXN_LAN_IP / AXN_LAN_NAME and the
+  # derived AXN_KEYCLOAK_URL / AXN_GATEWAY_URL in the gitignored .env
+  # next to compose.yaml (see .env.example).
+  # JWT-bound /remote: hellos must carry a keycloak token; sessions bind
+  # to the publisher account (set true for anonymous local dev).
+  REMOTE_AUTHORITY_ANON: "false"
   AXN_KC_PORT: "18093"
   AXN_GW_PORT: "18094"
   # ramphastos hub instead of per-PTY /ws sockets
@@ -31,10 +35,9 @@ env:
   KEYCLOAK_REALM: "axn-term"
   KEYCLOAK_CLIENT_ID: "axn-term"
   # bind-mounted into every session host at the same path; shells land
-  # there and axn state goes to <DATA_MOUNT>/.axn-term. This dev box keeps
-  # it on the extended drive so real development survives (root fs is
-  # nearly full).
-  DATA_MOUNT: "/mnt/extended/axn-term"
+  # there and axn state goes to <DATA_MOUNT>/.axn-term. Set a real host
+  # path in .env — unset falls back to /tmp inside the session hosts.
+  # DATA_MOUNT: "/mnt/extended/axn-term"
   # kata only when the Docker host has the kata runtime installed; this dev
   # box runs plain runc, and inner dockerd is disabled with it.
   SESSION_HOST_RUNTIME: ""

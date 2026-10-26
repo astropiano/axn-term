@@ -87,7 +87,7 @@ export interface Workspace {
 }
 
 /** Agent CLIs whose conversations a sub-shell tab can host and resume. */
-export type AgentCli = 'devin' | 'claude' | 'agy' | 'codex';
+export type AgentCli = 'devin' | 'claude' | 'agy' | 'codex' | 'opencode';
 
 export interface EditorTab {
   id: string;

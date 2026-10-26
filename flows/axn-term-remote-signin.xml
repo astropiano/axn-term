@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - remote sign-in: real app device flow + authority publish">
+    <description>
+      End-to-end through the REAL desktop app: the axn-term adapter launches
+      the built binary with a temp state dir, seeds remote settings into its
+      config.yaml, triggers remoteAuth.signIn() via the remote-control
+      server (the same code path the "Sign in…" button runs — plugin_exec →
+      curl), then Playwright approves the device grant in a real browser,
+      and the app must reach signedIn. This is the faithful reproduction of
+      the invalid_client regression — remote-auth.ts stubs the client, this
+      drives it.
+      Plain listeners: keycloak :18096, gateway :18095 (127.0.0.1 — app runs
+      on the same host as the scenario).
+    </description>
+    <scenarios>
+      <scenario name="axn-term-online" service="shell" adapter="tsAdapter" />
+    </scenarios>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="single" />
+        <var name="AXN_TERM_REMOTE_ISSUER" value="http://192.168.1.202:18096/realms/axn-term" />
+        <var name="AXN_TERM_REMOTE_CLIENT_ID" value="axn-term-desktop" />
+        <var name="AXN_TERM_REMOTE_HUB" value="ws://192.168.1.202:18095/remote" />
+        <var name="AXN_TERM_REMOTE_SESSION" value="flow-desktop" />
+        <var name="TEST_USER" value="demo" />
+        <var name="TEST_PASSWORD" value="changeme" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Temp state dir + remote-control port/token" >
+        <assert that="contains" value="state dir prepared" description="The test harness is ready" />
+      </step>
+      <step adapter="axn-term" action="remoteConfig" description="Seed remote settings into the run's config.yaml" >
+        <assert that="contains" value="remote config written" description="config.yaml carries issuer + hub" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch the real axn-term" >
+        <assert that="contains" value="app started" description="The app started" />
+      </step>
+      <step adapter="axn-term" action="remoteSignIn"
+            description="Trigger signIn() in-app; device POST must reach pending (the invalid_client repro)" >
+        <assert that="contains" value="sign-in pending" description="Device endpoint accepted the app's client_id" />
+      </step>
+      <step adapter="axn-term" action="remoteApprove"
+            description="Headless Chromium approves the device grant" >
+        <assert that="contains" value="device grant approved" description="The grant is approved" />
+      </step>
+      <step adapter="axn-term" action="remoteAuthAwait"
+            description="App polls the token endpoint and lands signedIn" >
+        <assert that="contains" value="remote auth signedIn" description="App is signed in" />
+      </step>
+      <step adapter="axn-term" action="close" description="Close axn-term" >
+        <assert that="contains" value="app closed" description="The app closed" />
+      </step>
+    </steps>
+  </flow>
+</flows>

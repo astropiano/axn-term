@@ -26,6 +26,10 @@ services:
     image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26}
     container_name: axn-term-online-keycloak
     restart: unless-stopped
+    ports:
+      # plain HTTP for clients that can't trust the internal CA (e.g. the
+      # Tauri webview) — LAN/dev only; TLS stays on the Caddy route.
+      - ${AXN_KC_PLAIN_PORT:-18096}:8082
     command: ["start-dev", "--http-port", "8082", "--import-realm"]
     environment:
       KC_HOSTNAME: ${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}
@@ -116,6 +120,10 @@ services:
       # same sub on another device can attach). AllowAnonymous opens the
       # endpoint for local dev — scenario default, set 0/false in prod.
       - RemoteAuthority__AllowAnonymous=${REMOTE_AUTHORITY_ANON:-true}
+      # Hub surfaces — "remote" = desktop mirror (authority/viewers),
+      # "cloud" = hosted session-host hub. Each independently togglable.
+      - Hub__RemoteEnabled=${HUB_REMOTE_ENABLED:-true}
+      - Hub__CloudEnabled=${HUB_CLOUD_ENABLED:-true}
       - DEFAULT_USER=dev
       - DATA_MOUNT=${DATA_MOUNT:-}
       - PUID=${PUID:-1000}

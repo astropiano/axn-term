@@ -19,6 +19,23 @@ public sealed class RemoteWorkspaceInfo : SyncedObject
     }
 }
 
+/// <summary>Synced plugin-state blob — plugins declare state via the
+/// updateAppState/updatePluginState APIs and it rides the hub: every
+/// device renders the same plugin views. Key scheme: <c>app:&lt;pluginId&gt;</c>
+/// for app-level pluginData, <c>sess:&lt;sessionId&gt;:&lt;pluginId&gt;</c> for
+/// per-session pluginState. Data is an opaque JSON string.</summary>
+public sealed class RemotePluginStateInfo : SyncedObject
+{
+    public RemotePluginStateInfo(string key, string data) { Key = key; _data = data; }
+    public string Key { get; }
+    private string _data;
+    public string Data
+    {
+        get => _data;
+        set => Set(ref _data, value);
+    }
+}
+
 /// <summary>Synced view of one remote PTY — what clients see in <c>vm.ptys</c>.</summary>
 public sealed class RemotePtyInfo : SyncedObject
 {
@@ -256,6 +273,32 @@ public sealed class AxnHostVm : ApplicationModel
     /// <summary>Workspaces referenced by PTYs — id + display name, shared
     /// across devices (rename on one propagates to all).</summary>
     public ObservableCollection<RemoteWorkspaceInfo> Workspaces { get; } = new();
+
+    /// <summary>Plugin-declared state — generic shared plane; any value a
+    /// plugin stores through updateAppState/updatePluginState is mirrored to
+    /// every attached device (e.g. ram's stats from the desktop).</summary>
+    public ObservableCollection<RemotePluginStateInfo> PluginStates { get; } = new();
+
+    /// <summary>Set (or clear, with a null/empty payload) a shared plugin
+    /// state entry. Values are opaque JSON strings.</summary>
+    [Command]
+    public JsonObject SetPluginState(string key, string? data)
+    {
+        var existing = PluginStates.FirstOrDefault(p => p.Key == key);
+        if (data is null || data.Length == 0)
+        {
+            if (existing is not null) PluginStates.Remove(existing);
+        }
+        else if (existing is null)
+        {
+            PluginStates.Add(new RemotePluginStateInfo(key, data));
+        }
+        else
+        {
+            existing.Data = data;
+        }
+        return new JsonObject { ["ok"] = true };
+    }
 
     [Command]
     public JsonObject UpsertWorkspace(string id, string? name = null)

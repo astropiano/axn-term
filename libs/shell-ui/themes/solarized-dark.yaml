@@ -1,0 +1,59 @@
+# Solarized Dark (ethanschoonover.com/solarized). The classic mapping put
+# bright black on base03 (the background itself, 1.0:1) and greyed out four
+# bright colours. Bright black is now base01 lifted to 3.5:1; the bright
+# colours are lightened versions of their normal accents. Foreground nudged to
+# 6:1; Solarized stays deliberately soft.
+# Adjusted for legibility (hue kept, lightness moved):
+#   foreground: #839496 -> #99A7A9
+#   red: #DC322F -> #E56663
+#   blue: #268BD2 -> #3094DA
+#   magenta: #D33682 -> #DD629D
+#   brightBlack: #586E75 -> #668088
+#   brightRed: #CB4B16 -> #E8652E
+#   brightMagenta: #6C71C4 -> #8488CD
+#   ui.accent: #268BD2 -> #3094DA
+id: solarized-dark
+name: Solarized Dark
+mode: dark
+
+colors:
+  background: '#002B36'
+  foreground: '#99A7A9'
+  cursor: '#93A1A1'
+  cursorAccent: '#002B36'
+  selectionBackground: '#073642'
+  selectionForeground: '#99A7A9'
+
+  black: '#073642'
+  red: '#E56663'
+  green: '#859900'
+  yellow: '#B58900'
+  blue: '#3094DA'
+  magenta: '#DD629D'
+  cyan: '#2AA198'
+  white: '#EEE8D5'
+
+  brightBlack: '#668088'
+  brightRed: '#E8652E'
+  brightGreen: '#A3B82B'
+  brightYellow: '#D6A92A'
+  brightBlue: '#5CA8E0'
+  brightMagenta: '#8488CD'
+  brightCyan: '#5BC0B6'
+  brightWhite: '#FDF6E3'
+
+  orange: '#CB4B16'
+  violet: '#6C71C4'
+
+ui:
+  bg: '#002B36'
+  bgSecondary: '#073642'
+  surface: '#073642'
+  surfaceHover: '#0E4452'
+  text: '#99A7A9'
+  textSecondary: '#93A1A1'
+  textInverted: '#002B36'
+  border: '#24525E'
+  accent: '#3094DA'
+  accentHover: '#2AA198'
+  cursor: '#93A1A1'

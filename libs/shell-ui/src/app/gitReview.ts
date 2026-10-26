@@ -9,7 +9,7 @@ import { promptArg } from '../shellQuote';
  */
 
 /** Agent CLIs usable for explain/talk/resume — a sub-shell tab's `agent`. */
-export type ReviewAgent = 'devin' | 'claude' | 'agy' | 'codex';
+export type ReviewAgent = 'devin' | 'claude' | 'agy' | 'codex' | 'opencode';
 
 export interface Explanation {
   /** The agent's answer text. */
@@ -66,6 +66,11 @@ const AGENT_CMDS: Record<
     print: (p) => `codex exec ${p}`,
     seed: (p) => `codex ${p}`,
     resume: () => 'codex resume --last',
+  },
+  opencode: {
+    print: (p) => `opencode run ${p}`,
+    seed: (p) => `opencode --prompt ${p}`,
+    resume: (id) => (id ? `opencode -s ${id}` : 'opencode -c'),
   },
 };
 

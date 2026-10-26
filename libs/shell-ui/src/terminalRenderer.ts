@@ -31,6 +31,14 @@ export interface RendererFactories {
  *
  * Returns the renderer that was applied.
  */
+// Chrome keeps ~16 live WebGL contexts and force-loses the OLDEST past
+// that — with a couple of dozen mounted terminals (mirrored remote
+// sessions all mount), every mount blindly claiming WebGL first creates a
+// lose-and-restore churn loop (blank/dead terminals, flicker). Stop
+// offering WebGL once the pool is saturated; canvas/dom is plenty fast.
+const MAX_WEBGL_CONTEXTS = 8;
+let liveWebglContexts = 0;
+
 export function applyTerminalRenderer(
   term: Pick<Terminal, 'loadAddon'> & Partial<Pick<Terminal, 'clearTextureAtlas' | 'options'>>,
   mode?: string,
@@ -65,18 +73,33 @@ export function applyTerminalRenderer(
   };
 
   if (m === 'canvas') return { applied: tryCanvas(), dispose: noop };
+  if (m === 'auto' && liveWebglContexts >= MAX_WEBGL_CONTEXTS) {
+    return { applied: tryCanvas(), dispose: noop };
+  }
 
   const webgl = (factories.webgl ?? (() => new WebglAddon()))();
+  let counted = false;
+  const release = () => {
+    if (counted) {
+      counted = false;
+      liveWebglContexts--;
+    }
+  };
   webgl.onContextLoss?.(() => {
+    // The browser already killed this context — hand the slot back.
+    release();
     disposeActive();
     if (m === 'auto') tryCanvas();
   });
   try {
     load(webgl);
+    liveWebglContexts++;
+    counted = true;
     const stopGlyphRefresh = refreshGlyphsOnFontLoad(term);
     return {
       applied: 'webgl',
       dispose: () => {
+        release();
         stopGlyphRefresh();
         disposeActive();
       },

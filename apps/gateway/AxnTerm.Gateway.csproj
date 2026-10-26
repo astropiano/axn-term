@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <RootNamespace>Astropiano.AxnTerm.Gateway</RootNamespace>
-    <AssemblyName>Astropiano.AxnTerm.Gateway</AssemblyName>
-    <PackageId>Astropiano.AxnTerm.Gateway</PackageId>
+    <RootNamespace>AxnTerm.Gateway</RootNamespace>
+    <AssemblyName>AxnTerm.Gateway</AssemblyName>
+    <PackageId>AxnTerm.Gateway</PackageId>
     <Version>0.1.0</Version>
     <Authors>axn-term</Authors>
     <Company>axn-term</Company>
@@ -25,8 +25,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Sibling checkout: ../ramphastos, astropiano layout (see nuget.config
-         feeds). In the gateway Dockerfile the same tree lands at /ramphastos. -->
+    <!-- Sibling checkout: dev/libraries/ramphastos (see nuget.config feeds).
+         In the gateway Dockerfile the same tree lands at /libraries. -->
     <ProjectReference Include="../../../ramphastos/src/Ramphastos.Server/Ramphastos.Server.csproj" />
   </ItemGroup>
 

@@ -39,7 +39,7 @@ import {
   isPluginEnabled,
 } from './session-plugins';
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
-import { keepPtyAlive, takePtyKeepAlive, terminalAt } from '../terminalRegistry';
+import { keepPtyAlive, serializeTerminal, setPendingReplay, takePtyKeepAlive, terminalAt } from '../terminalRegistry';
 import { MoveToWorkspaceModal } from './MoveToWorkspaceModal';
 import { runSubShellClosers } from './subShellAgents';
 import { PickerHost } from './pickerHost';
@@ -47,11 +47,28 @@ import {
   requestAdopt,
   TOPIC_ADOPT,
   TOPIC_ADOPT_ACK,
+  TOPIC_WINDOW_GONE,
   useWorkspaceDirectory,
   type AdoptAck,
   type AdoptRequest,
   type WorkspaceTarget,
 } from './windowPeers';
+import {
+  FOREIGN_DRAG_LINGER_MS,
+  TEAR_OFF_ADOPT_TIMEOUT_MS,
+  TEAR_OFF_CLAIM_GRACE_MS,
+  TOPIC_SESSION_DRAG,
+  TOPIC_SESSION_DRAG_END,
+  TOPIC_SESSION_DROP,
+  TOPIC_WINDOW_READY,
+  WINDOW_READY_REPEAT_MS,
+  openTearOffWindow,
+  type SessionDrag,
+  type SessionDragEnd,
+  type SessionDrop,
+  type TearOffPlacement,
+  type WindowReady,
+} from './sessionTearOff';
 import { planSubShellPromote, planTurnIntoWorkspace } from './subshellPromote';
 import {
   PluginSettingsProvider,
@@ -88,6 +105,10 @@ import {
   maybeWireHookSpec,
   releaseHookSpec,
 } from './session-plugins/agentHookBridge';
+import { terminalInput } from '../terminalRegistry';
+import { MobileKeyBar } from './MobileKeyBar';
+import { LONG_PRESS_MS } from '../useContextMenuTrigger';
+import { useCoarsePointer, useVisualViewportSize } from '../useMediaQuery';
 
 const SMALL_SCREEN_QUERY = '(max-width: 639px)';
 
@@ -158,6 +179,8 @@ function resolveAnySessionId(): string | null {
 
 function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: ShellAppProps) {
   const windowId = platform.window?.id ?? 'main';
+  // Set when another window opened this one to tear a session off into it.
+  const bootIntent = platform.window?.bootIntent ?? null;
 
   const {
     workspaces,
@@ -192,12 +215,16 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     mergePluginData,
     appendSessionOutput,
     loaded,
+    startedEmpty,
     closeSession,
     saveNow,
     importWindowState,
     stateNotice,
     dismissStateNotice,
-  } = useShellSessions(windowId, platform.stateStore);
+  } = useShellSessions(windowId, platform.stateStore, {
+    startEmpty:
+      bootIntent?.kind === 'tear-off' ? { workspaceName: bootIntent.workspaceName } : undefined,
+  });
   const { settings, updateSettings } = useSettings();
   const pathDeps = useMemo(
     () => ({
@@ -365,6 +392,18 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     () => typeof window === 'undefined' || !window.matchMedia(SMALL_SCREEN_QUERY).matches
   );
   const [sidebarWidth, setSidebarWidth] = useState(288);
+  // Touch-primary devices get the mobile affordances: the key bar under the
+  // terminal, and a root sized to the visual viewport so the on-screen
+  // keyboard shrinks the app instead of covering it.
+  const coarsePointer = useCoarsePointer();
+  const viewportSize = useVisualViewportSize(coarsePointer);
+  // Long-press on a session/plugin tab opens the same menu as right-click.
+  const tabLongPress = useRef<{
+    timer: ReturnType<typeof setTimeout> | null;
+    fired: boolean;
+    origin: { x: number; y: number };
+    el: HTMLElement | null;
+  }>({ timer: null, fired: false, origin: { x: 0, y: 0 }, el: null });
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const taskState = useAgentTasks(
@@ -399,6 +438,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // the same flag repeatedly; keyed `${sessionId}:${pluginId}` → flag content.
   const notifiedAttentionRef = useRef(new Map<string, string>());
   const selectedSessionIdRef = useRef(selectedSessionId);
+  const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
+  selectedWorkspaceIdRef.current = selectedWorkspaceId;
   sessionsRef.current = sessions;
   selectedSessionIdRef.current = selectedSessionId;
   workspacesRef.current = workspaces;
@@ -699,7 +740,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   const [moveError, setMoveError] = useState<string | null>(null);
 
   const moveSessionToWindow = useCallback(
-    async (sessionId: string, target: WorkspaceTarget) => {
+    async (sessionId: string, target: WorkspaceTarget, beforeSessionId?: string | null) => {
       const peers = platform.peers;
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!peers || !session) return;
@@ -710,11 +751,20 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         ...(session.editors ?? []).filter((e) => e.kind === 'shell').map((e) => e.id),
       ];
       for (const id of ptyIds) keepPtyAlive(id);
+      // Carry the terminals' history along: the PTYs stay put and only send
+      // new output, so the target window would otherwise start blank.
+      const replay: Record<string, string> = {};
+      for (const id of [session.id, ...(session.editors ?? []).filter((e) => e.kind === 'shell').map((e) => e.id)]) {
+        const data = serializeTerminal(id);
+        if (data) replay[id] = data;
+      }
       const result = await requestAdopt(peers, {
         to: target.windowId,
         from: windowId,
         workspaceId: target.workspace.id,
         session: { ...session, workspaceId: target.workspace.id },
+        beforeSessionId: beforeSessionId ?? null,
+        replay,
       });
       if (!result.ok) {
         for (const id of ptyIds) takePtyKeepAlive(id);
@@ -755,17 +805,22 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         ack(false, 'the session is already in that window');
         return;
       }
+      for (const [id, data] of Object.entries(req.replay ?? {})) {
+        if (typeof data === 'string') setPendingReplay(id, data);
+      }
       adoptSession(req.workspaceId, req.session);
+      // A drop between two rows: place it there (moveSessionToWorkspace
+      // also saves). Otherwise it appends.
+      if (req.beforeSessionId) {
+        moveSessionToWorkspace(req.session.id, req.workspaceId, req.beforeSessionId);
+      }
       setSelectedSessionId(req.session.id);
       saveNow().catch(() => {});
       ack(true);
+      // The user just sent a session here — show it.
+      platform.window?.focus?.();
     });
-  }, [platform.peers, windowId, adoptSession, setSelectedSessionId, saveNow]);
-
-  // Dropped files/URLs/text from outside must never navigate the webview —
-  // only x-axn drags and drags that started inside this window reach drop
-  // targets (see dropGuard.ts).
-  useEffect(() => installDropGuard(window), []);
+  }, [platform.peers, windowId, adoptSession, moveSessionToWorkspace, setSelectedSessionId, saveNow]);
 
   const pickMoveTarget = useCallback(
     (sessionId: string, target: WorkspaceTarget) => {
@@ -775,6 +830,245 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     },
     [moveSessionToWorkspace, moveSessionToWindow],
   );
+
+  // ---- Session tear-off, Chrome-tab style (see sessionTearOff.ts): drag a
+  // session row out of the window and it opens in a window of its own; drag
+  // it onto another window and it moves there. Every hand-over is the adopt
+  // request above, so PTYs, tabs, plugin state and scrollback ride along.
+  const canTearOff = Boolean(platform.peers && platform.window?.createWindow);
+  // Sessions with a hand-over in flight — a drag can trigger both a tear-off
+  // and a drop claim; whichever starts first wins.
+  const inFlightMovesRef = useRef(new Set<string>());
+  // Tear-offs waiting out TEAR_OFF_CLAIM_GRACE_MS for a drop claim.
+  const pendingTearOffsRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  /** Open a window for `sessionId` and hand the session over; resolves an error message or null. */
+  const tearOffSession = useCallback(
+    async (sessionId: string, placement?: TearOffPlacement): Promise<string | null> => {
+      const peers = platform.peers;
+      const createWindow = platform.window?.createWindow;
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return 'no such session';
+      if (!peers || !createWindow) return 'new windows are not available here';
+      if (sessionsRef.current.length <= 1) return 'this is the only session in its window';
+      if (inFlightMovesRef.current.has(sessionId)) return null;
+      inFlightMovesRef.current.add(sessionId);
+      try {
+        const opened = await openTearOffWindow(peers, createWindow, {
+          from: windowId,
+          workspaceName: workspacesRef.current.find((w) => w.id === session.workspaceId)?.name,
+          placement,
+        });
+        if (!opened.ok) {
+          const message = `Could not move '${session.name}' to a new window: ${opened.error}`;
+          setMoveError(message);
+          return message;
+        }
+        await moveSessionToWindow(sessionId, {
+          windowId: opened.ready.windowId,
+          windowLabel: 'a new window',
+          isCurrentWindow: false,
+          workspace: opened.ready.workspace,
+        });
+        return null;
+      } finally {
+        inFlightMovesRef.current.delete(sessionId);
+      }
+    },
+    [platform.peers, platform.window, windowId, moveSessionToWindow],
+  );
+
+  // Drag source: announce the drag so other windows accept the drop; a drag
+  // that ends outside every window becomes a tear-off.
+  const handleSessionDragStart = useCallback(
+    (sessionId: string) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return;
+      platform.peers?.publish(TOPIC_SESSION_DRAG, {
+        from: windowId,
+        sessionId,
+        name: session.name,
+      } satisfies SessionDrag);
+    },
+    [platform.peers, windowId],
+  );
+
+  const handleSessionDragEnd = useCallback(
+    (sessionId: string, end: { dropEffect: string; outside: boolean; placement: TearOffPlacement }) => {
+      platform.peers?.publish(TOPIC_SESSION_DRAG_END, { from: windowId, sessionId } satisfies SessionDragEnd);
+      if (!canTearOff || end.dropEffect !== 'none' || !end.outside) return;
+      // Nothing took the drop and it landed outside this window. Give a
+      // window's drop claim (sent from its own drop handler) a moment to
+      // overtake this dragend before opening a new window.
+      clearTimeout(pendingTearOffsRef.current.get(sessionId));
+      pendingTearOffsRef.current.set(
+        sessionId,
+        setTimeout(() => {
+          pendingTearOffsRef.current.delete(sessionId);
+          void tearOffSession(sessionId, end.placement);
+        }, TEAR_OFF_CLAIM_GRACE_MS),
+      );
+    },
+    [platform.peers, windowId, canTearOff, tearOffSession],
+  );
+
+  // Drag source: another window took our dragged session — hand it over.
+  useEffect(() => {
+    const peers = platform.peers;
+    if (!peers) return;
+    return peers.subscribe(TOPIC_SESSION_DROP, (payload) => {
+      const drop = payload as SessionDrop;
+      if (drop?.to !== windowId || !drop.windowId || drop.windowId === windowId) return;
+      if (!drop.sessionId || typeof drop.workspace?.id !== 'string') return;
+      const pending = pendingTearOffsRef.current.get(drop.sessionId);
+      if (pending) {
+        clearTimeout(pending);
+        pendingTearOffsRef.current.delete(drop.sessionId);
+      }
+      if (inFlightMovesRef.current.has(drop.sessionId)) return;
+      if (!sessionsRef.current.some((s) => s.id === drop.sessionId)) return;
+      inFlightMovesRef.current.add(drop.sessionId);
+      void moveSessionToWindow(
+        drop.sessionId,
+        {
+          windowId: drop.windowId,
+          windowLabel: 'the other window',
+          isCurrentWindow: false,
+          workspace: drop.workspace,
+        },
+        drop.beforeSessionId,
+      ).finally(() => inFlightMovesRef.current.delete(drop.sessionId));
+    });
+  }, [platform.peers, windowId, moveSessionToWindow]);
+
+  useEffect(() => {
+    const pending = pendingTearOffsRef.current;
+    return () => {
+      for (const timer of pending.values()) clearTimeout(timer);
+      pending.clear();
+    };
+  }, []);
+
+  // Drop target: while another window drags a session, accept it. The ref
+  // lingers briefly after the drag's end — the source's dragend can overtake
+  // this window's own drop event.
+  const [foreignDrag, setForeignDrag] = useState<SessionDrag | null>(null);
+  const foreignDragRef = useRef<SessionDrag | null>(null);
+  useEffect(() => {
+    const peers = platform.peers;
+    if (!peers) return;
+    let linger: ReturnType<typeof setTimeout> | undefined;
+    const forget = () => {
+      clearTimeout(linger);
+      foreignDragRef.current = null;
+      setForeignDrag(null);
+    };
+    const unsubs = [
+      peers.subscribe(TOPIC_SESSION_DRAG, (payload) => {
+        const drag = payload as SessionDrag;
+        if (!drag?.sessionId || !drag.from || drag.from === windowId) return;
+        clearTimeout(linger);
+        foreignDragRef.current = drag;
+        setForeignDrag(drag);
+      }),
+      peers.subscribe(TOPIC_SESSION_DRAG_END, (payload) => {
+        const end = payload as SessionDragEnd;
+        const drag = foreignDragRef.current;
+        if (!drag || end?.from !== drag.from || end.sessionId !== drag.sessionId) return;
+        setForeignDrag(null);
+        clearTimeout(linger);
+        linger = setTimeout(() => {
+          foreignDragRef.current = null;
+        }, FOREIGN_DRAG_LINGER_MS);
+      }),
+      peers.subscribe(TOPIC_WINDOW_GONE, (payload) => {
+        if ((payload as { windowId?: string })?.windowId === foreignDragRef.current?.from) forget();
+      }),
+    ];
+    return () => {
+      clearTimeout(linger);
+      for (const unsub of unsubs) unsub();
+    };
+  }, [platform.peers, windowId]);
+
+  /** Claim the foreign session dragged onto this window; true when claimed. */
+  const claimForeignDrop = useCallback(
+    (workspaceId: string, beforeSessionId: string | null): boolean => {
+      const drag = foreignDragRef.current;
+      const peers = platform.peers;
+      const workspace = workspacesRef.current.find((w) => w.id === workspaceId);
+      if (!drag || !peers || !workspace) return false;
+      foreignDragRef.current = null;
+      setForeignDrag(null);
+      peers.publish(TOPIC_SESSION_DROP, {
+        to: drag.from,
+        sessionId: drag.sessionId,
+        windowId,
+        workspace: { id: workspace.id, name: workspace.name },
+        beforeSessionId,
+      } satisfies SessionDrop);
+      return true;
+    },
+    [platform.peers, windowId],
+  );
+
+  // Dropped files/URLs/text from outside must never navigate the webview —
+  // only x-axn drags and drags that started inside this window reach drop
+  // targets (see dropGuard.ts).
+  useEffect(() => installDropGuard(window), []);
+
+  // The whole window is a drop target for a foreign session: drops the
+  // session panel did not place (it preventDefaults its own) land in the
+  // selected workspace.
+  useEffect(() => {
+    if (!platform.peers) return;
+    const onDragOver = (e: DragEvent) => {
+      if (!foreignDragRef.current) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!foreignDragRef.current || e.defaultPrevented) return;
+      e.preventDefault();
+      claimForeignDrop(selectedWorkspaceIdRef.current || workspacesRef.current[0]?.id || '', null);
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [platform.peers, claimForeignDrop]);
+
+  // Tear-off target: a window opened for a tear-off boots empty, announces
+  // itself until the source hands the session over, and gives up (closing
+  // again, being empty) after TEAR_OFF_ADOPT_TIMEOUT_MS.
+  const [awaitingAdoption, setAwaitingAdoption] = useState(() => bootIntent?.kind === 'tear-off');
+  useEffect(() => {
+    if (!loaded || !awaitingAdoption) return;
+    const peers = platform.peers;
+    const workspace = workspacesRef.current[0];
+    if (!startedEmpty || !peers || !bootIntent || !workspace || sessionsRef.current.length > 0) {
+      setAwaitingAdoption(false);
+      return;
+    }
+    const announce = () =>
+      peers.publish(TOPIC_WINDOW_READY, {
+        windowId,
+        requestId: bootIntent.requestId,
+        workspace: { id: workspace.id, name: workspace.name },
+      } satisfies WindowReady);
+    announce();
+    const repeat = setInterval(announce, WINDOW_READY_REPEAT_MS);
+    const giveUp = setTimeout(() => setAwaitingAdoption(false), TEAR_OFF_ADOPT_TIMEOUT_MS);
+    return () => {
+      clearInterval(repeat);
+      clearTimeout(giveUp);
+    };
+  }, [loaded, awaitingAdoption, startedEmpty, platform.peers, bootIntent, windowId]);
+  useEffect(() => {
+    if (awaitingAdoption && sessions.length > 0) setAwaitingAdoption(false);
+  }, [awaitingAdoption, sessions.length]);
 
   // Cycle the selected session's tabs: 'shell' first, then sub-view tabs in
   // order. Same modifier family as session/workspace switching. While a
@@ -824,6 +1118,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     renameSession,
     updateSession,
     pathDeps,
+    tearOffSession: canTearOff ? tearOffSession : undefined,
   });
 
   // Sessions whose PTY just spawned, waiting for plugin settings to load
@@ -923,7 +1218,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   }, [flushPendingSessionOpen]);
 
   const MIN_SIDEBAR_WIDTH = 192;
-  const MAX_SIDEBAR_WIDTH = 448;
+  // Bigger uiZoom needs more room: the cap scales with it.
+  const MAX_SIDEBAR_WIDTH = Math.round(448 * ((settings.uiZoom ?? 100) / 100));
 
   const startSidebarResize = useCallback(
     (e: React.MouseEvent) => {
@@ -1112,9 +1408,23 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   useEffect(() => {
     if (!platform.autoCloseWhenEmpty) return;
     if (!loaded || sessions.length > 0 || closingRef.current) return;
+    // A tear-off window is empty until its session arrives.
+    if (awaitingAdoption) return;
 
+    // A secondary window emptied while others remain (its sessions were
+    // dragged or moved elsewhere — typically a torn-off window whose session
+    // went back) has nothing to restore: drop its saved state instead of
+    // reopening it empty at the next launch. The main window, the last
+    // window, and windows holding per-window data (bookmarks, rail order,
+    // hosted tabs) keep their state as before.
+    const holdsWindowData =
+      Object.keys(pluginDataRef.current).length > 0 || Object.keys(pluginTabsRef.current).length > 0;
+    if (windowId !== 'main' && otherWindowWorkspaces.size > 0 && !holdsWindowData) {
+      void removeAndClose();
+      return;
+    }
     platform.window?.close?.();
-  }, [loaded, sessions.length, platform]);
+  }, [loaded, sessions.length, platform, awaitingAdoption, otherWindowWorkspaces, removeAndClose, windowId]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -1161,6 +1471,12 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       window.removeEventListener('contextmenu', onContextMenu);
       window.removeEventListener('keydown', onKeyDown, true);
     };
+  }, [reloadWindow]);
+
+  useEffect(() => {
+    const onMenuReload = () => void reloadWindow();
+    window.addEventListener('axn:menu-reload', onMenuReload);
+    return () => window.removeEventListener('axn:menu-reload', onMenuReload);
   }, [reloadWindow]);
 
   useEffect(() => {
@@ -1240,6 +1556,57 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     [setSelectedSessionId, clearSessionAttention]
   );
   selectSessionRef.current = handleSelectSession;
+
+  // Long-press on a tab opens the same menu as right-click — the primary
+  // context-menu path on touch devices (tabs aren't draggable there anyway).
+  // Delegated at the strip level: `data-tab-id` (plus `data-session-id` or
+  // `data-plugin-id`) on each row identifies the target.
+  const handleTabStripTouchStart = useCallback((e: React.TouchEvent) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tab-id]');
+    const touch = e.touches[0];
+    const lp = tabLongPress.current;
+    if (lp.timer) clearTimeout(lp.timer);
+    lp.el = el;
+    lp.fired = false;
+    if (!el || !touch) return;
+    lp.origin = { x: touch.clientX, y: touch.clientY };
+    lp.timer = setTimeout(() => {
+      lp.fired = true;
+      const { sessionId, tabId, pluginId } = el.dataset;
+      if (pluginId) {
+        const tab = pluginTabsRef.current[pluginId]?.editors.find((t) => t.id === tabId);
+        if (tab) setTabMenu({ pluginId, tab, x: lp.origin.x, y: lp.origin.y });
+      } else {
+        const session = sessionsRef.current.find((s) => s.id === sessionId);
+        const tab = session && (session.editors ?? []).find((t) => t.id === tabId);
+        if (session && tab) setTabMenu({ session, tab, x: lp.origin.x, y: lp.origin.y });
+      }
+    }, LONG_PRESS_MS);
+  }, []);
+  const handleTabStripTouchMove = useCallback((e: React.TouchEvent) => {
+    const lp = tabLongPress.current;
+    if (!lp.timer) return;
+    const touch = e.touches[0];
+    if (
+      Math.abs((touch?.clientX ?? 0) - lp.origin.x) > 10 ||
+      Math.abs((touch?.clientY ?? 0) - lp.origin.y) > 10
+    ) {
+      clearTimeout(lp.timer);
+      lp.timer = null;
+    }
+  }, []);
+  const handleTabStripTouchEnd = useCallback(() => {
+    const lp = tabLongPress.current;
+    if (lp.timer) clearTimeout(lp.timer);
+    lp.timer = null;
+  }, []);
+  // The tap that ends a fired long-press must not also activate the tab.
+  const handleTabStripClickCapture = useCallback((e: React.MouseEvent) => {
+    if (!tabLongPress.current.fired) return;
+    tabLongPress.current.fired = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
 
   const handleSaveWorkspaces = useCallback(async () => {
     const snapshot = {
@@ -1549,6 +1916,17 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     ? enabledPlugins.find((p) => p.id === activePluginView && p.renderView)
     : undefined;
 
+  // The PTY the touch key bar targets: the session's live main PTY on the
+  // shell tab, the tab's own PTY on sub-shell tabs — nothing on non-terminal
+  // tabs (editors/browsers have their own input) or plugin views.
+  const keybarPtyId = (() => {
+    if (!selectedSession || viewPlugin) return null;
+    const activeTab = selectedSession.activeTab ?? 'shell';
+    if (activeTab === 'shell') return ptyIdOf(selectedSession);
+    const tab = (selectedSession.editors ?? []).find((e) => e.id === activeTab);
+    return tab?.kind === 'shell' ? tab.id : null;
+  })();
+
   if (!loaded || !selectedSession) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[var(--bg)] text-[var(--text-primary)]">
@@ -1560,9 +1938,26 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   return (
     <ShellServicesProvider services={mergedServices} fileReader={fileReader}>
     <MemoryStatsProvider active={enabledPlugins.some((p) => p.needsMemoryStats)}>
-    <div className="relative flex h-screen w-full overflow-hidden bg-[var(--bg)]">
+    <div
+      className="relative flex h-screen w-full overflow-hidden bg-[var(--bg)]"
+      style={{
+        // On touch devices track the visual viewport so the on-screen
+        // keyboard shrinks/translates the app instead of covering it
+        // (100dvh is the no-keyboard value; h-screen covers old engines).
+        height: viewportSize ? `${viewportSize.height}px` : '100dvh',
+        transform:
+          viewportSize && viewportSize.offsetTop > 0
+            ? `translateY(${viewportSize.offsetTop}px)`
+            : undefined,
+        padding:
+          'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)',
+      }}
+    >
       {/* Slim left rail — always visible, holds the hamburger + settings. */}
-      <div className="flex w-10 shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--bg-secondary)] py-2">
+      <div
+        className="flex w-10 shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--bg-secondary)] py-2"
+        style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
+      >
         <button
           type="button"
           onClick={() => setSidebarOpen((v) => !v)}
@@ -1696,19 +2091,10 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             onClick={() => setSidebarOpen(false)}
           />
           <div
-            className="absolute bottom-0 left-10 top-0 z-40 min-w-[12rem] max-w-[85vw] shadow-lg sm:static sm:z-auto sm:max-w-[28rem] sm:shadow-none"
+            className="absolute bottom-0 left-10 top-0 z-40 min-w-[12rem] max-w-[85vw] shadow-lg sm:static sm:z-auto sm:shadow-none"
             style={{ width: sidebarWidth }}
           >
-            <div
-              className="relative h-full w-full"
-              style={{
-                fontFamily: settings.panelFontFamily?.trim() || undefined,
-                // Panel text is ~12px-based; scale the whole pane proportionally.
-                zoom: settings.panelFontSize
-                  ? settings.panelFontSize / 12
-                  : undefined,
-              }}
-            >
+            <div className="relative h-full w-full">
               <SessionPanel
                 workspaces={workspaces}
                 sessions={sessions}
@@ -1741,6 +2127,13 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 mergePluginData={mergePluginData}
                 onOpenSubShell={openSubShell}
                 onTurnIntoWorkspace={turnIntoWorkspace}
+                onMoveToNewWindow={
+                  canTearOff ? (id) => void tearOffSession(id) : undefined
+                }
+                onSessionDragStart={handleSessionDragStart}
+                onSessionDragEnd={handleSessionDragEnd}
+                foreignDrag={foreignDrag}
+                onForeignDrop={claimForeignDrop}
               />
               <div
                 onMouseDown={startSidebarResize}
@@ -1793,7 +2186,18 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 />
               ))}
               {editors.length > 0 && (
-                <SessionTabStrip
+                <div
+                  className="contents"
+                  onTouchStart={handleTabStripTouchStart}
+         
+         onTouchMove={handleTabStripTouchMove}
+         
+         onTouchEnd={handleTabStripTouchEnd}
+         
+         onTouchCancel={handleTabStripTouchEnd}
+         onClickCapture={handleTabStripClickCapture}
+                >
+                  <SessionTabStrip
                   editors={editors}
                   activeTab={activeTab}
                   onSelect={(tabId) => updateSession(session.id, { activeTab: tabId })}
@@ -1801,6 +2205,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                   onReorder={(dragId, targetId) => reorderTab(session, dragId, targetId)}
                   onCloseTab={(tabId) => closeTab(session, tabId)}
                 />
+</div>
               )}
               <div className="min-h-0 flex-1">
                 <div
@@ -1833,6 +2238,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                   <div
                     key={ed.id}
                     className={activeTab === ed.id ? 'h-full w-full' : 'hidden'}
+                    style={ed.kind === 'shell' ? undefined : { zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
                   >
                     {/* A crashing tab view replaces only itself. */}
                     <ErrorBoundary
@@ -1911,7 +2317,14 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           return (
             <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
               {tabSet && (
-                <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
+                <div
+                  className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2"
+                  onTouchStart={handleTabStripTouchStart}
+                  onTouchMove={handleTabStripTouchMove}
+                  onTouchEnd={handleTabStripTouchEnd}
+                  onTouchCancel={handleTabStripTouchEnd}
+                  onClickCapture={handleTabStripClickCapture}
+                >
                   <button
                     type="button"
                     onClick={() => updatePluginTabs(viewPlugin.id, { activeTab: 'view' })}
@@ -1927,6 +2340,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                   {hostedTabs.map((ed) => (
                     <div
                       key={ed.id}
+                      data-plugin-id={viewPlugin.id}
+                      data-tab-id={ed.id}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setTabMenu({
@@ -2035,6 +2450,11 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           );
         })()}
         </div>
+        {/* Touch key bar — coarse-pointer devices only, and only while a
+            terminal tab (main shell or sub-shell) is active. */}
+        {coarsePointer && keybarPtyId && (
+          <MobileKeyBar target={() => terminalInput(keybarPtyId)} />
+        )}
       </div>
 
       {tabMenu && (

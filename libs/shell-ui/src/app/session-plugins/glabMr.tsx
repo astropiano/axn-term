@@ -10,6 +10,14 @@ import {
 } from 'lucide-react';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
+import { shellQuote } from '../../shellQuote';
+import {
+  classifyCliError,
+  forgeCliCommand,
+  forgeOfRemote,
+  forgeRailMode,
+  type CliFailure,
+} from './forge';
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -159,7 +167,9 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
   const branch = session.repo?.branch;
   const had =
     (((ctx.pluginState as { mrs?: SessionMr[] } | undefined)?.mrs?.length) ?? 0) > 0;
-  if (!root || !branch) {
+  const hostname = (ctx.pluginSettings as { hostname?: unknown } | undefined)?.hostname;
+  // A repo on GitHub is gh-pr's — don't spawn glab for it on every refresh.
+  if (!root || !branch || forgeOfRemote(session.repo?.remote, { gitlab: hostname }) === 'github') {
     if (had) ctx.updatePluginState({ mrs: [] });
     return;
   }
@@ -169,10 +179,7 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
 
   let list: RawMrListItem[];
   try {
-    const out = await ctx.exec(
-      `glab mr list -s ${JSON.stringify(branch)} -F json -P 10`,
-      root,
-    );
+    const out = await ctx.exec(mrListCommand(branch), root);
     const parsed = JSON.parse(out || '[]') as unknown;
     list = Array.isArray(parsed) ? (parsed as RawMrListItem[]) : [];
   } catch {
@@ -187,7 +194,7 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
       let pipeline: string | null = null;
       try {
         const detail = await ctx.exec(
-          `glab api "projects/:fullpath/merge_requests/${item.iid}"`,
+          `glab api "projects/:fullpath/merge_requests/${Math.trunc(Number(item.iid))}"`,
           root,
         );
         const parsed = JSON.parse(detail) as RawMrDetail;
@@ -254,6 +261,8 @@ const MR_OVERVIEW_QUERY = `query {
 export interface MrOverview {
   status: 'idle' | 'loading' | 'ready' | 'error';
   error?: string;
+  /** Why the last refresh failed; kept through `loading` so the rail doesn't flicker. */
+  failure?: CliFailure;
   username?: string;
   /** Assigned to me, or authored by me with no assignee yet. */
   mine: GlabMrItem[];
@@ -361,24 +370,39 @@ const EXEC_TRUNCATED_MARKER = '[axn-term: output truncated';
 const isAuthHintRelevant = (error?: string) =>
   !(error ?? '').startsWith('glab output too large');
 
+/** `glab mr list` for the MRs whose source is `branch` (single-quoted: git allows `$(…)` in names). */
+export function mrListCommand(branch: string): string {
+  return forgeCliCommand('glab', `mr list -s ${shellQuote(branch)} -F json -P 10`);
+}
+
+/** The app-wide overview command (`--hostname` for self-hosted GitLab). */
+export function mrOverviewCommand(hostname?: unknown): string {
+  const host =
+    typeof hostname === 'string' && hostname.trim() ? ` --hostname ${shellQuote(hostname.trim())}` : '';
+  // One line, single-quoted: no literal newlines or shell expansion inside.
+  const query = MR_OVERVIEW_QUERY.replace(/\s+/g, ' ');
+  return forgeCliCommand('glab', `api graphql${host} -f query=${shellQuote(query)}`);
+}
+
+/** The current overview snapshot (outside React). */
+export function currentMrOverview(): MrOverview {
+  return overview;
+}
+
+/** Test seam: drop the cached overview. */
+export function resetMrOverview(): void {
+  setOverview({ status: 'idle', mine: [], review: [] });
+}
+
 export function refreshMrOverview(settings?: {
   hostname?: unknown;
 }): Promise<void> {
   refreshInFlight ??= (async () => {
     setOverview({ ...overview, status: 'loading' });
     try {
-      const hostname =
-        typeof settings?.hostname === 'string' && settings.hostname
-          ? ` --hostname ${JSON.stringify(settings.hostname)}`
-          : '';
-      // plugin_exec runs `sh -c`: collapse the query to one line so the
-      // double-quoted argument carries no literal newlines.
-      const query = MR_OVERVIEW_QUERY.replace(/\s+/g, ' ');
       const rt = appRuntime();
       if (!rt) throw new Error('no session available for glab');
-      const out = await rt.exec(
-        `glab api graphql${hostname} -f query=${JSON.stringify(query)}`,
-      );
+      const out = await rt.exec(mrOverviewCommand(settings?.hostname));
       // plugin_exec caps output and appends a marker; JSON.parse would only
       // report "Expected '}'" — name the real cause instead.
       if (out.includes(EXEC_TRUNCATED_MARKER)) {
@@ -411,10 +435,12 @@ export function refreshMrOverview(settings?: {
         fetchedAt: Date.now(),
       });
     } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
       setOverview({
         ...overview,
         status: 'error',
-        error: e instanceof Error ? e.message : String(e),
+        error,
+        failure: classifyCliError('glab', error),
       });
     }
   })().finally(() => {
@@ -428,10 +454,10 @@ export function refreshMrOverview(settings?: {
 // ---------------------------------------------------------------------------
 
 const pipelineColor: Record<string, string> = {
-  success: 'text-emerald-500',
-  failed: 'text-red-500',
-  running: 'text-blue-500',
-  pending: 'text-yellow-500',
+  success: 'text-[var(--green)]',
+  failed: 'text-[var(--red)]',
+  running: 'text-[var(--blue)]',
+  pending: 'text-[var(--yellow)]',
   canceled: 'text-[var(--text-secondary)]',
 };
 
@@ -487,7 +513,7 @@ function SessionMrs({ ctx }: { ctx: SessionViewContext & PluginApi }) {
                 <span className="rounded bg-slate-500/20 px-1 text-slate-600">draft</span>
               )}
               {mr.conflicts && (
-                <span className="rounded bg-red-500/20 px-1 text-red-600">conflicts</span>
+                <span className="rounded bg-[color-mix(in_srgb,var(--red)_20%,transparent)] px-1 text-[var(--red)]">conflicts</span>
               )}
               {!mr.discussionsResolved && (
                 <span className="flex items-center gap-0.5 text-[var(--orange)]">
@@ -536,9 +562,14 @@ function GlabMrRail({
   const me = data.username ?? '';
   const mineAction = data.mine.filter((m) => mrNeedsAction(m)).length;
   const reviewWaiting = data.review.filter((m) => mrWaitingForMe(m, me)).length;
+  const mode = forgeRailMode(data);
+  // No glab (or nothing fetched yet): a GitHub-only user sees no GitLab icon.
+  if (mode === 'hidden') return null;
 
   const title =
-    data.status === 'error'
+    mode === 'signed-out'
+      ? 'GitLab merge requests — not signed in.\nRun `glab auth login` in a shell to see your MRs here.'
+      : mode === 'error'
       ? `merge requests unavailable\nglab: ${data.error ?? 'unknown error'}${isAuthHintRelevant(data.error) ? '\nCheck `glab auth status` in a shell.' : ''}`
       : [
           `${mineAction}/${data.mine.length} assigned/authored MRs need action (open threads, conflicts, failing pipeline or approved)`,
@@ -559,8 +590,8 @@ function GlabMrRail({
           : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
       }`}
     >
-      <GitMerge className="h-3.5 w-3.5" />
-      {data.status === 'error' ? (
+      <GitMerge className={`h-3.5 w-3.5${mode === 'signed-out' ? ' opacity-50' : ''}`} />
+      {mode === 'signed-out' ? null : mode === 'error' ? (
         <AlertTriangle className="h-3 w-3 text-[var(--red)]" />
       ) : (
         <>
@@ -574,7 +605,7 @@ function GlabMrRail({
           </span>
           <span
             className={`select-none text-[8px] font-bold leading-none ${
-              reviewWaiting > 0 ? 'text-cyan-500' : ''
+              reviewWaiting > 0 ? 'text-[var(--cyan)]' : ''
             }`}
             data-tip="review requested"
           >
@@ -633,7 +664,7 @@ function MrRow({ mr, badge, env }: { mr: GlabMrItem; badge?: string; env: MrRowE
           </span>
         )}
         {mr.conflicts && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-red-500">
+          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
             <AlertTriangle className="h-3 w-3" />
             conflicts
           </span>
@@ -650,7 +681,7 @@ function MrRow({ mr, badge, env }: { mr: GlabMrItem; badge?: string; env: MrRowE
           </span>
         )}
         {mr.approved && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-emerald-500">
+          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--green)]">
             <Check className="h-3 w-3" />
             approved
           </span>
@@ -761,9 +792,28 @@ function GlabMrView({ close, env }: { close: () => void; env: MrRowEnv }) {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {data.status === 'error' ? (
+        {data.status === 'error' && data.failure !== 'error' ? (
           <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
-            <div className="mb-1 font-semibold text-red-500">failed to load merge requests</div>
+            <div className="mb-1 font-semibold">
+              {data.failure === 'missing' ? 'GitLab CLI not installed' : 'Not signed in to GitLab'}
+            </div>
+            <div className="text-[var(--text-secondary)]">
+              {data.failure === 'missing' ? (
+                <>
+                  Install <code className="text-[var(--accent)]">glab</code> (https://gitlab.com/gitlab-org/cli), then
+                  run <code className="text-[var(--accent)]">glab auth login</code>.
+                </>
+              ) : (
+                <>
+                  Run <code className="text-[var(--accent)]">glab auth login</code> in a shell to see your
+                  merge requests here.
+                </>
+              )}
+            </div>
+          </div>
+        ) : data.status === 'error' ? (
+          <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
+            <div className="mb-1 font-semibold text-[var(--red)]">failed to load merge requests</div>
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
             {isAuthHintRelevant(data.error) && (
               <div className="text-[var(--text-secondary)]">
