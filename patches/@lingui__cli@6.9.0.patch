@@ -1,0 +1,95 @@
+diff --git a/dist/lingui-check.js b/dist/lingui-check.js
+index afd79dbf459fecedfc7044750de7db7e0f707fd7..e86d517b1c122d02a9fbf56554e389f8c15c5149 100644
+--- a/dist/lingui-check.js
++++ b/dist/lingui-check.js
+@@ -1,4 +1,5 @@
+ import { styleText } from "node:util";
++import { pathToFileURL } from "node:url";
+ import { Command } from "commander";
+ import ms from "ms";
+ import { getConfig } from "@lingui/conf";
+@@ -127,7 +128,7 @@ export function createProgram() {
+     });
+     return checkProgram;
+ }
+-if (import.meta.main) {
++if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+     createProgram()
+         .parseAsync(process.argv)
+         .catch((error) => {
+diff --git a/dist/lingui-compile.js b/dist/lingui-compile.js
+index 1170a2b8a56cc950d6e622f8f3772152f0484f72..0fd372c85b4ab80128ee11188873c151a85e451a 100644
+--- a/dist/lingui-compile.js
++++ b/dist/lingui-compile.js
+@@ -1,4 +1,5 @@
+ import { styleText } from "node:util";
++import { pathToFileURL } from "node:url";
+ import { watch } from "chokidar";
+ import { program } from "commander";
+ import { getConfig } from "@lingui/conf";
+@@ -65,7 +66,7 @@ export async function command(config, options) {
+     console.log(`Done in ${ms(Date.now() - startTime)}`);
+     return !errored;
+ }
+-if (import.meta.main) {
++if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+     program
+         .description("Compile message catalogs to compiled bundle.")
+         .option("--config <path>", "Path to the config file")
+diff --git a/dist/lingui-extract-experimental.js b/dist/lingui-extract-experimental.js
+index ae81f5173684ba524a70a31f0b7ae485cdda3191..f08e538f00c45d0444691875e58d5fadc3f449a6 100644
+--- a/dist/lingui-extract-experimental.js
++++ b/dist/lingui-extract-experimental.js
+@@ -1,4 +1,5 @@
+ import { program } from "commander";
++import { pathToFileURL } from "node:url";
+ import { getConfig, } from "@lingui/conf";
+ import nodepath from "path";
+ import { getFormat } from "./api/formats/index.js";
+@@ -175,7 +176,7 @@ export default async function command(linguiConfig, options) {
+     }
+     return commandSuccess;
+ }
+-if (import.meta.main) {
++if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+     program
+         .option("--config <path>", "Path to the config file")
+         .option("--template", "Extract to template")
+diff --git a/dist/lingui-extract-template.js b/dist/lingui-extract-template.js
+index b40443b90699a771d8000cc14804e2d86aeb1029..cdf219a304151b90edb505facd7ee45016b23ce1 100644
+--- a/dist/lingui-extract-template.js
++++ b/dist/lingui-extract-template.js
+@@ -1,4 +1,5 @@
+ import { styleText } from "node:util";
++import { pathToFileURL } from "node:url";
+ import { program } from "commander";
+ import { getConfig } from "@lingui/conf";
+ import { getCatalogs } from "./api/index.js";
+@@ -41,7 +42,7 @@ export default async function command(config, options) {
+     });
+     return commandSuccess;
+ }
+-if (import.meta.main) {
++if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+     program
+         .option("--config <path>", "Path to the config file")
+         .option("--verbose", "Verbose output")
+diff --git a/dist/lingui-extract.js b/dist/lingui-extract.js
+index 11d5f1721a9f97d5e95dd68d1bb2b0e88d04728f..b796da3ee914a9932e3ca045248f58f8ebd12683 100644
+--- a/dist/lingui-extract.js
++++ b/dist/lingui-extract.js
+@@ -1,4 +1,5 @@
+ import { styleText } from "node:util";
++import { pathToFileURL } from "node:url";
+ import { watch } from "chokidar";
+ import { program } from "commander";
+ import nodepath from "path";
+@@ -88,7 +89,7 @@ export default async function command(config, options) {
+     }
+     return commandSuccess;
+ }
+-if (import.meta.main) {
++if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+     program
+         .option("--config <path>", "Path to the config file")
+         .option("--locale <locale, [...]>", "Only extract the specified locales", (value) => {

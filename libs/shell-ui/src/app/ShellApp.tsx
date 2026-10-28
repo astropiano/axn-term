@@ -23,12 +23,11 @@ import {
 } from './restoring';
 import { SessionPanel } from './SessionPanel';
 import { SettingsModal } from './SettingsModal';
-import { EditorView } from './EditorView';
+import { EditorView, GitInspectView, preloadMonacoViews } from './lazyViews';
 import { useEditorClose } from './useEditorClose';
 import { BrowserView } from './BrowserView';
 import { SubShellView } from './SubShellView';
 import { PreviewView } from './PreviewView';
-import { GitInspectView } from './GitInspectView';
 import { backendFileService, resolvePath } from './fileService';
 import { useShellSessions, MAX_OUTPUT_LENGTH } from './useShellSessions';
 import { useAgentTasks } from './useAgentTasks';
@@ -111,6 +110,8 @@ import { LONG_PRESS_MS } from '../useContextMenuTrigger';
 import { useCoarsePointer, useVisualViewportSize } from '../useMediaQuery';
 
 const SMALL_SCREEN_QUERY = '(max-width: 639px)';
+/** How often batched terminal output reaches session state and plugins. */
+const OUTPUT_FLUSH_INTERVAL_MS = 50;
 
 
 
@@ -132,6 +133,16 @@ export interface ShellAppProps {
 }
 
 export function ShellApp({ backend, services, platform, fileReader, tasksWsUrl }: ShellAppProps) {
+  useEffect(() => {
+    // Load Monaco in the background once startup has settled, so it never
+    // competes with the first terminals but the first editor still opens fast.
+    const timer = setTimeout(() => {
+      const ric = (window as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
+      if (ric) ric(preloadMonacoViews);
+      else preloadMonacoViews();
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, []);
   useEffect(() => {
     registerShellPlatform(platform);
     bindShellServices(services);
@@ -586,6 +597,21 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     [services],
   );
 
+  const pendingOutputRef = useRef(new Map<string, string>());
+  const outputFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushSessionOutputRef = useRef<() => void>(() => {});
+  /** Live session including output still waiting for the next batch flush. */
+  const liveSessionWithPending = useCallback((sessionId: string) => {
+    const session = sessionsRef.current.find((s) => s.id === sessionId);
+    const pending = pendingOutputRef.current.get(sessionId);
+    if (!session || !pending) return session;
+    const combined = (session.output ?? '') + pending;
+    return {
+      ...session,
+      output: combined.length > MAX_OUTPUT_LENGTH ? combined.slice(-MAX_OUTPUT_LENGTH) : combined,
+    };
+  }, []);
+
   const buildPluginApi = useCallback(
     (session: ShellSession, plugin: SessionViewPlugin) =>
       createPluginApi(session, plugin, {
@@ -604,11 +630,11 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         getWorkspaces: () => workspacesRef.current,
         pluginData: pluginDataRef.current,
         mergePluginData,
-        getLiveSession: (sessionId) => sessionsRef.current.find((s) => s.id === sessionId),
+        getLiveSession: liveSessionWithPending,
         getSessionCount: () => sessionsRef.current.length,
         onAttention: notifyAttention,
       }),
-    [updateSession, mergePluginState, mergePluginData, openSessionTab, openSubShell, openSession, notifyAttention],
+    [updateSession, mergePluginState, mergePluginData, openSessionTab, openSubShell, openSession, notifyAttention, liveSessionWithPending],
   );
 
   const previousHookPluginsRef = useRef<SessionViewPlugin[]>([]);
@@ -654,11 +680,23 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     pushSandboxViewData();
   }, [enabledPlugins, sessions, pluginData]);
 
-  const handleSessionOutput = useCallback(
-    (sessionId: string, text: string) => {
+  // Terminal output reaches session state and plugin onOutput in batches:
+  // per-chunk updates re-rendered the whole app thousands of times a second
+  // during bursts (`cat` of a big file, build logs). The terminal itself
+  // writes every chunk immediately; only the text copy for plugins waits.
+  const flushSessionOutput = useCallback(() => {
+    if (outputFlushTimerRef.current !== null) {
+      clearTimeout(outputFlushTimerRef.current);
+      outputFlushTimerRef.current = null;
+    }
+    const pending = pendingOutputRef.current;
+    if (pending.size === 0) return;
+    const batch = [...pending];
+    pending.clear();
+    for (const [sessionId, text] of batch) {
       appendSessionOutput(sessionId, text);
       const originalSession = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!originalSession || !text) return;
+      if (!originalSession) continue;
       const combined = (originalSession.output ?? '') + text;
       const output =
         combined.length > MAX_OUTPUT_LENGTH ? combined.slice(-MAX_OUTPUT_LENGTH) : combined;
@@ -670,8 +708,31 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         // .mjs) get the full bridge with no lifecycle code of their own.
         if (plugin.hookSpec) maybeWireHookSpec(plugin, ctx);
       }
+    }
+  }, [appendSessionOutput, buildPluginApi]);
+  flushSessionOutputRef.current = flushSessionOutput;
+
+  const handleSessionOutput = useCallback((sessionId: string, text: string) => {
+    if (!text) return;
+    const pending = pendingOutputRef.current;
+    const combined = (pending.get(sessionId) ?? '') + text;
+    pending.set(
+      sessionId,
+      combined.length > MAX_OUTPUT_LENGTH ? combined.slice(-MAX_OUTPUT_LENGTH) : combined,
+    );
+    if (outputFlushTimerRef.current === null) {
+      outputFlushTimerRef.current = setTimeout(
+        () => flushSessionOutputRef.current(),
+        OUTPUT_FLUSH_INTERVAL_MS,
+      );
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (outputFlushTimerRef.current !== null) clearTimeout(outputFlushTimerRef.current);
     },
-    [appendSessionOutput, buildPluginApi],
+    [],
   );
 
   // Promote a sub-shell tab to the session's main shell: the tab's PTY takes
@@ -1243,6 +1304,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   const closeNow = useCallback(async () => {
     if (closingRef.current) return;
     closingRef.current = true;
+    flushSessionOutputRef.current();
     const win = platform.window;
 
     try {
@@ -1328,6 +1390,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // before the session/PTY is torn down — same order as window close.
   const closeSessionGracefully = useCallback(
     async (sessionId: string) => {
+      flushSessionOutputRef.current();
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session) return;
       await Promise.all(
@@ -1347,6 +1410,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
 
   useEffect(() => {
     const unlisten = backend.onSessionExit?.((ptyId) => {
+      // Plugins must see the session's last output before it closes.
+      flushSessionOutputRef.current();
       // The payload is a PTY id — a promoted sub-shell PTY maps back to its
       // owning session via mainPtyId.
       const session = sessionsRef.current.find(
@@ -2012,6 +2077,10 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
               appState: pluginData[plugin.settingsKey ?? plugin.id],
               updateAppState: (patch) => mergePluginData(plugin.settingsKey ?? plugin.id, patch),
               sessions,
+              sessionApi: (sessionId) => {
+                const s = sessionsRef.current.find((x) => x.id === sessionId);
+                return s ? buildPluginApi(s, plugin) : undefined;
+              },
             })}
           </div>
         ))}
@@ -2059,6 +2128,10 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 appState: pluginData[settingsKey],
                 updateAppState: (patch) => mergePluginData(settingsKey, patch),
                 sessions,
+                sessionApi: (sessionId) => {
+                  const s = sessionsRef.current.find((x) => x.id === sessionId);
+                  return s ? buildPluginApi(s, plugin) : undefined;
+                },
               })}
             </div>
           );

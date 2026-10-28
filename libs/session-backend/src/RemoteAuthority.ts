@@ -1,5 +1,6 @@
 import { RamphastosAuthority, RamphastosStream } from '@ramphastos/ramphastos-client';
-import type { SessionBackend, Unsubscribe } from './types';
+import type { RemoteConsole, RemoteConsoleSnapshot, SessionBackend, Unsubscribe } from './types';
+import { scopeSessionId } from './remoteScope.ts';
 
 /** One published terminal in the authority's replicated model. */
 export interface PublishedPty {
@@ -84,8 +85,14 @@ export class RemoteAuthority {
    *  client's claim is removed when it leaves the session. */
   private claims = new Map<string, Map<string, { cols: number; rows: number }>>();
   private streams = new Map<string, Set<RamphastosStream>>();
-  /** Stream -> {ptyId, viewerId} so a stream close drops the right claim. */
-  private streamViewers = new WeakMap<RamphastosStream, { id: string; viewer: string }>();
+  /** Stream -> {ptyId, viewerId} so a stream close drops the right claim.
+   *  A plain Map — entries are removed on close, and we iterate it to count
+   *  a viewer's live streams for the /viewers roster. */
+  private streamViewers = new Map<RamphastosStream, { id: string; viewer: string }>();
+  /** Connected client roster — the /viewers model plane. An entry lives
+   *  while the viewer holds a stream or a claim; reportViewer fills
+   *  name/platform. */
+  private viewers = new Map<string, { name?: string; platform?: string; since: number }>();
   private outputUnsubs = new Map<string, () => void>();
   /** Output captured before any viewer attaches — replayed on stream open
    *  (remote-spawned PTYs have no xterm buffer for ptyTail to serialize). */
@@ -94,6 +101,11 @@ export class RemoteAuthority {
   private started = false;
   private reconnecting = false;
   private stateCbs = new Set<(state: string) => void>();
+  private lastConnState = 'idle';
+  private consoleCbs = new Set<() => void>();
+  private consoleSnapshot: RemoteConsoleSnapshot = {
+    role: 'authority', state: 'idle', ptys: [], claims: {},
+  };
   private defaultShell = '/bin/sh';
   private readonly opts: RemoteAuthorityOptions;
 
@@ -115,7 +127,9 @@ export class RemoteAuthority {
 
     const authority = await RamphastosAuthority.connect(url, {
       auth: token,
-      sessionId: this.opts.sessionId,
+      // Tenant-scoped session id: '<sub>/<id>' makes ownership self-proving
+      // on the gateway — survives restarts, needs no shared state.
+      sessionId: scopeSessionId(this.opts.sessionId, token),
       webSocketOnly: this.opts.webSocketOnly,
       meta: { app: 'axn-term', ...this.opts.meta },
     });
@@ -169,7 +183,45 @@ export class RemoteAuthority {
   }
 
   private emitState(state: string): void {
+    this.lastConnState = state;
     for (const cb of this.stateCbs) cb(state);
+    this.refreshConsole();
+  }
+
+  /**
+   * The shared viewport/viewer state a remote console renders — claims +
+   * the published PTY list + this host's identity. RemoteBackend exposes
+   * the viewer-side counterpart, so the same console UI works on both.
+   */
+  readonly remoteConsole: RemoteConsole = {
+    get: () => this.consoleSnapshot,
+    subscribe: (cb) => {
+      this.consoleCbs.add(cb);
+      return () => this.consoleCbs.delete(cb);
+    },
+  };
+
+  private refreshConsole(): void {
+    const claims: Record<string, Record<string, { cols: number; rows: number }>> = {};
+    for (const [id, m] of this.claims) claims[id] = Object.fromEntries(m);
+    this.consoleSnapshot = {
+      role: 'authority',
+      state: this.lastConnState,
+      hostName: hostname(),
+      hostDevice: 'desktop',
+      ptys: [...this.ptys.values()].map(publicEntry).map((p) => ({
+        id: String(p.id),
+        name: p.name === undefined ? undefined : String(p.name),
+        sessionId: p.sessionId === undefined ? undefined : String(p.sessionId),
+        cols: typeof p.cols === 'number' ? p.cols : undefined,
+        rows: typeof p.rows === 'number' ? p.rows : undefined,
+      })),
+      claims,
+      viewers: Object.fromEntries(
+        [...this.viewers].map(([id, v]) => [id, { name: v.name, platform: v.platform }]),
+      ),
+    };
+    for (const cb of this.consoleCbs) cb();
   }
 
   /**
@@ -263,6 +315,9 @@ export class RemoteAuthority {
       ptys: [...this.ptys.values()].map(publicEntry),
       workspaces: [...this.workspaces].map(([id, name]) => ({ id, name })),
       viewportClaims,
+      viewers: Object.fromEntries(
+        [...this.viewers].map(([id, v]) => [id, { name: v.name, platform: v.platform }]),
+      ),
     };
   }
 
@@ -276,6 +331,7 @@ export class RemoteAuthority {
     this.authority?.publishPatch([
       { op: 'replace', path: '/ptys', value: [...this.ptys.values()].map(publicEntry) },
     ]);
+    this.refreshConsole();
   }
 
   private removePty(id: string, reason: string): void {
@@ -323,6 +379,39 @@ export class RemoteAuthority {
     this.authority?.publishPatch([
       { op: 'replace', path: '/viewportClaims', value },
     ]);
+    this.refreshConsole();
+  }
+
+  private patchViewers(): void {
+    this.authority?.publishPatch([
+      {
+        op: 'replace',
+        path: '/viewers',
+        value: Object.fromEntries(
+          [...this.viewers].map(([id, v]) => [id, { name: v.name, platform: v.platform }]),
+        ),
+      },
+    ]);
+    this.refreshConsole();
+  }
+
+  private touchViewer(viewer: string, name?: string, platform?: string): void {
+    if (viewer === 'anon') return;
+    const cur = this.viewers.get(viewer);
+    if (cur) {
+      if (name !== undefined) cur.name = name;
+      if (platform !== undefined) cur.platform = platform;
+    } else {
+      this.viewers.set(viewer, { name, platform, since: Date.now() });
+    }
+    this.patchViewers();
+  }
+
+  /** Drop a viewer from the roster once it holds no stream and no claim. */
+  private pruneViewer(viewer: string): void {
+    for (const ref of this.streamViewers.values()) if (ref.viewer === viewer) return;
+    for (const m of this.claims.values()) if (m.has(viewer)) return;
+    if (this.viewers.delete(viewer)) this.patchViewers();
   }
 
   // ---- streams (demand-driven: nothing flows while nobody watches) ----
@@ -348,6 +437,7 @@ export class RemoteAuthority {
       return;
     }
     this.streamViewers.set(s, { id, viewer });
+    if (viewer) this.touchViewer(viewer);
     let set = this.streams.get(id);
     if (!set) { set = new Set(); this.streams.set(id, set); }
     set.add(s);
@@ -400,7 +490,10 @@ export class RemoteAuthority {
     }
     // This client's claim leaves the collection — the PTY relaxes to the
     // smallest width still claimed (or the owner's own geometry).
-    if (viewer) this.dropClaim(id, viewer);
+    if (viewer) {
+      this.dropClaim(id, viewer);
+      this.pruneViewer(viewer);
+    }
   }
 
   private subscribeBackendExit(): void {
@@ -470,6 +563,7 @@ export class RemoteAuthority {
         // Mirrored PTY: this is a viewport claim, not a size command. The
         // PTY takes the smallest geometry across all active claimants.
         const viewer = a[3] === undefined ? 'anon' : String(a[3]);
+        this.touchViewer(viewer);
         let m = this.claims.get(id);
         if (!m) { m = new Map(); this.claims.set(id, m); }
         m.set(viewer, { cols, rows });
@@ -492,6 +586,16 @@ export class RemoteAuthority {
       }
       case 'resumeViewport':
         return { ok: true };
+      case 'reportViewer': {
+        // A client announces itself: name + platform for the /viewers roster.
+        const viewer = a[0] === undefined ? 'anon' : String(a[0]);
+        this.touchViewer(
+          viewer,
+          a[1] === undefined ? undefined : String(a[1]),
+          a[2] === undefined ? undefined : String(a[2]),
+        );
+        return { ok: true };
+      }
       case 'ptyTail': {
         const r = this.requirePty(String(a[0]));
         if ('error' in r) return r;

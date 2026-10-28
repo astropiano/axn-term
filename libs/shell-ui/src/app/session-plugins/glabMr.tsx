@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { appRuntime } from '../appRuntime';
 import {
   GitMerge,
@@ -9,8 +9,10 @@ import {
   Check,
 } from 'lucide-react';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
+import type { ShellSession } from '../../types';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
 import { shellQuote } from '../../shellQuote';
+import { sessionLastSelectedAt } from '../attention';
 import {
   classifyCliError,
   forgeCliCommand,
@@ -243,6 +245,121 @@ function scheduleSessionRefresh(
       immediate ? 0 : MR_REFRESH_DELAY_MS,
     ),
   );
+}
+
+// ---------------------------------------------------------------------------
+// MR watch (opt-in) — attention on sessions whose tracked MR changed
+// ---------------------------------------------------------------------------
+
+/** Per session-MR snapshot, persisted in appState.mrWatch. */
+interface MrWatchEntry {
+  pipeline: string | null;
+  unresolved: number;
+  notes: number;
+  /** Why attention was raised — cleared once the session is viewed. */
+  flag?: string;
+  flagAt?: number;
+}
+
+function overviewWatchEntry(mr: GlabMrItem): MrWatchEntry {
+  return {
+    pipeline: mr.pipeline,
+    unresolved: openThreads(mr),
+    notes: mr.discussions.reduce((n, d) => n + d.notes.length, 0),
+  };
+}
+
+function raiseMrWatch(
+  api: SessionViewContext & PluginApi,
+  entry: MrWatchEntry,
+  message: string,
+  critical = false,
+) {
+  api.setAttention({ level: critical ? 'critical' : 'warning', message });
+  entry.flag = message;
+  entry.flagAt = Date.now();
+}
+
+/**
+ * Diff every session's tracked MRs (`pluginState glab-mr.mrs`) against the
+ * freshest data and flag the owning session when its MR regressed or gained
+ * activity: pipeline -> failed, a new unresolved thread, or a new note.
+ * MRs covered by the overview poll cost nothing extra; the rest get one
+ * light `glab api` detail call each — the same request refreshSessionMrs
+ * already makes. Runs from the rail component after each overview refresh.
+ */
+async function mrWatchTick(args: {
+  sessions: ShellSession[];
+  data: MrOverview;
+  appState: unknown;
+  updateAppState: (patch: Record<string, unknown>) => void;
+  sessionApi: (id: string) => (SessionViewContext & PluginApi) | undefined;
+}) {
+  const watch = {
+    ...((args.appState as { mrWatch?: Record<string, MrWatchEntry> } | undefined)
+      ?.mrWatch ?? {}),
+  };
+  const overviewByUrl = new Map<string, GlabMrItem>(
+    [...args.data.mine, ...args.data.review].map((m) => [m.url, m]),
+  );
+  const seen = new Set<string>();
+  for (const session of args.sessions) {
+    const mrs =
+      (session.pluginState?.['glab-mr'] as { mrs?: SessionMr[] } | undefined)
+        ?.mrs ?? [];
+    const api = args.sessionApi(session.id);
+    for (const mr of mrs) {
+      const key = `${session.id}|${mr.url}`;
+      seen.add(key);
+      const prev = watch[key];
+      let entry: MrWatchEntry | undefined;
+      const overview = overviewByUrl.get(mr.url);
+      if (overview) {
+        entry = overviewWatchEntry(overview);
+      } else if (api && session.repo?.root) {
+        // Not one of my overview MRs — one detail call per watched session MR.
+        try {
+          const d = JSON.parse(
+            await api.exec(
+              `glab api "projects/:fullpath/merge_requests/${mr.iid}"`,
+              session.repo.root,
+            ),
+          ) as {
+            head_pipeline?: { status?: string } | null;
+            user_notes_count?: number;
+            blocking_discussions_resolved?: boolean;
+          };
+          entry = {
+            pipeline: d.head_pipeline?.status?.toLowerCase() ?? null,
+            unresolved: d.blocking_discussions_resolved === false ? 1 : 0,
+            notes: d.user_notes_count ?? 0,
+          };
+        } catch {
+          continue;
+        }
+      } else {
+        continue;
+      }
+      watch[key] = { ...entry, flag: prev?.flag, flagAt: prev?.flagAt };
+      if (!api) continue;
+      const e = watch[key];
+      // Clear a raised flag once the session was viewed since.
+      if (e.flag && sessionLastSelectedAt(session.id) > (e.flagAt ?? 0)) {
+        api.setAttention(null);
+        delete e.flag;
+        delete e.flagAt;
+      } else if (prev && !e.flag) {
+        if (prev.pipeline !== 'failed' && entry.pipeline === 'failed')
+          raiseMrWatch(api, e, `pipeline failed on ${mr.reference}`, true);
+        else if (entry.unresolved > prev.unresolved)
+          raiseMrWatch(api, e, `new unresolved thread on ${mr.reference}`);
+        else if (entry.notes > prev.notes)
+          raiseMrWatch(api, e, `new comment on ${mr.reference}`);
+      }
+    }
+  }
+  for (const key of Object.keys(watch)) if (!seen.has(key)) delete watch[key];
+  args.updateAppState({ mrWatch: watch });
 }
 
 // ---------------------------------------------------------------------------
@@ -538,16 +655,25 @@ function GlabMrRail({
   pluginSettings,
   viewActive,
   toggleView,
+  sessions,
+  appState,
+  updateAppState,
+  sessionApi,
 }: {
   pluginSettings: unknown;
   viewActive: boolean;
   toggleView: () => void;
+  sessions: ShellSession[];
+  appState: unknown;
+  updateAppState: (patch: Record<string, unknown>) => void;
+  sessionApi: (id: string) => (SessionViewContext & PluginApi) | undefined;
 }) {
   const data = useMrOverview();
   const settings = pluginSettings as
-    | { hostname?: string; refreshIntervalSeconds?: number }
+    | { hostname?: string; refreshIntervalSeconds?: number; watchMrChanges?: boolean }
     | undefined;
   const intervalSec = settings?.refreshIntervalSeconds ?? 120;
+  const watchEnabled = settings?.watchMrChanges === true;
 
   useEffect(() => {
     void refreshMrOverview(settings);
@@ -558,6 +684,16 @@ function GlabMrRail({
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervalSec, settings?.hostname]);
+
+  // Latest ctx for the tick — the poll effect would otherwise close over a
+  // stale sessions/appState snapshot from its mount render.
+  const watchRef = useRef({ sessions, appState, sessionApi });
+  watchRef.current = { sessions, appState, sessionApi };
+  useEffect(() => {
+    if (!watchEnabled || data.status !== 'ready') return;
+    void mrWatchTick({ ...watchRef.current, updateAppState, data });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, watchEnabled]);
 
   const me = data.username ?? '';
   const mineAction = data.mine.filter((m) => mrNeedsAction(m)).length;
@@ -882,6 +1018,14 @@ export const glabMrPlugin: SessionViewPlugin = {
       default: 120,
     },
     {
+      key: 'watchMrChanges',
+      label: 'Flag sessions on MR changes',
+      description:
+        'Attention dot on a session when its tracked merge request gets a failed pipeline, a new thread or a new comment.',
+      type: 'boolean',
+      default: false,
+    },
+    {
       key: 'hostname',
       label: 'GitLab hostname',
       description: 'Overrides the glab api --hostname default.',
@@ -941,11 +1085,23 @@ export const glabMrPlugin: SessionViewPlugin = {
     const first = mrs[0];
     return `${first.reference}${mrs.length > 1 ? ` +${mrs.length - 1}` : ''}: open merge request${mrs.length > 1 ? 's' : ''} on this branch — ${first.title}`;
   },
-  renderRail: ({ pluginSettings, viewActive, toggleView }) => (
+  renderRail: ({
+    pluginSettings,
+    viewActive,
+    toggleView,
+    sessions,
+    appState,
+    updateAppState,
+    sessionApi,
+  }) => (
     <GlabMrRail
       pluginSettings={pluginSettings}
       viewActive={viewActive}
       toggleView={toggleView}
+      sessions={sessions}
+      appState={appState}
+      updateAppState={updateAppState}
+      sessionApi={sessionApi}
     />
   ),
   renderView: ({ close, sessions, workspaces, selectSession, sessionApi }) => (

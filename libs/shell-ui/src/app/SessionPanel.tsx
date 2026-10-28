@@ -6,6 +6,7 @@ import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
 import { SessionView } from './SessionView';
 import { useSettings } from '../SettingsProvider';
+import { fontStackAvailable } from '../themes';
 import { usePluginSettings } from './PluginSettingsProvider';
 import { createPluginApi } from './session-plugins/plugin';
 import { AttentionDot } from './AttentionDot';
@@ -1529,7 +1530,10 @@ export function SessionPanel({
           // font reach font-mono utility classes inside too — otherwise
           // font-family: var(--font-mono) on rows beats inherited styles and
           // the setting appears to do nothing. Unset -> theme --font-mono.
-          ...((settings.panelFontFamily?.trim()
+          // Only apply a font that exists — a config.yaml string that
+          // resolves to nothing would render the whole panel in serif.
+          ...((settings.panelFontFamily?.trim() &&
+          fontStackAvailable(settings.panelFontFamily.trim())
             ? {
                 '--font-mono': settings.panelFontFamily.trim(),
                 fontFamily: settings.panelFontFamily.trim(),

@@ -1,6 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type Event, type UnlistenFn } from '@tauri-apps/api/event';
-import { writeText, readText } from '@tauri-apps/plugin-clipboard-manager';
+import { Channel, invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import {
   exists,
   mkdir,
@@ -29,36 +28,82 @@ import type {
   Unsubscribe,
 } from './types';
 
-interface ShellOutput {
-  session_id: string;
-  data: string;
-}
-
 interface SubshellExited {
   id: string;
   exit_code: number | null;
 }
 
-function decodeBase64(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
+const idDecoder = new TextDecoder();
+/** Acknowledge received output in steps of this much… */
+const ACK_BATCH_BYTES = 64 * 1024;
+/** …or after this long, whichever comes first. */
+const ACK_DELAY_MS = 30;
+
+/**
+ * Splits an `attach_output` frame: big-endian u16 id length, the session
+ * id, then the raw PTY bytes.
+ */
+export function parseOutputFrame(frame: ArrayBuffer | Uint8Array): { sessionId: string; data: Uint8Array } {
+  const bytes = frame instanceof Uint8Array ? frame : new Uint8Array(frame);
+  const idLen = (bytes[0] << 8) | bytes[1];
+  return {
+    sessionId: idDecoder.decode(bytes.subarray(2, 2 + idLen)),
+    data: bytes.subarray(2 + idLen),
+  };
 }
 
 /** SessionBackend over Tauri commands/events — used by the desktop app. */
 export class TauriBackend implements SessionBackend {
   private outputCbs = new Map<string, Set<(data: Uint8Array) => void>>();
-  private unlistenPromise: Promise<UnlistenFn> | null = null;
+  private anyOutputCbs = new Set<(sessionId: string, data: Uint8Array) => void>();
+  private outputChannel: Channel<ArrayBuffer> | null = null;
+  private unackedBytes = 0;
+  private ackTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private ensureOutputListener(): void {
-    this.unlistenPromise ??= listen('shell-output', (event: Event<ShellOutput>) => {
-      const cbs = this.outputCbs.get(event.payload.session_id);
-      if (!cbs?.size) return;
-      const bytes = decodeBase64(event.payload.data);
-      for (const cb of cbs) cb(bytes);
+  /**
+   * Tell the backend how much output this webview has taken off the
+   * channel; it holds further output while too much is unacknowledged.
+   */
+  private ackOutput(bytes: number): void {
+    this.unackedBytes += bytes;
+    if (this.unackedBytes >= ACK_BATCH_BYTES) {
+      this.flushAck();
+    } else if (this.ackTimer === null) {
+      this.ackTimer = setTimeout(() => this.flushAck(), ACK_DELAY_MS);
+    }
+  }
+
+  private flushAck(): void {
+    if (this.ackTimer !== null) {
+      clearTimeout(this.ackTimer);
+      this.ackTimer = null;
+    }
+    const bytes = this.unackedBytes;
+    if (bytes === 0) return;
+    this.unackedBytes = 0;
+    invoke('ack_output', { bytes }).catch(() => {});
+  }
+
+  /**
+   * One raw-byte channel per webview carries every session's output. Its
+   * `attach_output` invoke goes out before any `create_session` that follows,
+   * and both run in order on the backend, so no early output is missed.
+   */
+  private ensureOutputChannel(): void {
+    if (this.outputChannel) return;
+    const channel = new Channel<ArrayBuffer>();
+    channel.onmessage = (frame) => {
+      // Acknowledge first: a throwing callback must not stall the output.
+      this.ackOutput(frame.byteLength);
+      const { sessionId, data } = parseOutputFrame(frame);
+      const cbs = this.outputCbs.get(sessionId);
+      if (cbs) for (const cb of cbs) cb(data);
+      for (const cb of this.anyOutputCbs) cb(sessionId, data);
+    };
+    this.outputChannel = channel;
+    invoke('attach_output', { channel }).catch((e: unknown) => {
+      console.error('[tauri] attach_output failed:', e);
+      if (this.outputChannel === channel) this.outputChannel = null;
     });
   }
 
@@ -80,6 +125,14 @@ export class TauriBackend implements SessionBackend {
     invoke('resize_session', { sessionId, cols, rows }).catch(() => {});
   }
 
+  pause(sessionId: string): void {
+    invoke('pause_session', { sessionId }).catch(() => {});
+  }
+
+  resume(sessionId: string): void {
+    invoke('resume_session', { sessionId }).catch(() => {});
+  }
+
   close(sessionId: string): void {
     invoke('close_session', { sessionId }).catch(() => {});
   }
@@ -88,7 +141,7 @@ export class TauriBackend implements SessionBackend {
     let set = this.outputCbs.get(sessionId);
     if (!set) this.outputCbs.set(sessionId, (set = new Set()));
     set.add(cb);
-    this.ensureOutputListener();
+    this.ensureOutputChannel();
     return () => set.delete(cb);
   }
 
@@ -187,10 +240,9 @@ export class TauriBackend implements SessionBackend {
   }
 
   onAnyOutput(cb: (sessionId: string, data: Uint8Array) => void): Unsubscribe {
-    const p = listen<ShellOutput>('shell-output', (event) =>
-      cb(event.payload.session_id, decodeBase64(event.payload.data)),
-    );
-    return () => void p.then((fn) => fn());
+    this.anyOutputCbs.add(cb);
+    this.ensureOutputChannel();
+    return () => void this.anyOutputCbs.delete(cb);
   }
 
   getMemoryStats(): Promise<MemoryStats> {
@@ -208,8 +260,10 @@ export const tauriBackend = new TauriBackend();
 
 export const tauriServices: ShellServices = {
   copyText: (text) =>
-    writeText(text).catch((e: unknown) => console.warn('[clipboard] write failed:', e)),
-  pasteText: () => readText().then((t) => t ?? undefined),
+    invoke<void>('clipboard_write_text', { text }).catch((e: unknown) =>
+      console.warn('[clipboard] write failed:', e),
+    ),
+  pasteText: () => invoke<string | null>('clipboard_read_text').then((t) => t ?? undefined),
   openExternal: (url) => openUrl(url).catch(() => {}),
   openDirectory: (path) => invoke('open_directory', { path }).catch(() => {}),
   revealPath: (path) => invoke('reveal_path', { path }).catch(() => {}),

@@ -174,6 +174,12 @@ export interface SessionBackend {
    * PTY parent tracking; callers must tolerate no-ops.
    */
   setSubshellParent?(subshellId: string, parentId: string | null): void;
+  /**
+   * Output flow control: stop reading the PTY while the terminal is behind,
+   * resume once it caught up. Absent → output is never throttled.
+   */
+  pause?(sessionId: string): void;
+  resume?(sessionId: string): void;
   /** A session's main PTY exited (payload: the PTY id). */
   onSessionExit?(cb: (ptyId: string) => void): Unsubscribe;
   /** A sub-shell PTY exited (payload: tab/PTY id + exit code when known). */
@@ -234,4 +240,51 @@ export interface FileReader {
   readBytes?(path: string): Promise<Uint8Array>;
   /** Writes text; absent means read-only (editor saves disabled). */
   writeText?(path: string, contents: string): Promise<void>;
+}
+
+/**
+ * Read-only view of the remote hub's shared viewport state — the
+ * `/viewportClaims` collection plus the published PTY list. An authority
+ * (desktop host) reports `role: 'authority'`; a remote viewer reports
+ * `role: 'viewer'` with the host's device/hostname filled in. Used by the
+ * remote console rail view — absent on backends/platforms with no remote.
+ */
+export interface RemoteConsoleSnapshot {
+  role: 'authority' | 'viewer';
+  /** Authority: 'idle'|'connecting'|'connected'|'failed'. Viewer: session state. */
+  state: string;
+  error?: string;
+  hostName?: string;
+  hostDevice?: string;
+  /** This device's claim key — lets the UI mark "this is me". */
+  selfViewerId?: string;
+  /** Published terminals (id + display fields) claims are keyed on. */
+  ptys: { id: string; name?: string; sessionId?: string; cols?: number; rows?: number }[];
+  /** ptyId -> viewerId -> reported geometry. Smallest claim wins the PTY. */
+  claims: Record<string, Record<string, { cols: number; rows: number }>>;
+  /** Connected client roster (the /viewers plane): viewerId -> identity. */
+  viewers?: Record<string, { name?: string; platform?: string }>;
+  /** This device is not contributing a claim right now (viewer only). */
+  paused?: boolean;
+  /** Classified by an HTTP probe after a failed reconnect (viewer only):
+   *  'unreachable' = hub down, 'ws-broken' = server up, WS path broken. */
+  errorKind?: 'unreachable' | 'ws-broken';
+  /** A backoff reconnect is scheduled (viewer only). */
+  retrying?: boolean;
+  /** Mirrored sessions this account owns (viewer discovery, >1 = pick). */
+  sessions?: string[];
+  /** The session id this client is attached/pinned to. */
+  sessionId?: string;
+}
+
+export interface RemoteConsole {
+  /** Stable snapshot — rebuild on change only (useSyncExternalStore). */
+  get(): RemoteConsoleSnapshot;
+  subscribe(cb: () => void): () => void;
+  /** Pause/resume this device's claims (viewer only; absent on authority). */
+  setViewportPaused?(paused: boolean): void;
+  /** Skip the backoff wait and reconnect now (viewer only). */
+  retryNow?(): void;
+  /** Attach to a different mirrored session by id (viewer only). */
+  chooseSession?(id: string): void;
 }

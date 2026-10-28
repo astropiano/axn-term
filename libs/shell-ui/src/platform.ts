@@ -1,4 +1,4 @@
-import type { ControlReply, Unsubscribe } from '@axn-term/session-backend';
+import type { ControlReply, RemoteConsole, Unsubscribe } from '@axn-term/session-backend';
 import type { WindowBootIntent } from './app/sessionTearOff';
 
 export const isMac =
@@ -175,6 +175,12 @@ export interface ShellPlatform {
     get(): { state: 'idle' | 'connecting' | 'connected' | 'failed'; error?: string };
     subscribe(cb: () => void): () => void;
   };
+  /**
+   * The remote console's shared viewport/viewer state — desktop: the
+   * RemoteAuthority's claims+ptys (role 'authority'); web viewer: the
+   * mirrored replica (role 'viewer'). Absent when no remote is in play.
+   */
+  remoteConsole?: RemoteConsole;
   /**
    * OIDC sign-in for remote publishing — desktop only. 'pending' carries
    * the device-flow user code + verification URI to show/open.

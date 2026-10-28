@@ -33,6 +33,7 @@ import {
 import { talkResumeCommand } from './gitReview';
 import { isAppNavigationShortcut, isReloadShortcut } from './shortcuts';
 import type { EditorTab, ShellSession } from '../types';
+import { createFlowControl } from '../flowControl';
 
 /**
  * A sub-shell sub-view: a child PTY of the session spawned via
@@ -126,6 +127,7 @@ export function SubShellView({
       cursorBlink: true,
       fontSize: shellFont.size,
       fontFamily: shellFont.family,
+      lineHeight: shellFont.lineHeight,
       allowProposedApi: true,
       // macOS defaults this on: a right-click would replace the selection
       // with the word under the pointer before the context menu's Copy.
@@ -342,8 +344,12 @@ export function SubShellView({
     // enough to be certain it wasn't a merely long legitimate link.
     const outputDecoder = new TextDecoder();
     const osc8Guard = createOsc8LeakGuard(() => t.write(OSC8_CLOSE));
+    const flow = createFlowControl(
+      () => backend.pause?.(tab.id),
+      () => backend.resume?.(tab.id),
+    );
     const unlistenOut = backend.onOutput(tab.id, (data) => {
-      t.write(data);
+      t.write(data, flow.track(data.length));
       const text = outputDecoder.decode(data, { stream: true });
       osc8Guard(text);
       // Capture the agent's exit hint (exact conversation id/name): a talk
@@ -401,6 +407,7 @@ export function SubShellView({
       // Each step is guarded: closing a tab must never take the app down, and
       // one failing disposal must not skip the rest (the PTY release above all).
       safely('sub-shell output listener', () => unlistenOut?.());
+      safely('sub-shell flow control', () => flow.dispose());
       safely('sub-shell agent closer', () => unregisterCloser());
       unregisterElement();
       safely('OSC 52 handler', () => clipboardWrites.dispose());
@@ -432,8 +439,9 @@ export function SubShellView({
     term.current.options.theme = getXtermColors(activeTheme);
     term.current.options.fontFamily = shellFont.family;
     term.current.options.fontSize = shellFont.size;
+    term.current.options.lineHeight = shellFont.lineHeight;
     if (isVisibleRef.current) fitAddon.current?.fit();
-  }, [activeTheme, settings.shellFontFamily, settings.shellFontSize, settings.uiZoom]);
+  }, [activeTheme, settings.shellFontFamily, settings.shellFontSize, settings.shellLineHeight, settings.uiZoom]);
 
   // Renderer changes hot-swap the addon on the live terminal — recreating the
   // PTY would kill the sub-shell. Skipped on mount; the PTY effect applies

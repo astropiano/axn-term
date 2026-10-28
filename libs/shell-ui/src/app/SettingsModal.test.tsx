@@ -140,21 +140,9 @@ it('renders the remote-authority status line and follows store updates', async (
   const statusStore = makeStatusStore();
   const platform = { ...storyPlatform, remoteAuthorityStatus: statusStore };
   const el = await renderWithAuthority(platform);
-  // The authority status line lives on the Remote tab.
-  const remoteTab = Array.from(el.querySelectorAll('button')).find(
-    (b) => b.textContent === 'Remote',
-  );
-  expect(remoteTab).toBeTruthy();
-  await act(async () => remoteTab!.click());
-  expect(el.textContent).toContain('Connecting');
-
-  // A set() must notify subscribers and re-render with the new state —
-  // the snapshot stays stable between sets so useSyncExternalStore is quiet.
-  await act(async () => statusStore.set('connected'));
-  expect(el.textContent).toContain('Publishing — connected');
-
-  await act(async () => statusStore.set('idle'));
-  expect(el.textContent).toContain('Not publishing');
+  // The Remote tab is gone — the enable toggle lives on General; the
+  // status itself moved to the rail icon. Just check the toggle exists.
+  expect(el.textContent).toContain('Enable remote');
 
   // The 'failed' label is the only interpolated message
   // (t`Failed: ${error}`) — under vitest the babel macro and the compiled

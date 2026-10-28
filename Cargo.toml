@@ -8,3 +8,10 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 authors = ["axn-term"]
+
+# Smaller, faster release binary. panic stays "unwind": a panicking PTY
+# reader thread must only end that session, not the whole app.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"

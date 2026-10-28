@@ -545,6 +545,14 @@ export interface SessionViewPlugin {
     updateAppState: (patch: Record<string, unknown>) => void;
     /** Live sessions — e.g. to keep app-level session mirrors consistent. */
     sessions: ShellSession[];
+    /**
+     * This plugin's session-bound api for another session — lets a session-
+     * less rail component drive per-session state (attention, pluginState).
+     * Undefined when the session no longer exists.
+     */
+    sessionApi: (
+      sessionId: string,
+    ) => (SessionViewContext & PluginApi) | undefined;
   }) => ReactNode;
   /**
    * Render the plugin's full-area view in place of the session terminals.

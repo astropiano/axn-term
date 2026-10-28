@@ -133,18 +133,16 @@ builder.Services.AddSingleton(sp => new UserCapabilities(
 // unauthenticated — hellos carry a user JWT in `auth`, validated against
 // the same JWKS as the HTTP routes). A mirrored session belongs to the
 // account that published it:
-//   - authority hellos must pin a session id; the first JWT sub to
-//     publish it becomes the owner (recorded in memory — authorities
-//     re-stamp on reconnect). A different sub publishing the same id is
-//     denied: the id is claimed, not a shared secret.
-//   - viewer/controller hellos attach only when their sub matches the
-//     session's owner — same Keycloak account on the phone gets in,
-//     nobody else does.
+//   - session ids are namespaced '<jwt-sub>/<id>' — the prefix is
+//     self-proving for both authority and viewer hellos, so ownership
+//     needs no shared state and survives restarts.
+//   - authorities must pin a session id; viewers attach to an existing
+//     one in their own namespace — same Keycloak account on the phone
+//     gets in, nobody else does.
 // RemoteAuthority:AllowAnonymous=true opens the endpoint for local dev.
 var remoteAllowAnonymous =
     string.Equals(builder.Configuration["RemoteAuthority:AllowAnonymous"], "true", StringComparison.OrdinalIgnoreCase);
 var jwtHandler = new JwtSecurityTokenHandler();
-var sessionOwners = new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
 builder.Services.AddRamphastos(
     _ => new RelayVm(),
     opts =>
@@ -162,19 +160,12 @@ builder.Services.AddRamphastos(
                 Console.WriteLine("[remote] hello denied: jwt invalid");
                 return false;
             }
-            if (hello.Role == "authority")
-            {
-                // Authorities must pin the session they own — the bind has
-                // to happen before the server would assign an id.
-                if (string.IsNullOrEmpty(hello.Session))
-                {
-                    return false;
-                }
-                return sessionOwners.GetOrAdd(hello.Session, sub) == sub;
-            }
+            // Tenant isolation is structural: every session id lives in the
+            // caller's own namespace '<sub>/<id>' — self-proving on both the
+            // publish and the attach path, stateless across restarts, no
+            // shared registry to hijack. Unprefixed ids are rejected.
             return !string.IsNullOrEmpty(hello.Session)
-                && sessionOwners.TryGetValue(hello.Session, out var owner)
-                && owner == sub;
+                && hello.Session.StartsWith(sub + "/", StringComparison.Ordinal);
         };
     });
 
@@ -213,9 +204,15 @@ if (builder.Configuration.GetValue("Hub__RemoteEnabled", true))
     {
         var sub = user.FindFirst("sub")?.Value
             ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        // Live mirrored sessions in this caller's namespace — the same
+        // '<sub>/' rule AuthorizeHello enforces.
+        var manager = app.Services.GetRequiredService<RamphastosConnectionHandler>().Manager;
         var sessions = sub is null
             ? Array.Empty<string>()
-            : sessionOwners.Where(kv => kv.Value == sub).Select(kv => kv.Key).ToArray();
+            : manager.Sessions
+                .Select(s => s.Id)
+                .Where(id => id.StartsWith(sub + "/", StringComparison.Ordinal))
+                .ToArray();
         return Results.Ok(new { sessions });
     });
 }
