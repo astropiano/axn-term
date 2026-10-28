@@ -3,6 +3,30 @@
 Terminal workspace app for axn-term: a Tauri desktop app and a browser
 version backed by per-user remote session hosts.
 
+## Status
+
+**Pre-alpha.** The project is under active development and there are no
+published releases — no signed DMGs, installers, or nightly builds. If you
+want to try it, you build it yourself from source (see Getting started);
+expect rough edges, breaking changes between commits, and no upgrade path
+for persisted state yet.
+
+Axn-term started as an exploration of developer experience rather than as
+another terminal. It's an alternative take on what tools like
+agterm or Warp are doing — a workspace built around an
+HTML-based shell, where the terminal is the foundation but sessions,
+agent workflows, code intelligence, Git review flows, and plugins are
+first-class, and where humans and coding agents work in the same windows.
+It continues an older idea: that a shell rendered in HTML can be far more
+interactive than a classic grid of glyphs — hover cards, pickers, live
+session plugins, cross-device mirrors.
+
+Honest caveat: if what you want today is raw terminal performance,
+agterm (built on Ghostty) is the better choice right now — a GPU-native
+renderer with years of hardening. axn-term trades some of that speed for
+the flexibility an HTML shell buys; whether that trade-off is worth it is
+part of what this project is trying to find out.
+
 ## Layout
 
 - `apps/desktop/` — Tauri desktop app.
