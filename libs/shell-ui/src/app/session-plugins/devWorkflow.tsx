@@ -1760,14 +1760,20 @@ export async function startMrReview(
   const ref = parseMrRef(mr.url);
   const project = mr.project ?? ref?.project;
   const projShort = project?.split('/').pop();
-  const sess =
-    (project
-      ? env.sessions.find(
-          (s) =>
-            s.repo?.remote?.includes(project) ||
-            (projShort !== undefined && s.repo?.root.endsWith(`/${projShort}`)),
-        )
-      : undefined) ?? env.sessions.find((s) => s.repo?.root);
+  // A known project only accepts a session inside that project's repo —
+  // falling back to any repo session would run the fetch (and possibly the
+  // whole review) in the wrong repository: refs like merge-requests/N/head
+  // can exist there too, and a missing target branch then fails with a
+  // misleading 'couldn't find remote ref' error. The any-repo fallback is
+  // for project-less refs (session MR rows, bare `!N`), where the repo is
+  // implied by the session the row lives on.
+  const sess = project
+    ? env.sessions.find(
+        (s) =>
+          s.repo?.remote?.includes(project) ||
+          (projShort !== undefined && s.repo?.root.endsWith(`/${projShort}`)),
+      )
+    : env.sessions.find((s) => s.repo?.root);
   const api = sess ? env.apiFor(sess.id) : undefined;
   if (!sess?.repo?.root || !api) {
     const msg = `review ${mr.reference} — no session inside ${project ?? 'the MR project'}'s repo`;
@@ -1802,11 +1808,21 @@ async function reviewMr(
   const branch = worktreeBranchFor(slug);
   const fetchRef = reviewFetchRef(ref, mr.iid, api.session?.repo?.remote);
   try {
-    // Fetch the target branch in the same call so `origin/<target>` is a
-    // usable compare base for the worktree's git tab (`axn-git origin/N`).
+    // Fetch the target branch first and best-effort: `origin/<target>` is
+    // only the compare base for the worktree's git tab (`axn-git
+    // origin/<target>`), so a remote without it (renamed or deleted target,
+    // a fork as origin) must not fail the review. It goes first so the
+    // required MR-head fetch leaves FETCH_HEAD on the review head.
+    if (mr.targetBranch) {
+      await api
+        .exec(
+          `git -C ${shellQuote(root)} fetch origin ${shellQuote(mr.targetBranch)}`,
+          root,
+        )
+        .catch(() => {});
+    }
     await api.exec(
-      `git -C ${shellQuote(root)} fetch origin ${shellQuote(fetchRef)}` +
-        `${mr.targetBranch ? ` ${shellQuote(mr.targetBranch)}` : ''}`,
+      `git -C ${shellQuote(root)} fetch origin ${shellQuote(fetchRef)}`,
       root,
     );
     if ((await api.statPath(dir, root).catch(() => null))?.isDir) {

@@ -1658,6 +1658,55 @@ describe('startMrReview', () => {
     expect(h.execCalls).toHaveLength(0);
   });
 
+  it('does not fall back to an unrelated repo when the project matches nothing', async () => {
+    // The reported failure: an MR for project g/p reviewed while only a g/q
+    // session is open used to fetch 'merge-requests/N/head' + the target
+    // branch in g/q — failing with 'couldn't find remote ref <target>'.
+    const other = makeSession({
+      id: 'other',
+      repo: {
+        name: 'q',
+        branch: 'develop',
+        ahead: 0,
+        behind: 0,
+        dirty: false,
+        untracked: 0,
+        remoteBranchMissing: false,
+        root: '/q',
+        remote: 'git@gitlab.com:g/q.git',
+      },
+    });
+    const h = makeCtx({ session: other, settings, execImpl: async () => '' });
+    const err = await startMrReview(MR, def(), envFor(h));
+    expect(err).toContain('no session inside');
+    expect(err).toContain('g/p');
+    expect(h.execCalls.some((c) => c.command.includes('fetch origin'))).toBe(false);
+    expect(h.opened).toHaveLength(0);
+  });
+
+  it('still opens the review when the target-branch fetch fails', async () => {
+    // e.g. origin is a fork or the target was renamed — the compare base is
+    // nice-to-have, only the MR head is required.
+    const h = makeCtx({
+      session: repoSession(),
+      settings,
+      execImpl: async (command) => {
+        if (command.includes("fetch origin 'main'")) {
+          throw new Error("fatal: couldn't find remote ref main");
+        }
+        return '';
+      },
+    });
+    const err = await startMrReview({ ...MR, targetBranch: 'main' }, def(), envFor(h));
+    expect(err).toBeUndefined();
+    expect(h.opened).toEqual([
+      { cwd: '/worktrees/repo-mr-114', name: '!114 opt-in worktree sessions' },
+    ]);
+    const fetches = h.execCalls.map((c) => c.command).filter((c) => c.includes('fetch origin'));
+    // the MR head is fetched last so FETCH_HEAD names the review head
+    expect(fetches.at(-1)).toContain("fetch origin 'merge-requests/114/head'");
+  });
+
   it('fails when the worktree dir exists but is not a git worktree', async () => {
     const h = makeCtx({
       session: repoSession(),
