@@ -1,11 +1,14 @@
 import { RamphastosSession, RamphastosStream } from '@ramphastos/ramphastos-client';
 import { answerControl } from './types.ts';
+import { listRemoteSessions, scopeSessionId } from './remoteScope.ts';
 import type {
   ControlCommandHandler,
   DirEntry,
   FsResult,
   PathStat,
   PtySpawnOptions,
+  RemoteConsole,
+  RemoteConsoleSnapshot,
   SessionBackend,
   SubshellSpawnOptions,
   Unsubscribe,
@@ -26,6 +29,8 @@ export interface RemoteBackendOptions {
   sessionId?: string;
   /** "controller" (default, interactive) or "viewer" (watch-only). */
   role?: 'controller' | 'viewer';
+  /** Display name this device reports into the /viewers roster. */
+  viewerName?: string;
   /**
    * Set when `url` goes through a proxy that forwards WebSocket frames only
    * (the axn-term gateway) — skips the SignalR negotiate POST.
@@ -93,6 +98,130 @@ export class RemoteBackend implements SessionBackend {
     return this.ptys.has(clientId) ? clientId : undefined;
   }
 
+  // ---- remote console (viewer-side mirror of RemoteAuthority's) ----
+
+  private consoleCbs = new Set<() => void>();
+  private consoleUnsub: (() => void) | undefined;
+  private consoleSnapshot: RemoteConsoleSnapshot = {
+    role: 'viewer', state: 'idle', ptys: [], claims: {},
+  };
+  /** Reconnect bookkeeping — a dropped transport retries with backoff. */
+  private reconnectTimer?: ReturnType<typeof setTimeout>;
+  private reconnectAttempt = 0;
+  private connErrorKind?: 'unreachable' | 'ws-broken';
+  /** Mirrored sessions this account owns (filled by discovery). */
+  private availableSessions: string[] = [];
+
+  /**
+   * Viewer-side read of the shared `/viewportClaims` + published ptys —
+   * same shape the desktop authority's RemoteConsole exposes, so one
+   * console UI renders on host and clients alike.
+   */
+  readonly remoteConsole: RemoteConsole = {
+    get: () => this.consoleSnapshot,
+    subscribe: (cb) => {
+      this.consoleCbs.add(cb);
+      this.ensureConsoleFeed();
+      return () => this.consoleCbs.delete(cb);
+    },
+    setViewportPaused: (paused) => this.setViewportPaused(paused),
+    retryNow: () => this.retryNow(),
+    chooseSession: (id) => this.chooseSession(id),
+  };
+
+  private ensureConsoleFeed(): void {
+    if (this.consoleUnsub) return;
+    void this.connect().then((session) => {
+      if (this.consoleUnsub) return;
+      this.refreshConsole();
+      const unModel = session.onChange(() => this.refreshConsole());
+      const unState = session.onStateChange?.(() => this.refreshConsole()) ?? (() => {});
+      this.consoleUnsub = () => { unModel(); unState(); };
+    }).catch(() => {});
+  }
+
+  private refreshConsole(): void {
+    const session = this.session;
+    const vm = session?.vm() as Record<string, unknown> | undefined;
+    const ptys = Array.isArray(vm?.ptys) ? (vm!.ptys as Record<string, unknown>[]) : [];
+    const claims =
+      (vm?.viewportClaims as RemoteConsoleSnapshot['claims'] | undefined) ?? {};
+    this.consoleSnapshot = {
+      role: 'viewer',
+      state: session?.state ?? 'idle',
+      hostName: (vm?.hostname as string | undefined) ?? undefined,
+      hostDevice: (vm?.device as string | undefined) ?? undefined,
+      selfViewerId: this.viewerId,
+      ptys: ptys.map((p) => ({
+        id: String(p.id),
+        name: p.name === undefined ? undefined : String(p.name),
+        sessionId: p.sessionId === undefined ? undefined : String(p.sessionId),
+        cols: typeof p.cols === 'number' ? p.cols : undefined,
+        rows: typeof p.rows === 'number' ? p.rows : undefined,
+      })),
+      claims,
+      viewers:
+        (vm?.viewers as RemoteConsoleSnapshot['viewers'] | undefined) ?? {},
+      paused: this.viewportPaused,
+      errorKind: this.connErrorKind,
+      retrying: this.reconnectTimer !== undefined,
+      sessions: this.availableSessions.length ? this.availableSessions : undefined,
+      sessionId: session?.sessionId ?? this.opts.sessionId,
+    };
+    for (const cb of this.consoleCbs) cb();
+  }
+
+  /** Backoff reconnect: 1s → 30s cap + jitter. A failed attempt probes the
+   *  hub over HTTP to classify the failure (server down vs WS path broken),
+   *  then reschedules. `retryNow` skips the wait (overlay button). */
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) return;
+    const base = Math.min(30_000, 1_000 * 2 ** Math.min(this.reconnectAttempt, 5));
+    this.reconnectAttempt++;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      void this.connect()
+        .then(() => this.refreshConsole())
+        .catch(async () => {
+          this.connErrorKind = await this.probe();
+          this.refreshConsole();
+          this.scheduleReconnect();
+        });
+    }, base + Math.random() * 500);
+  }
+
+  private retryNow(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+    this.scheduleReconnect();
+  }
+
+  /** HTTP reachability of the hub — a response (even 4xx) means the server
+   *  is up and the WS path is broken; nothing means the hub is down. */
+  private async probe(): Promise<'unreachable' | 'ws-broken'> {
+    try {
+      const http = this.opts.url.replace(/^ws/, 'http');
+      await fetch(http, { signal: AbortSignal.timeout(3_000) });
+      return 'ws-broken';
+    } catch {
+      return 'unreachable';
+    }
+  }
+
+  /** Attach to a different mirrored session (console picker). */
+  private chooseSession(id: string): void {
+    this.opts.sessionId = id;
+    this.session = undefined;
+    this.connectPromise = undefined;
+    this.refreshConsole();
+    void this.connect().then(() => this.refreshConsole()).catch(() => {
+      this.refreshConsole();
+      this.scheduleReconnect();
+    });
+  }
+
   private async connect(): Promise<RamphastosSession> {
     this.connectPromise ??= (async () => {
       const token = await this.opts.getToken?.();
@@ -101,10 +230,20 @@ export class RemoteBackend implements SessionBackend {
       // access_token query param; the token also rides hello.auth for
       // endpoints that authorize at the envelope level.
       if (token) url += `${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`;
+      // Discovery: no pinned session → ask the gateway which mirrored
+      // sessions this account owns; exactly one auto-attaches.
+      let sessionId = this.opts.sessionId;
+      if (!sessionId) {
+        this.availableSessions = await listRemoteSessions(this.opts.url, token)
+          .catch(() => []);
+        if (this.availableSessions.length === 1)
+          sessionId = this.availableSessions[0];
+      }
       const session = await RamphastosSession.connect(url, {
         auth: token,
         role: this.opts.role ?? 'controller',
-        sessionId: this.opts.sessionId,
+        // Tenant-scoped: viewers attach to their own account's namespace.
+        sessionId: scopeSessionId(sessionId, token),
         webSocketOnly: this.opts.webSocketOnly,
       });
       session.onStream((s) => this.handleStreamAnnounce(s));
@@ -114,12 +253,26 @@ export class RemoteBackend implements SessionBackend {
       // finds them instead of timing out.
       for (const s of session.streams.values()) this.handleStreamAnnounce(s);
       this.session = session;
+      this.reconnectAttempt = 0;
+      this.connErrorKind = undefined;
+      void session.invoke('/vm/reportViewer', [
+        this.viewerId,
+        this.opts.viewerName ??
+          (typeof navigator !== 'undefined' ? `browser — ${navigator.platform}` : 'client'),
+        'web',
+      ]).catch(() => {});
       // A dropped transport must not be reused — clear the cached promise
       // so the next call reconnects (and re-fetches the token).
       session.onStateChange?.((state) => {
         if (state !== 'closed') return;
         if (this.session === session) this.session = undefined;
         this.connectPromise = undefined;
+        // The console feed was bound to the dead session — rebind on the
+        // next connect so subscribers keep seeing model changes.
+        this.consoleUnsub = undefined;
+        if (this.consoleCbs.size) this.ensureConsoleFeed();
+        this.refreshConsole();
+        this.scheduleReconnect();
       });
       return session;
     })();
@@ -331,6 +484,7 @@ export class RemoteBackend implements SessionBackend {
 
   setViewportPaused(paused: boolean): void {
     this.viewportPaused = paused;
+    this.refreshConsole();
     void this.session?.invoke(
       paused ? '/vm/pauseViewport' : '/vm/resumeViewport',
       paused ? [this.viewerId] : [this.viewerId, this.lastCols || 80, this.lastRows || 24],

@@ -72,6 +72,9 @@ function AppContent() {
         // sessions, so the flag stays off there.
         attachOnly: Boolean(remoteSessionId),
       });
+      // The remote console's viewer-side state — /viewportClaims + host
+      // identity straight from the replicated model.
+      p.remoteConsole = backend.remoteConsole;
     }
     return p;
   }, [username, backend]);

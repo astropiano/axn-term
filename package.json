@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.5.2",
-  "description": "Extensible terminal workspace \u2014 desktop application and remote shell session server.",
+  "description": "Extensible terminal workspace — desktop application and remote shell session server.",
   "scripts": {
     "dev:desktop": "pnpm --filter @axn-term/desktop tauri dev",
     "build:desktop": "pnpm --filter @axn-term/desktop tauri build --bundles app && ./build/scripts/make-dmg.sh",
@@ -33,5 +33,10 @@
     "lucide-react": "^0.400.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@lingui/cli@6.9.0": "patches/@lingui__cli@6.9.0.patch"
+    }
   }
 }

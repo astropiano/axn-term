@@ -64,6 +64,11 @@ export interface AppSettings {
   shellFontFamily?: string;
   /** Shell terminal font size in px (default 14). */
   shellFontSize?: number;
+  /**
+   * Shell terminal line height multiplier (default 1.2 — xterm itself
+   * defaults to 1.0). Applies to terminals only, not the panel.
+   */
+  shellLineHeight?: number;
   /** Session/workspace panel font family. Empty/unset = app font. */
   panelFontFamily?: string;
   /** Panel font size in px — scales the panel relative to its 12px base. */
@@ -85,6 +90,13 @@ export interface AppSettings {
    * live when added; a removed root stays allowed until the app restarts.
    */
   fileAccessRoots?: string[];
+  /**
+   * Remote access — when true the rail shows the Remote console icon.
+   * Publishing additionally needs remoteAuthorityUrl (configured inside the
+   * console view). Undefined behaves as enabled-without-console (icon shows
+   * only where a remote console already exists, e.g. web viewers).
+   */
+  remoteEnabled?: boolean;
   /**
    * Remote authority — publish this window's terminals to a Ramphastos
    * /remote hub so remote viewers (e.g. a phone browser) can attach and
@@ -221,11 +233,113 @@ export function resolveTheme(settings: AppSettings): ThemeDefinition {
 export const defaultShellFontFamily =
   '"Monaspace Neon Var", "Monaspace Neon", "Monaspace Argon Var", "Monaspace Argon", "Fira Code", "Cascadia Code", "Source Code Pro", monospace';
 export const defaultShellFontSize = 14;
+/**
+ * xterm lineHeight multiplier. 1.0 packed rows too tightly once Monaspace
+ * Neon started loading everywhere (it is bundled since Oct '24); 1.2 keeps
+ * the relaxed spacing the previous fallback fonts gave.
+ */
+export const defaultShellLineHeight = 1.2;
+
+/** CSS generic families — always "installed", no probe needed. */
+const GENERIC_FONT_FAMILIES = new Set([
+  'serif',
+  'sans-serif',
+  'monospace',
+  'cursive',
+  'fantasy',
+  'system-ui',
+  'ui-serif',
+  'ui-sans-serif',
+  'ui-monospace',
+  'ui-rounded',
+  'emoji',
+  'math',
+  'fangsong',
+]);
+
+/**
+ * Font existence check: draw the probe string in "family, monospace" and
+ * compare widths with plain monospace — a missing font falls back to the
+ * same glyph run and measures identically. Reliable for system fonts where
+ * document.fonts.check() reports false positives.
+ */
+let fontProbeCtx: CanvasRenderingContext2D | null | undefined;
+const fontProbeCache = new Map<string, boolean>();
+// Webfonts resolve asynchronously — a name probed "missing" before the font
+// loaded must not stay cached as missing forever.
+if (typeof document !== 'undefined') {
+  void document.fonts?.ready?.then(() => fontProbeCache.clear());
+}
+function singleFontExists(name: string): boolean {
+  const cached = fontProbeCache.get(name);
+  if (cached !== undefined) return cached;
+  let exists = true;
+  try {
+    if (document.fonts?.check?.(`12px "${name}"`)) {
+      exists = true;
+    } else {
+      if (fontProbeCtx === undefined) {
+        fontProbeCtx = document.createElement('canvas').getContext('2d');
+      }
+      if (!fontProbeCtx) {
+        exists = true;
+      } else {
+        const probe = 'mmmmmmmmmmWWW';
+        fontProbeCtx.font = '72px monospace';
+        const base = fontProbeCtx.measureText(probe).width;
+        fontProbeCtx.font = `72px "${name}", monospace`;
+        exists = Math.abs(fontProbeCtx.measureText(probe).width - base) > 0.01;
+      }
+    }
+  } catch {
+    exists = true;
+  }
+  fontProbeCache.set(name, exists);
+  return exists;
+}
+
+/**
+ * Does a single font family name resolve to an installed (or bundled) font?
+ * Empty and generic family names count as available. Without a DOM there is
+ * nothing to render with anyway, so everything counts as available.
+ */
+export function fontFamilyExists(family: string): boolean {
+  const name = family.trim().replace(/^["']|["']$/g, '');
+  if (!name) return true;
+  if (GENERIC_FONT_FAMILIES.has(name.toLowerCase())) return true;
+  if (typeof document === 'undefined') return true;
+  return singleFontExists(name);
+}
+
+/**
+ * Does a CSS font-family stack resolve to something real? A stack applies
+ * when at least one listed (non-generic) family exists — a stack of only
+ * missing names would fall through to the UA default (serif), which is why
+ * configured fonts must be validated at apply time, not only at input time
+ * (config.yaml edits bypass the settings field's own check).
+ */
+export function fontStackAvailable(stack: string): boolean {
+  const names = stack
+    .split(',')
+    .map((n) => n.trim().replace(/^["']|["']$/g, ''))
+    .filter(Boolean);
+  if (names.length === 0) return false;
+  return names.some(
+    (n) => GENERIC_FONT_FAMILIES.has(n.toLowerCase()) || fontFamilyExists(n),
+  );
+}
 
 /** Resolve the shell terminal font from settings (defaults in parens). */
-export function resolveShellFont(settings: AppSettings): { family: string; size: number } {
+export function resolveShellFont(settings: AppSettings): {
+  family: string;
+  size: number;
+  lineHeight: number;
+} {
+  const family = settings.shellFontFamily?.trim();
   return {
-    family: settings.shellFontFamily?.trim() || defaultShellFontFamily,
+    // A configured font only applies when it actually exists — otherwise
+    // every config.yaml typo would restyle the terminal in fallback serif.
+    family: family && fontStackAvailable(family) ? family : defaultShellFontFamily,
     // xterm fontSize wants integer px.
     size: Math.round(
       (settings.shellFontSize && settings.shellFontSize > 0
@@ -233,6 +347,10 @@ export function resolveShellFont(settings: AppSettings): { family: string; size:
         : defaultShellFontSize) *
         (settings.uiZoom && settings.uiZoom > 0 ? settings.uiZoom / 100 : 1),
     ),
+    lineHeight:
+      settings.shellLineHeight && settings.shellLineHeight > 0
+        ? settings.shellLineHeight
+        : defaultShellLineHeight,
   };
 }
 

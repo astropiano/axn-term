@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { setupI18n } from '@lingui/core';
 import { messages as en } from './locales/en/messages';
 import { messages as ko } from './locales/ko/messages';
@@ -34,6 +36,44 @@ describe('compiled message catalogs', () => {
         }
       }
       expect(failures).toEqual([]);
+    });
+  }
+
+  // An id missing from a catalog is what surfaces in the UI as an
+  // untranslated entry — or as the raw hash id when there is no `message`
+  // fallback. Catalogs drift when `lingui extract`/`compile` is not re-run
+  // after adding messages; keep every locale at the source locale's key set.
+  for (const [locale, messages] of Object.entries(catalogs)) {
+    if (locale === 'en') continue;
+    it(`${locale} has a translation for every en message`, () => {
+      const missing = Object.keys(en).filter((id) => !(id in messages));
+      const stale = Object.keys(messages).filter((id) => !(id in en));
+      expect({ missing, stale }).toEqual({ missing: [], stale: [] });
+    });
+  }
+});
+
+describe('message sources (.po)', () => {
+  // A msgid with an empty msgstr drops out of the compiled catalog — the
+  // check above then sees a missing translation. Catch it at the source.
+  for (const locale of Object.keys(catalogs)) {
+    if (locale === 'en') continue;
+    it(`every ${locale} msgid is translated`, () => {
+      const po = readFileSync(
+        fileURLToPath(new URL(`./locales/${locale}/messages.po`, import.meta.url)),
+        'utf8',
+      );
+      const untranslated: string[] = [];
+      const entry = /^msgid "(.*)"$/gm;
+      let m: RegExpExecArray | null;
+      while ((m = entry.exec(po))) {
+        const msgid = m[1];
+        if (!msgid) continue; // header
+        const rest = po.slice(m.index);
+        const msgstr = /^msgstr "((?:[^"\\]|\\.)*)"/m.exec(rest)?.[1];
+        if (!msgstr) untranslated.push(msgid);
+      }
+      expect(untranslated).toEqual([]);
     });
   }
 });

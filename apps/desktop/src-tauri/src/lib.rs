@@ -2,7 +2,6 @@ pub mod cli;
 #[cfg(unix)]
 pub mod control;
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -12,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, Listener, Manager, State, WebviewUrl, Wry};
 use tauri_plugin_fs::FsExt;
 
@@ -54,7 +54,23 @@ struct AppState {
     /// Last remoteAuth snapshot the frontend reported — only read by the
     /// remote-control `GET /remote-auth` endpoint.
     remote_auth: Mutex<Option<String>>,
+    /// Per-webview output channels (`attach_output`), keyed by label. Every
+    /// window receives every session's output, as with a broadcast event.
+    output_channels: OutputChannels,
 }
+
+type OutputChannels = Arc<Mutex<HashMap<String, OutputSink>>>;
+
+/// A webview's output channel plus the bytes it has not acknowledged yet
+/// (`ack_output`). Channel sends never block, so without this a flood
+/// queues up in the IPC layer faster than the webview can take it.
+struct OutputSink {
+    channel: Channel<InvokeResponseBody>,
+    unacked: usize,
+}
+
+/// Emitters wait while a webview has more than this unacknowledged.
+const TRANSPORT_HIGH_WATERMARK: usize = 1024 * 1024;
 
 impl AppState {
     fn new(capture_output: bool) -> Self {
@@ -64,6 +80,7 @@ impl AppState {
             window_counter: AtomicU64::new(0),
             capture_output,
             remote_auth: Mutex::new(None),
+            output_channels: Arc::default(),
         }
     }
 }
@@ -413,6 +430,11 @@ struct Session {
     master: Mutex<Box<dyn MasterPty + Send>>,
     /// Shared so writers can release the session map before blocking I/O.
     writer: PtyWriter,
+    /// Keystrokes for this PTY's writer thread (`write_session`): in order,
+    /// and never blocking the main thread on a full PTY input buffer.
+    input: std::sync::mpsc::Sender<Vec<u8>>,
+    /// Output flow control (`pause_session` / `resume_session`).
+    flow: Arc<FlowGate>,
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
     shell_pid: u32,
     /// Recent decoded output for remote-control `GET /sessions/<id>`;
@@ -429,6 +451,27 @@ struct Session {
 /// Cap of a session's `OutputTail` in bytes (≤ chars) — the frontend
 /// scrollback is capped at 200,000 characters as well.
 const OUTPUT_TAIL_MAX: usize = 200_000;
+/// PTY read size; the tty layer usually hands out less per read anyway.
+const OUTPUT_READ_BUF: usize = 64 * 1024;
+/// Upper bound for one coalesced output message.
+const OUTPUT_BATCH_MAX: usize = 256 * 1024;
+/// Read-ahead between the PTY reader and the emitter, in reads (usually
+/// a few KB each).
+const OUTPUT_QUEUE_CHUNKS: usize = 64;
+
+/// Waits for the next PTY chunk, then appends whatever else is already
+/// queued (up to `OUTPUT_BATCH_MAX`) without waiting for more. `None` once
+/// the reader has finished and everything was handed out.
+fn next_output_batch(rx: &std::sync::mpsc::Receiver<Vec<u8>>) -> Option<Vec<u8>> {
+    let mut batch = rx.recv().ok()?;
+    while batch.len() < OUTPUT_BATCH_MAX {
+        match rx.try_recv() {
+            Ok(more) => batch.extend_from_slice(&more),
+            Err(_) => break,
+        }
+    }
+    Some(batch)
+}
 
 /// Incremental UTF-8 decoder for raw PTY reads: a multibyte character split
 /// across two reads is carried over into the next chunk instead of failing
@@ -498,10 +541,72 @@ impl OutputTail {
     }
 }
 
-#[derive(Clone, Serialize)]
-struct ShellOutput {
-    session_id: String,
-    data: String,
+/// One output frame: big-endian u16 id length, the session id, the bytes.
+/// Raw bytes skip the base64 + JSON + script-eval cost of an event.
+fn output_frame(session_id: &str, data: &[u8]) -> Vec<u8> {
+    let id = &session_id.as_bytes()[..session_id.len().min(u16::MAX as usize)];
+    let mut frame = Vec::with_capacity(2 + id.len() + data.len());
+    frame.extend_from_slice(&(id.len() as u16).to_be_bytes());
+    frame.extend_from_slice(id);
+    frame.extend_from_slice(data);
+    frame
+}
+
+fn send_output(channels: &OutputChannels, session_id: &str, data: &[u8]) {
+    let frame = output_frame(session_id, data);
+    let mut channels = match channels.lock() {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    // A closed webview fails the send — forget its channel.
+    channels.retain(|_, sink| {
+        sink.unacked += frame.len();
+        sink.channel.send(InvokeResponseBody::Raw(frame.clone())).is_ok()
+    });
+}
+
+/// Blocks while some webview is more than `TRANSPORT_HIGH_WATERMARK` behind.
+/// A webview that stops acknowledging (hung) is let go after
+/// `FLOW_PAUSE_MAX` so it cannot stall output for every window.
+fn wait_for_transport(channels: &OutputChannels) {
+    let start = std::time::Instant::now();
+    loop {
+        {
+            let Ok(mut sinks) = channels.lock() else { return };
+            if sinks.values().all(|s| s.unacked <= TRANSPORT_HIGH_WATERMARK) {
+                return;
+            }
+            if start.elapsed() >= FLOW_PAUSE_MAX {
+                for sink in sinks.values_mut() {
+                    sink.unacked = 0;
+                }
+                return;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
+/// The webview took `bytes` of output off its channel.
+#[tauri::command]
+async fn ack_output(webview: tauri::Webview, state: State<'_, AppState>, bytes: usize) -> Result<(), String> {
+    if let Ok(mut sinks) = state.output_channels.lock() {
+        if let Some(sink) = sinks.get_mut(webview.label()) {
+            sink.unacked = sink.unacked.saturating_sub(bytes);
+        }
+    }
+    Ok(())
+}
+
+/// Called once per webview (the frontend's session backend) before it
+/// creates sessions; a reload replaces the window's previous channel.
+/// Sync on purpose: it runs in order with `create_session`, so no early
+/// output is missed.
+#[tauri::command]
+fn attach_output(webview: tauri::Webview, state: State<AppState>, channel: Channel<InvokeResponseBody>) {
+    if let Ok(mut channels) = state.output_channels.lock() {
+        channels.insert(webview.label().to_string(), OutputSink { channel, unacked: 0 });
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -541,9 +646,13 @@ fn get_default_shell() -> String {
 /// remaining output. A background job that still holds the PTY open keeps
 /// the reader from reaching EOF — the exit is reported anyway after this.
 const READER_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
+/// Upper bound for that wait while output is still flowing.
+const READER_DRAIN_MAX: Duration = Duration::from_secs(30);
 
 /// Poll `try_wait` until the child exits, then wait for the reader to hit
-/// EOF (all `reader_done` senders dropped), at most `drain_timeout`.
+/// EOF (all `reader_done` senders dropped). Every message on `reader_done`
+/// is a heartbeat — output still going out, which flow control can stretch
+/// — and restarts the `drain_timeout` wait, up to `READER_DRAIN_MAX`.
 /// Returns the exit code, `None` when the status could not be read.
 fn wait_exit_then_drain(
     mut try_wait: impl FnMut() -> std::io::Result<Option<u32>>,
@@ -558,7 +667,12 @@ fn wait_exit_then_drain(
             Err(_) => break None,
         }
     };
-    let _ = reader_done.recv_timeout(drain_timeout);
+    let start = std::time::Instant::now();
+    while reader_done.recv_timeout(drain_timeout).is_ok() {
+        if start.elapsed() >= READER_DRAIN_MAX {
+            break;
+        }
+    }
     exit_code
 }
 
@@ -669,10 +783,17 @@ fn spawn_pty(
         .then(|| Arc::new(Mutex::new(OutputTail::default())));
     let reader_output = output.clone();
 
+    let writer: PtyWriter = Arc::new(Mutex::new(writer));
+    let input = spawn_input_writer(Arc::clone(&writer));
+    let flow = Arc::new(FlowGate::default());
+    let emitter_flow = Arc::clone(&flow);
+
     let parent_link = Arc::new(Mutex::new(parent_id));
     let session = Session {
         master: Mutex::new(pair.master),
-        writer: Arc::new(Mutex::new(writer)),
+        writer,
+        input,
+        flow,
         child: Arc::clone(&child),
         shell_pid,
         output,
@@ -686,7 +807,9 @@ fn spawn_pty(
 
     // The reader drops its end on EOF, so the exit watcher can hold the
     // exit event back until the last output has been emitted.
-    let (reader_done_tx, reader_done_rx) = std::sync::mpsc::channel::<()>();
+    // The emitter also sends a heartbeat per batch (one slot: a stale one
+    // is dropped, so nothing piles up over a session's lifetime).
+    let (reader_done_tx, reader_done_rx) = std::sync::mpsc::sync_channel::<()>(1);
 
     let session_id_exit = session_id.clone();
     let child_for_exit = Arc::clone(&child);
@@ -714,27 +837,44 @@ fn spawn_pty(
         }
     });
 
-    let session_id_reader = session_id;
-    let app_handle = app.clone();
+    // The reader only reads; a separate emitter thread sends the output to
+    // the webviews. While a send is in flight, further reads pile up in the
+    // queue and go out together in the next message, so a burst (`cat` of a
+    // big file) becomes a few large messages instead of thousands of 4 KB
+    // ones — without delaying a lone keystroke echo.
+    // Bounded: while the emitter is paused (flow control) the reader stops,
+    // the kernel PTY buffer fills and the producing process blocks.
+    let (chunk_tx, chunk_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(OUTPUT_QUEUE_CHUNKS);
     std::thread::spawn(move || {
-        let mut buf = [0u8; 4096];
+        let mut buf = vec![0u8; OUTPUT_READ_BUF];
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    let data = BASE64.encode(&buf[..n]);
-                    let payload = ShellOutput {
-                        session_id: session_id_reader.clone(),
-                        data,
-                    };
-                    let _ = app_handle.emit("shell-output", payload);
-                    if let Some(Ok(mut out)) = reader_output.as_ref().map(|o| o.lock()) {
-                        out.push_bytes(&buf[..n]);
+                    if chunk_tx.send(buf[..n].to_vec()).is_err() {
+                        break;
                     }
                 }
                 Err(_) => break,
             }
         }
+    });
+
+    let session_id_emitter = session_id;
+    let channels = Arc::clone(&state.output_channels);
+    std::thread::spawn(move || {
+        loop {
+            emitter_flow.wait_open(FLOW_PAUSE_MAX);
+            let Some(batch) = next_output_batch(&chunk_rx) else { break };
+            wait_for_transport(&channels);
+            if let Some(Ok(mut out)) = reader_output.as_ref().map(|o| o.lock()) {
+                out.push_bytes(&batch);
+            }
+            send_output(&channels, &session_id_emitter, &batch);
+            let _ = reader_done_tx.try_send(());
+        }
+        // Dropped only after the last output went out, so the exit watcher
+        // never reports the exit ahead of it.
         drop(reader_done_tx);
     });
 
@@ -810,6 +950,7 @@ fn create_subshell(
         }
         // Re-spawning an existing id (re-run) replaces the dead child.
         if let Some(old) = sessions.remove(&subshell_id) {
+            old.flow.set_paused(false);
             let _ = old.child.lock().unwrap().kill();
         }
         let parent = sessions
@@ -884,15 +1025,86 @@ async fn with_state_blocking<T: Send + 'static>(
         .map_err(|e| e.to_string())?
 }
 
-// Stays a synchronous command: the main thread serializes keystroke writes.
+/// Lets the frontend stop reading a PTY while its terminal is behind, so a
+/// flood (`seq 1 1000000000`, a runaway log) blocks the producer instead of
+/// piling megabytes into xterm — Ctrl-C then takes effect on screen at once.
+/// A pause lifts by itself after `FLOW_PAUSE_MAX`, so a frontend that never
+/// resumes cannot hang a session for good.
+#[derive(Default)]
+struct FlowGate {
+    paused: Mutex<bool>,
+    cv: std::sync::Condvar,
+}
+
+const FLOW_PAUSE_MAX: Duration = Duration::from_secs(5);
+
+impl FlowGate {
+    fn set_paused(&self, paused: bool) {
+        if let Ok(mut p) = self.paused.lock() {
+            *p = paused;
+        }
+        self.cv.notify_all();
+    }
+
+    /// Blocks while paused, at most `max`.
+    fn wait_open(&self, max: Duration) {
+        let Ok(mut paused) = self.paused.lock() else { return };
+        let deadline = std::time::Instant::now() + max;
+        while *paused {
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                *paused = false;
+                break;
+            }
+            paused = match self.cv.wait_timeout(paused, deadline - now) {
+                Ok((guard, _)) => guard,
+                Err(_) => return,
+            };
+        }
+    }
+}
+
+#[tauri::command]
+fn pause_session(state: State<AppState>, session_id: String) -> Result<(), String> {
+    set_session_paused(&state, &session_id, true)
+}
+
+#[tauri::command]
+fn resume_session(state: State<AppState>, session_id: String) -> Result<(), String> {
+    set_session_paused(&state, &session_id, false)
+}
+
+fn set_session_paused(state: &AppState, session_id: &str, paused: bool) -> Result<(), String> {
+    let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    let session = sessions.get(session_id).ok_or("session not found")?;
+    session.flow.set_paused(paused);
+    Ok(())
+}
+
+/// Writes queued keystrokes to the PTY in order. Ends once the session is
+/// dropped (its sender goes away).
+fn spawn_input_writer(writer: PtyWriter) -> std::sync::mpsc::Sender<Vec<u8>> {
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        for data in rx {
+            let Ok(mut w) = writer.lock() else { break };
+            let _ = w.write_all(&data).and_then(|_| w.flush());
+        }
+    });
+    tx
+}
+
+// Stays a synchronous command so keystrokes keep their order, but only
+// queues: a large paste into a process that isn't reading would otherwise
+// block the main thread (and with it every window) until the PTY drains.
 #[tauri::command]
 fn write_session(state: State<AppState>, session_id: String, data: String) -> Result<(), String> {
-    let writer = session_writer(&state, &session_id)?;
-    let mut writer = writer.lock().map_err(|e| e.to_string())?;
-    writer
-        .write_all(data.as_bytes())
-        .and_then(|_| writer.flush())
-        .map_err(|e| e.to_string())
+    let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    let session = sessions.get(&session_id).ok_or("session not found")?;
+    session
+        .input
+        .send(data.into_bytes())
+        .map_err(|_| "session closed".to_string())
 }
 
 #[tauri::command]
@@ -1502,6 +1714,45 @@ fn path_to_file_uri(path: &str) -> String {
     out
 }
 
+/// Run a clipboard operation on the main thread with a fresh `arboard`
+/// handle. tauri-plugin-clipboard-manager keeps one `arboard::Clipboard` for
+/// the app's lifetime and drives it from tokio workers; on macOS that reuse of
+/// an NSPasteboard handle off the main thread crashed in
+/// `_NSPasteboardDeclareTypes` (EXC_BAD_ACCESS) after hours of OSC 52 copies.
+async fn on_main_clipboard<T: Send + 'static>(
+    app: tauri::AppHandle,
+    f: impl FnOnce(&mut arboard::Clipboard) -> Result<T, arboard::Error> + Send + 'static,
+) -> Result<T, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let result = arboard::Clipboard::new()
+            .and_then(|mut clipboard| f(&mut clipboard))
+            .map_err(|e| e.to_string());
+        let _ = tx.send(result);
+    })
+    .map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || rx.recv())
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|_| "clipboard operation was dropped".to_string())?
+}
+
+#[tauri::command]
+async fn clipboard_write_text(app: tauri::AppHandle, text: String) -> Result<(), String> {
+    on_main_clipboard(app, move |clipboard| clipboard.set_text(text)).await
+}
+
+/// Clipboard text, or `None` when the clipboard holds no text.
+#[tauri::command]
+async fn clipboard_read_text(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    on_main_clipboard(app, |clipboard| match clipboard.get_text() {
+        Ok(text) => Ok(Some(text)),
+        Err(arboard::Error::ContentNotAvailable) => Ok(None),
+        Err(e) => Err(e),
+    })
+    .await
+}
+
 /// Reveal a file or directory in the OS file manager with the item selected.
 #[tauri::command]
 fn reveal_path(path: String) -> Result<(), String> {
@@ -1584,10 +1835,13 @@ fn close_session(state: State<AppState>, session_id: String) -> Result<(), Strin
         .collect();
     for id in child_ids {
         if let Some(sub) = sessions.remove(&id) {
+            sub.flow.set_paused(false);
             let _ = sub.child.lock().unwrap().kill();
         }
     }
     if let Some(session) = sessions.remove(&session_id) {
+        // A paused reader must drain to EOF so the exit is reported.
+        session.flow.set_paused(false);
         let _ = session.child.lock().unwrap().kill();
         Ok(())
     } else {
@@ -2889,7 +3143,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
         .manage(AppState::new(remote_control.is_some()));
     #[cfg(unix)]
@@ -2984,11 +3237,15 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            attach_output,
+            ack_output,
             control_reply,
             allow_file_roots,
             get_default_shell,
             create_session,
             write_session,
+            pause_session,
+            resume_session,
             resize_session,
             get_foreground_process,
             current_exe_path,
@@ -2998,6 +3255,8 @@ pub fn run() {
             stat_path,
             open_directory,
             reveal_path,
+            clipboard_write_text,
+            clipboard_read_text,
             get_git_repo,
             git_exec,
             close_session,
@@ -3438,6 +3697,8 @@ mod session_lock_tests {
             Session {
                 master: Mutex::new(pair.master),
                 writer: Arc::new(Mutex::new(writer)),
+                input: std::sync::mpsc::channel().0,
+                flow: Default::default(),
                 child: Arc::new(Mutex::new(child)),
                 shell_pid: 0,
                 output: None,
@@ -3484,6 +3745,22 @@ mod exit_order_tests {
         reader.join().unwrap();
         assert_eq!(code, Some(7));
         assert_eq!(*events.lock().unwrap(), vec!["output", "exit"]);
+    }
+
+    #[test]
+    fn exit_keeps_waiting_while_output_still_flows() {
+        let (tx, rx) = channel::<()>();
+        let emitter = std::thread::spawn(move || {
+            // Heartbeats for 300 ms — longer than the drain timeout — then EOF.
+            for _ in 0..6 {
+                std::thread::sleep(Duration::from_millis(50));
+                tx.send(()).unwrap();
+            }
+        });
+        let start = Instant::now();
+        wait_exit_then_drain(|| Ok(Some(0)), &rx, Duration::from_millis(1), Duration::from_millis(120));
+        emitter.join().unwrap();
+        assert!(start.elapsed() >= Duration::from_millis(280));
     }
 
     #[test]
@@ -3634,5 +3911,115 @@ mod git_status_tests {
     fn unborn_branch_reports_its_name() {
         assert_eq!(parse("## No commits yet on main\n").branch.as_deref(), Some("main"));
         assert_eq!(parse("## Initial commit on master\n").branch.as_deref(), Some("master"));
+    }
+}
+
+#[cfg(test)]
+mod output_batch_tests {
+    use super::{next_output_batch, output_frame, OUTPUT_BATCH_MAX};
+
+    #[test]
+    fn an_output_frame_carries_the_session_id_then_the_bytes() {
+        let frame = output_frame("s-1", b"hi");
+        assert_eq!(frame, [&[0u8, 3][..], b"s-1", b"hi"].concat());
+    }
+
+    #[test]
+    fn queued_chunks_go_out_together_in_order() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(b"ab".to_vec()).unwrap();
+        tx.send(b"cd".to_vec()).unwrap();
+        tx.send(b"e".to_vec()).unwrap();
+        assert_eq!(next_output_batch(&rx).unwrap(), b"abcde");
+        drop(tx);
+        assert!(next_output_batch(&rx).is_none());
+    }
+
+    #[test]
+    fn a_batch_stops_growing_at_the_cap() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        for _ in 0..5 {
+            tx.send(vec![b'x'; OUTPUT_BATCH_MAX / 2]).unwrap();
+        }
+        drop(tx);
+        let mut sizes = Vec::new();
+        while let Some(b) = next_output_batch(&rx) {
+            sizes.push(b.len());
+        }
+        assert_eq!(sizes, vec![OUTPUT_BATCH_MAX, OUTPUT_BATCH_MAX, OUTPUT_BATCH_MAX / 2]);
+    }
+}
+
+#[cfg(test)]
+mod input_writer_tests {
+    use super::spawn_input_writer;
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+
+    struct Sink(Arc<Mutex<Vec<u8>>>);
+    impl Write for Sink {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn queued_keystrokes_reach_the_pty_in_order() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let writer: super::PtyWriter = Arc::new(Mutex::new(Box::new(Sink(Arc::clone(&seen)))));
+        let tx = spawn_input_writer(writer);
+        for key in ["l", "s", " ", "-", "l", "\r"] {
+            tx.send(key.as_bytes().to_vec()).unwrap();
+        }
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while seen.lock().unwrap().len() < 6 && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert_eq!(&*seen.lock().unwrap(), b"ls -l\r");
+    }
+}
+
+#[cfg(test)]
+mod flow_gate_tests {
+    use super::FlowGate;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn an_open_gate_does_not_block() {
+        let gate = FlowGate::default();
+        let t = Instant::now();
+        gate.wait_open(Duration::from_secs(5));
+        assert!(t.elapsed() < Duration::from_millis(100));
+    }
+
+    #[test]
+    fn resume_releases_a_waiting_reader() {
+        let gate = Arc::new(FlowGate::default());
+        gate.set_paused(true);
+        let g = Arc::clone(&gate);
+        let waiter = std::thread::spawn(move || {
+            let t = Instant::now();
+            g.wait_open(Duration::from_secs(10));
+            t.elapsed()
+        });
+        std::thread::sleep(Duration::from_millis(100));
+        gate.set_paused(false);
+        let waited = waiter.join().unwrap();
+        assert!(waited >= Duration::from_millis(90) && waited < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn a_pause_lifts_by_itself_after_the_limit() {
+        let gate = FlowGate::default();
+        gate.set_paused(true);
+        let t = Instant::now();
+        gate.wait_open(Duration::from_millis(150));
+        assert!(t.elapsed() >= Duration::from_millis(140));
+        assert!(!*gate.paused.lock().unwrap());
     }
 }

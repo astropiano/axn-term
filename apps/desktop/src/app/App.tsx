@@ -94,7 +94,24 @@ export default function App() {
       [],
     ),
   );
+  // A published session needs a unique id on the shared hub — two devices
+  // with the same id collide (the later hello wins the session). Generate a
+  // stable random one the first time remote is enabled; the setting stays
+  // editable in the remote console for an explicit name.
   useEffect(() => {
+    if (settings.remoteEnabled === false) return;
+    if (!settings.remoteAuthorityUrl) return;
+    if (settings.remoteAuthoritySession) return;
+    updateSettings({
+      remoteAuthoritySession: `host-${crypto.randomUUID().slice(0, 8)}`,
+    });
+  }, [settings.remoteEnabled, settings.remoteAuthorityUrl,
+      settings.remoteAuthoritySession, updateSettings]);
+  useEffect(() => {
+    if (settings.remoteEnabled === false) {
+      setAuthority(undefined);
+      return;
+    }
     const next = createRemoteAuthority({
       url: settings.remoteAuthorityUrl,
       session: settings.remoteAuthoritySession,
@@ -109,7 +126,7 @@ export default function App() {
     return () => {
       next?.stop().catch(() => {});
     };
-  }, [settings.remoteAuthorityUrl, settings.remoteAuthoritySession, settings.remoteAuthorityToken, remoteAuthState]);
+  }, [settings.remoteEnabled, settings.remoteAuthorityUrl, settings.remoteAuthoritySession, settings.remoteAuthorityToken, remoteAuthState]);
   const platform = useMemo(
     () => (authority ? withAuthorityReflect(authority, desktopPlatform) : desktopPlatform),
     [authority],

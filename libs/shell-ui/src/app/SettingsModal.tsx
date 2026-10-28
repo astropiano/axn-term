@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { msg } from '@lingui/core/macro';
 import type { MessageDescriptor } from '@lingui/core';
 import { Trans, useLingui } from '@lingui/react/macro';
@@ -8,7 +8,7 @@ import { SessionIconGlyph } from './SessionPanel';
 import { useSettings, settingsFromYaml, settingsToYaml } from '../SettingsProvider';
 import { usePluginSettings } from './PluginSettingsProvider';
 import type { AppSettings, ThemeMode } from '../themes';
-import { themeDefinitions } from '../themes';
+import { defaultShellLineHeight, fontFamilyExists, themeDefinitions } from '../themes';
 import { useSessionBackend, useShellPlatform } from '../services';
 import { availableLocales, localeNames } from '../i18n';
 import { getSessionViewPlugins, isPluginEnabled, pluginDependencies } from './session-plugins';
@@ -97,11 +97,10 @@ function ThemeSelect({
   );
 }
 
-type SettingsTab = 'general' | 'remote' | 'plugins';
+type SettingsTab = 'general' | 'plugins';
 
 const tabs: { id: SettingsTab; label: MessageDescriptor }[] = [
   { id: 'general', label: msg`General` },
-  { id: 'remote', label: msg`Remote` },
   { id: 'plugins', label: msg`Plugins` },
 ];
 
@@ -163,7 +162,7 @@ export function SettingsModal({ open, onClose, embedded }: SettingsModalProps) {
         </div>
 
         <div className="flex min-h-0 flex-1">
-          {tab === 'general' ? <GeneralTab /> : tab === 'remote' ? <RemoteTab /> : <PluginsTab />}
+          {tab === 'general' ? <GeneralTab /> : <PluginsTab />}
         </div>
       </div>
   );
@@ -248,10 +247,68 @@ function FontSizeInput({
   );
 }
 
+/**
+ * Line-height field — same ± stepping as FontSizeInput but fractional
+ * (xterm's multiplier, 0.05 steps between 1.0 and 2.0). Rounded to two
+ * decimals so repeated steps don't accumulate float noise.
+ */
+function LineHeightInput({
+  value,
+  onChange,
+}: {
+  value: number | undefined;
+  onChange: (next: number | undefined) => void;
+}) {
+  const { t } = useLingui();
+  const min = 1;
+  const max = 2;
+  const clamp = (v: number) => Math.round(Math.min(max, Math.max(min, v)) * 100) / 100;
+  const step = (delta: number) => onChange(clamp((value ?? defaultShellLineHeight) + delta * 0.05));
+  const buttonClass =
+    'flex h-6 w-5 shrink-0 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40';
+  return (
+    <div className="flex shrink-0 items-center gap-0.5" data-tip={t`Line height`}>
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={() => step(-1)}
+        disabled={(value ?? defaultShellLineHeight) <= min}
+        aria-label={t`Decrease line height`}
+      >
+        <Minus className="h-3 w-3" />
+      </button>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={0.05}
+        value={value ?? ''}
+        onChange={(e) =>
+          onChange(
+            e.currentTarget.value === '' ? undefined : clamp(Number(e.currentTarget.value)),
+          )
+        }
+        placeholder={String(defaultShellLineHeight)}
+        className="w-10 rounded border border-[var(--border)] bg-[var(--bg)] px-1 py-1 text-center text-xs text-[var(--text-primary)] outline-none [appearance:textfield] focus:border-[var(--accent)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={() => step(1)}
+        disabled={(value ?? defaultShellLineHeight) >= max}
+        aria-label={t`Increase line height`}
+      >
+        <Plus className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
 function GeneralTab() {
   const { t } = useLingui();
   const { settings, setTheme, updateSettings, replaceSettings } = useSettings();
   const platform = useShellPlatform();
+  const remoteEnabled = settings.remoteEnabled ?? Boolean(settings.remoteAuthorityUrl);
   const [defaultShell, setDefaultShell] = useState(settings.defaultShell ?? '');
   const [configError, setConfigError] = useState<string | null>(null);
   const [configNote, setConfigNote] = useState<string | null>(null);
@@ -419,9 +476,13 @@ function GeneralTab() {
             max={40}
             onChange={(shellFontSize) => updateSettings({ shellFontSize })}
           />
+          <LineHeightInput
+            value={settings.shellLineHeight}
+            onChange={(shellLineHeight) => updateSettings({ shellLineHeight })}
+          />
         </div>
         <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
-          <Trans>Terminal font family and size in px. Empty uses the built-in monospace stack at 14px.</Trans>
+          <Trans>Terminal font family, size in px, and line height. Empty uses the built-in monospace stack at 14px.</Trans>
         </p>
       </div>
 
@@ -556,152 +617,20 @@ function GeneralTab() {
             : t`Stored in browser localStorage`}
         </p>
       </div>
-    </div>
-  );
-}
-
-const SIGNED_OUT = { state: 'signedOut' as const };
-
-function RemoteTab() {
-  const { t } = useLingui();
-  const { settings, updateSettings } = useSettings();
-  const platform = useShellPlatform();
-  const remoteAuth = platform.remoteAuth;
-  const auth = useSyncExternalStore(
-    useCallback((cb: () => void) => remoteAuth?.subscribe(cb) ?? (() => {}), [remoteAuth]),
-    // useSyncExternalStore needs a STABLE snapshot — a fresh object literal
-    // per get() re-renders forever.
-    useCallback(() => remoteAuth?.get() ?? SIGNED_OUT, [remoteAuth]),
-  );
-  const inputCls =
-    'min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]';
-  const rowCls = 'flex items-center gap-2';
-  const labelCls = 'w-24 shrink-0 text-xs text-[var(--text-secondary)]';
-  const btnCls =
-    'rounded border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--text-primary)] hover:border-[var(--accent)] disabled:opacity-50';
-
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-      <div className="mb-4">
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Account</Trans></label>
-        <div className="flex flex-col gap-1.5">
-          <div className={rowCls}>
-            <span className={labelCls}><Trans>Server URL</Trans></span>
-            <input
-              type="text"
-              value={settings.remoteAuthIssuer ?? ''}
-              onChange={(e) =>
-                updateSettings({ remoteAuthIssuer: e.currentTarget.value || undefined })
-              }
-              placeholder="https://<host>:<port>/realms/axn-term"
-              aria-label={t`Server URL`}
-              className={inputCls}
-            />
-          </div>
-          <div className={rowCls}>
-            <span className={labelCls}><Trans>OIDC client</Trans></span>
-            <input
-              type="text"
-              value={settings.remoteAuthClientId ?? ''}
-              onChange={(e) =>
-                updateSettings({ remoteAuthClientId: e.currentTarget.value || undefined })
-              }
-              placeholder={t`axn-term-desktop (default)`}
-              aria-label={t`OIDC client`}
-              className={inputCls}
-            />
-          </div>
-          {remoteAuth ? (
-            <div className="mt-1">
-              {auth.state === 'signedIn' ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-[var(--text-secondary)]">
-                    <Trans>Signed in as {auth.user ?? ''}</Trans>
-                  </span>
-                  <button type="button" className={btnCls} onClick={() => void remoteAuth.signOut()}>
-                    <Trans>Sign out</Trans>
-                  </button>
-                </div>
-              ) : auth.state === 'pending' ? (
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-[var(--text-secondary)]">
-                    <Trans>Enter code {auth.userCode ?? ''} in the browser to finish sign-in.</Trans>
-                  </span>
-                  {auth.verificationUri ? (
-                    <span className="select-all break-all text-[10px] text-[var(--text-secondary)]">
-                      {auth.verificationUri}
-                    </span>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className={btnCls}
-                    disabled={!settings.remoteAuthIssuer}
-                    onClick={() => void remoteAuth.signIn()}
-                  >
-                    <Trans>Sign in…</Trans>
-                  </button>
-                  {auth.state === 'error' ? (
-                    <span className="text-xs text-[var(--error,#e05)]">{auth.error}</span>
-                  ) : settings.remoteAuthIssuer ? (
-                    <span className="text-xs text-[var(--text-secondary)]"><Trans>Not signed in</Trans></span>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          ) : null}
-        </div>
-      </div>
 
       <div className="mb-4">
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Remote control</Trans></label>
-        <div className="flex flex-col gap-1.5">
-          <div className={rowCls}>
-            <span className={labelCls}><Trans>Hub URL</Trans></span>
-            <input
-              type="text"
-              value={settings.remoteAuthorityUrl ?? ''}
-              onChange={(e) =>
-                updateSettings({ remoteAuthorityUrl: e.currentTarget.value || undefined })
-              }
-              placeholder="ws://<gateway>:<port>/remote"
-              aria-label={t`Hub URL`}
-              className={inputCls}
-            />
-          </div>
-          <div className={rowCls}>
-            <span className={labelCls}><Trans>Session name</Trans></span>
-            <input
-              type="text"
-              value={settings.remoteAuthoritySession ?? ''}
-              onChange={(e) =>
-                updateSettings({ remoteAuthoritySession: e.currentTarget.value || undefined })
-              }
-              placeholder={t`optional`}
-              className={inputCls}
-            />
-          </div>
-          <div className={rowCls}>
-            <span className={labelCls}><Trans>User token</Trans></span>
-            <input
-              type="text"
-              value={settings.remoteAuthorityToken ?? ''}
-              onChange={(e) =>
-                updateSettings({ remoteAuthorityToken: e.currentTarget.value || undefined })
-              }
-              placeholder={t`optional`}
-              className={inputCls}
-            />
-          </div>
-        </div>
-        {settings.remoteAuthorityUrl && platform.remoteAuthorityStatus ? (
-          <RemoteAuthorityStatusLine status={platform.remoteAuthorityStatus} />
-        ) : null}
-        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
-          <Trans>Publish this window's terminals to a /remote hub — other devices attach via the web app with ?remote=&lt;session&gt;.</Trans>
-        </p>
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Remote access</Trans></label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={remoteEnabled}
+            onChange={(e) => updateSettings({ remoteEnabled: e.currentTarget.checked })}
+            className="h-3.5 w-3.5 accent-[var(--accent)]"
+          />
+          <span className="text-xs text-[var(--text-primary)]">
+            <Trans>Enable remote — show the Remote console in the rail</Trans>
+          </span>
+        </label>
       </div>
     </div>
   );
@@ -1075,32 +1004,6 @@ function SessionIconEditor({
 }
 
 /**
- * Font existence check: draw the probe string in "family, monospace" and
- * compare widths with plain monospace — a missing font falls back to the
- * same glyph run and measures identically. Reliable for system fonts where
- * document.fonts.check() reports false positives.
- */
-let fontProbeCtx: CanvasRenderingContext2D | null | undefined;
-function fontFamilyExists(family: string): boolean {
-  const quoted = family.trim().replace(/"/g, '');
-  if (!quoted) return true;
-  try {
-    if (document.fonts?.check?.(`12px "${quoted}"`)) return true;
-  } catch {
-    /* fall through to canvas */
-  }
-  if (fontProbeCtx === undefined) {
-    fontProbeCtx = document.createElement('canvas').getContext('2d');
-  }
-  if (!fontProbeCtx) return true;
-  const probe = 'mmmmmmmmmmWWW';
-  fontProbeCtx.font = '72px monospace';
-  const base = fontProbeCtx.measureText(probe).width;
-  fontProbeCtx.font = `72px "${quoted}", monospace`;
-  return Math.abs(fontProbeCtx.measureText(probe).width - base) > 0.01;
-}
-
-/**
  * Font family field: commits only a name that resolves to an installed (or
  * bundled) font — while typing, invalid names show a hint and keep the last
  * valid setting. When the platform can enumerate fonts (desktop font dirs,
@@ -1186,30 +1089,3 @@ function FontFamilyInput({
   );
 }
 
-function RemoteAuthorityStatusLine({
-  status,
-}: {
-  status: NonNullable<ReturnType<typeof useShellPlatform>['remoteAuthorityStatus']>;
-}) {
-  const { t } = useLingui();
-  // subscribe/get are object methods — passing them unbound leaves `this`
-  // undefined inside the store (this._state), which crashed the modal.
-  const subscribe = useCallback((cb: () => void) => status.subscribe(cb), [status]);
-  const get = useCallback(() => status.get(), [status]);
-  const s = useSyncExternalStore(subscribe, get);
-  const color =
-    s.state === 'connected'
-      ? 'text-[var(--green)]'
-      : s.state === 'failed'
-        ? 'text-[var(--error,#e05)]'
-        : 'text-[var(--text-secondary)]';
-  const label =
-    s.state === 'connected'
-      ? t`Publishing — connected`
-      : s.state === 'connecting'
-        ? t`Connecting…`
-        : s.state === 'failed'
-          ? t`Failed: ${s.error ?? ''}`
-          : t`Not publishing`;
-  return <p className={`mt-1 text-[10px] ${color}`}>{label}</p>;
-}

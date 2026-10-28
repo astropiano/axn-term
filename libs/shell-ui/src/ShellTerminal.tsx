@@ -27,6 +27,7 @@ import { createHiddenCommandInput } from './app/hiddenCommands';
 import { isAppNavigationShortcut, isReloadShortcut } from './app/shortcuts';
 import { useShellServices } from './services';
 import { axnLog } from './app/log';
+import { createFlowControl } from './flowControl';
 
 import '@xterm/xterm/css/xterm.css';
 
@@ -237,6 +238,7 @@ export function ShellTerminal({
       cursorBlink: true,
       fontSize: shellFont.size,
       fontFamily: shellFont.family,
+      lineHeight: shellFont.lineHeight,
       allowProposedApi: true,
       // macOS defaults this on: a right-click would replace the selection
       // with the word under the pointer before the context menu's Copy.
@@ -283,11 +285,19 @@ export function ShellTerminal({
     // GPU renderers are demand-driven: hidden terminals keep xterm's DOM
     // renderer so a wall of mounted sessions doesn't exhaust the WebGL
     // context pool (iOS kills the whole webview past ~16 contexts).
+    // Attach on the next frame: creating the WebGL context takes 100–200 ms,
+    // and the PTY spawn below should not wait for it — the shell starts
+    // while the GPU renderer comes up.
+    let rendererFrame: number | null = null;
     if (isVisibleRef.current) {
-      rendererCleanupRef.current = applyTerminalRenderer(
-        term,
-        settings.terminalRenderer,
-      ).dispose;
+      rendererFrame = requestAnimationFrame(() => {
+        rendererFrame = null;
+        if (!active || rendererCleanupRef.current || !isVisibleRef.current) return;
+        rendererCleanupRef.current = applyTerminalRenderer(
+          term,
+          settings.terminalRenderer,
+        ).dispose;
+      });
     }
 
     // fit() reads _renderService.dimensions — undefined once the terminal
@@ -369,6 +379,10 @@ export function ShellTerminal({
     // promoted sub-shell takes over the pinned shell view while keeping its
     // own PTY id.
     const ptyId = session.mainPtyId ?? session.id;
+    const flow = createFlowControl(
+      () => backend.pause?.(ptyId),
+      () => backend.resume?.(ptyId),
+    );
     const shell = settings.defaultShell?.trim() || undefined;
     const pty = acquirePty(backend, ptyId, () => {
       const dims = isVisibleRef.current
@@ -406,7 +420,7 @@ export function ShellTerminal({
         // enough to be certain it wasn't a merely long legitimate link.
         const osc8Guard = createOsc8LeakGuard(() => term.write(OSC8_CLOSE));
         unlisten = backend.onOutput(ptyId, (bytes) => {
-          term.write(bytes);
+          term.write(bytes, flow.track(bytes.length));
 
           const raw = decoder.decode(bytes, { stream: true });
           osc8Guard(raw);
@@ -777,6 +791,7 @@ export function ShellTerminal({
 
     return () => {
       active = false;
+      if (rendererFrame !== null) cancelAnimationFrame(rendererFrame);
       if (processInterval) clearInterval(processInterval);
       if (cwdInterval) clearInterval(cwdInterval);
       if (enterPollTimeout) clearTimeout(enterPollTimeout);
@@ -794,6 +809,7 @@ export function ShellTerminal({
       safely('input listener', () => onData?.dispose());
       safely('title listener', () => onTitleChange?.dispose());
       safely('output listener', () => unlisten?.());
+      safely('flow control', () => flow.dispose());
       // A PTY flagged keep-alive survives this unmount — it reattaches in a
       // different view (sub-shell promoted to main, demoted main re-shown as
       // a sub-shell tab).
@@ -827,8 +843,9 @@ export function ShellTerminal({
     terminal.current.options.theme = getXtermColors(activeTheme);
     terminal.current.options.fontFamily = shellFont.family;
     terminal.current.options.fontSize = shellFont.size;
+    terminal.current.options.lineHeight = shellFont.lineHeight;
     if (isVisibleRef.current) fitAddon.current?.fit();
-  }, [activeTheme, settings.shellFontFamily, settings.shellFontSize, settings.uiZoom]);
+  }, [activeTheme, settings.shellFontFamily, settings.shellFontSize, settings.shellLineHeight, settings.uiZoom]);
 
   // Renderer changes hot-swap the addon on the live terminal — the PTY effect
   // above can't react (its teardown would kill the session). Skipped on mount:

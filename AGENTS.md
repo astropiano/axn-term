@@ -702,6 +702,15 @@ UI strings are localized with [Lingui](https://lingui.dev) 6 (macros via
 - `libs/shell-ui/src/i18n.ts` owns the global `i18n` instance and loads
   all compiled catalogs statically; `SettingsProvider` wraps children in
   `I18nProvider` and calls `activateLanguage(settings.language)` on change.
+- `@lingui/cli` 6.9 gates its subcommands on `import.meta.main`, which Node
+  22 lacks (added in Node 24) — `extract`/`compile`/`check` silently exit 0
+  doing nothing. `patches/@lingui__cli@6.9.0.patch` replaces the gate with a
+  `process.argv[1]` comparison so `pnpm i18n:extract`/`i18n:compile` work on
+  Node 22.
+- `libs/shell-ui/src/i18n.test.ts` fails when a compiled catalog misses an
+  `en` message id or a non-`en` `.po` entry has an empty `msgstr` — a missing
+  translation surfaces in the UI as untranslated English (or a raw hash id
+  where no `message` fallback exists).
 - User-facing control: `language` setting in `config.yaml` (`en`/`ko`) and
   Settings → General → Language.
 
@@ -1693,6 +1702,15 @@ UI strings are localized with [Lingui](https://lingui.dev) 6 (macros via
 - `libs/shell-ui/src/i18n.ts` owns the global `i18n` instance and loads
   all compiled catalogs statically; `SettingsProvider` wraps children in
   `I18nProvider` and calls `activateLanguage(settings.language)` on change.
+- `@lingui/cli` 6.9 gates its subcommands on `import.meta.main`, which Node
+  22 lacks (added in Node 24) — `extract`/`compile`/`check` silently exit 0
+  doing nothing. `patches/@lingui__cli@6.9.0.patch` replaces the gate with a
+  `process.argv[1]` comparison so `pnpm i18n:extract`/`i18n:compile` work on
+  Node 22.
+- `libs/shell-ui/src/i18n.test.ts` fails when a compiled catalog misses an
+  `en` message id or a non-`en` `.po` entry has an empty `msgstr` — a missing
+  translation surfaces in the UI as untranslated English (or a raw hash id
+  where no `message` fallback exists).
 - User-facing control: `language` setting in `config.yaml` (`en`/`ko`) and
   Settings → General → Language.
 

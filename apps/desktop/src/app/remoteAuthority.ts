@@ -111,6 +111,7 @@ export function withAuthorityReflect(
   return {
     ...platform,
     remoteAuthorityStatus: authorityStatus,
+    remoteConsole: authority.remoteConsole,
     stateStore: {
       ...inner,
       save: async (windowId, state) => {

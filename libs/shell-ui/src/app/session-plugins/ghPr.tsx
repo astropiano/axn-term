@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { appRuntime } from '../appRuntime';
 import {
   GitPullRequest,
@@ -10,6 +10,8 @@ import {
   GitPullRequestClosed,
 } from 'lucide-react';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
+import type { ShellSession } from '../../types';
+import { sessionLastSelectedAt } from '../attention';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
 import { shellQuote } from '../../shellQuote';
 import {
@@ -309,6 +311,121 @@ function scheduleSessionRefresh(
 }
 
 // ---------------------------------------------------------------------------
+// PR watch (opt-in) — attention on sessions whose tracked PR changed
+// ---------------------------------------------------------------------------
+
+/** Per session-PR snapshot, persisted in appState.prWatch. */
+interface PrWatchEntry {
+  pipeline: string | null;
+  unresolved: number;
+  notes: number;
+  /** Why attention was raised — cleared once the session is viewed. */
+  flag?: string;
+  flagAt?: number;
+}
+
+function overviewWatchEntry(pr: GhPrItem): PrWatchEntry {
+  return {
+    pipeline: pr.pipeline,
+    unresolved: openThreads(pr),
+    notes: pr.discussions.reduce((n, d) => n + d.notes.length, 0),
+  };
+}
+
+function raisePrWatch(
+  api: SessionViewContext & PluginApi,
+  entry: PrWatchEntry,
+  message: string,
+  critical = false,
+) {
+  api.setAttention({ level: critical ? 'critical' : 'warning', message });
+  entry.flag = message;
+  entry.flagAt = Date.now();
+}
+
+/**
+ * Diff every session's tracked PRs (`pluginState gh-pr.prs`) against the
+ * freshest data and flag the owning session when its PR regressed or gained
+ * activity: checks -> failed, a new unresolved thread, or a new comment.
+ * PRs covered by the overview poll cost nothing extra; the rest get one
+ * light `gh pr view` call each. Runs from the rail after each overview
+ * refresh.
+ */
+async function prWatchTick(args: {
+  sessions: ShellSession[];
+  data: PrOverview;
+  appState: unknown;
+  updateAppState: (patch: Record<string, unknown>) => void;
+  sessionApi: (id: string) => (SessionViewContext & PluginApi) | undefined;
+}) {
+  const watch = {
+    ...((args.appState as { prWatch?: Record<string, PrWatchEntry> } | undefined)
+      ?.prWatch ?? {}),
+  };
+  const overviewByUrl = new Map<string, GhPrItem>(
+    [...args.data.mine, ...args.data.review].map((m) => [m.url, m]),
+  );
+  const seen = new Set<string>();
+  for (const session of args.sessions) {
+    const prs =
+      (session.pluginState?.['gh-pr'] as { prs?: SessionPr[] } | undefined)
+        ?.prs ?? [];
+    const api = args.sessionApi(session.id);
+    for (const pr of prs) {
+      const key = `${session.id}|${pr.url}`;
+      seen.add(key);
+      const prev = watch[key];
+      let entry: PrWatchEntry | undefined;
+      const overview = overviewByUrl.get(pr.url);
+      if (overview) {
+        entry = overviewWatchEntry(overview);
+      } else if (api && session.repo?.root) {
+        // Not one of my overview PRs — one detail call per watched session PR.
+        try {
+          const d = JSON.parse(
+            await api.exec(
+              `gh pr view ${shellQuote(pr.url)} --json statusCheckRollup,reviewThreads,comments`,
+              session.repo.root,
+            ),
+          ) as {
+            statusCheckRollup?: unknown;
+            reviewThreads?: { isResolved?: boolean }[];
+            comments?: unknown[];
+          };
+          entry = {
+            pipeline: rollupStatus(d.statusCheckRollup),
+            unresolved: (d.reviewThreads ?? []).filter((t) => t.isResolved === false).length,
+            notes: (d.comments ?? []).length,
+          };
+        } catch {
+          continue;
+        }
+      } else {
+        continue;
+      }
+      watch[key] = { ...entry, flag: prev?.flag, flagAt: prev?.flagAt };
+      if (!api) continue;
+      const e = watch[key];
+      // Clear a raised flag once the session was viewed since.
+      if (e.flag && sessionLastSelectedAt(session.id) > (e.flagAt ?? 0)) {
+        api.setAttention(null);
+        delete e.flag;
+        delete e.flagAt;
+      } else if (prev && !e.flag) {
+        if (prev.pipeline !== 'failed' && entry.pipeline === 'failed')
+          raisePrWatch(api, e, `checks failed on ${pr.reference}`, true);
+        else if (entry.unresolved > prev.unresolved)
+          raisePrWatch(api, e, `new unresolved thread on ${pr.reference}`);
+        else if (entry.notes > prev.notes)
+          raisePrWatch(api, e, `new comment on ${pr.reference}`);
+      }
+    }
+  }
+  for (const key of Object.keys(watch)) if (!seen.has(key)) delete watch[key];
+  args.updateAppState({ prWatch: watch });
+}
+
+// ---------------------------------------------------------------------------
 // PR overview — `gh api graphql` search for assigned/authored/review PRs
 // ---------------------------------------------------------------------------
 
@@ -587,16 +704,25 @@ function GhPrRail({
   pluginSettings,
   viewActive,
   toggleView,
+  sessions,
+  appState,
+  updateAppState,
+  sessionApi,
 }: {
   pluginSettings: unknown;
   viewActive: boolean;
   toggleView: () => void;
+  sessions: ShellSession[];
+  appState: unknown;
+  updateAppState: (patch: Record<string, unknown>) => void;
+  sessionApi: (id: string) => (SessionViewContext & PluginApi) | undefined;
 }) {
   const data = usePrOverview();
   const settings = pluginSettings as
-    | { hostname?: string; refreshIntervalSeconds?: number }
+    | { hostname?: string; refreshIntervalSeconds?: number; watchPrChanges?: boolean }
     | undefined;
   const intervalSec = settings?.refreshIntervalSeconds ?? 120;
+  const watchEnabled = settings?.watchPrChanges === true;
 
   useEffect(() => {
     void refreshPrOverview(settings);
@@ -607,6 +733,16 @@ function GhPrRail({
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervalSec, settings?.hostname]);
+
+  // Latest ctx for the tick — the poll effect would otherwise close over a
+  // stale sessions/appState snapshot from its mount render.
+  const watchRef = useRef({ sessions, appState, sessionApi });
+  watchRef.current = { sessions, appState, sessionApi };
+  useEffect(() => {
+    if (!watchEnabled || data.status !== 'ready') return;
+    void prWatchTick({ ...watchRef.current, updateAppState, data });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, watchEnabled]);
 
   const me = data.username ?? '';
   const mineAction = data.mine.filter((m) => prNeedsAction(m)).length;
@@ -935,6 +1071,14 @@ export const ghPrPlugin: SessionViewPlugin = {
       default: 120,
     },
     {
+      key: 'watchPrChanges',
+      label: 'Flag sessions on PR changes',
+      description:
+        'Attention dot on a session when its tracked pull request gets failed checks, a new thread or a new comment.',
+      type: 'boolean',
+      default: false,
+    },
+    {
       key: 'hostname',
       label: 'GitHub hostname (GHES)',
       description: 'Overrides the gh api --hostname default.',
@@ -994,11 +1138,23 @@ export const ghPrPlugin: SessionViewPlugin = {
     const first = prs[0];
     return `${first.reference}${prs.length > 1 ? ` +${prs.length - 1}` : ''}: open pull request${prs.length > 1 ? 's' : ''} on this branch — ${first.title}`;
   },
-  renderRail: ({ pluginSettings, viewActive, toggleView }) => (
+  renderRail: ({
+    pluginSettings,
+    viewActive,
+    toggleView,
+    sessions,
+    appState,
+    updateAppState,
+    sessionApi,
+  }) => (
     <GhPrRail
       pluginSettings={pluginSettings}
       viewActive={viewActive}
       toggleView={toggleView}
+      sessions={sessions}
+      appState={appState}
+      updateAppState={updateAppState}
+      sessionApi={sessionApi}
     />
   ),
   renderView: ({ close, sessions, workspaces, selectSession, sessionApi }) => (
