@@ -1,5 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
+import { emit } from '@tauri-apps/api/event';
 import { tauriServices } from '@axn-term/session-backend/tauri';
+
+const authLog = (message: string) =>
+  void emit('log', { level: 'info', target: 'remote-auth', message }).catch(() => {});
 
 /**
  * OIDC device-flow sign-in for remote publishing (RFC 8628).
@@ -149,29 +153,36 @@ export function createRemoteAuth(
       }
       const client = clientId(await getConfig());
       try {
+        authLog(`sign-in: device authorization → ${ep.device}`);
         const dev = (await postForm(ep.device, { client_id: client })) as unknown as DeviceAuthResponse;
         if (!dev.device_code) {
           const err = dev as unknown as TokenResponse;
           throw new Error(err.error_description ?? err.error ?? 'device flow not enabled');
         }
-        pollAbort = new AbortController();
+        // Supersede any in-flight flow — the old loop must see ITS OWN
+        // controller aborted, not the new one.
+        pollAbort?.abort();
+        const ctl = new AbortController();
+        pollAbort = ctl;
         const verificationUri = dev.verification_uri_complete ?? dev.verification_uri;
         set({ state: 'pending', userCode: dev.user_code, verificationUri });
+        authLog(`sign-in: pending (code ${dev.user_code}), opening browser → ${verificationUri}`);
         // Open the system browser straight to the code-entry page — skipped
         // for remote-control-triggered sign-ins (flow tests approve headlessly).
         if (opts?.openBrowser !== false) tauriServices.openExternal(verificationUri);
         // Poll until the user completes (or the code expires).
         const interval = Math.max(dev.interval ?? 5, 2) * 1000;
         const deadline = Date.now() + (dev.expires_in ?? 600) * 1000;
-        while (Date.now() < deadline && !pollAbort.signal.aborted) {
+        while (Date.now() < deadline && !ctl.signal.aborted) {
           await new Promise((r) => setTimeout(r, interval));
-          if (pollAbort.signal.aborted) return;
+          if (ctl.signal.aborted) return;
           const tok = await postForm(ep.token, {
             grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
             client_id: client,
             device_code: dev.device_code,
           });
           if (tok.access_token) {
+            authLog('sign-in: token issued — adopting');
             adoptTokens(tok);
             return;
           }
@@ -183,8 +194,9 @@ export function createRemoteAuth(
             throw new Error(tok.error_description ?? tok.error ?? 'device flow failed');
           }
         }
-        if (!pollAbort.signal.aborted) set({ state: 'error', error: 'Sign-in expired — try again' });
+        if (!ctl.signal.aborted) set({ state: 'error', error: 'Sign-in expired — try again' });
       } catch (e) {
+        authLog(`sign-in: failed — ${e instanceof Error ? e.message : String(e)}`);
         set({ state: 'error', error: e instanceof Error ? e.message : String(e) });
       }
     },

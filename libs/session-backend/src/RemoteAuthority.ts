@@ -52,6 +52,12 @@ export interface RemoteAuthorityOptions {
   getScrollback?: (ptyId: string) => string | Uint8Array | undefined;
   /** Live local terminal geometry — the owner's own size claim. */
   getPtySize?: (ptyId: string) => { cols: number; rows: number } | undefined;
+  /**
+   * Fired when a client writes shared state via `setPluginState` — lets the
+   * host apply shared settings (e.g. `app:icons`) into its own config.
+   * Local `setSharedState` writes do not re-fire it.
+   */
+  onSharedState?: (key: string, data: string | undefined) => void;
 }
 
 type PtyStatus = 'running' | 'exited';
@@ -89,17 +95,30 @@ export class RemoteAuthority {
    *  A plain Map — entries are removed on close, and we iterate it to count
    *  a viewer's live streams for the /viewers roster. */
   private streamViewers = new Map<RamphastosStream, { id: string; viewer: string }>();
-  /** Connected client roster — the /viewers model plane. An entry lives
-   *  while the viewer holds a stream or a claim; reportViewer fills
-   *  name/platform. */
-  private viewers = new Map<string, { name?: string; platform?: string; since: number }>();
+  /** Connected client roster — the /viewers model plane. A client proves
+   *  liveness via reportViewer heartbeats (re-invoked every ~10s) plus
+   *  claims and live streams; lastSeen past the TTL (~30s) with no live
+   *  stream means the conn died without telling us — the entry expires. */
+  private viewers = new Map<string, { name?: string; platform?: string; since: number; lastSeen: number }>();
+  /** Stale-viewer sweep interval — see `viewers`. */
+  private sweepTimer: ReturnType<typeof setInterval> | undefined;
+  /** Shared plugin-state plane — opaque JSON strings keyed `app:`/`sess:`. */
+  private pluginStates = new Map<string, string>();
   private outputUnsubs = new Map<string, () => void>();
   /** Output captured before any viewer attaches — replayed on stream open
    *  (remote-spawned PTYs have no xterm buffer for ptyTail to serialize). */
   private outputBuffers = new Map<string, (string | Uint8Array)[]>();
+  /** Last payload published per replace-path — identical patches are
+   *  skipped instead of waking every viewer on each upstream save. */
+  private lastPublished = new Map<string, string>();
   private backendUnsubs: (() => void)[] = [];
   private started = false;
   private reconnecting = false;
+  /** Retry state for a failed start() — a denied hello must surface and
+   *  retry (fresh token per attempt), not strand the console at 'idle'. */
+  private stopped = false;
+  private startRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  private startRetryDelay = 3000;
   private stateCbs = new Set<(state: string) => void>();
   private lastConnState = 'idle';
   private consoleCbs = new Set<() => void>();
@@ -120,19 +139,48 @@ export class RemoteAuthority {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+    this.stopped = false;
 
     const token = await this.opts.getToken?.();
     let url = this.opts.url;
     if (token) url += `${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`;
 
-    const authority = await RamphastosAuthority.connect(url, {
-      auth: token,
-      // Tenant-scoped session id: '<sub>/<id>' makes ownership self-proving
-      // on the gateway — survives restarts, needs no shared state.
-      sessionId: scopeSessionId(this.opts.sessionId, token),
-      webSocketOnly: this.opts.webSocketOnly,
-      meta: { app: 'axn-term', ...this.opts.meta },
-    });
+    let authority: RamphastosAuthority;
+    try {
+      authority = await RamphastosAuthority.connect(url, {
+        auth: token,
+        // Tenant-scoped session id: '<sub>/<id>' makes ownership self-proving
+        // on the gateway — survives restarts, needs no shared state.
+        sessionId: scopeSessionId(this.opts.sessionId, token),
+        webSocketOnly: this.opts.webSocketOnly,
+        meta: { app: 'axn-term', ...this.opts.meta },
+      });
+    } catch (e) {
+      // A denied hello (stale token, issuer drift, gateway restart) used to
+      // strand the console at 'idle' forever — no visible failure, no
+      // retry. Surface it and retry with a fresh token; stop() cancels.
+      this.started = false;
+      if (this.stopped) throw e;
+      this.emitState('failed');
+      this.startRetryTimer ??= setTimeout(() => {
+        this.startRetryTimer = undefined;
+        // reconnect()'s loop owns retries while it's active.
+        if (!this.stopped && !this.reconnecting) void this.start().catch(() => {});
+      }, this.startRetryDelay);
+      this.startRetryDelay = Math.min(this.startRetryDelay * 2, 30_000);
+      throw e;
+    }
+    // stop() ran while connect() was still in flight — nothing held a
+    // reference to the new conn, so it would attach upstream and live on
+    // as a zombie authority (stale model, dead subscriptions, competing
+    // for _authorityConnId with the live instance — the parallel-authority
+    // failure that corrupted remote I/O). Disconnect it and bail.
+    if (this.stopped) {
+      this.started = false;
+      await authority.disconnect().catch(() => {});
+      return;
+    }
+    this.startRetryDelay = 3000;
     this.authority = authority;
 
     this.defaultShell = (await this.opts.backend.getDefaultShell?.()) ?? '/bin/sh';
@@ -171,9 +219,18 @@ export class RemoteAuthority {
       }
     });
 
+    // 'ready' fired inside connect() — before our subscription landed — so
+    // seed the console state here; without this it sits at 'idle' forever
+    // and the rail dot never turns green.
+    this.emitState(authority.state);
+
     // (Re-)publish after every (re)connect — onReady fires on first
     // connect and after each reconnect+resume.
     this.publishSnapshot();
+
+    // The roster/claims are only as live as the clients that feed them —
+    // without a sweep a dead conn's entries linger forever.
+    this.sweepTimer ??= setInterval(() => this.sweepViewers(), 10_000);
   }
 
   /** Connection-state passthrough for status UIs ('ready'|'reconnecting'|'closed'). */
@@ -263,9 +320,7 @@ export class RemoteAuthority {
     if (workspaces) {
       this.workspaces.clear();
       for (const w of workspaces) this.workspaces.set(w.id, w.name);
-      this.authority?.publishPatch([
-        { op: 'replace', path: '/workspaces', value: [...this.workspaces].map(([id, name]) => ({ id, name })) },
-      ]);
+      this.patchReplace('/workspaces', this.workspaceEntries());
     }
     const seen = new Set<string>();
     for (const p of ptys) {
@@ -292,7 +347,16 @@ export class RemoteAuthority {
 
   /** Drop the connection; local PTYs keep running. */
   async stop(): Promise<void> {
+    this.stopped = true;
     this.started = false;
+    if (this.startRetryTimer) {
+      clearTimeout(this.startRetryTimer);
+      this.startRetryTimer = undefined;
+    }
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = undefined;
+    }
     for (const unsub of this.backendUnsubs) unsub();
     this.backendUnsubs = [];
     for (const unsub of this.outputUnsubs.values()) unsub();
@@ -313,8 +377,9 @@ export class RemoteAuthority {
       defaultCwd: '/',
       defaultShell: this.defaultShell,
       ptys: [...this.ptys.values()].map(publicEntry),
-      workspaces: [...this.workspaces].map(([id, name]) => ({ id, name })),
+      workspaces: this.workspaceEntries(),
       viewportClaims,
+      pluginStates: [...this.pluginStates].map(([key, data]) => ({ key, data })),
       viewers: Object.fromEntries(
         [...this.viewers].map(([id, v]) => [id, { name: v.name, platform: v.platform }]),
       ),
@@ -322,15 +387,50 @@ export class RemoteAuthority {
   }
 
   private publishSnapshot(): void {
-    this.authority?.publishSnapshot(this.snapshot());
+    const snap = this.snapshot();
+    // The snapshot is the new baseline — seed the dedupe map from it so
+    // post-reconnect patches aren't skipped (or duplicated) on stale data.
+    for (const [k, v] of Object.entries(snap)) {
+      this.lastPublished.set(`/${k}`, JSON.stringify(v));
+    }
+    this.authority?.publishSnapshot(snap);
+  }
+
+  private workspaceEntries(): { id: string; name?: string }[] {
+    return [...this.workspaces].map(([id, name]) => ({ id, name }));
+  }
+
+  /**
+   * Whole-value replace with dedupe: every upstream save calls reflectPtys
+   * and status/progress churn used to publish an identical /ptys patch on
+   * each ~2s flush — every replica onChange then reloaded the mirror and
+   * blanked locally-derived fields (the repo row flicker on the panel).
+   */
+  /**
+   * Write a shared plugin-state entry — the local half of `setPluginState`,
+   * callable by the host itself (e.g. publishing `app:icons` on settings
+   * change). Does not fire `onSharedState` — that is for client writes.
+   */
+  setSharedState(key: string, data: string | undefined): void {
+    if (data === undefined || data === '') this.pluginStates.delete(key);
+    else this.pluginStates.set(key, data);
+    this.patchReplace(
+      '/pluginStates',
+      [...this.pluginStates].map(([key, data]) => ({ key, data })),
+    );
+  }
+
+  private patchReplace(path: string, value: unknown): void {
+    const json = JSON.stringify(value);
+    if (this.lastPublished.get(path) === json) return;
+    this.lastPublished.set(path, json);
+    this.authority?.publishPatch([{ op: 'replace', path, value }]);
   }
 
   private patchPtys(): void {
     // Whole-array replace — the set is small and the diff bookkeeping of
     // index-addressed ops buys nothing here.
-    this.authority?.publishPatch([
-      { op: 'replace', path: '/ptys', value: [...this.ptys.values()].map(publicEntry) },
-    ]);
+    this.patchReplace('/ptys', [...this.ptys.values()].map(publicEntry));
     this.refreshConsole();
   }
 
@@ -342,12 +442,14 @@ export class RemoteAuthority {
     for (const s of this.streams.get(id) ?? []) s.close(reason);
     this.streams.delete(id);
     this.claims.delete(id);
+    this.ownerSizes.delete(id);
   }
 
   /** Smallest geometry among all claims plus the owner's live size. */
   private effectiveSize(id: string): { cols: number; rows: number } | undefined {
     const e = this.ptys.get(id);
-    const own = this.opts.getPtySize?.(id)
+    const own = this.ownerSizes.get(id)
+      ?? this.opts.getPtySize?.(id)
       ?? (e?.cols && e.rows ? { cols: e.cols, rows: e.rows } : undefined);
     const m = this.claims.get(id);
     if ((!m || m.size === 0) && !own) return undefined;
@@ -365,6 +467,21 @@ export class RemoteAuthority {
     if (size) this.opts.backend.resize(id, size.cols, size.rows);
   }
 
+  /** Owner-side geometry: the local terminal's size is ONE claimant like
+   * any viewer — never a direct PTY write. The desktop's xterm re-asserts
+   * its size on every fit/layout event; routed through here the PTY still
+   * takes min(all claims), so local resizes can no longer fight remote
+   * claims (the width flicker where 'sometimes the smallest wins'). */
+  private ownerSizes = new Map<string, { cols: number; rows: number }>();
+  claimOwnerSize(id: string, cols: number, rows: number): void {
+    // Remote-spawned PTYs take the caller's geometry directly — no claims.
+    if (this.ptys.get(id)?.remote) { this.opts.backend.resize(id, cols, rows); return; }
+    const cur = this.ownerSizes.get(id);
+    if (cur?.cols === cols && cur?.rows === rows) return;
+    this.ownerSizes.set(id, { cols, rows });
+    this.applyEffectiveSize(id);
+  }
+
   private dropClaim(id: string, viewer: string): void {
     const m = this.claims.get(id);
     if (!m?.delete(viewer)) return;
@@ -376,22 +493,17 @@ export class RemoteAuthority {
   private patchClaims(): void {
     const value: Record<string, Record<string, { cols: number; rows: number }>> = {};
     for (const [id, m] of this.claims) value[id] = Object.fromEntries(m);
-    this.authority?.publishPatch([
-      { op: 'replace', path: '/viewportClaims', value },
-    ]);
+    this.patchReplace('/viewportClaims', value);
     this.refreshConsole();
   }
 
   private patchViewers(): void {
-    this.authority?.publishPatch([
-      {
-        op: 'replace',
-        path: '/viewers',
-        value: Object.fromEntries(
-          [...this.viewers].map(([id, v]) => [id, { name: v.name, platform: v.platform }]),
-        ),
-      },
-    ]);
+    this.patchReplace(
+      '/viewers',
+      Object.fromEntries(
+        [...this.viewers].map(([id, v]) => [id, { name: v.name, platform: v.platform }]),
+      ),
+    );
     this.refreshConsole();
   }
 
@@ -399,12 +511,44 @@ export class RemoteAuthority {
     if (viewer === 'anon') return;
     const cur = this.viewers.get(viewer);
     if (cur) {
+      cur.lastSeen = Date.now();
       if (name !== undefined) cur.name = name;
       if (platform !== undefined) cur.platform = platform;
     } else {
-      this.viewers.set(viewer, { name, platform, since: Date.now() });
+      const now = Date.now();
+      this.viewers.set(viewer, { name, platform, since: now, lastSeen: now });
     }
     this.patchViewers();
+  }
+
+  /** Stale-viewer sweep: a conn that dies without unclaiming (app killed,
+   *  tab closed, network drop before stream-close lands) leaves claims and
+   *  a roster entry behind. Heartbeats (reportViewer) refresh lastSeen; a
+   *  live stream also proves liveness — older clients never heartbeat but
+   *  stay listed while they hold one. Everything else past the TTL expires:
+   *  claims (they pin the effective viewport) and the roster entry. */
+  private sweepViewers(): void {
+    const cutoff = Date.now() - 30_000;
+    let claimsChanged = false;
+    let rosterChanged = false;
+    for (const [viewer, v] of this.viewers) {
+      if (v.lastSeen >= cutoff) continue;
+      let streaming = false;
+      for (const ref of this.streamViewers.values()) {
+        if (ref.viewer === viewer) { streaming = true; break; }
+      }
+      if (streaming) continue;
+      for (const [id, m] of this.claims) {
+        if (!m.delete(viewer)) continue;
+        if (!m.size) this.claims.delete(id);
+        this.applyEffectiveSize(id);
+        claimsChanged = true;
+      }
+      this.viewers.delete(viewer);
+      rosterChanged = true;
+    }
+    if (claimsChanged) this.patchClaims();
+    if (rosterChanged) this.patchViewers();
   }
 
   /** Drop a viewer from the roster once it holds no stream and no claim. */
@@ -442,10 +586,17 @@ export class RemoteAuthority {
     if (!set) { set = new Set(); this.streams.set(id, set); }
     set.add(s);
     const buffered = this.outputBuffers.get(id);
-    if (buffered?.length) {
+    // Replay the capture buffer only when ptyTail can't serialize a
+    // scrollback (remote-spawned or unmounted PTYs). A PTY with a live
+    // xterm gets its history from the tail dump — replaying the buffer
+    // too would paint those lines twice.
+    const scrollback = this.opts.getScrollback?.(id);
+    const hasTail =
+      scrollback !== undefined && scrollback.length > 0;
+    if (buffered?.length && !hasTail) {
       for (const d of buffered) s.write(d);
-      this.outputBuffers.delete(id);
     }
+    this.outputBuffers.delete(id);
     s.onData((data) => this.opts.backend.write(id, decodeUtf8(data)));
     s.onClose((reason) => this.onStreamClosed(s, reason));
     this.subscribeOutput(id);
@@ -594,6 +745,39 @@ export class RemoteAuthority {
           a[1] === undefined ? undefined : String(a[1]),
           a[2] === undefined ? undefined : String(a[2]),
         );
+        return { ok: true };
+      }
+      case 'setPtyMeta': {
+        // Session-model fields (rename, workspace move, re-parenting after
+        // a sub-shell promotion). Undefined args leave the field untouched —
+        // AxnHostVm's command vocabulary, mirrored for client-authoritative
+        // sessions; without it every phone-side edit answers 'unknown
+        // command' and never syncs back.
+        const id = String(a[0]);
+        const entry = this.ptys.get(id);
+        if (!entry) return noSuchPty(id);
+        if (a[1] !== undefined) entry.sessionId = String(a[1]);
+        if (a[2] !== undefined) entry.workspaceId = String(a[2]);
+        if (a[3] !== undefined) entry.name = String(a[3]);
+        if (a[4] !== undefined) entry.kind = String(a[4]) as PtyEntry['kind'];
+        this.patchPtys();
+        return { ok: true };
+      }
+      case 'upsertWorkspace': {
+        // Shared workspace names — rename on one device lands everywhere.
+        const id = String(a[0]);
+        const name = a[1] === undefined ? undefined : String(a[1]);
+        this.workspaces.set(id, name ?? this.workspaces.get(id));
+        this.patchReplace('/workspaces', this.workspaceEntries());
+        return { ok: true };
+      }
+      case 'setPluginState': {
+        // Generic shared plane — opaque JSON strings keyed `app:`/`sess:`.
+        // Absent/empty data clears the entry (AxnHostVm semantics).
+        const key = String(a[0]);
+        const data = a[1] === undefined ? undefined : String(a[1]);
+        this.setSharedState(key, data);
+        this.opts.onSharedState?.(key, data);
         return { ok: true };
       }
       case 'ptyTail': {

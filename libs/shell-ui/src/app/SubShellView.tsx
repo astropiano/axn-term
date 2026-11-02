@@ -11,6 +11,7 @@ import {
   handleClipboardWrites,
   registerTerminal,
   takePendingReplay,
+  takeReloadReplay,
   registerTerminalElement,
   takePtyKeepAlive,
   unregisterTerminal,
@@ -21,7 +22,7 @@ import { tabTaskPatch } from './subShellTasks';
 import { agentInputPluginFor } from './session-plugins/agentHookBridge';
 import { createHiddenCommandInput } from './hiddenCommands';
 import { createOsc8LeakGuard, OSC8_CLOSE } from '../terminalLinks';
-import { applyTerminalRenderer, repaintTerminal, safely } from '../terminalRenderer';
+import { applyTerminalRenderer, createTerminalInput, oscReportTarget, repaintTerminal, safely } from '../terminalRenderer';
 import { acquirePty } from '../ptyLifetime';
 import {
   agentOfProcess,
@@ -144,8 +145,9 @@ export function SubShellView({
     });
     // keyed by the tab id: screen scans (subShellTasks.ts) read this PTY's view
     registerTerminal(tab.id, t);
-    // A tab moved in with its session from another window: history first.
-    const replay = takePendingReplay(tab.id);
+    // A tab moved in with its session from another window, or the page
+    // reloaded with live PTYs: history first.
+    const replay = takePendingReplay(tab.id) ?? takeReloadReplay(tab.id);
     if (replay) t.write(replay);
     // App navigation shortcuts must bubble to ShellApp's window listener
     // instead of becoming escape sequences.
@@ -215,13 +217,25 @@ export function SubShellView({
     };
     spawnRef.current = () => spawn(true);
 
+    // One ordered writer per PTY: input after an OSC report waits until
+    // the report's alive probe settles (DA1 must never overtake it).
+    const ptyInput = createTerminalInput(
+      (d) => backend.write(tab.id, d),
+      backend.writeWhenRaw ? (d) => backend.writeWhenRaw!(tab.id, d) : undefined,
+      oscReportTarget(
+        backend.getForegroundProcess
+          ? (id) => backend.getForegroundProcess!(id)
+          : undefined,
+        tab.id,
+      ),
+    );
     // Same hidden-command interception as the main terminal: axn-rename is
     // handled locally (it renames this tab, never the session); all other
     // axn-* commands delegate to the session-level dispatch. Interception is
     // gated on the sub-shell's own foreground process so input typed into a
     // running program (vim, devin, …) is never stolen.
     const hiddenInput = createHiddenCommandInput({
-      write: (d) => backend.write(tab.id, d),
+      write: ptyInput.write,
       mode: () => {
         const fg = foregroundRef.current;
         if (!fg) return 'full';
@@ -230,9 +244,8 @@ export function SubShellView({
       onLocalCommand: (line) => {
         const m = /^\s*axn-rename(?:\s+(.*?))?\s*$/.exec(line);
         if (!m) return false;
-        // Clear the typed line and rename the tab instead of executing
-        // anything in the sub-shell.
-        backend.write(tab.id, '\x15');
+        // Rename the tab instead of executing anything in the sub-shell
+        // (the handler clears the typed line).
         onRenameRef.current?.(m[1]?.trim().replace(/^["']+|["']+$/g, '') ?? '');
         return true;
       },
@@ -242,6 +255,8 @@ export function SubShellView({
         onBrowserRequestRef.current?.(sessionRef.current.id, path, tab.id),
       onPreviewRequest: (path) =>
         onPreviewRequestRef.current?.(sessionRef.current.id, path, tab.id),
+      writeDisplay: (d) => term.current?.write(d),
+      writeReport: ptyInput.send,
       onSessionCommand: (line) => {
         // `/exit` inside a sub-shell must not reach session-level dispatch:
         // the devin plugin's exit capture is bound to the session's main PTY
@@ -260,7 +275,7 @@ export function SubShellView({
     const sendInput = (data: string) => {
       if (!exitedRef.current) {
         if (hiddenInput(data)) return;
-        backend.write(tab.id, data);
+        ptyInput.send(data);
         return;
       }
       if (data === '\r') {

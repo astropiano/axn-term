@@ -152,6 +152,8 @@ export interface ShellPlatform {
   exePath?(): Promise<string>;
   /** Forward a log line to the host logger; absent → console. */
   emitLog?(level: LogLevel, target: string, message: string): void;
+  /** Open the app log folder in the OS file manager — desktop only. */
+  openLogDir?(): void;
   stateStore: ShellStateStore;
   pluginSettingsStore: PluginSettingsStore;
   workspaceSetStorage: WorkspaceSetStorage;
@@ -181,6 +183,19 @@ export interface ShellPlatform {
    * mirrored replica (role 'viewer'). Absent when no remote is in play.
    */
   remoteConsole?: RemoteConsole;
+  /**
+   * Publish a shared app-level state entry to every connected device —
+   * desktop authority: a `setPluginState`-equivalent local write + replica
+   * patch; web viewer: a `/vm/setPluginState` invoke upstream. Absent when
+   * no remote session is in play. Keys are `app:`-prefixed (`app:icons`).
+   */
+  publishSharedState?(key: string, data: string): void;
+  /**
+   * Sign the user out of the account session — web: keycloak logout
+   * (redirects the page). The remote viewer panel exposes it; the desktop
+   * signs out of publishing via `remoteAuth.signOut` instead.
+   */
+  signOut?(): void;
   /**
    * OIDC sign-in for remote publishing — desktop only. 'pending' carries
    * the device-flow user code + verification URI to show/open.

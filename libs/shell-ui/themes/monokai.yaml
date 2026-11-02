@@ -1,0 +1,57 @@
+# Monokai as shipped with Visual Studio Code (extensions/theme-monokai).
+# Terminal and UI colours from that theme; its blended selection is flattened.
+# The darker normal red, blue and magenta are lifted to read on the background.
+# Hot pink is the accent.
+# Palette: Visual Studio Code <https://github.com/microsoft/vscode>, MIT. Copyright (c) 2015 - present Microsoft Corporation.
+# Adjusted for legibility (hue kept, lightness moved):
+#   red: #C4265E -> #E1638F
+#   blue: #6A7EC8 -> #798BCD
+#   magenta: #8C6BC8 -> #9C7FD0
+#   brightBlack: #666666 -> #7C7C7C
+#   brightRed: #F92672 -> #FA4989
+#   ui.accent: #F92672 -> #F93078
+id: monokai
+name: Monokai
+mode: dark
+
+colors:
+  background: '#272822'
+  foreground: '#F8F8F2'
+  cursor: '#F8F8F0'
+  cursorAccent: '#272822'
+  selectionBackground: '#575A5A'
+  selectionForeground: '#F8F8F2'
+
+  black: '#333333'
+  red: '#E1638F'
+  green: '#86B42B'
+  yellow: '#B3B42B'
+  blue: '#798BCD'
+  magenta: '#9C7FD0'
+  cyan: '#56ADBC'
+  white: '#E3E3DD'
+
+  brightBlack: '#7C7C7C'
+  brightRed: '#FA4989'
+  brightGreen: '#A6E22E'
+  brightYellow: '#E2E22E'
+  brightBlue: '#819AFF'
+  brightMagenta: '#AE81FF'
+  brightCyan: '#66D9EF'
+  brightWhite: '#F8F8F2'
+
+  orange: '#FD971F'
+  violet: '#AE81FF'
+
+ui:
+  bg: '#1E1F1C'
+  bgSecondary: '#272822'
+  surface: '#272822'
+  surfaceHover: '#3E3D32'
+  text: '#F8F8F2'
+  textSecondary: '#B9BAB4'
+  textInverted: '#272822'
+  border: '#414339'
+  accent: '#F93078'
+  accentHover: '#AE81FF'
+  cursor: '#F8F8F0'

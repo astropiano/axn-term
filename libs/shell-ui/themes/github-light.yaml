@@ -1,0 +1,49 @@
+# GitHub Light Default (github.com/primer/github-vscode-theme), colours from
+# @primer/primitives 7.10 with the theme's own text overrides. GitHub's ANSI
+# brights are already tuned for white; UI layers from its canvas and borders.
+# Palette: GitHub VS Code theme + Primer primitives <https://github.com/primer/github-vscode-theme>, MIT. Copyright (c) 2020 Primer; Copyright (c) 2018 GitHub Inc..
+id: github-light
+name: GitHub Light
+mode: light
+
+colors:
+  background: '#FFFFFF'
+  foreground: '#1F2328'
+  cursor: '#0969DA'
+  cursorAccent: '#FFFFFF'
+  selectionBackground: '#BBDFFF'
+  selectionForeground: '#1F2328'
+
+  black: '#24292F'
+  red: '#CF222E'
+  green: '#116329'
+  yellow: '#4D2D00'
+  blue: '#0969DA'
+  magenta: '#8250DF'
+  cyan: '#1B7C83'
+  white: '#6E7781'
+
+  brightBlack: '#57606A'
+  brightRed: '#A40E26'
+  brightGreen: '#1A7F37'
+  brightYellow: '#633C01'
+  brightBlue: '#218BFF'
+  brightMagenta: '#A475F9'
+  brightCyan: '#3192AA'
+  brightWhite: '#8C959F'
+
+  orange: '#BC4C00'
+  violet: '#8250DF'
+
+ui:
+  bg: '#F6F8FA'
+  bgSecondary: '#FFFFFF'
+  surface: '#FFFFFF'
+  surfaceHover: '#EAEEF2'
+  text: '#1F2328'
+  textSecondary: '#656D76'
+  textInverted: '#FFFFFF'
+  border: '#D0D7DE'
+  accent: '#0969DA'
+  accentHover: '#1054A5'
+  cursor: '#0969DA'

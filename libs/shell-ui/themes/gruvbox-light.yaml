@@ -1,6 +1,7 @@
 # Gruvbox Light (github.com/morhetz/gruvbox). Uses Gruvbox's darker "faded"
 # accents for normal colours (the neutral ones are too light for text on bg0)
 # and the neutral accents for brights.
+# Palette: Gruvbox <https://github.com/morhetz/gruvbox>, MIT. Copyright (c) morhetz <morhetz@gmail.com>.
 # Adjusted for legibility (hue kept, lightness moved):
 #   green: #79740E -> #74700D
 #   yellow: #B57614 -> #976311

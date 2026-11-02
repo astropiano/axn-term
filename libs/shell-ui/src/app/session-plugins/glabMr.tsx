@@ -9,10 +9,13 @@ import {
   Check,
 } from 'lucide-react';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
-import type { ShellSession } from '../../types';
+import type { ShellSession, SessionAttention} from '../../types';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
 import { shellQuote } from '../../shellQuote';
 import { sessionLastSelectedAt } from '../attention';
+import { getSessionViewPlugins, isPluginEnabled } from './index';
+import { PluginIcon } from '../SessionPanel';
+import type { PluginSettings } from '../pluginSettings';
 import {
   classifyCliError,
   forgeCliCommand,
@@ -41,6 +44,8 @@ export interface GlabMrItem {
   /** e.g. `!75` */
   reference: string;
   title: string;
+  /** MR body text (may be empty). */
+  description: string;
   url: string;
   /** e.g. `mygroup/dev/axn-dev-cli` */
   project: string;
@@ -72,6 +77,8 @@ interface SessionMr {
   draft: boolean;
   conflicts: boolean;
   discussionsResolved: boolean;
+  /** Unresolved resolvable threads; absent when the discussions fetch failed. */
+  openThreads?: number;
   mergeStatus: string;
   pipeline: string | null;
 }
@@ -163,6 +170,21 @@ interface RawMrDetail {
   head_pipeline?: { status?: string } | null;
 }
 
+interface RawMrDiscussion {
+  notes?: { resolvable?: boolean; resolved?: boolean | null }[];
+}
+
+/**
+ * Open threads in the REST `…/discussions` shape: a discussion counts as
+ * open while it holds an unresolved resolvable note (GitLab has no
+ * unresolved-thread counter on the MR resource itself).
+ */
+export function countOpenThreads(discussions: RawMrDiscussion[]): number {
+  return discussions.filter((d) =>
+    (d.notes ?? []).some((n) => n.resolvable === true && n.resolved !== true),
+  ).length;
+}
+
 async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
   const session = ctx.getSession();
   const root = session.repo?.root;
@@ -190,19 +212,34 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
     return;
   }
 
-  // Per-MR detail adds the head pipeline status (absent from list output).
+  // Per-MR detail calls add the head pipeline status and the open-thread
+  // count (both absent from list output).
   const mrs = await Promise.all(
     list.slice(0, 5).map(async (item): Promise<SessionMr> => {
+      const iid = Math.trunc(Number(item.iid));
       let pipeline: string | null = null;
+      let threadCount: number | undefined;
       try {
         const detail = await ctx.exec(
-          `glab api "projects/:fullpath/merge_requests/${Math.trunc(Number(item.iid))}"`,
+          `glab api "projects/:fullpath/merge_requests/${iid}"`,
           root,
         );
         const parsed = JSON.parse(detail) as RawMrDetail;
         pipeline = parsed.head_pipeline?.status?.toLowerCase() ?? null;
       } catch {
         // pipeline stays unknown
+      }
+      try {
+        const out = await ctx.exec(
+          `glab api "projects/:fullpath/merge_requests/${iid}/discussions?per_page=100"`,
+          root,
+        );
+        const parsed = JSON.parse(out) as unknown;
+        if (Array.isArray(parsed)) {
+          threadCount = countOpenThreads(parsed as RawMrDiscussion[]);
+        }
+      } catch {
+        // thread count stays unknown — the panel falls back to the boolean chip
       }
       return {
         iid: item.iid ?? 0,
@@ -212,6 +249,7 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
         draft: item.draft ?? false,
         conflicts: item.has_conflicts ?? false,
         discussionsResolved: item.blocking_discussions_resolved ?? true,
+        openThreads: threadCount,
         mergeStatus: (item.detailed_merge_status ?? '').toLowerCase(),
         pipeline,
       };
@@ -274,10 +312,52 @@ function raiseMrWatch(
   entry: MrWatchEntry,
   message: string,
   critical = false,
+  actions?: SessionAttention['actions'],
+  data?: unknown,
 ) {
-  api.setAttention({ level: critical ? 'critical' : 'warning', message });
+  api.setAttention({
+    level: critical ? 'critical' : 'warning',
+    message,
+    actions,
+    data,
+  });
   entry.flag = message;
   entry.flagAt = Date.now();
+}
+
+/** "Go to session" buttons for every session with this MR checked out,
+ * else a "create worktree" action when the worktrees plugin is enabled. */
+function mrWatchActions(
+  mr: SessionMr,
+  sessions: ShellSession[],
+  api: SessionViewContext & PluginApi,
+): SessionAttention['actions'] {
+  const holders = sessions.filter((s) =>
+    ((s.pluginState?.['glab-mr'] as { mrs?: SessionMr[] } | undefined)?.mrs ?? []).some(
+      (m) => m.url === mr.url,
+    ),
+  );
+  const actions: SessionAttention['actions'] = holders.map((s) => ({
+    id: `goto-session:${s.id}`,
+    label: `Go to ${s.name}`,
+  }));
+  const all = getSessionViewPlugins();
+  const wt = all.find((p) => p.id === 'worktrees');
+  if (
+    holders.length === 0 &&
+    wt &&
+    isPluginEnabled(
+      wt,
+      (api.pluginSettings ?? {}) as PluginSettings,
+      all,
+    )
+  ) {
+    actions.push({
+      id: 'worktrees:mr-worktree',
+      label: `Create worktree for ${mr.reference}`,
+    });
+  }
+  return actions.length ? actions : undefined;
 }
 
 /**
@@ -349,12 +429,14 @@ async function mrWatchTick(args: {
         delete e.flag;
         delete e.flagAt;
       } else if (prev && !e.flag) {
+        const actions = mrWatchActions(mr, args.sessions, api);
+        const data = { mr: { url: mr.url, iid: mr.iid, title: mr.title, reference: mr.reference } };
         if (prev.pipeline !== 'failed' && entry.pipeline === 'failed')
-          raiseMrWatch(api, e, `pipeline failed on ${mr.reference}`, true);
+          raiseMrWatch(api, e, `pipeline failed on ${mr.reference}`, true, actions, data);
         else if (entry.unresolved > prev.unresolved)
-          raiseMrWatch(api, e, `new unresolved thread on ${mr.reference}`);
+          raiseMrWatch(api, e, `new unresolved thread on ${mr.reference}`, false, actions, data);
         else if (entry.notes > prev.notes)
-          raiseMrWatch(api, e, `new comment on ${mr.reference}`);
+          raiseMrWatch(api, e, `new comment on ${mr.reference}`, false, actions, data);
       }
     }
   }
@@ -369,9 +451,9 @@ async function mrWatchTick(args: {
 const MR_OVERVIEW_QUERY = `query {
   currentUser {
     username
-    assignedMergeRequests(state: opened, first: 40) { nodes { iid reference title webUrl draft conflicts detailedMergeStatus sourceBranch targetBranch updatedAt approved approvedBy { nodes { username } } author { username } assignees { nodes { username } } reviewers { nodes { username } } project { fullPath } headPipeline { status } discussions(first: 100) { nodes { resolvable resolved notes(first: 50) { nodes { author { username } } } } } } }
-    authoredMergeRequests(state: opened, first: 40) { nodes { iid reference title webUrl draft conflicts detailedMergeStatus sourceBranch targetBranch updatedAt approved approvedBy { nodes { username } } author { username } assignees { nodes { username } } reviewers { nodes { username } } project { fullPath } headPipeline { status } discussions(first: 100) { nodes { resolvable resolved notes(first: 50) { nodes { author { username } } } } } } }
-    reviewRequestedMergeRequests(state: opened, first: 40) { nodes { iid reference title webUrl draft conflicts detailedMergeStatus sourceBranch targetBranch updatedAt approved approvedBy { nodes { username } } author { username } assignees { nodes { username } } reviewers { nodes { username } } project { fullPath } headPipeline { status } discussions(first: 100) { nodes { resolvable resolved notes(first: 50) { nodes { author { username } } } } } } }
+    assignedMergeRequests(state: opened, first: 40) { nodes { iid reference title description webUrl draft conflicts detailedMergeStatus sourceBranch targetBranch updatedAt approved approvedBy { nodes { username } } author { username } assignees { nodes { username } } reviewers { nodes { username } } project { fullPath } headPipeline { status } discussions(first: 100) { nodes { resolvable resolved notes(first: 50) { nodes { author { username } } } } } } }
+    authoredMergeRequests(state: opened, first: 40) { nodes { iid reference title description webUrl draft conflicts detailedMergeStatus sourceBranch targetBranch updatedAt approved approvedBy { nodes { username } } author { username } assignees { nodes { username } } reviewers { nodes { username } } project { fullPath } headPipeline { status } discussions(first: 100) { nodes { resolvable resolved notes(first: 50) { nodes { author { username } } } } } } }
+    reviewRequestedMergeRequests(state: opened, first: 40) { nodes { iid reference title description webUrl draft conflicts detailedMergeStatus sourceBranch targetBranch updatedAt approved approvedBy { nodes { username } } author { username } assignees { nodes { username } } reviewers { nodes { username } } project { fullPath } headPipeline { status } discussions(first: 100) { nodes { resolvable resolved notes(first: 50) { nodes { author { username } } } } } } }
   }
 }`;
 
@@ -410,6 +492,7 @@ interface RawGqlMr {
   iid?: string;
   reference?: string;
   title?: string;
+  description?: string;
   webUrl?: string;
   draft?: boolean;
   conflicts?: boolean;
@@ -444,6 +527,7 @@ function normalizeMr(raw: RawGqlMr): GlabMrItem {
     iid,
     reference: raw.reference ?? `!${iid}`,
     title: raw.title ?? '',
+    description: raw.description ?? '',
     url: raw.webUrl ?? '',
     project,
     sourceBranch: raw.sourceBranch ?? '',
@@ -611,37 +695,49 @@ function SessionMrs({ ctx }: { ctx: SessionViewContext & PluginApi }) {
   return (
     <div className="mb-2">
       <div className="flex flex-col gap-1 text-[10px]">
-        {mrs.map((mr) => (
-          <div key={mr.iid} className="flex flex-col gap-0.5">
-            <div className="flex items-center gap-1">
-              <a
-                href={mr.url}
-                target="_blank"
-                rel="noreferrer"
-                className="truncate font-semibold text-[var(--accent)] hover:underline"
-                data-tip={mr.title}
-              >
-                {mr.reference} {mr.title}
-              </a>
-              <MrActions mr={mr} env={env} />
+        {mrs.map((mr) => {
+          // `openThreads` is authoritative once fetched; snapshots without it
+          // fall back to the boolean `discussionsResolved` chip.
+          const threadLabel =
+            mr.openThreads !== undefined
+              ? mr.openThreads > 0
+                ? `${mr.openThreads} open thread${mr.openThreads === 1 ? '' : 's'}`
+                : null
+              : mr.discussionsResolved
+                ? null
+                : 'open threads';
+          return (
+            <div key={mr.iid} className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-1">
+                <a
+                  href={mr.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate font-semibold text-[var(--accent)] hover:underline"
+                  data-tip={`GitLab · ${mr.title}`}
+                >
+                  {mr.reference} {mr.title}
+                </a>
+                <MrActions mr={mr} env={env} />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {mr.draft && (
+                  <span className="rounded bg-slate-500/20 px-1 text-slate-600">draft</span>
+                )}
+                {mr.conflicts && (
+                  <span className="rounded bg-[color-mix(in_srgb,var(--red)_20%,transparent)] px-1 text-[var(--red)]">conflicts</span>
+                )}
+                {threadLabel && (
+                  <span className="flex items-center gap-0.5 text-[var(--orange)]">
+                    <MessageSquare className="h-3 w-3" />
+                    {threadLabel}
+                  </span>
+                )}
+                {mr.pipeline && <PipelineChip status={mr.pipeline} />}
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {mr.draft && (
-                <span className="rounded bg-slate-500/20 px-1 text-slate-600">draft</span>
-              )}
-              {mr.conflicts && (
-                <span className="rounded bg-[color-mix(in_srgb,var(--red)_20%,transparent)] px-1 text-[var(--red)]">conflicts</span>
-              )}
-              {!mr.discussionsResolved && (
-                <span className="flex items-center gap-0.5 text-[var(--orange)]">
-                  <MessageSquare className="h-3 w-3" />
-                  open threads
-                </span>
-              )}
-              {mr.pipeline && <PipelineChip status={mr.pipeline} />}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -726,7 +822,10 @@ function GlabMrRail({
           : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
       }`}
     >
-      <GitMerge className={`h-3.5 w-3.5${mode === 'signed-out' ? ' opacity-50' : ''}`} />
+      <PluginIcon
+        plugin={glabMrPlugin}
+        className={`h-3.5 w-3.5${mode === 'signed-out' ? ' opacity-50' : ''}`}
+      />
       {mode === 'signed-out' ? null : mode === 'error' ? (
         <AlertTriangle className="h-3 w-3 text-[var(--red)]" />
       ) : (
@@ -781,45 +880,52 @@ function MrRow({ mr, badge, env }: { mr: GlabMrItem; badge?: string; env: MrRowE
         href={mr.url}
         target="_blank"
         rel="noreferrer"
-        className="flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
+        className="min-w-0 flex-1 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
         data-tip={`${mr.project}\n${mr.sourceBranch} → ${mr.targetBranch}`}
       >
-        <span className="shrink-0 font-semibold text-[var(--accent)]">{mr.reference}</span>
-        <span className="max-w-44 shrink-0 truncate text-[var(--text-secondary)]">
-          {projectShort(mr.project)}
+        <span className="flex items-center gap-2">
+          <span className="shrink-0 font-semibold text-[var(--accent)]">{mr.reference}</span>
+          <span className="max-w-44 shrink-0 truncate text-[var(--text-secondary)]">
+            {projectShort(mr.project)}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{mr.title}</span>
+          {badge && (
+            <span className="shrink-0 rounded bg-[var(--accent)]/15 px-1 text-[9px] font-semibold text-[var(--accent)]">
+              {badge}
+            </span>
+          )}
+          {mr.draft && (
+            <span className="shrink-0 rounded bg-slate-500/20 px-1 text-[9px] text-slate-500">
+              draft
+            </span>
+          )}
+          {mr.conflicts && (
+            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
+              <AlertTriangle className="h-3 w-3" />
+              conflicts
+            </span>
+          )}
+          {threads > 0 && (
+            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--orange)]">
+              <MessageSquare className="h-3 w-3" />
+              {threads}
+            </span>
+          )}
+          {mr.pipeline && (
+            <span className="shrink-0 text-[9px]">
+              <PipelineChip status={mr.pipeline} />
+            </span>
+          )}
+          {mr.approved && (
+            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--green)]">
+              <Check className="h-3 w-3" />
+              approved
+            </span>
+          )}
         </span>
-        <span className="min-w-0 flex-1 truncate">{mr.title}</span>
-        {badge && (
-          <span className="shrink-0 rounded bg-[var(--accent)]/15 px-1 text-[9px] font-semibold text-[var(--accent)]">
-            {badge}
-          </span>
-        )}
-        {mr.draft && (
-          <span className="shrink-0 rounded bg-slate-500/20 px-1 text-[9px] text-slate-500">
-            draft
-          </span>
-        )}
-        {mr.conflicts && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
-            <AlertTriangle className="h-3 w-3" />
-            conflicts
-          </span>
-        )}
-        {threads > 0 && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--orange)]">
-            <MessageSquare className="h-3 w-3" />
-            {threads}
-          </span>
-        )}
-        {mr.pipeline && (
-          <span className="shrink-0 text-[9px]">
-            <PipelineChip status={mr.pipeline} />
-          </span>
-        )}
-        {mr.approved && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--green)]">
-            <Check className="h-3 w-3" />
-            approved
+        {mr.description && (
+          <span className="mt-0.5 line-clamp-3 whitespace-pre-line break-words text-[10px] text-[var(--text-secondary)]">
+            {mr.description}
           </span>
         )}
       </a>
@@ -993,7 +1099,8 @@ function GlabMrView({ close, env }: { close: () => void; env: MrRowEnv }) {
 
 export const glabMrPlugin: SessionViewPlugin = {
   id: 'glab-mr',
-  title: 'merge requests',
+  title: 'GitLab merge requests',
+  logo: 'GitMerge',
   version: '0.1.0',
   settings: [
     {
@@ -1067,7 +1174,7 @@ export const glabMrPlugin: SessionViewPlugin = {
         target="_blank"
         rel="noreferrer"
         onClick={(e) => e.stopPropagation()}
-        data-tip={mrs.map((m) => `${m.reference} ${m.title}`).join('\n')}
+        data-tip={['GitLab', ...mrs.map((m) => `${m.reference} ${m.title}`)].join('\n')}
         className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)] hover:underline"
       >
         <GitMerge className="h-2.5 w-2.5" />

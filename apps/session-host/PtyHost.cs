@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Porta.Pty;
 
-namespace Astropiano.AxnTerm.SessionHost;
+namespace AxnTerm.SessionHost;
 
 /// <summary>
 /// One shell PTY owned by the host — spawned either for a /ws connection or a
@@ -36,21 +36,196 @@ public sealed class PtySession
     public DateTimeOffset SpawnedAt { get; init; } = DateTimeOffset.UtcNow;
 
     /// <summary>Ring buffer of recent PTY output — late-attaching clients
-    /// fetch it via <c>ptyTail</c> to repaint the screen before live frames.</summary>
-    public byte[] Tail { get; private set; } = [];
+    /// fetch it via <c>ptyTail</c> to repaint the screen before live frames.
+    /// Fixed-size with a wrap-around cursor: appending is O(chunk), not a
+    /// copy of everything retained so far.</summary>
+    private readonly byte[] _tail = new byte[TailMax];
     private readonly object _tailLock = new();
     private const int TailMax = 64 * 1024;
+    private int _tailStart;
+    private int _tailLength;
     public void AppendTail(ReadOnlySpan<byte> data)
     {
         lock (_tailLock)
         {
-            var combined = new byte[Tail.Length + data.Length];
-            Tail.CopyTo(combined, 0);
-            data.CopyTo(combined.AsSpan(Tail.Length));
-            Tail = combined.Length > TailMax ? combined[^TailMax..] : combined;
+            if (data.Length >= TailMax)
+            {
+                // The chunk alone overflows the buffer — keep only its tail.
+                data[^TailMax..].CopyTo(_tail);
+                _tailStart = 0;
+                _tailLength = TailMax;
+                return;
+            }
+            var drop = Math.Max(0, _tailLength + data.Length - TailMax);
+            _tailStart = (_tailStart + drop) % TailMax;
+            _tailLength -= drop;
+            var writeAt = (_tailStart + _tailLength) % TailMax;
+            var first = Math.Min(data.Length, TailMax - writeAt);
+            data[..first].CopyTo(_tail.AsSpan(writeAt));
+            data[first..].CopyTo(_tail);
+            _tailLength += data.Length;
         }
     }
-    public byte[] TailSnapshot() { lock (_tailLock) return Tail; }
+    public byte[] TailSnapshot()
+    {
+        lock (_tailLock)
+        {
+            var snapshot = new byte[_tailLength];
+            var first = Math.Min(_tailLength, TailMax - _tailStart);
+            _tail.AsSpan(_tailStart, first).CopyTo(snapshot);
+            _tail.AsSpan(0, _tailLength - first).CopyTo(snapshot.AsSpan(first));
+            return snapshot;
+        }
+    }
+
+    // ---- output fan-out ----
+    // A PTY read hands each chunk to exactly one reader, so the PTY has a
+    // single pump (started by the first subscriber) that feeds the tail and
+    // every subscriber: the /ws socket and each Ramphastos session.
+
+    private readonly object _subscribersLock = new();
+    private readonly List<OutputSubscription> _subscribers = new();
+    private bool _pumpStarted;
+    private bool _outputEnded;
+    private int? _endExitCode;
+    private int _disposed;
+
+    /// <summary>
+    /// Receive every output chunk from now on. <paramref name="onData"/> is
+    /// awaited before the next read (back-pressure) and must copy the data
+    /// if it keeps it; if it throws, the subscription is dropped. <paramref
+    /// name="onEnd"/> runs once when the shell exits (with its exit code if
+    /// known) — immediately if it already has. Dispose to unsubscribe.
+    /// </summary>
+    public IDisposable SubscribeOutput(Func<ReadOnlyMemory<byte>, ValueTask> onData, Action<int?> onEnd)
+    {
+        var subscription = new OutputSubscription(this, onData, onEnd);
+        bool ended;
+        int? code;
+        var start = false;
+        lock (_subscribersLock)
+        {
+            ended = _outputEnded;
+            code = _endExitCode;
+            if (!ended)
+            {
+                _subscribers.Add(subscription);
+                start = !_pumpStarted;
+                _pumpStarted = true;
+            }
+        }
+
+        if (ended)
+        {
+            onEnd(code);
+        }
+        else if (start)
+        {
+            _ = Task.Run(PumpOutputAsync);
+        }
+
+        return subscription;
+    }
+
+    private async Task PumpOutputAsync()
+    {
+        var buffer = new byte[8192];
+        while (true)
+        {
+            int read;
+            try
+            {
+                read = await Pty.ReaderStream.ReadAsync(buffer.AsMemory());
+            }
+            // On Linux the master read fails with EIO once the shell is gone
+            // instead of returning 0 — that is EOF too.
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or OperationCanceledException)
+            {
+                break;
+            }
+            if (read <= 0)
+            {
+                break;
+            }
+
+            var chunk = buffer.AsMemory(0, read);
+            AppendTail(chunk.Span);
+            OutputSubscription[] targets;
+            lock (_subscribersLock)
+            {
+                targets = _subscribers.ToArray();
+            }
+            foreach (var target in targets)
+            {
+                try
+                {
+                    await target.OnData(chunk);
+                }
+                catch (Exception)
+                {
+                    target.Dispose();
+                }
+            }
+        }
+
+        int? exitCode = null;
+        try
+        {
+            exitCode = Pty.ExitCode;
+        }
+        catch { /* not exited yet / unavailable */ }
+
+        OutputSubscription[] ended;
+        lock (_subscribersLock)
+        {
+            _outputEnded = true;
+            _endExitCode = exitCode;
+            ended = _subscribers.ToArray();
+            _subscribers.Clear();
+        }
+        foreach (var target in ended)
+        {
+            try
+            {
+                target.OnEnd(exitCode);
+            }
+            catch (Exception)
+            {
+                // one subscriber's teardown must not skip the others
+            }
+        }
+    }
+
+    /// <summary>Close the PTY's file descriptors; only the first call disposes.</summary>
+    public void DisposePty()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            try
+            {
+                Pty.Dispose();
+            }
+            catch (Exception)
+            {
+                // already torn down
+            }
+        }
+    }
+
+    private sealed class OutputSubscription(
+        PtySession owner, Func<ReadOnlyMemory<byte>, ValueTask> onData, Action<int?> onEnd) : IDisposable
+    {
+        public Func<ReadOnlyMemory<byte>, ValueTask> OnData { get; } = onData;
+        public Action<int?> OnEnd { get; } = onEnd;
+
+        public void Dispose()
+        {
+            lock (owner._subscribersLock)
+            {
+                owner._subscribers.Remove(this);
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -125,6 +300,14 @@ public sealed class PtyHost
     public async Task<PtySession?> SpawnAsync(
         string id, string? cmd, string? cwd, int cols, int rows, CancellationToken cancellationToken)
     {
+        // Ramphastos clients choose the id, and it names the state file the
+        // service (possibly root) reads back.
+        if (!IsValidPtyId(id))
+        {
+            _logger.LogWarning("Refusing to spawn a PTY with an invalid id");
+            return null;
+        }
+
         var stateFile = Path.Combine(_stateDir, $"tasks-{id}.json");
         EnsureStateDir();
 
@@ -160,6 +343,9 @@ public sealed class PtyHost
             ["AXN_TERM_PTY_SECRET"] = _control.MintSecret(id),
             ["AXN_TERM_CONTROL_SOCKET"] = Path.Combine(_stateDir, ControlListener.SocketName),
             ["AXN_TERM_CLI"] = Path.Combine(_stateDir, "bin", ControlListener.ScriptName),
+            // Same scrub as CommandPsi: the gateway secret must never leak
+            // into shells (empty value removes it from the merged env).
+            [SessionHostAuth.SecretEnvName] = "",
         };
 
         IPtyConnection pty;
@@ -216,12 +402,22 @@ public sealed class PtyHost
         }
     }
 
-    /// <summary>Drop a session from the registry (task-state polling stops).</summary>
+    /// <summary>Drop a session from the registry (task-state polling stops)
+    /// and release its PTY.</summary>
     public void Remove(string id)
     {
-        _sessions.TryRemove(id, out _);
+        if (_sessions.TryRemove(id, out var session))
+        {
+            session.DisposePty();
+        }
         _control.Forget(id);
     }
+
+    /// <summary>PTY ids become file names (tasks-&lt;id&gt;.json) and stream
+    /// names: letters, digits, '-', '_', '.', not starting with '.', at most 128.</summary>
+    public static bool IsValidPtyId(string? id) =>
+        !string.IsNullOrEmpty(id) && id.Length <= 128 && id[0] != '.'
+        && id.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.');
 
     /// <summary>Resolve a client path relative to the shell's live cwd.
     /// With AXN_FS_JAIL_HOME=1 the result must stay inside the PTY user's

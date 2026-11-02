@@ -35,7 +35,7 @@ const BRIGHT = ['brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brigh
 
 describe('bundled themes stay legible', () => {
   it('ships every theme with a full ui block and unique ids', () => {
-    expect(themeDefinitions.length).toBeGreaterThanOrEqual(21);
+    expect(themeDefinitions.length).toBeGreaterThanOrEqual(33);
     expect(new Set(themeDefinitions.map((t) => t.id)).size).toBe(themeDefinitions.length);
     for (const t of themeDefinitions) {
       for (const k of ['bg', 'surface', 'surfaceHover', 'text', 'textSecondary', 'border', 'accent'] as const) {
@@ -60,4 +60,16 @@ describe('bundled themes stay legible', () => {
       expect(contrast(t.ui!.accent!, t.ui!.bg!), `${t.id} ui.accent`).toBeGreaterThanOrEqual(4.5);
     });
   }
+});
+
+describe('bundled themes credit their source palette', () => {
+  const raw = import.meta.glob('../themes/*.yaml', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+
+  it('names the upstream source and licence in every ported theme', () => {
+    const ported = Object.entries(raw).filter(([path]) => !/\/axn-[^/]+\.yaml$/.test(path));
+    expect(ported.length).toBeGreaterThan(0);
+    for (const [path, text] of ported) {
+      expect(text, path).toMatch(/^# Palette: .+ <https?:\/\/[^>]+>, .+\.$/m);
+    }
+  });
 });

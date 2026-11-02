@@ -8,11 +8,13 @@
     "dev:desktop": "pnpm --filter @axn-term/desktop tauri dev",
     "build:desktop": "pnpm --filter @axn-term/desktop tauri build --bundles app && ./build/scripts/make-dmg.sh",
     "build:desktop:docker": "./build/build-desktop.sh",
+    "build:desktop:windows": "./build/build-desktop-windows.sh",
     "serve:web": "nx serve web",
     "dev:gateway": "dotnet run --project apps/gateway -f net10.0",
     "build:dotnet": "dotnet build axn-term.slnx",
     "tauri": "pnpm --filter @axn-term/desktop tauri",
     "i18n:extract": "lingui extract",
+    "i18n:check": "lingui check sync",
     "i18n:compile": "lingui compile --typescript"
   },
   "devDependencies": {

@@ -1,8 +1,9 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 
-namespace Astropiano.AxnTerm.Gateway;
+namespace AxnTerm.Gateway;
 
 /// <summary>
 /// Maps an authenticated principal to the user id that names its session
@@ -11,6 +12,12 @@ namespace Astropiano.AxnTerm.Gateway;
 public static class UserIdentity
 {
     private const int MaxHashedPrefixLength = 23;
+
+    /// <summary>Every id the hashing branch of <see cref="ToUserId"/> can
+    /// return: a letter-led prefix of at most 23 chars not ending in '-'/'_',
+    /// then '-' and 8 lowercase hex.</summary>
+    private static readonly Regex HashedIdShape = new(
+        "^[a-z](?:[a-z0-9_-]{0,21}[a-z0-9])?-[0-9a-f]{8}$", RegexOptions.CultureInvariant);
 
     /// <summary>
     /// The token's user name (preferred_username, then sub) mapped through
@@ -46,11 +53,16 @@ public static class UserIdentity
     /// container and home), the hash keeps distinct raw names apart. The
     /// prefix is capped so the result stays a valid 32-char Linux user name
     /// (the entrypoint creates an account from it).
+    /// A clean name that has exactly the shape of a hashed id (e.g.
+    /// "johndoe-30f69670") is hashed as well — otherwise a user could pick
+    /// the hashed id of someone else ("john.doe") as their name and get
+    /// that user's container and home. Only names of that exact shape
+    /// change; every other clean name keeps its id.
     /// </summary>
     public static string ToUserId(string rawName)
     {
         var sanitized = SanitizeAscii(rawName);
-        if (sanitized == rawName)
+        if (sanitized == rawName && !HashedIdShape.IsMatch(rawName))
         {
             return rawName;
         }

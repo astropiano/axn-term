@@ -3,11 +3,11 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using Astropiano.AxnTerm.SessionHost;
+using AxnTerm.SessionHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Astropiano.AxnTerm.SessionHost.Tests;
+namespace AxnTerm.SessionHost.Tests;
 
 /// <summary>Real PTY sessions over a loopback WebSocket.</summary>
 public sealed class SessionTests : IDisposable
@@ -113,7 +113,7 @@ public sealed class SessionTests : IDisposable
         var big = Path.Combine(_dir, "big.bin");
         await using (var file = File.Create(big))
         {
-            file.SetLength(SessionHostService.MaxReadBytes + 1);
+            file.SetLength(PtyHost.MaxReadBytes + 1);
         }
         var small = Path.Combine(_dir, "small.txt");
         await File.WriteAllTextAsync(small, "contents");
@@ -134,6 +134,33 @@ public sealed class SessionTests : IDisposable
         Assert.Equal("contents", ok.GetProperty("contents").GetString());
     }
 
+    [Fact]
+    public async Task MalformedControlFramesNeverEndTheSession()
+    {
+        var (session, client) = await StartAsync("sleep 60");
+        await ReceiveJsonAsync(client, "session");
+
+        await SendTextAsync(client, """{"type":5}""");
+        await SendTextAsync(client, """{"type":"resize","cols":-1,"rows":-1}""");
+        await SendTextAsync(client, """{"type":"resize","cols":"80","rows":24}""");
+        await SendTextAsync(client, """{"type":"subscribe","sessionId":7}""");
+        await SendTextAsync(client, """{"type":"control-reply","requestId":"nope","ok":"yes","message":3}""");
+        await SendTextAsync(client, """{"type":"fs-read","requestId":"enc","path":"missing.txt","encoding":1}""");
+        var read = await ReceiveJsonAsync(client, "fs-read-result");
+        Assert.Equal("enc", read.GetProperty("requestId").GetString());
+        Assert.False(read.GetProperty("ok").GetBoolean());
+
+        await SendTextAsync(client, """{"type":"exec","requestId":"argv","argv":["echo",1]}""");
+        var badArgv = await ReceiveJsonAsync(client, "exec-result");
+        Assert.Equal("argv", badArgv.GetProperty("requestId").GetString());
+        Assert.False(badArgv.GetProperty("ok").GetBoolean());
+
+        await SendTextAsync(client, JsonSerializer.Serialize(new { type = "exec", requestId = "alive", argv = new[] { "echo", "still-here" } }));
+        var alive = await ReceiveJsonAsync(client, "exec-result");
+        Assert.Contains("still-here", alive.GetProperty("stdout").GetString());
+        Assert.False(session.IsCompleted);
+    }
+
     private async Task<(Task Session, WebSocket Client)> StartAsync(string cmd)
     {
         var configuration = new ConfigurationBuilder()
@@ -145,7 +172,10 @@ public sealed class SessionTests : IDisposable
                 ["AXN_STATE_DIR"] = Path.Combine(_dir, "state"),
             })
             .Build();
-        var service = new SessionHostService(configuration, NullLogger<SessionHostService>.Instance);
+        var control = new ControlBroker();
+        var host = new PtyHost(configuration, NullLogger<PtyHost>.Instance, control);
+        var service = new SessionHostService(
+            host, control, NullLogger<SessionHostService>.Instance, NullLogger<WsControlRouter>.Instance);
 
         var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
@@ -188,10 +218,19 @@ public sealed class SessionTests : IDisposable
             var text = await ReceiveTextAsync(socket);
             if (text.StartsWith('{'))
             {
-                var json = JsonDocument.Parse(text).RootElement;
-                if (json.GetProperty("type").GetString() == type)
+                // PTY output also arrives here (binary frames decode the
+                // same) — only JSON objects with a "type" are control.
+                try
                 {
-                    return json;
+                    var json = JsonDocument.Parse(text).RootElement;
+                    if (json.TryGetProperty("type", out var t) && t.GetString() == type)
+                    {
+                        return json;
+                    }
+                }
+                catch (JsonException)
+                {
+                    // output that merely starts with '{' — keep waiting
                 }
             }
         }

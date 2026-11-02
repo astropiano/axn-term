@@ -9,19 +9,19 @@ COPY --from=axn-term Directory.Build.props ./
 COPY --from=axn-term nuget.config ./
 COPY --from=axn-term apps/session-host ./apps/session-host
 
-# Sibling repos under a `libraries` build context (sibling checkouts
-# locally): ramphastos sources for the ProjectReference, plus its package
-# feeds — the nuget.config paths (../<repo>) resolve to /<repo> here.
+# Sibling repos under a `libraries` build context (dev/libraries locally):
+# ramphastos sources for the ProjectReference, plus its package feeds —
+# the nuget.config paths (../../libraries/...) resolve to /libraries here.
 # Directory.Packages.props carries the library versions (central package
 # management lives at the ramphastos repo root, above src/). NuGet finds
 # configs by walking up from each *project's* directory, so the feed config
 # must sit beside the referenced projects too — same relative paths resolve
-# (/ramphastos/../ → /).
-COPY --from=libraries ramphastos/Directory.Packages.props /ramphastos/Directory.Packages.props
-COPY --from=axn-term nuget.config /ramphastos/nuget.config
-COPY --from=libraries ramphastos/src /ramphastos/src
-COPY --from=libraries reflectiontools/src/packages /reflectiontools/src/packages
-COPY --from=libraries totalserializer/src/packages-local /totalserializer/src/packages-local
+# (/libraries/ramphastos/../../libraries → /libraries).
+COPY --from=libraries ramphastos/Directory.Packages.props /libraries/ramphastos/Directory.Packages.props
+COPY --from=axn-term nuget.config /libraries/ramphastos/nuget.config
+COPY --from=libraries ramphastos/src /libraries/ramphastos/src
+COPY --from=libraries reflectiontools/src/packages /libraries/reflectiontools/src/packages
+COPY --from=libraries totalserializer/packages-local /libraries/totalserializer/packages-local
 
 RUN dotnet publish apps/session-host/AxnTerm.SessionHost.csproj \
     -c Release \
@@ -108,4 +108,4 @@ ENV AXN_STATE_DIR=/tmp/axn-term
 EXPOSE 7682
 
 ENTRYPOINT ["axn-term-entrypoint.sh"]
-CMD ["dotnet", "Astropiano.AxnTerm.SessionHost.dll"]
+CMD ["dotnet", "AxnTerm.SessionHost.dll"]

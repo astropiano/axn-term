@@ -1,0 +1,51 @@
+# Night Owl (github.com/sdras/night-owl-vscode-theme). Terminal colours from
+# the theme's terminal.ansi* set; bright black (#575656) was 2.4:1 and is
+# lifted. Deep navy UI, accent blue.
+# Palette: Night Owl <https://github.com/sdras/night-owl-vscode-theme>, MIT. Copyright (c) 2018 Sarah Drasner.
+# Adjusted for legibility (hue kept, lightness moved):
+#   brightBlack: #575656 -> #6D6C6C
+id: night-owl
+name: Night Owl
+mode: dark
+
+colors:
+  background: '#011627'
+  foreground: '#D6DEEB'
+  cursor: '#80A4C2'
+  cursorAccent: '#011627'
+  selectionBackground: '#1D3B53'
+  selectionForeground: '#D6DEEB'
+
+  black: '#011627'
+  red: '#EF5350'
+  green: '#22DA6E'
+  yellow: '#C5E478'
+  blue: '#82AAFF'
+  magenta: '#C792EA'
+  cyan: '#21C7A8'
+  white: '#FFFFFF'
+
+  brightBlack: '#6D6C6C'
+  brightRed: '#EF5350'
+  brightGreen: '#22DA6E'
+  brightYellow: '#FFEB95'
+  brightBlue: '#82AAFF'
+  brightMagenta: '#C792EA'
+  brightCyan: '#7FDBCA'
+  brightWhite: '#FFFFFF'
+
+  orange: '#F78C6C'
+  violet: '#C792EA'
+
+ui:
+  bg: '#011627'
+  bgSecondary: '#0C2031'
+  surface: '#0C2031'
+  surfaceHover: '#182C3D'
+  text: '#D6DEEB'
+  textSecondary: '#96A2B0'
+  textInverted: '#011627'
+  border: '#2C3E4E'
+  accent: '#82AAFF'
+  accentHover: '#7FDBCA'
+  cursor: '#80A4C2'

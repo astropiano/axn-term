@@ -42,6 +42,11 @@ export const desktopPlatform: ShellPlatform = {
   emitLog: (level: LogLevel, target: string, message: string) => {
     emit('log', { level, target, message }).catch(() => {});
   },
+  openLogDir: () => {
+    void invoke<string>('log_dir')
+      .then((dir) => invoke('open_directory', { path: dir }))
+      .catch(() => {});
+  },
   stateStore: {
     load: (windowId) => invoke<unknown>('load_window_state', { windowId }),
     save: (windowId, state) =>

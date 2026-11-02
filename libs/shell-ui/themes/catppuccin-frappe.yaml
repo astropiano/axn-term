@@ -1,0 +1,53 @@
+# Catppuccin Frappé (catppuccin.com), the lightest of the dark flavours. ANSI
+# colours are Catppuccin's official terminal mapping (palette ansiColors);
+# bright black (surface2) is lifted to 3.5:1. UI from mantle, base and surface
+# layers; accent mauve.
+# Palette: Catppuccin <https://github.com/catppuccin/palette>, MIT. Copyright (c) 2021 Catppuccin.
+# Adjusted for legibility (hue kept, lightness moved):
+#   brightBlack: #626880 -> #82889F
+#   brightRed: #E67172 -> #E87E7F
+id: catppuccin-frappe
+name: Catppuccin Frappé
+mode: dark
+
+colors:
+  background: '#303446'
+  foreground: '#C6D0F5'
+  cursor: '#F2D5CF'
+  cursorAccent: '#303446'
+  selectionBackground: '#51576D'
+  selectionForeground: '#C6D0F5'
+
+  black: '#51576D'
+  red: '#E78284'
+  green: '#A6D189'
+  yellow: '#E5C890'
+  blue: '#8CAAEE'
+  magenta: '#F4B8E4'
+  cyan: '#81C8BE'
+  white: '#A5ADCE'
+
+  brightBlack: '#82889F'
+  brightRed: '#E87E7F'
+  brightGreen: '#8EC772'
+  brightYellow: '#D9BA73'
+  brightBlue: '#7B9EF0'
+  brightMagenta: '#F2A4DB'
+  brightCyan: '#5ABFB5'
+  brightWhite: '#B5BFE2'
+
+  orange: '#EF9F76'
+  violet: '#CA9EE6'
+
+ui:
+  bg: '#292C3C'
+  bgSecondary: '#303446'
+  surface: '#303446'
+  surfaceHover: '#414559'
+  text: '#C6D0F5'
+  textSecondary: '#A5ADCE'
+  textInverted: '#303446'
+  border: '#51576D'
+  accent: '#CA9EE6'
+  accentHover: '#BABBF1'
+  cursor: '#F2D5CF'

@@ -1,0 +1,53 @@
+# Tomorrow Night (github.com/chriskempson/tomorrow-theme). Uses the published
+# Tomorrow Night palette for normal colours (the repo's Xresources file has
+# much darker variants); bright black is the comment grey. Red is nudged up to
+# 4.5:1.
+# Palette: Tomorrow <https://github.com/chriskempson/tomorrow-theme>, MIT. Copyright (c) 2011 Chris Kempson.
+# Adjusted for legibility (hue kept, lightness moved):
+#   red: #CC6666 -> #CD6868
+#   brightRed: #CC6666 -> #CD6868
+id: tomorrow-night
+name: Tomorrow Night
+mode: dark
+
+colors:
+  background: '#1D1F21'
+  foreground: '#C5C8C6'
+  cursor: '#AEAFAD'
+  cursorAccent: '#1D1F21'
+  selectionBackground: '#373B41'
+  selectionForeground: '#C5C8C6'
+
+  black: '#282A2E'
+  red: '#CD6868'
+  green: '#B5BD68'
+  yellow: '#F0C674'
+  blue: '#81A2BE'
+  magenta: '#B294BB'
+  cyan: '#8ABEB7'
+  white: '#C5C8C6'
+
+  brightBlack: '#969896'
+  brightRed: '#CD6868'
+  brightGreen: '#B5BD68'
+  brightYellow: '#F0C674'
+  brightBlue: '#81A2BE'
+  brightMagenta: '#B294BB'
+  brightCyan: '#8ABEB7'
+  brightWhite: '#FFFFFF'
+
+  orange: '#DE935F'
+  violet: '#B294BB'
+
+ui:
+  bg: '#1D1F21'
+  bgSecondary: '#252729'
+  surface: '#252729'
+  surfaceHover: '#282A2E'
+  text: '#C5C8C6'
+  textSecondary: '#939594'
+  textInverted: '#1D1F21'
+  border: '#373B41'
+  accent: '#81A2BE'
+  accentHover: '#8ABEB7'
+  cursor: '#AEAFAD'

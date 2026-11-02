@@ -1,0 +1,49 @@
+# GitHub Dark Default (github.com/primer/github-vscode-theme), colours from
+# @primer/primitives 7.10 with the theme's own text overrides. UI layers from
+# GitHub's canvas inset/default/overlay; accent blue.
+# Palette: GitHub VS Code theme + Primer primitives <https://github.com/primer/github-vscode-theme>, MIT. Copyright (c) 2020 Primer; Copyright (c) 2018 GitHub Inc..
+id: github-dark
+name: GitHub Dark
+mode: dark
+
+colors:
+  background: '#0D1117'
+  foreground: '#E6EDF3'
+  cursor: '#2F81F7'
+  cursorAccent: '#0D1117'
+  selectionBackground: '#1E4273'
+  selectionForeground: '#E6EDF3'
+
+  black: '#484F58'
+  red: '#FF7B72'
+  green: '#3FB950'
+  yellow: '#D29922'
+  blue: '#58A6FF'
+  magenta: '#BC8CFF'
+  cyan: '#39C5CF'
+  white: '#B1BAC4'
+
+  brightBlack: '#6E7681'
+  brightRed: '#FFA198'
+  brightGreen: '#56D364'
+  brightYellow: '#E3B341'
+  brightBlue: '#79C0FF'
+  brightMagenta: '#D2A8FF'
+  brightCyan: '#56D4DD'
+  brightWhite: '#FFFFFF'
+
+  orange: '#DB6D28'
+  violet: '#BC8CFF'
+
+ui:
+  bg: '#010409'
+  bgSecondary: '#0D1117'
+  surface: '#161B22'
+  surfaceHover: '#21262D'
+  text: '#E6EDF3'
+  textSecondary: '#7D8590'
+  textInverted: '#0D1117'
+  border: '#30363D'
+  accent: '#2F81F7'
+  accentHover: '#58A6FF'
+  cursor: '#2F81F7'

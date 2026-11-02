@@ -3,6 +3,7 @@
 # bright colours. Bright black is now base01 lifted to 3.5:1; the bright
 # colours are lightened versions of their normal accents. Foreground nudged to
 # 6:1; Solarized stays deliberately soft.
+# Palette: Solarized <https://github.com/altercation/solarized>, MIT. Copyright (c) 2011 Ethan Schoonover.
 # Adjusted for legibility (hue kept, lightness moved):
 #   foreground: #839496 -> #99A7A9
 #   red: #DC322F -> #E56663

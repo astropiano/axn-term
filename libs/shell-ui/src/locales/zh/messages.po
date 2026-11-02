@@ -2,11 +2,11 @@ msgid ""
 msgstr ""
 "Language: zh\n"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:465
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:511
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} 正在主检出中运行 — 要隔离到 worktree 吗？"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:971
+#: libs/shell-ui/src/app/SettingsModal.tsx:1121
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "一个 Lucide 图标名称（如 <0>GitFork</0>）或内联 SVG 标签，例如 <1>{SVG_HINT_EXAMPLE}</1>"
 
@@ -14,16 +14,24 @@ msgstr "一个 Lucide 图标名称（如 <0>GitFork</0>）或内联 SVG 标签�
 #~ msgid "Account"
 #~ msgstr "账户"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:996
-#: libs/shell-ui/src/app/SettingsModal.tsx:998
+#: libs/shell-ui/src/app/SettingsModal.tsx:1146
+#: libs/shell-ui/src/app/SettingsModal.tsx:1148
 msgid "Add icon"
 msgstr "添加图标"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:59
+#: libs/shell-ui/src/app/SettingsModal.tsx:951
+msgid "Also used as the session icon while this process is foreground."
+msgstr "此进程位于前台时也用作会话图标。"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:684
+msgid "Applies immediately to the running app. Logs rotate in the OS log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides."
+msgstr "立即应用于正在运行的应用。日志在系统日志文件夹 (~/Library/Logs/axn-term) 中轮转；LOG_LEVEL 环境变量优先生效。"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:61
 msgid "Auto"
 msgstr "自动"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:564
+#: libs/shell-ui/src/app/SettingsModal.tsx:577
 msgid "Auto (WebGL → canvas → DOM)"
 msgstr "自动（WebGL → canvas → DOM）"
 
@@ -39,13 +47,15 @@ msgstr "axn-term 遇到了意外错误"
 msgid "Binary file"
 msgstr "二进制文件"
 
+#: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:116
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:112
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:982
+#: libs/shell-ui/src/app/SettingsModal.tsx:1132
 msgid "Cancel"
 msgstr "取消"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:570
+#: libs/shell-ui/src/app/SettingsModal.tsx:583
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "终端的单元格渲染器。“自动”使用 GPU（WebGL）并自动回退。如遇到渲染故障可强制使用 canvas/DOM。"
 
@@ -59,21 +69,25 @@ msgstr "终端的单元格渲染器。“自动”使用 GPU（WebGL）并自动
 #~ msgstr " ({0}{1})"
 
 #. placeholder {0}: viewers.length
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:365
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:441
 msgid "Clients: {0}"
 msgstr "：{0}"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2312
+#: libs/shell-ui/src/app/ShellApp.tsx:2395
 msgid "Close tab"
 msgstr "关闭标签页"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:466
+#: libs/shell-ui/src/app/SessionPanel.tsx:476
 msgid "Collapse"
 msgstr "折叠"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:589
+#: libs/shell-ui/src/app/SettingsModal.tsx:622
 msgid "Config file"
 msgstr "配置文件"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:473
+msgid "Connected to"
+msgstr "已连接到"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:1245
 #~ msgid "Connecting…"
@@ -82,13 +96,13 @@ msgstr "配置文件"
 #~ msgid "Connecting\\u2026"
 #~ msgstr "\\u6b63\\u5728\\u8fde\\u63a5\\u2026"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:202
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:326
 msgid "Connection"
-msgstr ""
+msgstr "连接"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:95
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:198
 msgid "Connection lost"
-msgstr ""
+msgstr "连接已断开"
 
 #: libs/shell-ui/src/app/AppContextMenu.tsx:82
 #: libs/shell-ui/src/app/AppContextMenu.tsx:104
@@ -111,7 +125,7 @@ msgstr "复制所选内容"
 msgid "Copy URL"
 msgstr "复制 URL"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:330
+#: libs/shell-ui/src/app/SettingsModal.tsx:339
 msgid "Could not parse the file as YAML."
 msgstr "无法将该文件解析为 YAML。"
 
@@ -123,19 +137,19 @@ msgstr "当前"
 msgid "Cut"
 msgstr "剪切"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:58
+#: libs/shell-ui/src/app/SettingsModal.tsx:60
 msgid "Dark"
 msgstr "深色"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:405
+#: libs/shell-ui/src/app/SettingsModal.tsx:418
 msgid "Dark theme"
 msgstr "深色主题"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:217
+#: libs/shell-ui/src/app/SettingsModal.tsx:225
 msgid "Decrease font size"
 msgstr "减小字号"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:276
+#: libs/shell-ui/src/app/SettingsModal.tsx:284
 msgid "Decrease line height"
 msgstr "减小行高"
 
@@ -143,16 +157,16 @@ msgstr "减小行高"
 msgid "Default folder"
 msgstr "默认文件夹"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:437
+#: libs/shell-ui/src/app/SettingsModal.tsx:450
 msgid "Default shell"
 msgstr "默认 Shell"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:491
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:537
 msgid "Delete {0}"
 msgstr "删除 {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:507
+#: libs/shell-ui/src/app/SessionPanel.tsx:517
 msgid "Delete workspace"
 msgstr "删除工作区"
 
@@ -160,11 +174,11 @@ msgstr "删除工作区"
 msgid "Directory"
 msgstr "目录"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:706
+#: libs/shell-ui/src/app/SettingsModal.tsx:798
 msgid "disabled"
 msgstr "已禁用"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:467
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:513
 msgid "Don't ask again"
 msgstr "不再询问"
 
@@ -172,41 +186,45 @@ msgstr "不再询问"
 msgid "Edit"
 msgstr "编辑"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:925
+#: libs/shell-ui/src/app/SettingsModal.tsx:1075
 msgid "Edit icon"
 msgstr "编辑图标"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:534
+#: libs/shell-ui/src/app/SessionPanel.tsx:711
+msgid "Edit summary…"
+msgstr "编辑摘要…"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:547
 msgid "Enable devin task parser"
 msgstr "启用 Devin 任务解析器"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:631
+#: libs/shell-ui/src/app/SettingsModal.tsx:702
 msgid "Enable remote — show the Remote console in the rail"
 msgstr " — "
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:706
-#: libs/shell-ui/src/app/SettingsModal.tsx:767
+#: libs/shell-ui/src/app/SettingsModal.tsx:798
+#: libs/shell-ui/src/app/SettingsModal.tsx:861
 msgid "enabled"
 msgstr "已启用"
 
 #. placeholder {0}: auth.userCode ?? ''
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:283
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:91
 msgid "Enter code {0} in the browser to finish sign-in."
 msgstr "在浏览器中输入代码 {0} 以完成登录。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:466
+#: libs/shell-ui/src/app/SessionPanel.tsx:476
 msgid "Expand"
 msgstr "展开"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:341
+#: libs/shell-ui/src/app/SettingsModal.tsx:350
 msgid "Export failed."
 msgstr "导出失败。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:604
+#: libs/shell-ui/src/app/SettingsModal.tsx:637
 msgid "Export…"
 msgstr "导出…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:339
+#: libs/shell-ui/src/app/SettingsModal.tsx:348
 msgid "Exported."
 msgstr "已导出。"
 
@@ -215,39 +233,47 @@ msgstr "已导出。"
 #~ msgid "Failed: {0}"
 #~ msgstr "\\u5931\\u8d25\\uff1a{0}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:723
+#: libs/shell-ui/src/app/SettingsModal.tsx:817
 msgid "file preview"
 msgstr "文件预览"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:654
+#: libs/shell-ui/src/app/SettingsModal.tsx:727
 msgid "File previews"
 msgstr "文件预览"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:177
+#: libs/shell-ui/src/app/SettingsModal.tsx:769
+msgid "Filter plugins…"
+msgstr "筛选插件…"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:187
 msgid "Filter sessions…"
 msgstr "筛选会话…"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:382
+msgid "Filter settings…"
+msgstr "筛选设置…"
 
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:44
 msgid "Fix the path or open the session in your home folder."
 msgstr "修正路径，或在主文件夹中打开会话。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:506
+#: libs/shell-ui/src/app/SettingsModal.tsx:519
 msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
 msgstr "会话/工作区面板的字体。字号相对于默认 12px 缩放。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1085
+#: libs/shell-ui/src/app/SettingsModal.tsx:1235
 msgid "Font not installed — keeping the previous font."
 msgstr "字体未安装 — 保留之前的字体。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:211
+#: libs/shell-ui/src/app/SettingsModal.tsx:219
 msgid "Font size (px)"
 msgstr "字号（px）"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:482
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:528
 msgid "Force remove"
 msgstr "强制移除"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:103
+#: libs/shell-ui/src/app/SettingsModal.tsx:111
 msgid "General"
 msgstr "常规"
 
@@ -255,27 +281,27 @@ msgstr "常规"
 #~ msgid "host — this machine"
 #~ msgstr " — "
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:206
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:330
 msgid "Hub URL"
 msgstr "Hub \\u5730\\u5740"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:612
+#: libs/shell-ui/src/app/SettingsModal.tsx:645
 msgid "Import replaces all settings with the picked config.yaml."
 msgstr "导入将用所选 config.yaml 替换所有设置。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:597
+#: libs/shell-ui/src/app/SettingsModal.tsx:630
 msgid "Import…"
 msgstr "导入…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:328
+#: libs/shell-ui/src/app/SettingsModal.tsx:337
 msgid "Imported."
 msgstr "已导入。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:242
+#: libs/shell-ui/src/app/SettingsModal.tsx:250
 msgid "Increase font size"
 msgstr "增大字号"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:299
+#: libs/shell-ui/src/app/SettingsModal.tsx:307
 msgid "Increase line height"
 msgstr "增大行高"
 
@@ -283,27 +309,27 @@ msgstr "增大行高"
 msgid "Invalid default folder"
 msgstr "无效的默认文件夹"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:417
+#: libs/shell-ui/src/app/SettingsModal.tsx:430
 msgid "Language"
 msgstr "语言"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:460
+#: libs/shell-ui/src/app/SettingsModal.tsx:473
 msgid "Leave empty to use the system $SHELL."
 msgstr "留空则使用系统 $SHELL。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:57
+#: libs/shell-ui/src/app/SettingsModal.tsx:59
 msgid "Light"
 msgstr "浅色"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:397
+#: libs/shell-ui/src/app/SettingsModal.tsx:410
 msgid "Light theme"
 msgstr "浅色主题"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:270
+#: libs/shell-ui/src/app/SettingsModal.tsx:278
 msgid "Line height"
 msgstr "行高"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1517
+#: libs/shell-ui/src/app/SessionPanel.tsx:1584
 msgid "Load workspace set"
 msgstr "加载工作区集"
 
@@ -311,27 +337,39 @@ msgstr "加载工作区集"
 msgid "Loading…"
 msgstr "加载中…"
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:657
+msgid "Log level"
+msgstr "日志级别"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:931
+msgid "Logo"
+msgstr "徽标"
+
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
 msgid "Main window"
 msgstr "主窗口"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:583
-msgid "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
-msgstr "将可执行文件名映射到 Lucide 图标（如 Bot、SquareTerminal）或 SVG 标签。"
+#: libs/shell-ui/src/app/SettingsModal.tsx:613
+msgid "Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
+msgstr "将可执行文件名或插件 ID 映射到 Lucide 图标（如 Bot、SquareTerminal）或 SVG 标签。"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:613
+#~ msgid "Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
+#~ msgstr "将可执行文件名映射到 Lucide 图标（如 Bot、SquareTerminal）或 SVG 标签。"
 
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:58
 msgid "Move “{sessionName}” to workspace"
 msgstr "将“{sessionName}”移到工作区"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:794
+#: libs/shell-ui/src/app/SessionPanel.tsx:818
 msgid "Move to new window"
 msgstr "移到新窗口"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:778
+#: libs/shell-ui/src/app/SessionPanel.tsx:802
 msgid "Move to workspace…"
 msgstr "移到工作区…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:494
+#: libs/shell-ui/src/app/SessionPanel.tsx:504
 msgid "New session in workspace"
 msgstr "在工作区中新建会话"
 
@@ -345,7 +383,7 @@ msgstr "新建代理会话…"
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "“{0}”中的新会话将在此文件夹中启动。留空则使用主目录。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:197
+#: libs/shell-ui/src/app/SessionPanel.tsx:207
 msgid "New workspace"
 msgstr "新建工作区"
 
@@ -356,15 +394,15 @@ msgstr "此窗口中的新工作区“{name}”"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "此窗口中的新工作区“{trimmed}”"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:466
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:512
 msgid "New worktree session"
 msgstr "新建 worktree 会话"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:387
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:463
 msgid "no clients"
-msgstr ""
+msgstr "无客户端"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:935
+#: libs/shell-ui/src/app/SettingsModal.tsx:1085
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "未配置图标 — 每个会话都显示默认终端图标。"
 
@@ -379,7 +417,7 @@ msgstr "无工作区"
 #~ msgid "No workspaces match."
 #~ msgstr "没有匹配的工作区。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:324
+#: libs/shell-ui/src/app/SettingsModal.tsx:333
 msgid "Not a valid config.yaml — expected a YAML mapping."
 msgstr "不是有效的 config.yaml — 应为 YAML 映射。"
 
@@ -387,19 +425,19 @@ msgstr "不是有效的 config.yaml — 应为 YAML 映射。"
 #~ msgid "Not publishing"
 #~ msgstr "\\u672a\\u53d1\\u5e03"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:304
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:131
 msgid "Not signed in"
 msgstr "未登录"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:254
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:366
 msgid "OIDC client"
 msgstr "OIDC 客户端"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:242
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:354
 msgid "OIDC issuer"
 msgstr "OIDC "
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:387
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:463
 msgid "only this device, not viewing a session"
 msgstr "，"
 
@@ -416,6 +454,10 @@ msgstr "在主文件夹中打开"
 msgid "Open in workspace"
 msgstr "在工作区中打开"
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:680
+msgid "Open log folder…"
+msgstr "打开日志文件夹…"
+
 #: libs/shell-ui/src/PathActionMenu.tsx:115
 msgid "Open preview in a tab"
 msgstr "在标签页中打开预览"
@@ -425,11 +467,11 @@ msgstr "在标签页中打开预览"
 #~ msgid "optional"
 #~ msgstr "\\u53ef\\u9009"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:521
+#: libs/shell-ui/src/app/SettingsModal.tsx:534
 msgid "Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size."
 msgstr "整体界面缩放百分比 — 面板、标签页、横幅、菜单。终端使用自己的字号。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:490
+#: libs/shell-ui/src/app/SettingsModal.tsx:503
 msgid "Panel font"
 msgstr "面板字体"
 
@@ -438,15 +480,15 @@ msgstr "面板字体"
 msgid "Paste"
 msgstr "粘贴"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:333
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:409
 msgid "Pause viewport"
-msgstr ""
+msgstr "暂停视口"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:747
+#: libs/shell-ui/src/app/SettingsModal.tsx:841
 msgid "permissions:"
 msgstr "权限："
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:104
+#: libs/shell-ui/src/app/SettingsModal.tsx:112
 msgid "Plugins"
 msgstr "插件"
 
@@ -458,7 +500,7 @@ msgstr "预览"
 msgid "Preview unavailable"
 msgstr "预览不可用"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:944
+#: libs/shell-ui/src/app/SettingsModal.tsx:1094
 msgid "Process"
 msgstr "进程"
 
@@ -491,49 +533,49 @@ msgstr "重新加载窗口"
 
 #. placeholder {0}: snap.role === 'authority' ? 'host' : `viewing ${snap.hostName ?? 'host'}`
 #. placeholder {1}: stateLabel(snap)
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:150
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:265
 msgid "Remote — {0} · {1} · {count} client(s)"
 msgstr " — {0} · {1} · {count} "
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:319
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:395
 msgid "Remote — this machine is the host"
 msgstr " — "
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:319
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:395
 msgid "Remote — viewing"
 msgstr " — "
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:622
+#: libs/shell-ui/src/app/SettingsModal.tsx:693
 msgid "Remote access"
-msgstr ""
+msgstr "远程访问"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:151
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:266
 msgid "Remote console"
-msgstr ""
+msgstr "远程控制台"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:720
 #~ msgid "Remote control"
 #~ msgstr "\\u8fdc\\u7a0b\\u63a7\\u5236"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:928
+#: libs/shell-ui/src/app/SettingsModal.tsx:1078
 msgid "Remove icon"
 msgstr "移除图标"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:395
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:441
 msgid "Remove worktree"
 msgstr "移除 worktree"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:547
+#: libs/shell-ui/src/app/SettingsModal.tsx:560
 msgid "Render session summaries (set via axn-session-summary)"
 msgstr "显示会话摘要（通过 axn-session-summary 设置）"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
-#: libs/shell-ui/src/app/SettingsModal.tsx:739
+#: libs/shell-ui/src/app/SettingsModal.tsx:833
 msgid "requires {0}{1}"
 msgstr "需要 {0}{1}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:673
+#: libs/shell-ui/src/app/SessionPanel.tsx:686
 msgid "Reset to process name"
 msgstr "重置为进程名"
 
@@ -545,32 +587,33 @@ msgstr "重置为进程名"
 msgid "Resume {agent} session{0}"
 msgstr "恢复 {agent} 会话{0}"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:333
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:409
 msgid "Resume viewport"
-msgstr ""
+msgstr "恢复视口"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:111
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:214
 msgid "Retry now"
-msgstr ""
+msgstr "立即重试"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:102
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:205
 msgid "Retrying…"
 msgstr "…"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:391
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:437
 msgid "Review worktree changes"
 msgstr "检查 worktree 更改"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:753
+#: libs/shell-ui/src/app/SettingsModal.tsx:847
 msgid "sandboxed — no permissions (no shell, files or terminal access)"
 msgstr "已沙箱化 — 无权限（无 shell、文件或终端访问）"
 
+#: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:990
+#: libs/shell-ui/src/app/SettingsModal.tsx:1140
 msgid "Save"
 msgstr "保存"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1514
+#: libs/shell-ui/src/app/SessionPanel.tsx:1581
 msgid "Save workspace set"
 msgstr "保存工作区集"
 
@@ -592,27 +635,36 @@ msgstr "全选"
 #~ msgid "Server URL"
 #~ msgstr "服务器 URL"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:579
+#: libs/shell-ui/src/app/SettingsModal.tsx:592
 msgid "Session icons"
 msgstr "会话图标"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:218
-msgid "Session name"
-msgstr "\\u4f1a\\u8bdd\\u540d\\u79f0"
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:321
+#~ msgid "Session name"
+#~ msgstr "\\u4f1a\\u8bdd\\u540d\\u79f0"
 
 #~ msgid "Session name on the hub (optional)"
 #~ msgstr "Hub \\u4e0a\\u7684\\u4f1a\\u8bdd\\u540d\\u79f0\\uff08\\u53ef\\u9009\\uff09"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:723
+#: libs/shell-ui/src/app/SettingsModal.tsx:817
 msgid "session plugin"
 msgstr "会话插件"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:648
+#: libs/shell-ui/src/app/SettingsModal.tsx:721
 msgid "Session plugins"
 msgstr "会话插件"
 
+#: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:73
+msgid "Session summary"
+msgstr "会话摘要"
+
+#. placeholder {0}: snap.sessionId.includes('/') ? snap.sessionId.slice(snap.sessionId.indexOf('/') + 1) : snap.sessionId
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:486
+msgid "Session: {0}"
+msgstr "会话：{0}"
+
 #. placeholder {0}: snap.sessions.length
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:343
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:419
 msgid "Sessions ({0})"
 msgstr " ({0})"
 
@@ -620,7 +672,7 @@ msgstr " ({0})"
 msgid "Set default folder…"
 msgstr "设置默认文件夹…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:134
+#: libs/shell-ui/src/app/SettingsModal.tsx:142
 msgid "Settings"
 msgstr "设置"
 
@@ -632,46 +684,49 @@ msgstr "shell"
 msgid "Shell"
 msgstr "Shell"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:465
+#: libs/shell-ui/src/app/SettingsModal.tsx:478
 msgid "Shell font"
 msgstr "Shell 字体"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:299
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:105
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:126
 msgid "Sign in…"
 msgstr "登录…"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:277
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:82
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:223
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:496
 msgid "Sign out"
 msgstr "退出登录"
 
 #. placeholder {0}: auth.user ?? ''
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:270
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:75
 msgid "Signed in as {0}"
 msgstr "已登录为 {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:2751
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:2925
 msgid "Start workflow…"
 msgstr "启动工作流…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:616
+#: libs/shell-ui/src/app/SettingsModal.tsx:649
 msgid "Stored in ~/.axn-term/config.yaml"
 msgstr "存储于 ~/.axn-term/config.yaml"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:796
+#: libs/shell-ui/src/app/SettingsModal.tsx:892
 msgid "Stored in ~/.axn-term/plugins.yaml"
 msgstr "存储于 ~/.axn-term/plugins.yaml"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:617
+#: libs/shell-ui/src/app/SettingsModal.tsx:650
 msgid "Stored in browser localStorage"
 msgstr "存储于浏览器 localStorage"
 
 #. placeholder {0}: t(modeMessages[next])
-#: libs/shell-ui/src/app/SettingsModal.tsx:41
-#: libs/shell-ui/src/app/SettingsModal.tsx:42
+#: libs/shell-ui/src/app/SettingsModal.tsx:43
+#: libs/shell-ui/src/app/SettingsModal.tsx:44
 msgid "Switch to {0}"
 msgstr "切换到 {0}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:426
+#: libs/shell-ui/src/app/SettingsModal.tsx:439
 msgid "System"
 msgstr "系统"
 
@@ -679,11 +734,11 @@ msgstr "系统"
 #~ msgid "Terminal font family and size in px. Empty uses the built-in monospace stack at 14px."
 #~ msgstr "终端字体族及字号（px）。留空则使用内置等宽字体栈，14px。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:485
+#: libs/shell-ui/src/app/SettingsModal.tsx:498
 msgid "Terminal font family, size in px, and line height. Empty uses the built-in monospace stack at 14px."
 msgstr "终端字体、像素大小和行高。留空则使用内置等宽字体栈，14px。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:553
+#: libs/shell-ui/src/app/SettingsModal.tsx:566
 msgid "Terminal renderer"
 msgstr "终端渲染器"
 
@@ -692,25 +747,29 @@ msgstr "终端渲染器"
 msgid "The default folder of “{0}” does not exist:"
 msgstr "“{0}”的默认文件夹不存在："
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:83
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:186
 msgid "The remote host is unreachable — is it running?"
 msgstr " — ？"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:85
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:188
 msgid "The server is reachable, but the remote channel failed."
 msgstr "，。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:374
+#: libs/shell-ui/src/app/SettingsModal.tsx:387
 msgid "Theme"
 msgstr "主题"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:370
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:446
 msgid "This machine is the host"
-msgstr ""
+msgstr "本机是主机"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:791
+#: libs/shell-ui/src/app/SettingsModal.tsx:887
 msgid "This plugin declares no settings."
 msgstr "此插件未声明任何设置。"
+
+#: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:90
+msgid "This text is longer than three lines — it will be shortened in the session list."
+msgstr "此文本超过三行——在会话列表中将被截短显示。"
 
 #: libs/shell-ui/src/app/ErrorBoundary.tsx:63
 msgid "This view hit an unexpected error"
@@ -720,7 +779,7 @@ msgstr "此视图遇到了意外错误"
 msgid "This window"
 msgstr "此窗口"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:511
+#: libs/shell-ui/src/app/SettingsModal.tsx:524
 msgid "UI zoom"
 msgstr "界面缩放"
 
@@ -729,15 +788,15 @@ msgstr "界面缩放"
 msgid "Unable to read file"
 msgstr "无法读取文件"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:740
+#: libs/shell-ui/src/app/SettingsModal.tsx:834
 msgid "unmet, plugin disabled"
 msgstr "未满足，插件已禁用"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:453
+#: libs/shell-ui/src/app/SettingsModal.tsx:466
 msgid "Use system default"
 msgstr "使用系统默认"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:230
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:342
 msgid "User token"
 msgstr "\\u7528\\u6237\\u4ee4\\u724c"
 
@@ -750,11 +809,11 @@ msgid "Window {0}"
 msgstr "窗口 {0}"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:481
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:527
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "worktree 移除失败（有未提交更改？）：{0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:490
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:536
 msgid "worktree removed — branch {0} kept"
 msgstr "worktree 已移除 — 分支 {0} 已保留"

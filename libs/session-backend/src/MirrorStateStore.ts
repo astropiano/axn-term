@@ -154,16 +154,59 @@ export function createMirrorStateStore(
 
     watch(_windowId, cb) {
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let retry: ReturnType<typeof setTimeout> | undefined;
       let unsub: (() => void) | undefined;
-      void connect().then((session) => {
-        unsub = session.onChange(() => {
-          // Replica patches arrive per-op; coalesce bursts into one reload.
-          clearTimeout(timer);
-          timer = setTimeout(cb, 120);
-        });
-      });
-      return () => {
+      let stopped = false;
+      let attempt = 0;
+      // Replica patches arrive per-op; coalesce bursts into one reload.
+      const bump = () => {
         clearTimeout(timer);
+        timer = setTimeout(cb, 120);
+      };
+      // Follow the backend across reconnects: a closed session is dropped
+      // and the next one connect() hands out gets the subscription.
+      const later = (rebind: boolean) => {
+        if (stopped || retry) return;
+        retry = setTimeout(() => {
+          retry = undefined;
+          bind(rebind);
+        }, Math.min(30_000, 1_000 * 2 ** attempt++));
+      };
+      const bind = (rebind: boolean) => {
+        if (stopped) return;
+        connect().then(
+          (session) => {
+            if (stopped) return;
+            attempt = 0;
+            const unChange = session.onChange(bump);
+            const unState =
+              session.onStateChange?.((state) => {
+                if (state !== 'closed') return;
+                unsub?.();
+                unsub = undefined;
+                later(true);
+              }) ?? (() => {});
+            unsub = () => {
+              unChange();
+              unState();
+            };
+            if (session.state === 'closed') {
+              unsub();
+              unsub = undefined;
+              later(true);
+            } else if (rebind) {
+              // New session, possibly a changed model — reload once.
+              bump();
+            }
+          },
+          () => later(rebind),
+        );
+      };
+      bind(false);
+      return () => {
+        stopped = true;
+        clearTimeout(timer);
+        clearTimeout(retry);
         unsub?.();
       };
     },

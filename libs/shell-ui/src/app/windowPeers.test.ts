@@ -5,7 +5,9 @@ import {
   requestAdopt,
   TOPIC_ADOPT,
   TOPIC_ADOPT_ACK,
+  remoteSessionName,
   windowLabels,
+  windowRank,
   workspaceTargets,
   type AdoptRequest,
 } from './windowPeers';
@@ -92,5 +94,34 @@ describe('requestAdopt', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('windowRank', () => {
+  it('ranks main first, then window ids in order', () => {
+    expect(windowRank(['main', 'w-1', 'w-2'], 'main')).toBe(0);
+    expect(windowRank(['main', 'w-1', 'w-2'], 'w-1')).toBe(1);
+    expect(windowRank(['main', 'w-1', 'w-2'], 'w-2')).toBe(2);
+  });
+
+  it('compacts when a lower window closes — the number it later drives', () => {
+    expect(windowRank(['main', 'w-2'], 'w-2')).toBe(1);
+    expect(windowRank(['w-2', 'w-7'], 'w-7')).toBe(1);
+  });
+
+  it('sorts by id, not arrival order', () => {
+    expect(windowRank(['w-9', 'w-1'], 'w-9')).toBe(1);
+  });
+
+  it('unknown id ranks last — safe fallback for a window not yet seen', () => {
+    expect(windowRank(['main', 'w-1'], 'w-99')).toBe(2);
+  });
+});
+
+describe('remoteSessionName', () => {
+  it('rank 0 keeps the base name; the rest are suffixed', () => {
+    expect(remoteSessionName('mac', 0)).toBe('mac');
+    expect(remoteSessionName('mac', 1)).toBe('mac-2');
+    expect(remoteSessionName('mac', 2)).toBe('mac-3');
   });
 });

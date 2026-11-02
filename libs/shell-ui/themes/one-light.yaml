@@ -1,0 +1,62 @@
+# One Half Light (github.com/sonph/onehalf), the terminal port of Atom's One
+# Light. White was the background itself; it uses One Half's comment grey.
+# The accents are darkened within their hue for text on #FAFAFA.
+# Palette: One Half <https://github.com/sonph/onehalf>, MIT. Copyright (c) 2019 Son A. Pham <sp@sonpham.me>.
+# Adjusted for legibility (hue kept, lightness moved):
+#   red: #E45649 -> #DA3020
+#   green: #50A14F -> #40803F
+#   yellow: #C18401 -> #9B6A01
+#   blue: #0184BC -> #017BAF
+#   cyan: #0997B3 -> #087E96
+#   brightGreen: #98C379 -> #6C9E47
+#   brightYellow: #E4C07A -> #BB8826
+#   brightBlue: #61AFEF -> #3096EA
+#   brightMagenta: #C577DD -> #C271DB
+#   brightCyan: #56B5C1 -> #3F9EAB
+#   ui.textSecondary: #727479 -> #6B6C71
+#   ui.accent: #0184BC -> #0174A5
+id: one-light
+name: One Light
+mode: light
+
+colors:
+  background: '#FAFAFA'
+  foreground: '#383A42'
+  cursor: '#4F525D'
+  cursorAccent: '#FAFAFA'
+  selectionBackground: '#BFCEFF'
+  selectionForeground: '#383A42'
+
+  black: '#383A42'
+  red: '#DA3020'
+  green: '#40803F'
+  yellow: '#9B6A01'
+  blue: '#017BAF'
+  magenta: '#A626A4'
+  cyan: '#087E96'
+  white: '#A0A1A7'
+
+  brightBlack: '#4F525D'
+  brightRed: '#DF6C75'
+  brightGreen: '#6C9E47'
+  brightYellow: '#BB8826'
+  brightBlue: '#3096EA'
+  brightMagenta: '#C271DB'
+  brightCyan: '#3F9EAB'
+  brightWhite: '#FFFFFF'
+
+  orange: '#C18401'
+  violet: '#A626A4'
+
+ui:
+  bg: '#F0F0F0'
+  bgSecondary: '#FAFAFA'
+  surface: '#FAFAFA'
+  surfaceHover: '#EAEBEB'
+  text: '#383A42'
+  textSecondary: '#6B6C71'
+  textInverted: '#FAFAFA'
+  border: '#E5E5E5'
+  accent: '#0174A5'
+  accentHover: '#126387'
+  cursor: '#4F525D'

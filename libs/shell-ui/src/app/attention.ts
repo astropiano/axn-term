@@ -38,8 +38,12 @@ export interface RailFlag {
   /** Display key — `<session> · <plugin>` or the app-level source name. */
   source: string;
   attention: SessionAttention;
-  /** Set when the flag belongs to a session — enables navigate-on-click. */
+  /** Set when the flag belongs to a session — enables a "Go to session" button. */
   sessionId?: string;
+  /** Plugin that raised the flag — routes `<plugin>:<action>` clicks. */
+  pluginId?: string;
+  /** The session's display name, for "Go to <name>" buttons. */
+  sessionName?: string;
   /** App-level action — clicking the flag runs this (e.g. open Settings). */
   onClick?: () => void;
 }

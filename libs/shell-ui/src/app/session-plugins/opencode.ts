@@ -146,6 +146,7 @@ function isFreshOpencodeLaunch(words: string[]): boolean {
 export const opencodePlugin: SessionViewPlugin = {
   id: 'opencode',
   title: 'opencode',
+  logo: 'Bot',
   version: '0.1.0',
   stateKey: 'opencode',
   settingsKey: 'opencode',

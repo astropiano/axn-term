@@ -36,6 +36,7 @@ function pr(partial: Partial<GhPrItem> = {}): GhPrItem {
     iid: 1,
     reference: '#1',
     title: 'pr',
+    description: '',
     url: 'https://github.com/a/b/pull/1',
     project: 'a/b',
     sourceBranch: 'feat',
@@ -269,6 +270,12 @@ describe('gh command lines', () => {
   it('asks gh pr list for the fork owner', () => {
     const argv = argvOf(prListCommand('main'));
     expect(argv[argv.indexOf('--json') + 1]).toContain('isCrossRepository,headRepositoryOwner');
+  });
+
+  it('asks the overview query for the PR body text', () => {
+    const argv = argvOf(overviewCommand());
+    const query = argv.find((a) => a.startsWith('query='))!;
+    expect(query).toContain('bodyText');
   });
 
   it('keeps the GraphQL $variables of the threads query intact', () => {

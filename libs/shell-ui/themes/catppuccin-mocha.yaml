@@ -1,6 +1,7 @@
 # Catppuccin Mocha (catppuccin.com). UI colours from Mocha's mantle, crust and
 # surface layers, accent mauve. Bright black was surface2 (2.5:1); it is lifted
 # toward overlay1 so comments stay readable.
+# Palette: Catppuccin <https://github.com/catppuccin/palette>, MIT. Copyright (c) 2021 Catppuccin.
 # Adjusted for legibility (hue kept, lightness moved):
 #   brightBlack: #585B70 -> #70738E
 id: catppuccin-mocha

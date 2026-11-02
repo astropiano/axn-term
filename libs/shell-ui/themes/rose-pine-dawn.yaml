@@ -1,6 +1,7 @@
 # Rosé Pine Dawn (rosepinetheme.com), the light variant. Gold, rose and foam
 # were too pale for text on base; they are darkened within their hue. Black and
 # white swapped to the light-theme convention (black = text tone).
+# Palette: Rosé Pine <https://github.com/rose-pine/palette>, MIT. Copyright (c) mvllow; Copyright (c) 2023 Rosé Pine.
 # Adjusted for legibility (hue kept, lightness moved):
 #   foreground: #575279 -> #534E73
 #   red: #B4637A -> #AD546D

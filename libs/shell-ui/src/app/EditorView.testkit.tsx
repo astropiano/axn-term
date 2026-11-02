@@ -19,6 +19,7 @@ const { editors, createEditor } = vi.hoisted(() => {
       addCommand: (_key: number, cb: () => void) => { editor.command = cb; },
       command: undefined as (() => void) | undefined,
       layout: vi.fn(),
+      updateOptions: vi.fn(),
       dispose: vi.fn(),
     };
     editors.push(editor);

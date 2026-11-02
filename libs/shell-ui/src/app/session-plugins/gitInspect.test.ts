@@ -66,7 +66,7 @@ describe('git-inspect plugin', () => {
       gitExec.mockClear();
       gitExec.mockResolvedValue('/repo\n');
       const out = await axnGit().run?.(ctx('/repo/sub', opened), undefined, 'axn-git');
-      expect(gitExec).toHaveBeenCalledWith('s1', '/repo/sub', ['rev-parse', '--show-toplevel']);
+      expect(gitExec).toHaveBeenCalledWith('s1', '/repo/sub', ['--literal-pathspecs', 'rev-parse', '--show-toplevel']);
       expect(opened).toEqual([{ path: '/repo', kind: 'git' }]);
       expect(out).toBe(false);
     });

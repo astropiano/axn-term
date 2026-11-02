@@ -4,6 +4,7 @@ import { Eye, FileText, Folder, GitBranch, SquareTerminal, Terminal, X } from 'l
 import type { EditorTab } from '../types';
 import { defaultTabLabel } from './subshellPromote';
 import { useSettings } from '../SettingsProvider';
+import { tabStripTabClasses } from './tabStyles';
 
 /**
  * A session's tab strip: `shell` pinned leftmost, then its sub-view tabs —
@@ -39,11 +40,9 @@ export function SessionTabStrip({
         type="button"
         onClick={() => onSelect('shell')}
         data-tip={t`Shell`}
-        className={`flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[11px] transition ${
-          activeTab === 'shell'
-            ? 'bg-[var(--surface)] text-[var(--text-primary)]'
-            : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-        }`}
+        className={`relative flex shrink-0 items-center gap-1.5 px-2 text-[11px] transition ${tabStripTabClasses(
+          activeTab === 'shell',
+        )}`}
       >
         <SquareTerminal className="h-3.5 w-3.5" />
         {t`shell`}
@@ -79,11 +78,9 @@ export function SessionTabStrip({
             setTabDragId(null);
             setTabDropId(null);
           }}
-          className={`flex h-6 shrink-0 items-center rounded pl-2 pr-1 text-[11px] transition ${
-            activeTab === ed.id
-              ? 'bg-[var(--surface)] text-[var(--text-primary)]'
-              : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-          }${tabDragId === ed.id ? ' opacity-40' : ''}${
+          className={`relative flex shrink-0 items-center pl-2 pr-1 text-[11px] transition ${tabStripTabClasses(
+            activeTab === ed.id,
+          )}${tabDragId === ed.id ? ' opacity-40' : ''}${
             tabDropId === ed.id && tabDragId !== ed.id
               ? ' shadow-[inset_2px_0_0_var(--accent)]'
               : ''

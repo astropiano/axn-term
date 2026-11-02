@@ -25,16 +25,16 @@ tauri-plugin-fs = "2"
 arboard = "3"
 tauri-plugin-notification = "2.5"
 portable-pty = "0.9"
-nix = { version = "0.28", features = ["term", "signal"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "6"
-log = "0.4"
-env_logger = "0.11"
+log = { version = "0.4", features = ["std"] }
 tauri-plugin-dialog = "2"
 tiny_http = "0.12"
 
 [target.'cfg(unix)'.dependencies]
+# termios (VERASE) and process-group kill — Unix only.
+nix = { version = "0.28", features = ["term", "signal"] }
 # Async-signal-safe SIGTERM/SIGHUP flag — session teardown (logout, restart,
 # shutdown) terminates the app with SIGTERM.
 signal-hook = "0.3"

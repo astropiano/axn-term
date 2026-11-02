@@ -366,6 +366,7 @@ function startsNewClaudeConversation(command: string): boolean {
 export const claudePlugin: SessionViewPlugin = {
   id: 'claude',
   title: 'claude',
+  logo: 'Bot',
   version: '0.1.0',
   stateKey: 'claude',
   settingsKey: 'claude',

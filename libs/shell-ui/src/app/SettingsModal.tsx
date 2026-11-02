@@ -12,6 +12,8 @@ import { defaultShellLineHeight, fontFamilyExists, themeDefinitions } from '../t
 import { useSessionBackend, useShellPlatform } from '../services';
 import { availableLocales, localeNames } from '../i18n';
 import { getSessionViewPlugins, isPluginEnabled, pluginDependencies } from './session-plugins';
+import { PanelSearch, PluginIcon } from './SessionPanel';
+import { collectIconBag } from './iconModel';
 import type { PluginSettingField, SessionViewPlugin } from './session-plugins';
 import { isSandboxedPlugin } from './session-plugins/sandbox';
 import { getFilePreviewPlugins, isFilePreviewEnabled } from './preview-plugins';
@@ -98,6 +100,12 @@ function ThemeSelect({
 }
 
 type SettingsTab = 'general' | 'plugins';
+
+/** Section-filter predicate for the Settings search box. */
+function matchSetting(query: string, keywords: string): boolean {
+  const q = query.trim().toLowerCase();
+  return !q || keywords.includes(q);
+}
 
 const tabs: { id: SettingsTab; label: MessageDescriptor }[] = [
   { id: 'general', label: msg`General` },
@@ -312,6 +320,7 @@ function GeneralTab() {
   const [defaultShell, setDefaultShell] = useState(settings.defaultShell ?? '');
   const [configError, setConfigError] = useState<string | null>(null);
   const [configNote, setConfigNote] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   async function importConfig() {
     setConfigError(null);
@@ -368,8 +377,12 @@ function GeneralTab() {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-4">
-      <div className="mb-4">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 border-b border-[var(--border)] px-3 py-2">
+        <PanelSearch value={query} onChange={setQuery} placeholder={t`Filter settings…`} />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="mb-4" hidden={!matchSetting(query, 'theme light dark appearance color scheme')}>
         <div className="mb-1 flex items-center justify-between">
           <label className="text-xs text-[var(--text-secondary)]"><Trans>Theme</Trans></label>
           <ThemeToggle />
@@ -412,7 +425,7 @@ function GeneralTab() {
         )}
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4" hidden={!matchSetting(query, 'language locale translation')}>
         <label className="mb-1 block text-xs text-[var(--text-secondary)]">
           <Trans>Language</Trans>
         </label>
@@ -432,7 +445,7 @@ function GeneralTab() {
         </select>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4" hidden={!matchSetting(query, 'default shell bash zsh fish')}>
         <label className="mb-1 block text-xs text-[var(--text-secondary)]">
           <Trans>Default shell</Trans>
         </label>
@@ -461,7 +474,7 @@ function GeneralTab() {
         </p>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4" hidden={!matchSetting(query, 'shell font terminal font family size line height')}>
         <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Shell font</Trans></label>
         <div className="flex gap-2">
           <FontFamilyInput
@@ -486,7 +499,7 @@ function GeneralTab() {
         </p>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4" hidden={!matchSetting(query, 'panel font size')}>
         <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Panel font</Trans></label>
         <div className="flex gap-2">
           <FontFamilyInput
@@ -507,7 +520,7 @@ function GeneralTab() {
         </p>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4" hidden={!matchSetting(query, 'ui zoom scale percent')}>
         <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>UI zoom</Trans></label>
         <FontSizeInput
           value={settings.uiZoom}
@@ -522,7 +535,7 @@ function GeneralTab() {
         </p>
       </div>
 
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex items-center gap-2" hidden={!matchSetting(query, 'devin task parser enable')}>
         <input
           id="devin-task-parser"
           type="checkbox"
@@ -535,7 +548,7 @@ function GeneralTab() {
         </label>
       </div>
 
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex items-center gap-2" hidden={!matchSetting(query, 'session summaries axn-session-summary render')}>
         <input
           id="session-summaries"
           type="checkbox"
@@ -548,7 +561,7 @@ function GeneralTab() {
         </label>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4" hidden={!matchSetting(query, 'terminal renderer webgl canvas dom auto')}>
         <label className="mb-1 block text-xs text-[var(--text-secondary)]">
           <Trans>Terminal renderer</Trans>
         </label>
@@ -574,17 +587,37 @@ function GeneralTab() {
         </p>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4" hidden={!matchSetting(query, 'session icons lucide svg executable mapping')}>
         <label className="mb-1 block text-xs text-[var(--text-secondary)]">
           <Trans>Session icons</Trans>
         </label>
-        <SessionIconEditor sessionIcons={settings.sessionIcons} updateSettings={updateSettings} />
+        <SessionIconEditor
+          icons={collectIconBag(settings)}
+          updateIcons={(key, value) => {
+            const customIcons = { ...(settings.customIcons ?? {}) };
+            const sessionIcons = { ...(settings.sessionIcons ?? {}) };
+            const pluginIcons = { ...(settings.pluginIcons ?? {}) };
+            if (value === undefined) {
+              delete customIcons[key];
+              delete sessionIcons[key];
+              delete pluginIcons[key];
+            } else {
+              customIcons[key] = value;
+              delete sessionIcons[key];
+              delete pluginIcons[key];
+            }
+            updateSettings({ customIcons, sessionIcons, pluginIcons });
+          }}
+        />
         <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
-          <Trans>Map executable names to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag.</Trans>
+          <Trans>
+            Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG
+            tag.
+          </Trans>
         </p>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4" hidden={!matchSetting(query, 'config file import export yaml')}>
         <label className="mb-1 block text-xs text-[var(--text-secondary)]">
           <Trans>Config file</Trans>
         </label>
@@ -618,7 +651,45 @@ function GeneralTab() {
         </p>
       </div>
 
-      <div className="mb-4">
+      {platform.openLogDir && (
+        <div className="mb-4" hidden={!matchSetting(query, 'log level logging debug trace diagnostics folder')}>
+          <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+            <Trans>Log level</Trans>
+          </label>
+          <select
+            value={settings.logLevel ?? 'info'}
+            onChange={(e) =>
+              updateSettings({
+                logLevel: e.currentTarget.value as AppSettings['logLevel'],
+              })
+            }
+            className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          >
+            <option value="error">error</option>
+            <option value="warn">warn</option>
+            <option value="info">info</option>
+            <option value="debug">debug</option>
+            <option value="trace">trace</option>
+          </select>
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => platform.openLogDir?.()}
+              className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+            >
+              <Trans>Open log folder…</Trans>
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+            <Trans>
+              Applies immediately to the running app. Logs rotate in the OS
+              log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides.
+            </Trans>
+          </p>
+        </div>
+      )}
+
+      <div className="mb-4" hidden={!matchSetting(query, 'remote access ramphastos authority session token url')}>
         <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Remote access</Trans></label>
         <label className="flex items-center gap-2">
           <input
@@ -632,6 +703,7 @@ function GeneralTab() {
           </span>
         </label>
       </div>
+      </div>
     </div>
   );
 }
@@ -643,6 +715,7 @@ type PluginEntry =
 function PluginsTab() {
   const { t } = useLingui();
   const { pluginSettings, updatePluginSection } = usePluginSettings();
+  const [query, setQuery] = useState('');
   const groups: { label: string; entries: PluginEntry[] }[] = [
     {
       label: t`Session plugins`,
@@ -668,6 +741,20 @@ function PluginsTab() {
       : isFilePreviewEnabled(entry.plugin, pluginSettings);
   }
 
+  const q = query.trim().toLowerCase();
+  const filtered = groups
+    .map((g) => ({
+      ...g,
+      entries: g.entries.filter(
+        (e) =>
+          !q ||
+          e.plugin.title.toLowerCase().includes(q) ||
+          e.plugin.id.toLowerCase().includes(q) ||
+          (e.plugin.settingsKey ?? '').toLowerCase().includes(q),
+      ),
+    }))
+    .filter((g) => g.entries.length > 0);
+
   const settingsKey = selected ? (selected.plugin.settingsKey ?? selected.plugin.id) : '';
   const section = pluginSettings[settingsKey] ?? {};
   const deps =
@@ -677,8 +764,12 @@ function PluginsTab() {
 
   return (
     <>
-      <div className="w-44 shrink-0 overflow-y-auto border-r border-[var(--border)] py-1">
-        {groups.map((group) => (
+      <div className="flex w-44 shrink-0 flex-col border-r border-[var(--border)]">
+        <div className="shrink-0 border-b border-[var(--border)] px-2 py-1.5">
+          <PanelSearch value={query} onChange={setQuery} placeholder={t`Filter plugins…`} />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+        {filtered.map((group) => (
           <div key={group.label}>
             <div className="px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               {group.label}
@@ -696,6 +787,7 @@ function PluginsTab() {
                       : 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                   }`}
                 >
+                  <PluginIcon plugin={entry.plugin} className="h-3.5 w-3.5 shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{entry.plugin.title}</span>
                   <span
                     className={`h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -710,13 +802,15 @@ function PluginsTab() {
             })}
           </div>
         ))}
+        </div>
       </div>
 
       {selected && (
         <div className="min-w-0 flex-1 overflow-y-auto p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-[var(--text-primary)]">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
+                <PluginIcon plugin={selected.plugin} className="h-4 w-4 shrink-0" />
                 {selected.plugin.title}
               </div>
               <div className="text-[10px] text-[var(--text-secondary)]">
@@ -768,6 +862,8 @@ function PluginsTab() {
             </label>
           </div>
 
+          {selected.plugin.logo !== undefined && <PluginLogoField plugin={selected.plugin} />}
+
           {selected.kind === 'session' &&
             selected.plugin.settings?.map((field) => (
               <PluginSettingRow
@@ -798,6 +894,64 @@ function PluginsTab() {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Editable logo override — only rendered for plugins that declare `logo`
+ * (the has-an-icon capability). Reads the merged icon bag so an entry set
+ * through the Session icons editor shows here too; for agent plugins the
+ * plugin id is the process name, so this field and that row edit the same
+ * icon.
+ */
+function PluginLogoField({ plugin }: { plugin: { id: string; logo?: string; processPattern?: RegExp } }) {
+  const { settings, updateSettings } = useSettings();
+  const override = collectIconBag(settings)[plugin.id] ?? '';
+  const [draft, setDraft] = useState<string | null>(null);
+
+  function commit() {
+    if (draft === null) return;
+    const value = draft.trim();
+    const customIcons = { ...(settings.customIcons ?? {}) };
+    const sessionIcons = { ...(settings.sessionIcons ?? {}) };
+    const pluginIcons = { ...(settings.pluginIcons ?? {}) };
+    if (value) customIcons[plugin.id] = value;
+    else delete customIcons[plugin.id];
+    delete sessionIcons[plugin.id];
+    delete pluginIcons[plugin.id];
+    updateSettings({ customIcons, sessionIcons, pluginIcons });
+    setDraft(null);
+  }
+
+  const value = draft ?? override;
+  return (
+    <div className="mb-3">
+      <div className="flex items-center gap-2">
+        <label className="w-14 shrink-0 text-[10px] text-[var(--text-secondary)]">
+          <Trans>Logo</Trans>
+        </label>
+        <SessionIconGlyph
+          value={value.trim() || plugin.logo || 'Puzzle'}
+          className="h-4 w-4 shrink-0"
+        />
+        <input
+          value={value}
+          onChange={(e) => setDraft(e.currentTarget.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') setDraft(null);
+          }}
+          placeholder={plugin.logo ?? 'Puzzle'}
+          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+        />
+      </div>
+      {plugin.processPattern && (
+        <p className="mt-0.5 text-[10px] text-[var(--text-secondary)]">
+          <Trans>Also used as the session icon while this process is foreground.</Trans>
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -868,14 +1022,14 @@ const SVG_HINT_EXAMPLE =
   '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2l12 6-12 6z"/></svg>';
 
 function SessionIconEditor({
-  sessionIcons,
-  updateSettings,
+  icons,
+  updateIcons,
 }: {
-  sessionIcons?: Record<string, string>;
-  updateSettings: (patch: Partial<AppSettings>) => void;
+  icons: Record<string, string>;
+  /** Write one entry (value) or remove it (value undefined) — hits `customIcons` and clears any legacy-map shadow. */
+  updateIcons: (key: string, value: string | undefined) => void;
 }) {
   const { t } = useLingui();
-  const icons = sessionIcons ?? {};
   const keys = Object.keys(icons).sort((a, b) => a.localeCompare(b));
   const [editing, setEditing] = useState<{ key: string; isNew: boolean } | null>(null);
   const [draftKey, setDraftKey] = useState('');
@@ -894,19 +1048,15 @@ function SessionIconEditor({
   }
 
   function remove(key: string) {
-    const next = { ...icons };
-    delete next[key];
-    updateSettings({ sessionIcons: next });
+    updateIcons(key, undefined);
     if (editing?.key === key) setEditing(null);
   }
 
   function save() {
     const key = draftKey.trim().toLowerCase();
     if (!key || !editing) return;
-    const next = { ...icons };
-    if (!editing.isNew && key !== editing.key) delete next[editing.key];
-    next[key] = draftValue;
-    updateSettings({ sessionIcons: next });
+    if (!editing.isNew && key !== editing.key) updateIcons(editing.key, undefined);
+    updateIcons(key, draftValue);
     setEditing(null);
   }
 

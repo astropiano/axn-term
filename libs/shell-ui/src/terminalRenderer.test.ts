@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest';
-import { applyTerminalRenderer, repaintTerminal } from './terminalRenderer';
+import { describe, it, expect, vi } from 'vitest';
+import { applyTerminalRenderer, createTerminalInput, repaintTerminal } from './terminalRenderer';
 import type { Terminal } from '@xterm/xterm';
 import type { ITerminalAddon } from '@xterm/xterm';
 
@@ -142,5 +142,104 @@ describe('repaintTerminal', () => {
     };
     expect(() => repaintTerminal(dead as never)).not.toThrow();
     return new Promise<void>((resolve) => setTimeout(resolve, 50));
+  });
+});
+
+describe('createTerminalInput', () => {
+  const OSC10 = '\x1b]10;rgb:4f4f/6060/6666\x07';
+  const OSC11 = '\x1b]11;rgb:fdfd/f6f6/e3e3\x07';
+  const DA1 = '\x1b[?1;2c';
+
+  it('passes normal input through synchronously', () => {
+    const writes: string[] = [];
+    const input = createTerminalInput((d) => writes.push(d));
+    input.send('ls\r');
+    input.send('\x1b[3;5R');
+    expect(writes).toEqual(['ls\r', '\x1b[3;5R']);
+  });
+
+  it('defers a chunk that is only OSC color reports', async () => {
+    vi.useFakeTimers();
+    try {
+      const writes: string[] = [];
+      const batched = OSC10 + OSC11;
+      createTerminalInput((d) => writes.push(d)).send(batched);
+      expect(writes).toEqual([]);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(writes).toEqual([batched]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hands OSC-only chunks to writeWhenRaw when the backend supports it', () => {
+    const writes: string[] = [];
+    const raw: string[] = [];
+    createTerminalInput((d) => writes.push(d), (d) => raw.push(d)).send(OSC10);
+    expect(raw).toEqual([OSC10]);
+    expect(writes).toEqual([]);
+  });
+
+  it('does not defer a report mixed with user input', () => {
+    const writes: string[] = [];
+    createTerminalInput((d) => writes.push(d)).send(`\x1b]10;rgb:aaaa/bbbb/cccc\x07x`);
+    expect(writes).toEqual(['\x1b]10;rgb:aaaa/bbbb/cccc\x07x']);
+  });
+
+  it('normalizes ST-terminated reports to BEL', async () => {
+    const writes: string[] = [];
+    createTerminalInput((d) => writes.push(d), undefined, () => Promise.resolve(true)).send(
+      '\x1b]11;rgb:fdfd/f6f6/e3e3\x1b\\',
+    );
+    await vi.waitFor(() => expect(writes).toEqual([OSC11]));
+  });
+
+  // devin queries `ESC]10;? ESC]11;? ESC[c` — the DA1 answer is its
+  // sentinel: once it arrives, OSC replies are no longer expected and a
+  // later one is read as typed `10;rgb:…11;rgb:…`. The report's alive
+  // probe is async, so the DA1 reply must wait behind it.
+  it('keeps a DA1 reply behind OSC reports whose probe is pending', async () => {
+    const writes: string[] = [];
+    const probes: ((alive: boolean) => void)[] = [];
+    const input = createTerminalInput(
+      (d) => writes.push(d),
+      undefined,
+      () => new Promise<boolean>((r) => probes.push(r)),
+    );
+    input.send(OSC10);
+    input.send(OSC11);
+    input.send(DA1);
+    input.write('typed');
+    expect(writes).toEqual([]);
+    probes.forEach((resolve) => resolve(true));
+    await vi.waitFor(() => expect(writes).toEqual([OSC10, OSC11, DA1, 'typed']));
+  });
+
+  it('drops dead-letter reports but still releases what queued behind them', async () => {
+    const writes: string[] = [];
+    const input = createTerminalInput((d) => writes.push(d), undefined, () => Promise.resolve(false));
+    input.send(OSC11);
+    input.send('x');
+    await vi.waitFor(() => expect(writes).toEqual(['x']));
+  });
+
+  it('delivers when the probe fails or hangs (fail-open)', async () => {
+    vi.useFakeTimers();
+    try {
+      const writes: string[] = [];
+      const failing = createTerminalInput((d) => writes.push(d), undefined, () => Promise.reject(new Error('x')));
+      failing.send(OSC10);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(writes).toEqual([OSC10]);
+      writes.length = 0;
+      const hanging = createTerminalInput((d) => writes.push(d), undefined, () => new Promise<boolean>(() => {}));
+      hanging.send(OSC11);
+      hanging.send(DA1);
+      expect(writes).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1100);
+      expect(writes).toEqual([OSC11, DA1]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

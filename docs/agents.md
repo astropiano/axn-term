@@ -72,8 +72,12 @@ These are intercepted by axn-term when *typed* at a bare shell prompt — the
 user's way in. Printing one in output does nothing; from inside a running
 program use `axn-term session …` above:
 
-- `axn-session [path]` — open a new session in the current workspace (`.` or
-  no argument uses the session cwd).
+- `axn-session [-w|--workspace <name>] [-n|--name <name>] [--background]
+  [--create-ws] [path]` — open a new session in a workspace (`.` or no path
+  uses the session cwd). `-w` targets a workspace by name — it must exist
+  unless `--create-ws` opts into creating it; `-n` names the session;
+  `--background` spawns it without stealing the user's focus. As a running agent, spawn sessions with
+  `"$AXN_TERM_CLI" session command axn-session -w <workspace> [--background]`.
 - `axn-session-mv <workspace>` — move the session to another workspace.
 - `axn-session-window` — move the session into a new window of its own.
 - `axn-sh [command|dir]` — open a sub-shell tab (one-shot command or
@@ -87,6 +91,7 @@ program use `axn-term session …` above:
   no argument clears it.
 - `axn-install [args]` — runs `axn-term install <args>` (e.g.
   `axn-install --skills --devin`).
+- `axn-workspaces` — list workspaces; the session's own is marked `*`.
 - `axn-session-up/down`, `axn-workspace-up/down` — reorder sessions/workspaces.
 - `axn-focus [tab]` — bring a session view to the front: bare or `shell`
   selects the main terminal; otherwise a sub-view tab matched by index,

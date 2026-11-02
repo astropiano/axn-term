@@ -1,6 +1,7 @@
 # Dracula (draculatheme.com). Unchanged terminal colours; adds Dracula's own
 # UI layers (darker sidebar, current-line surface, comment-blue secondary text)
 # and its purple as the accent.
+# Palette: Dracula <https://github.com/dracula/dracula-theme>, MIT. Copyright (c) 2023 Dracula Theme.
 # Adjusted for legibility (hue kept, lightness moved):
 #   brightBlack: #6272A4 -> #6F7EAB
 id: dracula

@@ -1,6 +1,7 @@
 # Catppuccin Latte (catppuccin.com). UI colours from Latte's mantle, crust and
 # surface layers. Yellow, green and pink were too light for text on base (down to
 # 2.3:1); they are darkened within their hue.
+# Palette: Catppuccin <https://github.com/catppuccin/palette>, MIT. Copyright (c) 2021 Catppuccin.
 # Adjusted for legibility (hue kept, lightness moved):
 #   green: #40A02B -> #327C21
 #   yellow: #DF8E1D -> #996114

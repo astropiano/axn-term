@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { MemoryStick } from 'lucide-react';
 import type { SessionViewPlugin } from './plugin';
 import type { SessionAttention } from '../../types';
 import { useMemoryStats } from '../useMemoryStats';
@@ -77,6 +78,7 @@ function RamRailView({
     .join('\n');
   return (
     <div data-tip={title} className="flex flex-col items-center gap-0.5">
+      <MemoryStick className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
       <div className="flex h-3 w-7 items-center overflow-hidden rounded-sm border border-[var(--border)] bg-[var(--surface)]">
         <div
           className="h-full transition-all duration-500"

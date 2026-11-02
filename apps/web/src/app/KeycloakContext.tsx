@@ -8,6 +8,9 @@ export interface KeycloakContextValue {
   /** Keycloak preferred_username — used for the remote home dir (`/home/<u>`). */
   username: string | null;
   login: () => void;
+  /** Ends the IdP session and redirects back here — the remote viewer
+   *  panel's sign-out. */
+  logout?: () => void;
   updateToken: (minValidity?: number) => Promise<string | undefined>;
 }
 
@@ -95,14 +98,28 @@ function KeycloakProviderInner({ children }: { children: ReactNode }) {
 
   const updateToken = useCallback(async (minValidity = 30) => {
     if (!keycloak) return undefined;
-    await keycloak.updateToken(minValidity);
+    try {
+      await keycloak.updateToken(minValidity);
+    } catch {
+      // Refresh token dead (revoked/expired SSO session) — flip back to
+      // the login screen instead of retrying 401s forever.
+      setToken(null);
+      setAuthenticated(false);
+      return undefined;
+    }
     const refreshed = keycloak.token ?? undefined;
     setToken(refreshed ?? null);
     return refreshed;
   }, []);
 
+  const logout = keycloak
+    // Keep the query string — `?remote` selects mirror mode and must
+    // survive the sign-out → sign-in round trip.
+    ? () => keycloak.logout({ redirectUri: window.location.href })
+    : undefined;
+
   return (
-    <KeycloakContext.Provider value={{ authenticated, token, username, login, updateToken }}>
+    <KeycloakContext.Provider value={{ authenticated, token, username, login, logout, updateToken }}>
       {children}
     </KeycloakContext.Provider>
   );

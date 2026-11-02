@@ -1,0 +1,56 @@
+# Visual Studio Code's Dark Modern: terminal colours as published in Windows
+# Terminal's "VSCode Dark Modern" scheme, UI from VS Code's dark_modern theme.
+# Red, blue, magenta and bright black were under target on #1F1F1F and are
+# lifted.
+# Palette: Windows Terminal <https://github.com/microsoft/terminal>, MIT. Copyright (c) Microsoft Corporation.
+# Palette: Visual Studio Code <https://github.com/microsoft/vscode>, MIT. Copyright (c) 2015 - present Microsoft Corporation.
+# Adjusted for legibility (hue kept, lightness moved):
+#   red: #CD3131 -> #D96060
+#   blue: #2472C8 -> #3C88DC
+#   magenta: #BC3FBC -> #C85AC8
+#   brightBlack: #666666 -> #747474
+id: vscode-dark
+name: VS Code Dark
+mode: dark
+
+colors:
+  background: '#1F1F1F'
+  foreground: '#CCCCCC'
+  cursor: '#FFFFFF'
+  cursorAccent: '#1F1F1F'
+  selectionBackground: '#264F78'
+  selectionForeground: '#CCCCCC'
+
+  black: '#000000'
+  red: '#D96060'
+  green: '#0DBC79'
+  yellow: '#E5E510'
+  blue: '#3C88DC'
+  magenta: '#C85AC8'
+  cyan: '#11A8CD'
+  white: '#E5E5E5'
+
+  brightBlack: '#747474'
+  brightRed: '#F14C4C'
+  brightGreen: '#23D18B'
+  brightYellow: '#F5F543'
+  brightBlue: '#3B8EEA'
+  brightMagenta: '#D670D6'
+  brightCyan: '#29B8DB'
+  brightWhite: '#E5E5E5'
+
+  orange: '#F97316'
+  violet: '#C85AC8'
+
+ui:
+  bg: '#181818'
+  bgSecondary: '#1F1F1F'
+  surface: '#1F1F1F'
+  surfaceHover: '#323232'
+  text: '#CCCCCC'
+  textSecondary: '#9D9D9D'
+  textInverted: '#1F1F1F'
+  border: '#2B2B2B'
+  accent: '#4DAAFC'
+  accentHover: '#73B4EE'
+  cursor: '#FFFFFF'

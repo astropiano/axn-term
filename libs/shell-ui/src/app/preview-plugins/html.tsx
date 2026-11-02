@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import DOMPurify from 'dompurify';
+import { useEffect, useRef, type CSSProperties } from 'react';
+import DOMPurify, { type DOMPurify as Purifier } from 'dompurify';
 import { shellServices } from '../../services';
 import { useSettings } from '../../SettingsProvider';
 import { renderMermaidInto } from './mermaidRender';
@@ -12,6 +12,9 @@ import type { FilePreviewContext } from './plugin';
 // embedded documents or document-level <link>/<meta>/<base>. <input> and
 // <button> stay: GFM task lists render disabled checkboxes, surfaces may use
 // `<button data-axn-action>`, and without a form neither can submit.
+// Inline styles lose `position: fixed/sticky`, and the host container
+// (`previewContainStyle`) clips and isolates whatever is left, so markup
+// cannot lay itself over the rest of the app.
 const SANITIZE_OPTS = {
   USE_PROFILES: { html: true, svg: true, svgFilters: true, mathMl: true },
   FORBID_TAGS: [
@@ -29,9 +32,42 @@ const SANITIZE_OPTS = {
   FORBID_ATTR: ['action', 'formaction', 'form'],
 };
 
-export function sanitizePreviewHtml(html: string): string {
-  return DOMPurify.sanitize(html, SANITIZE_OPTS);
+let purifier: Purifier | undefined;
+
+function previewPurifier(): Purifier {
+  if (purifier) return purifier;
+  // own instance, so the hook does not affect other DOMPurify users
+  const p = DOMPurify(window);
+  p.addHook('afterSanitizeAttributes', (node) => {
+    if (!(node as Element).hasAttribute?.('style')) return;
+    const style = (node as HTMLElement).style as CSSStyleDeclaration | undefined;
+    if (!style) {
+      (node as Element).removeAttribute('style');
+      return;
+    }
+    if (/fixed|sticky/i.test(style.getPropertyValue('position'))) style.removeProperty('position');
+    // keep only what the engine parsed, so no unparsed text slips through
+    if (style.length) (node as Element).setAttribute('style', style.cssText);
+    else (node as Element).removeAttribute('style');
+  });
+  purifier = p;
+  return p;
 }
+
+export function sanitizePreviewHtml(html: string): string {
+  return previewPurifier().sanitize(html, SANITIZE_OPTS);
+}
+
+/**
+ * Inline style for any element that hosts sanitized markup: it becomes the
+ * containing block for positioned content (`contain: paint` also clips it)
+ * and its own stacking context, so no z-index inside reaches the app.
+ */
+export const previewContainStyle: CSSProperties = {
+  position: 'relative',
+  contain: 'paint',
+  isolation: 'isolate',
+};
 
 function isRemoteRef(src: string): boolean {
   return /^(https?:|data:|blob:|asset:|tauri:)/i.test(src);
@@ -114,6 +150,7 @@ export function HtmlPreview({ html, ctx }: { html: string; ctx: FilePreviewConte
     <div
       ref={ref}
       className="axn-prose"
+      style={previewContainStyle}
       onClick={(e) => {
         const anchor = (e.target as HTMLElement).closest('a');
         const href = anchor?.getAttribute('href');

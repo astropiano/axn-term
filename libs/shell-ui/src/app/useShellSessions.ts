@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import type { ShellStateStore } from '../platform';
 import { clearSessionRestoring } from './restoring';
 import type { PluginTabSet, ShellSession, WindowState, Workspace } from '../types';
+import { axnLog } from './log';
 
 function generateId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -97,6 +98,27 @@ async function loadWindowState(store: ShellStateStore, windowId: string): Promis
 
 async function writeWindowState(store: ShellStateStore, windowId: string, state: WindowState): Promise<void> {
   await store.save(windowId, state);
+}
+
+/**
+ * Merge a mirror reload into the live sessions: the remote model doesn't
+ * carry locally-derived fields — `repo` is probed by the git-status plugin
+ * on each device — so they're carried over by id. Otherwise every upstream
+ * patch blanks them and the panel entry flickers (folder appearing and
+ * disappearing). A repo is only kept while the session's cwd is unchanged
+ * (a moved session re-probes).
+ */
+export function mergeMirrorSessions(
+  prev: ShellSession[],
+  fresh: ShellSession[],
+): ShellSession[] {
+  const byId = new Map(prev.map((s) => [s.id, s]));
+  return fresh.map((s) => {
+    const old = byId.get(s.id);
+    return s.repo === undefined && old?.repo !== undefined && old.cwd === s.cwd
+      ? { ...s, repo: old.repo }
+      : s;
+  });
 }
 
 export interface UseShellSessionsOptions {
@@ -413,14 +435,14 @@ export function useShellSessions(
 
   // Stores that mirror a remote model push changes through watch — reload
   // and merge upstream sessions/workspaces, keeping local selection when
-  // it still exists (plugin state stays local: the mirror doesn't carry it).
+  // it still exists.
   useEffect(() => {
     if (!loaded || !stateStore.watch) return;
     return stateStore.watch(windowId, () => {
       void loadWindowState(stateStoreRef.current, windowIdRef.current).then((fresh) => {
         if (!fresh) return;
         setWorkspacesWithRef(() => fresh.workspaces);
-        setSessionsWithRef(() => fresh.sessions);
+        setSessionsWithRef((prev) => mergeMirrorSessions(prev, fresh.sessions));
         if (fresh.sessions.length > 0 && waitingNoticeRef.current) setWaitingNotice(false);
         if (!fresh.sessions.some((s) => s.id === selectedSessionIdRef.current)) {
           setSelectedSessionIdWithRef(fresh.sessions[0]?.id ?? '');
@@ -595,7 +617,7 @@ export function useShellSessions(
   );
 
   const addSession = useCallback(
-    (workspaceId?: string, cwd?: string, name?: string) => {
+    (workspaceId?: string, cwd?: string, name?: string, background?: boolean) => {
       // Only ids that exist right now — a stale/unknown id would create a
       // session no workspace lists (invisible, yet selected), which surfaces
       // as "click → nothing happened" (MR review hit this).
@@ -606,14 +628,19 @@ export function useShellSessions(
         selectedWorkspaceIdRef.current,
         workspacesRef.current[0]?.id,
       ].find(known);
-      if (!targetWorkspaceId) return;
+      if (!targetWorkspaceId) return undefined;
       const session = createDefaultSession(targetWorkspaceId);
       session.name = name?.trim() || `session-${sessionsRef.current.length + 1}`;
       if (cwd) session.cwd = cwd;
       setSessionsWithRef((prev) => [...prev, session]);
-      setSelectedWorkspaceIdWithRef(targetWorkspaceId);
-      setSelectedSessionIdWithRef(session.id);
+      // `background` (agent-driven `axn-session --background`) leaves the
+      // user's selection alone — the session spawns silently in its workspace.
+      if (!background) {
+        setSelectedWorkspaceIdWithRef(targetWorkspaceId);
+        setSelectedSessionIdWithRef(session.id);
+      }
       saveNow().catch(() => {});
+      return session.id;
     },
     [setSessionsWithRef, setSelectedWorkspaceIdWithRef, setSelectedSessionIdWithRef, saveNow],
   );
@@ -776,12 +803,41 @@ export function useShellSessions(
     [setSessionsWithRef, saveNow],
   );
 
-  /** Merge a patch into a plugin's hosted tab set (window-level state). */
+  /**
+   * Patch a session computed from its *latest* state inside the state
+   * updater, so back-to-back patches (two tabs opened before a re-render)
+   * build on each other instead of the last one winning. Return null to
+   * leave the session unchanged. Always persists (tab changes are structural).
+   */
+  const updateSessionWith = useCallback(
+    (sessionId: string, patch: (session: ShellSession) => Partial<ShellSession> | null) => {
+      setSessionsWithRef((prev) =>
+        prev.map((s) => {
+          if (s.id !== sessionId) return s;
+          const next = patch(s);
+          return next ? { ...s, ...next } : s;
+        }),
+      );
+      saveNow().catch(() => {});
+    },
+    [setSessionsWithRef, saveNow],
+  );
+
+  /**
+   * Merge a patch into a plugin's hosted tab set (window-level state). A
+   * function patch is computed from the latest set, so back-to-back calls
+   * build on each other; returning null leaves the set unchanged.
+   */
   const updatePluginTabs = useCallback(
-    (pluginId: string, patch: Partial<PluginTabSet>) => {
+    (
+      pluginId: string,
+      patch: Partial<PluginTabSet> | ((set: PluginTabSet) => Partial<PluginTabSet> | null),
+    ) => {
       setPluginTabsWithRef((prev) => {
         const current = prev[pluginId] ?? { editors: [] };
-        return { ...prev, [pluginId]: { ...current, ...patch } };
+        const next = typeof patch === 'function' ? patch(current) : patch;
+        if (!next) return prev;
+        return { ...prev, [pluginId]: { ...current, ...next } };
       });
       saveNow().catch(() => {});
     },
@@ -845,7 +901,8 @@ export function useShellSessions(
   );
 
   const closeSession = useCallback(
-    (sessionId: string) => {
+    (sessionId: string, reason = 'unknown') => {
+      axnLog('info', 'shell', `closeSession ${sessionId} (${reason})`);
       clearSessionRestoring(sessionId);
       setSessionsWithRef((prev) => {
         const next = prev.filter((s) => s.id !== sessionId);
@@ -932,6 +989,7 @@ export function useShellSessions(
     applySessionAutoName,
     duplicateSession,
     updateSession,
+    updateSessionWith,
     mergePluginState,
     pluginTabs,
     pluginData,

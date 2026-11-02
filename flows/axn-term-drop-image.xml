@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - image dropped on the terminal is pasted as its path" adapter="axn-term">
+    <description>
+      Drag a PNG from a file-manager stand-in onto axn-term with real X11 drag
+      and drop, as when dropping a screenshot into Claude Code. The webview
+      must not open the image in place of the app; the terminal must get the
+      image's path at the prompt; the app's own drags (a session row onto
+      another workspace) must still work; the window must still close from its
+      close button. Runs on a private X server (Xvfb, else rootful Xwayland), so the
+      desktop never sees the input.
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+      <tag>linux</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="shell" />
+      </env>
+    </setup>
+    <steps>
+      <script action="prepare" description="Create temp state: one window, one plain shell session" />
+      <script action="startTestDisplay" description="Start a private X server with a drag source holding 'drop image.png'" />
+      <script action="start" description="Launch axn-term on the test display" />
+      <script action="dropBesideTerminal" description="Drop on the session panel: nothing is typed and the app stays loaded" />
+      <script action="dropOnTerminal" description="Type 'wc -c ', drop on the terminal, press Enter: the shell counts the image's bytes" />
+      <script action="dragSessionToWorkspace" description="Drag the session row onto the empty 'extra' workspace with the mouse: the app's own drags still work beside the native file-drop handler" />
+      <script action="closeWithWindowButton" description="Press the window's close button and confirm: the app exits" />
+      <assertions description="Every drop check ran">
+        <assert that="contains" value="drop beside the terminal ignored" />
+        <assert that="contains" value="dropped image pasted as its path" />
+        <assert that="contains" value="session row dragged to another workspace" />
+        <assert that="contains" value="window closed by its close button" />
+      </assertions>
+    </steps>
+  </flow>
+</flows>

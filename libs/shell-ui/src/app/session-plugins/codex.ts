@@ -49,6 +49,7 @@ function rememberCodexLast(ctx: SessionViewContext & PluginApi): void {
 export const codexPlugin: SessionViewPlugin = {
   id: 'codex',
   title: 'codex',
+  logo: 'Bot',
   version: '0.1.0',
   stateKey: 'codex',
   settingsKey: 'codex',

@@ -1,8 +1,8 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ShellApp } from '@axn-term/shell-ui';
 import type { FileReader } from '@axn-term/session-backend';
 import { browserServices, WsBackend } from '@axn-term/session-backend';
-import { RemoteBackend, createMirrorStateStore } from '@axn-term/session-backend/remote';
+import { RemoteBackend, createMirrorStateStore, listRemoteSessions } from '@axn-term/session-backend/remote';
 import { KeycloakProvider, useKeycloak } from './KeycloakContext';
 import { ConnectionGate } from './ConnectionGate';
 import { browserPlatform } from './platform';
@@ -27,28 +27,62 @@ const remoteHubUrl =
   // the authority/viewer endpoint, NOT /ramphastos (the hosted session host,
   // which would silently create a fresh container session).
   (wsUrlBase ? wsUrlBase.replace(/\/ws\/?$/, '/remote') : undefined);
+const remoteParam = new URLSearchParams(window.location.search).get('remote');
 const remoteSessionId =
-  new URLSearchParams(window.location.search).get('remote') ||
-  (import.meta.env.VITE_REMOTE_SESSION as string | undefined);
+  remoteParam || (import.meta.env.VITE_REMOTE_SESSION as string | undefined);
+// `?remote` with no value still selects mirror mode — the name was never
+// load-bearing, only the account's session list is. Discovery attaches the
+// single owned session; several → the remote panel's picker chooses.
+// Remote-only deployments (VITE_REMOTE_ONLY): the cloud/hosted session
+// path does not exist for this build — the account's mirrored desktops
+// are the only sessions. Backend retries keep rediscovering, so a
+// desktop appearing later attaches on its own.
+const remoteOnly = /^(1|true|yes)$/i.test(
+  String(import.meta.env.VITE_REMOTE_ONLY ?? ''),
+);
+const mirrorModeParam = remoteParam !== null || remoteSessionId !== undefined;
 
 function AppContent() {
-  const { authenticated, login, updateToken, username } = useKeycloak();
+  const { authenticated, login, logout, updateToken, username } = useKeycloak();
+
+  // Mode is account state, not a URL: when the signed-in account owns a
+  // mirrored desktop session (gateway /remote/sessions), this device is a
+  // remote viewer — otherwise it rides the cloud hub. `?remote` remains
+  // the explicit deep-link for tests and pinning.
+  const [mirrorDiscovered, setMirrorDiscovered] = useState(false);
+  useEffect(() => {
+    if (!authenticated || mirrorModeParam || mirrorDiscovered || !remoteHubUrl)
+      return;
+    let alive = true;
+    void updateToken(30)
+      .then((t) => listRemoteSessions(remoteHubUrl, t))
+      .then((s) => {
+        if (alive && s.length) setMirrorDiscovered(true);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [authenticated, mirrorDiscovered, updateToken]);
+  const mirrorMode = remoteOnly || mirrorModeParam || mirrorDiscovered;
 
   // Mirror mode wins when a remote session id is present: attach to the
   // desktop-authoritative session on the /remote hub and render the
   // mirrored model instead of local browser sessions. Never fall back to
   // the cloud hub — that endpoint creates container PTYs, which is
   // exactly the wrong thing for a viewer.
-  const hubUrl = remoteSessionId ? remoteHubUrl : cloudUrl;
+  const hubUrl = mirrorMode ? remoteHubUrl : cloudUrl;
   const backend = useMemo(
     () =>
       hubUrl
         ? new RemoteBackend({
             url: hubUrl,
-            // ?remote=<id> attaches to a desktop's authority session; hosted
-            // mode joins a fixed session so every device of this user shares
-            // the host's model (per-user session host → no cross-user clash).
-            sessionId: remoteSessionId ?? 'axn-shared',
+            // ?remote=<id> pins a desktop's authority session; `?remote`
+            // bare leaves it undefined → discovery resolves the account's
+            // session. Hosted mode joins a fixed session so every device of
+            // this user shares the host's model (per-user session host →
+            // no cross-user clash).
+            sessionId: mirrorMode ? remoteSessionId || undefined : 'axn-shared',
             getToken: () => updateToken(30),
             // The gateway proxies raw WS only — no negotiate POST.
             webSocketOnly: true,
@@ -59,9 +93,18 @@ function AppContent() {
           }),
     [hubUrl, updateToken],
   );
+  // A replaced RemoteBackend (discovery switched the hub) must drop its hub
+  // connection and heartbeat. disconnect() leaves it lazily reusable, so the
+  // StrictMode re-mount still works.
+  useEffect(
+    () => () => {
+      if (backend instanceof RemoteBackend) void backend.disconnect().catch(() => {});
+    },
+    [backend],
+  );
 
   const platform = useMemo(() => {
-    const p = browserPlatform(username);
+    const p = browserPlatform(username, logout);
     if (backend instanceof RemoteBackend) {
       // The session list is the authority's model (desktop via /remote, or
       // the session host's AxnHostVm in hosted mode), not browser state —
@@ -70,14 +113,22 @@ function AppContent() {
         // Remote mode is attach-only: never synthesize/spawn sessions — the
         // desktop authority owns the model. Cloud mode keeps host-created
         // sessions, so the flag stays off there.
-        attachOnly: Boolean(remoteSessionId),
+        attachOnly: mirrorMode,
       });
       // The remote console's viewer-side state — /viewportClaims + host
       // identity straight from the replicated model.
       p.remoteConsole = backend.remoteConsole;
+      // Shared-state writes ride the same generic plane as pluginData —
+      // the authority applies them into its own config.
+      p.publishSharedState = (key, data) => {
+        void backend
+          .ramphastosSession()
+          .then((sess) => sess.invoke('/vm/setPluginState', [key, data]))
+          .catch(() => {});
+      };
     }
     return p;
-  }, [username, backend]);
+  }, [username, logout, backend]);
 
   // Web fileReader routes through the owning session's WS connection.
   const fileReader = useCallback(

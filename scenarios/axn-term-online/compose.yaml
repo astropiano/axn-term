@@ -38,7 +38,15 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
     volumes:
+      # persist data/ (H2 store: realm keys, users, sessions) — without it
+      # every restart mints new signing keys and every client token dies.
+      # Mounted at data/ (not data/h2) so the volume inherits the image's
+      # keycloak-user ownership; the import bind nests on top.
+      - axn-term-online-keycloak-data:/opt/keycloak/data
       - ./keycloak:/opt/keycloak/data/import:ro
+      # persist the H2 store (realm keys, users, sessions) — without it every
+      # restart mints new signing keys and every client token dies
+      - axn-term-online-keycloak-data:/opt/keycloak/data/h2
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
       interval: 10s
@@ -63,9 +71,9 @@ services:
     volumes:
       - ${AXN_TERM_ROOT:-../..}:/app
       - axn-term-online-node_modules:/app/node_modules
-      # Sibling ramphastos checkout at /ramphastos — the vite alias
-      # (../../../ramphastos/...) resolves there inside the container.
-      - ${AXN_LIBS_ROOT:-../../..}/ramphastos:/ramphastos:ro
+      # dev/libraries at /libraries — the ramphastos-client vite alias
+      # (../../libraries/...) resolves there inside the container.
+      - ${AXN_LIBS_ROOT:-../../../../libraries}:/libraries:ro
       # plugins.yaml seed for first load (VITE_PLUGINS_YAML_SEED, web platform.ts).
       # Nested over the /app bind — apps/web/public/plugins.seed.yaml must exist
       # in the repo (empty placeholder, .gitignored) or this mount breaks.
@@ -78,12 +86,17 @@ services:
       # passed to vite server.allowedHosts so the proxied host is accepted
       - AXN_DOMAIN=${AXN_DOMAIN:-localhost}
       - AXN_LAN_IP=${AXN_LAN_IP:-localhost}
+      - AXN_LAN_NAME=${AXN_LAN_NAME:-}
       - VITE_PLUGINS_YAML_SEED=/plugins.seed.yaml
       - VITE_SHELL_WS_URL=${AXN_GATEWAY_URL:-${AXN_WS_SCHEME:-ws}://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/ws
       - VITE_KEYCLOAK_URL=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}
-      # Set to ws://<gateway>/ramphastos to run terminals over the Ramphastos
-      # hub (multiplexed streams) instead of per-PTY /ws sockets.
-      - VITE_RAMPHASTOS_URL=${VITE_RAMPHASTOS_URL:-}
+      # "cloud" mode: run terminals over the hosted session-host hub
+      # (multiplexed streams) instead of per-PTY /ws sockets.
+      - VITE_REMOTE_ONLY=${AXN_REMOTE_ONLY:-}
+      - VITE_CLOUD_URL=${VITE_CLOUD_URL:-}
+      # "remote" mode: ?remote=<id> attaches to a desktop's mirrored session
+      # on this hub (attach-only — never falls back to the cloud hub).
+      - VITE_REMOTE_URL=${VITE_REMOTE_URL:-}
       - VITE_KEYCLOAK_REALM=${KEYCLOAK_REALM:-axn-term}
       - VITE_KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-axn-term}
     depends_on:
@@ -94,11 +107,15 @@ services:
     build:
       context: ${AXN_TERM_ROOT:-../..}
       additional_contexts:
-        # Sibling checkouts — ramphastos sources + package feeds land at
-        # /<repo> inside the build (matching the nuget.config paths).
-        libraries: ${AXN_LIBS_ROOT:-../../..}
+        # dev/libraries — ramphastos sources + package feeds land at
+        # /libraries inside the build (matching the nuget.config paths).
+        libraries: ${AXN_LIBS_ROOT:-../../../../libraries}
       dockerfile: apps/gateway/Dockerfile
     image: axn-term-gateway:latest
+    ports:
+      # plain ws:// for clients that can't trust the internal CA (e.g. the
+      # Tauri webview) — LAN/dev only; TLS stays on the Caddy route.
+      - ${AXN_GW_PLAIN_PORT:-18095}:8080
     container_name: axn-term-online-gateway
     user: "0:0"
     environment:
@@ -106,7 +123,7 @@ services:
       - ASPNETCORE_URLS=http://0.0.0.0:8080
       - Authentication__Authority=http://keycloak:8082/realms/${KEYCLOAK_REALM:-axn-term}
       - Authentication__ValidIssuer=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/realms/${KEYCLOAK_REALM:-axn-term}
-      - Authentication__ValidIssuers=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/realms/${KEYCLOAK_REALM:-axn-term},http://keycloak.localhost:8082/realms/${KEYCLOAK_REALM:-axn-term}
+      - Authentication__ValidIssuers=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/realms/${KEYCLOAK_REALM:-axn-term},http://keycloak.localhost:8082/realms/${KEYCLOAK_REALM:-axn-term},http://localhost:${AXN_KC_PLAIN_PORT:-18096}/realms/${KEYCLOAK_REALM:-axn-term}
       - Authentication__JwksUri=http://keycloak:8082/realms/${KEYCLOAK_REALM:-axn-term}/protocol/openid-connect/certs
       # Only tokens issued to the web client (azp) open shells.
       - Authentication__ClientId=${KEYCLOAK_CLIENT_ID:-axn-term}
@@ -117,9 +134,12 @@ services:
       - SESSION_HOST_PORT=7682
       # /remote auth: hellos carry a user JWT; mirrored sessions are bound
       # to the account that published them (authority JWT sub = owner, the
-      # same sub on another device can attach). AllowAnonymous opens the
-      # endpoint for local dev — scenario default, set 0/false in prod.
-      - RemoteAuthority__AllowAnonymous=${REMOTE_AUTHORITY_ANON:-true}
+      # same sub on another device can attach). AllowAnonymous lets anyone
+      # claim any session — set REMOTE_AUTHORITY_ANON=true only for local dev.
+      - RemoteAuthority__AllowAnonymous=${REMOTE_AUTHORITY_ANON:-false}
+      # Clients whose tokens may say hello (azp): the web viewer and the
+      # desktop's device-flow client.
+      - RemoteAuthority__ClientIds=${KEYCLOAK_CLIENT_ID:-axn-term},${REMOTE_AUTH_CLIENT_ID:-axn-term-desktop}
       # Hub surfaces — "remote" = desktop mirror (authority/viewers),
       # "cloud" = hosted session-host hub. Each independently togglable.
       - Hub__RemoteEnabled=${HUB_REMOTE_ENABLED:-true}
@@ -180,9 +200,9 @@ services:
       context: ./session-host
       additional_contexts:
         axn-term: ${AXN_TERM_ROOT:-../..}
-        # Sibling checkouts — ramphastos sources + package feeds land at
-        # /<repo> inside the build (matching the nuget.config paths).
-        libraries: ${AXN_LIBS_ROOT:-../../..}
+        # dev/libraries — ramphastos sources + package feeds land at
+        # /libraries inside the build (matching the nuget.config paths).
+        libraries: ${AXN_LIBS_ROOT:-../../../../libraries}
       dockerfile: Dockerfile
     image: axn-term-host
     scale: 0
@@ -197,6 +217,9 @@ services:
       - ${AXN_GW_PORT:-18094}:${AXN_GW_PORT:-18094}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # fixed dev certs — `tls {$AXN_TLS}` points here, so the chain never
+      # rotates across restarts/rebuilds and one-time CA trust suffices
+      - ${AXN_CERT_DIR:-./certs}:/certs:ro
       # persist /data so the internal CA (and issued certs) survive
       # container recreation — otherwise every client must re-trust the CA
       - axn-term-online-caddy-data:/data
@@ -206,6 +229,7 @@ services:
       - AXN_TLS=${AXN_TLS:-off}
       - AXN_AUTO_HTTPS=${AXN_AUTO_HTTPS:-off}
       - AXN_LAN_IP=${AXN_LAN_IP:-localhost}
+      - AXN_LAN_NAME=${AXN_LAN_NAME:-axn-term.local}
       - AXN_KC_PORT=${AXN_KC_PORT:-18093}
       - AXN_GW_PORT=${AXN_GW_PORT:-18094}
     depends_on:
@@ -216,3 +240,4 @@ services:
 volumes:
   axn-term-online-node_modules:
   axn-term-online-caddy-data:
+  axn-term-online-keycloak-data:

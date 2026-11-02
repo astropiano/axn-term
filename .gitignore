@@ -45,3 +45,6 @@ apps/web/public/plugins.seed.yaml
 
 # Devin CLI local config (machine-specific permissions)
 .devin/*.local.json
+
+# Generated dev TLS certs (private keys must not be committed)
+scenarios/**/certs/

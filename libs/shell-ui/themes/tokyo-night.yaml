@@ -1,6 +1,7 @@
 # Tokyo Night (github.com/enkia/tokyo-night-vscode-theme). Bright black was
 # 1.9:1; it is lifted to 3.5:1. UI layers from Tokyo Night's sidebar and
 # highlight colours, accent blue.
+# Palette: Tokyo Night <https://github.com/enkia/tokyo-night-vscode-theme>, MIT. Copyright (c) 2018-present Enkia.
 # Adjusted for legibility (hue kept, lightness moved):
 #   brightBlack: #414868 -> #646F9E
 #   ui.textSecondary: #787C99 -> #7B7F9B

@@ -9,6 +9,7 @@ import { usePluginSettings } from '../PluginSettingsProvider';
 import { WorkspacePicker } from '../../WorkspacePicker';
 import { axnLog } from '../log';
 import { promptArg, shellQuote, shellWord } from '../../shellQuote';
+import { shellTokens } from '../shellCommandSupport';
 import { forgeOfRemote } from './forge';
 import { pickFromList } from '../pickerHost';
 import { resolvePersona, agentLauncherFor } from './agentRegistry';
@@ -799,27 +800,184 @@ export async function agentLaunchLine(
 /**
  * Substitute {{placeholder}}s in a `command:` step template for the shell.
  * Values come from places an attacker can reach — MR titles/branches, the
- * `axn-workflow-var[<token>]:` output marker, card fields — so each one goes in as a
- * single shell word (`shellWord`: plain values stay bare, anything else is
- * single-quoted), never as raw shell text. Quotes the author already put
- * around a placeholder (`"{{x}}"`, `'{{x}}'`) are replaced rather than
- * nested. `rawKeys` (the base64 `{{prompt}}` word from promptArg) are
- * inserted as-is — they are already safe shell words.
+ * `axn-workflow-var[<token>]:` output marker, card fields — so each one goes
+ * in as a single shell word (`shellWord`: plain values stay bare, anything
+ * else is single-quoted), never as raw shell text. The template is scanned
+ * for its quoting so the word works wherever the placeholder sits: inside
+ * "…" or '…' the string is closed around it (`"fix: "'v'""`), and a
+ * placeholder that is the whole quoted string (`"{{x}}"`) just replaces it.
+ * Inside a comment it goes in on one line; in places a word cannot be
+ * spliced safely (backticks, `${…}`, `$((…))`, `$'…'`, heredocs) rendering
+ * throws. `rawKeys` (the base64 `{{prompt}}` word from promptArg) are
+ * already safe shell words and get the same treatment without shellWord.
  */
 export function renderCommandTemplate(
   template: string,
   vars: Record<string, string>,
   rawKeys: readonly string[] = [],
 ): string {
-  return template.replace(
-    /(["']?)\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}\1/g,
-    (m, _quote: string, key: string) => {
+  type Kind = 'plain' | 'cmd' | 'dq' | 'sq' | 'ansi' | 'bt' | 'param' | 'arith' | 'comment';
+  // quoting context stack; `start` = index in `out` of the opening quote,
+  // `depth` = open parens/braces for cmd/param/arith
+  const stack: Array<{ kind: Kind; start: number; depth: number }> = [
+    { kind: 'plain', start: -1, depth: 0 },
+  ];
+  const top = () => stack[stack.length - 1];
+  const push = (kind: Kind, open: string, depth = 0) => {
+    stack.push({ kind, start: out.length, depth });
+    out += open;
+  };
+  const placeholder = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/y;
+  let out = '';
+  let heredoc: 'none' | 'pending' | 'body' = 'none';
+  let i = 0;
+  // `$((`, `$(` or `${` at i: open the frame and advance
+  const openExpansion = (): boolean => {
+    if (template.startsWith('$((', i)) {
+      i += 3;
+      push('arith', '$((', 2);
+    } else if (template.startsWith('$(', i)) {
+      i += 2;
+      push('cmd', '$(', 1);
+    } else if (template.startsWith('${', i)) {
+      i += 2;
+      push('param', '${');
+    } else {
+      return false;
+    }
+    return true;
+  };
+  while (i < template.length) {
+    placeholder.lastIndex = i;
+    const m = placeholder.exec(template);
+    if (m) {
+      i += m[0].length;
+      const key = m[1];
       const value = vars[key];
-      if (value === undefined) return m;
-      return rawKeys.includes(key) ? value : shellWord(value);
-    },
-  );
+      if (value === undefined) {
+        out += m[0];
+        continue;
+      }
+      const word = rawKeys.includes(key) ? value : shellWord(value);
+      const f = top();
+      if (heredoc === 'body' || !['plain', 'cmd', 'dq', 'sq', 'comment'].includes(f.kind)) {
+        throw new Error(`{{${key}}} cannot be used inside ${heredoc === 'body' ? 'a heredoc' : CONTEXT_NAME[f.kind]}`);
+      } else if (f.kind === 'comment') {
+        out += value.replace(/[\r\n]+/g, ' ');
+      } else if (f.kind === 'dq' || f.kind === 'sq') {
+        const q = f.kind === 'dq' ? '"' : "'";
+        if (f.start === out.length - 1 && template[i] === q) {
+          // the placeholder is the whole quoted string: drop the quotes
+          out = out.slice(0, -1) + word;
+          stack.pop();
+          i++;
+        } else {
+          out += q + word + q;
+        }
+      } else {
+        out += word;
+      }
+      continue;
+    }
+    const c = template[i];
+    const f = top();
+    const two = template.slice(i, i + 2);
+    switch (f.kind) {
+      case 'sq':
+        out += c;
+        i++;
+        if (c === "'") stack.pop();
+        continue;
+      case 'ansi':
+      case 'bt':
+        if (c === '\\') {
+          out += two;
+          i += 2;
+          continue;
+        }
+        out += c;
+        i++;
+        if (c === (f.kind === 'bt' ? '`' : "'")) stack.pop();
+        continue;
+      case 'comment':
+        if (c === '\n') {
+          stack.pop();
+          continue;
+        }
+        out += c;
+        i++;
+        continue;
+      case 'arith':
+        out += c;
+        i++;
+        if (c === '(') f.depth++;
+        else if (c === ')' && --f.depth === 0) stack.pop();
+        continue;
+      case 'dq':
+        if (c === '\\') {
+          const n = /^[$`"\\\n]$/.test(template[i + 1] ?? '') ? 2 : 1;
+          out += template.slice(i, i + n);
+          i += n;
+        } else if (c === '"') {
+          out += c;
+          i++;
+          stack.pop();
+        } else if (c === '`') {
+          i++;
+          push('bt', c);
+        } else if (c === '$' && openExpansion()) {
+          // handled
+        } else {
+          out += c;
+          i++;
+        }
+        continue;
+      default: {
+        // plain, cmd, param: unquoted shell text
+        if (c === '\\') {
+          out += two;
+          i += 2;
+        } else if (c === "'") {
+          i++;
+          push('sq', c);
+        } else if (c === '"') {
+          i++;
+          push('dq', c);
+        } else if (c === '`') {
+          i++;
+          push('bt', c);
+        } else if (two === "$'") {
+          i += 2;
+          push('ansi', two);
+        } else if (c === '$' && openExpansion()) {
+          // handled
+        } else if (c === '#' && f.kind !== 'param' && /^$|[\s;&|()<>]$/.test(template[i - 1] ?? '')) {
+          i++;
+          push('comment', c);
+        } else {
+          if (f.kind === 'cmd' && c === '(') f.depth++;
+          else if (f.kind === 'cmd' && c === ')' && --f.depth === 0) stack.pop();
+          else if (f.kind === 'param' && c === '}') stack.pop();
+          if (heredoc === 'none' && f.kind !== 'param' && two === '<<' && template[i + 2] !== '<' && template[i - 1] !== '<') {
+            heredoc = 'pending';
+          } else if (heredoc === 'pending' && c === '\n') {
+            heredoc = 'body';
+          }
+          out += c;
+          i++;
+        }
+      }
+    }
+  }
+  return out;
 }
+
+const CONTEXT_NAME: Record<string, string> = {
+  ansi: "$'…'",
+  bt: 'backticks',
+  param: '${…}',
+  arith: '$((…))',
+};
 
 /** Substitute {{placeholder}}s in prompt text (no shell involved). */
 export function renderTemplate(
@@ -1596,13 +1754,7 @@ function scheduleReconcile(ctx: Ctx): void {
 const echo = (msg: string) => `echo ${JSON.stringify(msg)}`;
 
 /** Shell-ish tokenizer for command args — honours single/double quotes. */
-export function shellTokens(arg: string): string[] {
-  const out: string[] = [];
-  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(arg))) out.push(m[1] ?? m[2] ?? m[3]);
-  return out;
-}
+export { shellTokens };
 
 /**
  * Parse `axn-workflow-start <wf>` trailing args into var values: `key=value`
@@ -2390,7 +2542,7 @@ function DevWorkflowView({
                           </div>
                           {session?.summary && (
                             <div
-                              className="truncate text-[10px] text-[var(--text-secondary)]"
+                              className="line-clamp-3 whitespace-pre-line break-words text-[10px] text-[var(--text-secondary)]"
                               data-tip={session.summary}
                             >
                               {session.summary}
@@ -2710,7 +2862,13 @@ export const devWorkflowPlugin: SessionViewPlugin = {
         // to /exit), so a shell action can be returned as the replacement
         // line — the user sees the real command, including its check trailer.
         if ((action.runIn ?? 'shell') === 'shell') {
-          const cmd = await actionCommand(ctx, def, action, bound.state);
+          let cmd: string | undefined;
+          try {
+            cmd = await actionCommand(ctx, def, action, bound.state);
+          } catch (e) {
+            const msg = String(e instanceof Error ? e.message : e).split('\n')[0].slice(0, 300);
+            return `echo ${shellQuote(`axn-workflow-run: ${msg}`)}`;
+          }
           if (!cmd) return echo(`axn-workflow-run: nothing to run for '${action.name}'`);
           if (action.command) {
             recordCheck(ctx, def, bound.state, action.name, {

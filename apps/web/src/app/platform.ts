@@ -34,7 +34,10 @@ function pickTextFile(accept: string): Promise<string | null> {
  * workspace sets, no window lifecycle (the browser tab owns that), no
  * external `.mjs` plugin loading.
  */
-export function browserPlatform(username: string | null): ShellPlatform {
+export function browserPlatform(
+  username: string | null,
+  signOut?: () => void,
+): ShellPlatform {
   const queryLocalFonts = (window as unknown as {
     queryLocalFonts?: () => Promise<{ family: string }[]>;
   }).queryLocalFonts;
@@ -51,6 +54,7 @@ export function browserPlatform(username: string | null): ShellPlatform {
 
   return {
     ...(listFonts ? { listFonts } : {}),
+    ...(signOut ? { signOut } : {}),
     homeDir: () => Promise.resolve(username ? `/home/${username}` : '/'),
     emitLog: (level: LogLevel, target: string, message: string) => {
       const fn = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'debug';

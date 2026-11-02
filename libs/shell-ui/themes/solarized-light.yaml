@@ -1,6 +1,7 @@
 # Solarized Light (ethanschoonover.com/solarized). Green, yellow and cyan
 # were at or under 3:1 on base3; they are darkened within their hue. Foreground
 # nudged to 6:1; secondary UI text was base1 (2.4:1) and is darkened.
+# Palette: Solarized <https://github.com/altercation/solarized>, MIT. Copyright (c) 2011 Ethan Schoonover.
 # Adjusted for legibility (hue kept, lightness moved):
 #   foreground: #657B83 -> #4F6066
 #   red: #DC322F -> #DA2825

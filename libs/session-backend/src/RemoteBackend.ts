@@ -1,6 +1,6 @@
 import { RamphastosSession, RamphastosStream } from '@ramphastos/ramphastos-client';
 import { answerControl } from './types.ts';
-import { listRemoteSessions, scopeSessionId } from './remoteScope.ts';
+import { listRemoteSessions, scopeSessionId, type RemoteSessionInfo } from './remoteScope.ts';
 import type {
   ControlCommandHandler,
   DirEntry,
@@ -41,6 +41,38 @@ export interface RemoteBackendOptions {
 interface PtyEntry {
   stream?: RamphastosStream;
   intentionalClose?: boolean;
+  /** Stream closed because the tab was hidden — re-pull when shown. */
+  released?: boolean;
+  /** Stream died with the transport — re-pull on the next session. */
+  lost?: boolean;
+  /** Tail replay + stream re-pull in flight. */
+  reacquiring?: boolean;
+}
+
+/** RIS — clears screen and scrollback before a re-acquire replays the tail. */
+const RESET = '\x1bc';
+
+/** A connect attempt overtaken by chooseSession/disconnect. */
+class SupersededError extends Error {
+  constructor() {
+    super('remote connect superseded');
+  }
+}
+
+/** Per-device viewer identity — stable across reloads (localStorage) so a
+ *  refreshed page reattaches as the same roster/claims entry instead of
+ *  ghosting the roster with a new id every load. */
+function loadViewerId(): string {
+  const KEY = 'axn-term:viewer-id';
+  try {
+    const existing = localStorage.getItem(KEY);
+    if (existing) return existing;
+    const id = crypto.randomUUID();
+    localStorage.setItem(KEY, id);
+    return id;
+  } catch {
+    return crypto.randomUUID();
+  }
 }
 
 /**
@@ -70,9 +102,17 @@ export class RemoteBackend implements SessionBackend {
   private subshells = new Set<string>();
   private parents = new Map<string, string>();
   private remoteSpawned = new Set<string>();
-  /** This device's identity in the per-session width-claims collection. */
-  private viewerId = crypto.randomUUID();
+  /** This device's identity in the per-session width-claims/roster
+   *  collections — persisted so a page reload reattaches as the same
+   *  viewer instead of ghosting the roster with a fresh id each time. */
+  private viewerId = loadViewerId();
+  /** Liveness ping — the authority expires viewers that stop reporting. */
+  private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   private streamWaiters = new Map<string, { resolve: (s: RamphastosStream) => void; reject: (e: Error) => void }[]>();
+  /** pty id → session a pull is running on (one pull per id per session). */
+  private pulls = new Map<string, RamphastosSession>();
+  /** Bumped by chooseSession/disconnect — an older attempt is dropped. */
+  private connectGen = 0;
 
   private opts: RemoteBackendOptions;
 
@@ -102,6 +142,7 @@ export class RemoteBackend implements SessionBackend {
 
   private consoleCbs = new Set<() => void>();
   private consoleUnsub: (() => void) | undefined;
+  private consoleSession: RamphastosSession | undefined;
   private consoleSnapshot: RemoteConsoleSnapshot = {
     role: 'viewer', state: 'idle', ptys: [], claims: {},
   };
@@ -110,7 +151,7 @@ export class RemoteBackend implements SessionBackend {
   private reconnectAttempt = 0;
   private connErrorKind?: 'unreachable' | 'ws-broken';
   /** Mirrored sessions this account owns (filled by discovery). */
-  private availableSessions: string[] = [];
+  private availableSessions: RemoteSessionInfo[] = [];
 
   /**
    * Viewer-side read of the shared `/viewportClaims` + published ptys —
@@ -130,14 +171,27 @@ export class RemoteBackend implements SessionBackend {
   };
 
   private ensureConsoleFeed(): void {
-    if (this.consoleUnsub) return;
+    if (this.consoleSession && this.consoleSession === this.session) return;
     void this.connect().then((session) => {
-      if (this.consoleUnsub) return;
-      this.refreshConsole();
-      const unModel = session.onChange(() => this.refreshConsole());
-      const unState = session.onStateChange?.(() => this.refreshConsole()) ?? (() => {});
-      this.consoleUnsub = () => { unModel(); unState(); };
+      if (session === this.session && this.consoleCbs.size) this.bindConsole(session);
     }).catch(() => {});
+  }
+
+  /** Feed the console from `session` — rebinding drops the old feed. */
+  private bindConsole(session: RamphastosSession): void {
+    if (this.consoleSession === session) return;
+    this.unbindConsole();
+    this.consoleSession = session;
+    const unModel = session.onChange(() => this.refreshConsole());
+    const unState = session.onStateChange?.(() => this.refreshConsole()) ?? (() => {});
+    this.consoleUnsub = () => { unModel(); unState(); };
+    this.refreshConsole();
+  }
+
+  private unbindConsole(): void {
+    this.consoleUnsub?.();
+    this.consoleUnsub = undefined;
+    this.consoleSession = undefined;
   }
 
   private refreshConsole(): void {
@@ -165,8 +219,11 @@ export class RemoteBackend implements SessionBackend {
       paused: this.viewportPaused,
       errorKind: this.connErrorKind,
       retrying: this.reconnectTimer !== undefined,
-      sessions: this.availableSessions.length ? this.availableSessions : undefined,
+      sessions: this.availableSessions.length
+        ? this.availableSessions.map((s) => s.id)
+        : undefined,
       sessionId: session?.sessionId ?? this.opts.sessionId,
+      authorityUrl: this.opts.url,
     };
     for (const cb of this.consoleCbs) cb();
   }
@@ -212,9 +269,20 @@ export class RemoteBackend implements SessionBackend {
 
   /** Attach to a different mirrored session (console picker). */
   private chooseSession(id: string): void {
+    const old = this.session;
     this.opts.sessionId = id;
     this.session = undefined;
     this.connectPromise = undefined;
+    this.connectGen++;
+    // The old desktop's streams, waiters and queued input don't carry over.
+    this.dropStreams(false);
+    for (const [, waiters] of this.streamWaiters)
+      for (const w of waiters) w.reject(new Error('remote session switched'));
+    this.streamWaiters.clear();
+    this.pendingWrites.clear();
+    this.tailsFetched.clear();
+    this.unbindConsole();
+    if (old) void old.disconnect().catch(() => {});
     this.refreshConsole();
     void this.connect().then(() => this.refreshConsole()).catch(() => {
       this.refreshConsole();
@@ -223,73 +291,176 @@ export class RemoteBackend implements SessionBackend {
   }
 
   private async connect(): Promise<RamphastosSession> {
-    this.connectPromise ??= (async () => {
-      const token = await this.opts.getToken?.();
-      let url = this.opts.url;
-      // Browsers can't set WS headers — the gateway authorizes via the
-      // access_token query param; the token also rides hello.auth for
-      // endpoints that authorize at the envelope level.
-      if (token) url += `${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`;
-      // Discovery: no pinned session → ask the gateway which mirrored
-      // sessions this account owns; exactly one auto-attaches.
-      let sessionId = this.opts.sessionId;
-      if (!sessionId) {
-        this.availableSessions = await listRemoteSessions(this.opts.url, token)
-          .catch(() => []);
-        if (this.availableSessions.length === 1)
-          sessionId = this.availableSessions[0];
-      }
-      const session = await RamphastosSession.connect(url, {
-        auth: token,
-        role: this.opts.role ?? 'controller',
-        // Tenant-scoped: viewers attach to their own account's namespace.
-        sessionId: scopeSessionId(sessionId, token),
-        webSocketOnly: this.opts.webSocketOnly,
-      });
-      session.onStream((s) => this.handleStreamAnnounce(s));
-      // Streams announced during the handshake (host Attach declares
-      // pty:* before our onStream subscription lands) sit in
-      // session.streams unadopted — adopt them now so waitForStream
-      // finds them instead of timing out.
-      for (const s of session.streams.values()) this.handleStreamAnnounce(s);
-      this.session = session;
-      this.reconnectAttempt = 0;
-      this.connErrorKind = undefined;
-      void session.invoke('/vm/reportViewer', [
-        this.viewerId,
-        this.opts.viewerName ??
-          (typeof navigator !== 'undefined' ? `browser — ${navigator.platform}` : 'client'),
-        'web',
-      ]).catch(() => {});
-      // A dropped transport must not be reused — clear the cached promise
-      // so the next call reconnects (and re-fetches the token).
-      session.onStateChange?.((state) => {
-        if (state !== 'closed') return;
-        if (this.session === session) this.session = undefined;
-        this.connectPromise = undefined;
-        // The console feed was bound to the dead session — rebind on the
-        // next connect so subscribers keep seeing model changes.
-        this.consoleUnsub = undefined;
-        if (this.consoleCbs.size) this.ensureConsoleFeed();
-        this.refreshConsole();
-        this.scheduleReconnect();
-      });
-      return session;
-    })();
-    const s = await this.connectPromise;
+    if (!this.connectPromise) {
+      const gen = ++this.connectGen;
+      this.connectPromise = this.openSession(gen);
+    }
+    const p = this.connectPromise;
+    let s: RamphastosSession;
+    try {
+      s = await p;
+    } catch (e) {
+      // A failed attempt must not stick — otherwise every later connect()
+      // returns this same cached rejection and no retry ever reaches the
+      // network: one denied hello (expired JWT, gateway restart) would
+      // brick the backend until a full page reload.
+      if (this.connectPromise === p) this.connectPromise = undefined;
+      // Overtaken by chooseSession — follow the newer attempt.
+      if (e instanceof SupersededError && this.connectPromise) return this.connect();
+      throw e;
+    }
     if (s.state === 'closed') {
       // Race: the session died between resolve and return — retry once
       // with a fresh connection rather than handing back a corpse.
-      this.connectPromise = undefined;
-      this.session = undefined;
+      if (this.connectPromise === p) this.connectPromise = undefined;
+      if (this.session === s) this.session = undefined;
       return this.connect();
     }
     return s;
   }
 
+  private async openSession(gen: number): Promise<RamphastosSession> {
+    const token = await this.opts.getToken?.();
+    let url = this.opts.url;
+    // Browsers can't set WS headers — the gateway authorizes via the
+    // access_token query param; the token also rides hello.auth for
+    // endpoints that authorize at the envelope level.
+    if (token) url += `${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`;
+    // Discovery is server-side truth for "which mode am I": the account's
+    // mirrored desktops always refresh the picker list — even when this
+    // attach is pinned (chooseSession can switch live). An unpinned
+    // attach has nothing to fall back to, so its lookup failures surface
+    // the real fetch/CORS/HTTP cause instead of 'no sessions'.
+    let sessionId = this.opts.sessionId;
+    try {
+      this.availableSessions = await listRemoteSessions(this.opts.url, token);
+    } catch (e) {
+      if (!sessionId)
+        throw new Error(
+          `remote session discovery failed: ${e instanceof Error ? e.message : e}`,
+        );
+    }
+    // Prefer a live authority — offline mirrors stay listed (the
+    // desktop may return) but attaching to a dead one fails every
+    // stream open with authority_offline.
+    sessionId ??= this.availableSessions.find((s) => s.online)?.id
+      ?? this.availableSessions[0]?.id;
+    if (!sessionId) {
+      // Not terminal — 'no mirror yet' is a pending state: keep polling
+      // on the reconnect backoff so a desktop publishing later attaches
+      // on its own, while this attempt still reports the honest reason.
+      this.scheduleReconnect();
+      throw new Error(
+        'no mirrored sessions for this account — is the desktop remote-enabled and signed in?',
+      );
+    }
+    const session = await RamphastosSession.connect(url, {
+      auth: token,
+      role: this.opts.role ?? 'controller',
+      // Tenant-scoped: viewers attach to their own account's namespace.
+      sessionId: scopeSessionId(sessionId, token),
+      webSocketOnly: this.opts.webSocketOnly,
+    });
+    if (gen !== this.connectGen) {
+      // chooseSession/disconnect ran meanwhile — don't leak this one.
+      void session.disconnect().catch(() => {});
+      throw new SupersededError();
+    }
+    session.onStream((s) => this.handleStreamAnnounce(s, session));
+    // Streams announced during the handshake (host Attach declares
+    // pty:* before our onStream subscription lands) sit in
+    // session.streams unadopted — adopt them now so waitForStream
+    // finds them instead of timing out.
+    for (const s of session.streams.values()) this.handleStreamAnnounce(s, session);
+    this.session = session;
+    this.reconnectAttempt = 0;
+    this.connErrorKind = undefined;
+    const report = () =>
+      void this.session?.invoke('/vm/reportViewer', [
+        this.viewerId,
+        this.opts.viewerName ??
+          (typeof navigator !== 'undefined' ? `browser — ${navigator.platform}` : 'client'),
+        'web',
+      ]).catch(() => {});
+    report();
+    // Heartbeat — the authority expires roster entries/claims that go
+    // stale, so the client count tracks actually-live devices. Without
+    // this a dead conn ghosts the roster forever.
+    this.heartbeatTimer ??= setInterval(report, 10_000);
+    // A dropped transport must not be reused — clear the cached promise
+    // so the next call reconnects (and re-fetches the token). Only the
+    // current session may touch shared state: a replaced one (picker
+    // switch, disconnect) closing late must not kill the new one.
+    session.onStateChange?.((state) => {
+      if (this.session !== session) return;
+      if (state === 'ready') {
+        // Back from 'reconnecting' — send input queued meanwhile.
+        this.flushPending();
+        return;
+      }
+      if (state !== 'closed') return;
+      this.session = undefined;
+      this.connectPromise = undefined;
+      // Stop pinging a dead session — the next connect() reports again.
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+      // The library keeps dead streams open on transport loss — drop them
+      // so the next session re-pulls instead of writing into the old conn.
+      this.dropStreams(true);
+      // The console feed rebinds when the next session connects.
+      this.unbindConsole();
+      this.refreshConsole();
+      this.scheduleReconnect();
+    });
+    if (this.consoleCbs.size) this.bindConsole(session);
+    this.resumeStreams(session);
+    return session;
+  }
+
+  /** Forget every pty stream ref; `lost` marks live ones for re-pull. */
+  private dropStreams(lost: boolean): void {
+    for (const entry of this.ptys.values()) {
+      if (!entry.stream) continue;
+      delete entry.stream;
+      if (lost && !entry.released) entry.lost = true;
+    }
+    this.pulls.clear();
+    this.controlStream = undefined;
+  }
+
+  /** New session: re-pull what the old one carried or was waiting for. */
+  private resumeStreams(session: RamphastosSession): void {
+    const lost = [...this.ptys].filter(([, e]) => e.lost).map(([id]) => id);
+    if (session.vmType !== 'client') {
+      // Server-authoritative hosts re-announce pty streams on attach.
+      for (const id of lost) delete this.ptys.get(id)!.lost;
+      return;
+    }
+    for (const id of lost) this.reacquire(id);
+    for (const id of this.streamWaiters.keys()) {
+      if (!this.ptys.get(id)?.reacquiring && this.pulls.get(id) !== session) this.pullStream(id);
+    }
+    for (const id of this.pendingWrites.keys()) {
+      if (!this.streamWaiters.has(id) && !this.ptys.get(id)?.reacquiring)
+        void this.waitForStream(id).catch(() => {});
+    }
+  }
+
+  /** Send input queued while the transport was reconnecting. */
+  private flushPending(): void {
+    for (const [id, queued] of this.pendingWrites) {
+      const stream = this.ptys.get(id)?.stream;
+      if (!stream || stream.closed) continue;
+      this.pendingWrites.delete(id);
+      for (const d of queued) stream.write(d);
+    }
+  }
+
   // ---- stream bookkeeping ----
 
-  private handleStreamAnnounce(stream: RamphastosStream): void {
+  private handleStreamAnnounce(stream: RamphastosStream, session: RamphastosSession): void {
+    // A replaced session's late announce must not displace live streams.
+    if (this.session && this.session !== session) return;
     if (stream.name === 'control') {
       this.adoptControlStream(stream);
       return;
@@ -343,6 +514,8 @@ export class RemoteBackend implements SessionBackend {
     // twice would double-wire onData/onClose.
     if (entry.stream === stream) return;
     entry.stream = stream;
+    delete entry.released;
+    delete entry.lost;
     this.ptys.set(id, entry);
 
     const waiters = this.streamWaiters.get(id);
@@ -357,11 +530,16 @@ export class RemoteBackend implements SessionBackend {
       for (const d of queued) stream.write(d);
     }
 
+    // A replaced stream (hidden, transport lost, re-pulled) is ignored.
+    const current = () => this.ptys.get(id)?.stream === stream;
     stream.onData((data) => {
+      if (!current()) return;
       for (const cb of this.outputListeners.get(id) ?? []) cb(data);
       for (const cb of this.anyOutputCbs) cb(id, data);
     });
-    stream.onClose((reason) => this.handleStreamClosed(id, reason));
+    stream.onClose((reason) => {
+      if (current()) this.handleStreamClosed(id, reason);
+    });
   }
 
   private handleStreamClosed(id: string, reason?: string): void {
@@ -387,18 +565,34 @@ export class RemoteBackend implements SessionBackend {
 
   private waitForStream(id: string): Promise<RamphastosStream> {
     const existing = this.ptys.get(id)?.stream;
-    if (existing) return Promise.resolve(existing);
+    // A CLOSED stream is no stream: the hub doesn't echo stream-close back
+    // to the closer, so entry.stream can hold a dead object — resolving it
+    // here would skip the re-pull and leave every write queued forever
+    // (the "typing on the phone does nothing" failure).
+    if (existing && !existing.closed) return Promise.resolve(existing);
     const promise = new Promise<RamphastosStream>((resolve, reject) => {
+      const waiter = {
+        resolve: (s: RamphastosStream) => { clearTimeout(timer); resolve(s); },
+        reject: (e: Error) => { clearTimeout(timer); reject(e); },
+      };
+      // A timed-out waiter leaves the list, so the next wait pulls again.
+      const timer = setTimeout(() => {
+        const list = this.streamWaiters.get(id);
+        const i = list?.indexOf(waiter) ?? -1;
+        if (i >= 0) list!.splice(i, 1);
+        if (list && !list.length) this.streamWaiters.delete(id);
+        reject(new Error(`stream pty:${id} never acquired`));
+      }, 10_000);
       const waiters = this.streamWaiters.get(id) ?? [];
-      waiters.push({ resolve, reject });
+      waiters.push(waiter);
       this.streamWaiters.set(id, waiters);
-      setTimeout(() => reject(new Error(`stream pty:${id} never acquired`)), 10_000);
     });
     // Authority-backed (client-authoritative) sessions are demand-driven:
     // nothing is announced until a client opens the stream — pull it.
     // Server-authoritative sessions announce pty:* streams eagerly, so a
     // pull there would create a second, idle stream — skip it.
-    if (this.session?.vmType === 'client' && this.streamWaiters.get(id)?.length === 1) {
+    const session = this.session;
+    if (session?.vmType === 'client' && this.pulls.get(id) !== session) {
       this.pullStream(id);
     }
     return promise;
@@ -411,12 +605,24 @@ export class RemoteBackend implements SessionBackend {
    * before giving up to the waiter's timeout.
    */
   private pullStream(id: string, attempt = 0): void {
-    this.session?.openStream(`pty:${id}@${this.viewerId}`, { direction: 'duplex' })
-      .then((s) => this.adoptStream(id, s))
+    const session = this.session;
+    if (!session) return;
+    this.pulls.set(id, session);
+    const done = () => {
+      if (this.pulls.get(id) === session) this.pulls.delete(id);
+    };
+    session.openStream(`pty:${id}@${this.viewerId}`, { direction: 'duplex' })
+      .then((s) => {
+        done();
+        // Session replaced meanwhile — resumeStreams pulls on the new one.
+        if (this.session === session) this.adoptStream(id, s);
+      })
       .catch((e) => {
+        if (this.session !== session) return done();
         if (attempt < 5 && this.streamWaiters.has(id) && !this.ptys.get(id)?.stream) {
           setTimeout(() => this.pullStream(id, attempt + 1), 250);
         } else {
+          done();
           console.error(`[remote] openStream pty:${id} failed`, e);
         }
       });
@@ -444,14 +650,32 @@ export class RemoteBackend implements SessionBackend {
   }
 
   write(clientId: string, data: string): void {
-    const stream = this.ptys.get(clientId)?.stream;
-    if (stream && !stream.closed) { stream.write(data); return; }
+    const entry = this.ptys.get(clientId);
+    const stream = entry?.stream && !entry.stream.closed ? entry.stream : undefined;
+    const reconnecting = this.session?.state === 'reconnecting';
+    if (stream && !reconnecting) {
+      try {
+        stream.write(data);
+        return;
+      } catch (e) {
+        console.warn(`[remote] write to pty:${clientId} failed — re-pulling`, e);
+        delete entry!.stream;
+      }
+    }
     // Stream not adopted yet (attach in flight / reconnect) — queue instead
     // of dropping the keystroke.
     const q = this.pendingWrites.get(clientId) ?? [];
     q.push(data);
     this.pendingWrites.set(clientId, q);
-    void this.waitForStream(clientId).catch(() => {});
+    // Reconnecting in place: flushed when the session is ready again.
+    if (stream && reconnecting) return;
+    if (entry?.released || entry?.lost) {
+      this.reacquire(clientId);
+    } else if (!entry?.reacquiring) {
+      void this.waitForStream(clientId).catch((e: Error) =>
+        console.warn(`[remote] input for pty:${clientId} stays queued: ${e.message}`),
+      );
+    }
   }
 
   private lastCols = 0;
@@ -468,14 +692,39 @@ export class RemoteBackend implements SessionBackend {
     // the authority recomputes the session's effective (smallest) size.
     void this.session?.invoke('/vm/unclaimViewport', [clientId, this.viewerId]);
     if (this.remoteSpawned.has(clientId)) return;
+    // Only pull-based (client-authoritative) streams can be re-acquired.
+    if (this.session?.vmType !== 'client') return;
     const entry = this.ptys.get(clientId);
     const s = entry?.stream;
-    if (!s) return;
-    delete entry!.stream;
+    if (!entry || !s) return;
+    delete entry.stream;
+    entry.released = true;
     s.close('hidden');
   }
 
+  /**
+   * Re-pull a released/lost stream: replay the tail first (with a reset,
+   * the terminal still shows the stale screen), then open the stream.
+   */
+  private reacquire(clientId: string): void {
+    const entry = this.ptys.get(clientId);
+    if (!entry || entry.reacquiring) return;
+    delete entry.released;
+    delete entry.lost;
+    entry.reacquiring = true;
+    this.tailsFetched.add(clientId);
+    void this.fetchTail(clientId, true)
+      .catch((e) => console.error(`[remote] ptyTail ${clientId} failed`, e))
+      .then(() => this.ensureStream(clientId))
+      .catch(() => {})
+      .finally(() => {
+        entry.reacquiring = false;
+      });
+  }
+
   resize(clientId: string, cols: number, rows: number): void {
+    // Shown again after releasePty — get the live stream back.
+    if (this.ptys.get(clientId)?.released) this.reacquire(clientId);
     this.lastCols = cols;
     this.lastRows = rows;
     if (this.viewportPaused) return;
@@ -508,19 +757,34 @@ export class RemoteBackend implements SessionBackend {
     let set = this.outputListeners.get(clientId);
     if (!set) this.outputListeners.set(clientId, (set = new Set()));
     set.add(cb);
+    const entry = this.ptys.get(clientId);
+    if (entry?.released || entry?.lost) {
+      // Re-attach after a hide/drop — fresh tail + stream.
+      this.reacquire(clientId);
+      return () => set.delete(cb);
+    }
     // Late attach: replay the server-side tail so a pre-existing PTY paints
-    // its scrollback before live frames (streams carry no history).
+    // its scrollback before live frames (streams carry no history). The
+    // stream open is sequenced AFTER the tail — firing both concurrently
+    // lets live frames paint first and the snapshot land on top, which
+    // freezes the dumped screen and duplicates its overlapping lines.
+    const openStream = () => {
+      // Attaching to a pre-existing PTY on an authority session: no stream
+      // was ever announced — pull it so the listener actually gets data.
+      if (!this.ptys.get(clientId)?.stream)
+        void this.ensureStream(clientId).catch(() => {});
+    };
     if (!this.tailsFetched.has(clientId)) {
       this.tailsFetched.add(clientId);
-      void this.fetchTail(clientId).catch((e) => {
-        console.error(`[remote] ptyTail ${clientId} failed`, e);
-        this.tailsFetched.delete(clientId);
-      });
+      void this.fetchTail(clientId)
+        .catch((e) => {
+          console.error(`[remote] ptyTail ${clientId} failed`, e);
+          this.tailsFetched.delete(clientId);
+        })
+        .finally(openStream);
+    } else {
+      openStream();
     }
-    // Attaching to a pre-existing PTY on an authority session: no stream
-    // was ever announced — pull it so the listener actually gets data.
-    if (!this.ptys.get(clientId)?.stream)
-      void this.ensureStream(clientId).catch(() => {});
     return () => set.delete(cb);
   }
 
@@ -529,12 +793,12 @@ export class RemoteBackend implements SessionBackend {
    * the hub session is still connecting — an immediate invoke would reject
    * with 'not connected' and the replay would never happen (black terminal).
    */
-  private async fetchTail(clientId: string): Promise<void> {
+  private async fetchTail(clientId: string, reset = false): Promise<void> {
     const session = await this.connect();
     const r = await invoke(session, 'ptyTail', clientId);
     const b64 = r.data as string | undefined;
     if (!b64) return;
-    const bin = atob(b64);
+    const bin = (reset ? RESET : '') + atob(b64);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     for (const l of this.outputListeners.get(clientId) ?? []) l(bytes);
@@ -735,10 +999,20 @@ export class RemoteBackend implements SessionBackend {
 
   /** Drop the connection (all PTYs detach — the remote side keeps running). */
   async disconnect(): Promise<void> {
-    await this.session?.disconnect();
+    clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = undefined;
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
+    // Detach first: the session's own 'closed' event must not reconnect.
+    const session = this.session;
     this.session = undefined;
     this.connectPromise = undefined;
+    this.connectGen++;
+    this.unbindConsole();
     this.ptys.clear();
+    this.pulls.clear();
+    this.tailsFetched.clear();
+    await session?.disconnect();
   }
 }
 

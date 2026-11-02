@@ -1,6 +1,7 @@
 # Kanagawa Wave (github.com/rebelot/kanagawa.nvim). Sumi ink backgrounds,
 # Fuji white text. Autumn red and autumn green were under 4.5:1 on sumiInk3;
 # they are lifted.
+# Palette: Kanagawa <https://github.com/rebelot/kanagawa.nvim>, MIT. Copyright (c) 2021 Tommaso Laurenzi.
 # Adjusted for legibility (hue kept, lightness moved):
 #   red: #C34043 -> #CF6769
 #   brightBlack: #727169 -> #76756D

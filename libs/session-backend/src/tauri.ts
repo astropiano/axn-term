@@ -9,6 +9,7 @@ import {
   watch,
   writeTextFile,
 } from '@tauri-apps/plugin-fs';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   isPermissionGranted,
@@ -54,6 +55,7 @@ export function parseOutputFrame(frame: ArrayBuffer | Uint8Array): { sessionId: 
 
 /** SessionBackend over Tauri commands/events — used by the desktop app. */
 export class TauriBackend implements SessionBackend {
+  readonly localFiles = true;
   private outputCbs = new Map<string, Set<(data: Uint8Array) => void>>();
   private anyOutputCbs = new Set<(sessionId: string, data: Uint8Array) => void>();
   private outputChannel: Channel<ArrayBuffer> | null = null;
@@ -119,6 +121,10 @@ export class TauriBackend implements SessionBackend {
 
   write(sessionId: string, data: string): void {
     invoke('write_session', { sessionId, data }).catch(() => {});
+  }
+
+  writeWhenRaw(sessionId: string, data: string): void {
+    invoke('write_when_raw', { sessionId, data }).catch(() => {});
   }
 
   resize(sessionId: string, cols: number, rows: number): void {
@@ -208,6 +214,13 @@ export class TauriBackend implements SessionBackend {
     return new Uint8Array(await readBinaryFile(path));
   }
 
+  saveDroppedFile(_sessionId: string, name: string, bytes: Uint8Array): Promise<string> {
+    // Raw IPC body (no JSON/base64 copy of the bytes); the name rides in a header.
+    return invoke<string>('save_dropped_file', bytes, {
+      headers: { 'x-file-name': encodeURIComponent(name) },
+    });
+  }
+
   watchDir(_sessionId: string, path: string, cb: () => void): Promise<Unsubscribe> {
     return watch(path, cb, { delayMs: 250 });
   }
@@ -281,6 +294,12 @@ export const tauriServices: ShellServices = {
         // notifications unavailable — ignore
       }
     })();
+  },
+  onFileDrop: (cb) => {
+    const unlisten = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === 'drop' && event.payload.paths.length) cb(event.payload.paths);
+    });
+    return () => void unlisten.then((off) => off()).catch(() => {});
   },
 };
 

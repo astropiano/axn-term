@@ -1,7 +1,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 
-namespace Astropiano.AxnTerm.Gateway;
+namespace AxnTerm.Gateway;
 
 /// <summary>
 /// Per-container shared secret between the gateway and a session host.

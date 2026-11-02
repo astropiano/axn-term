@@ -26,6 +26,8 @@ interface WorktreesSettings {
   agents?: string;
   /** Agent command used by "New worktree with agent". */
   defaultAgent?: string;
+  /** Agent asked to suggest a worktree name for an MR (`<agent> -p <prompt>`). */
+  nameAgent?: string;
   /** Parent dir for new worktrees (default: `<repo-parent>/worktrees`). */
   worktreeRoot?: string;
   /** Raise the "agent in main checkout" banner. */
@@ -262,6 +264,14 @@ export const worktreesPlugin: SessionViewPlugin = {
   defaultEnabled: false,
   settings: [
     {
+      key: 'nameAgent',
+      label: 'Worktree name agent',
+      description:
+        'Agent command asked to suggest a worktree name for an MR (e.g. claude, devin — run as `<agent> -p <prompt>`). Empty derives it from the MR reference.',
+      type: 'string',
+      default: '',
+    },
+    {
       key: 'agents',
       label: 'Agent process names',
       description:
@@ -345,6 +355,42 @@ export const worktreesPlugin: SessionViewPlugin = {
       if (fresh.dismissed || fresh.worktree) return;
       raiseIsolationBanner(ctx, agent);
     });
+  },
+
+  /**
+   * `mr-worktree` (declared by the gh/glab MR-watch flags): create a
+   * worktree for the flagged MR and open a session in it. The flag's ctx is
+   * bound to the session that raised it — its repo.root is the repo.
+   */
+  onAttentionAction: (ctx, actionId, attention) => {
+    if (actionId !== 'mr-worktree') return;
+    const payload = (attention.data as
+      | { mr?: { reference?: string; iid?: number; title?: string }
+          pr?: { reference?: string; number?: number; title?: string } }
+      | undefined);
+    const mr = payload?.mr ?? payload?.pr;
+    if (!mr) return;
+    const ref = mr.reference ?? `mr-${(mr as { iid?: number; number?: number }).iid ?? (mr as { number?: number }).number ?? '?'}`;
+    void (async () => {
+      const root = ctx.session.repo?.root ?? (await resolveRepoRoot(ctx));
+      if (!root) {
+        ctx.setBanner({ level: 'error', message: 'worktrees: not inside a git repository' });
+        return;
+      }
+      let name = `${ref.replace(/^[!#]/, '')}-${slugify(mr.title ?? '')}`;
+      const agent = settingsOf(ctx).nameAgent?.trim();
+      if (agent) {
+        const suggestion = await ctx
+          .exec(
+            `${agent} -p "reply with only a short kebab-case git branch slug for merge request ${ref}: ${(mr.title ?? '').replace(/"/g, '')}"`,
+            root,
+          )
+          .then((out) => slugify(out.split('\n')[0] ?? ''))
+          .catch(() => '');
+        if (suggestion) name = `${ref.replace(/^[!#]/, '')}-${suggestion}`;
+      }
+      await createWorktreeSession(ctx, root, name);
+    })();
   },
 
   onBannerAction: (ctx, actionId) => {

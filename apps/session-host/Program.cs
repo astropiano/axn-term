@@ -1,4 +1,4 @@
-using Astropiano.AxnTerm.SessionHost;
+using AxnTerm.SessionHost;
 using Ramphastos.Server;
 
 var builder = WebApplication.CreateBuilder(args);

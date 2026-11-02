@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fragment, type CSSProperties } from 'react';
+import { useIconBag, resolveIcon, resolveProcessIcon, type IconBag } from './iconModel';
 import { ContextMenu } from '../ContextMenu';
-import { Plus, Save, FolderOpen, FolderCog, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow } from 'lucide-react';
+import { Plus, Save, FolderOpen, FolderCog, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText } from 'lucide-react';
 import { Trans, useLingui } from '@lingui/react/macro';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
@@ -20,6 +21,7 @@ import { ptyIdOf } from '../types';
 import type { RepoMenuItem, SessionViewPlugin } from './session-plugins/plugin';
 import type { TaskStateSnapshot } from './useAgentTasks';
 import { SetDefaultFolderModal } from './SetDefaultFolderModal';
+import { EditSessionSummaryModal } from './EditSessionSummaryModal';
 import { InvalidDefaultFolderModal } from './InvalidDefaultFolderModal';
 import {
   createDragExitTracker,
@@ -162,7 +164,15 @@ function Highlight({ text, query }: { text: string; query: string }) {
 }
 
 /** Panel-header filter input — sits right of the workspace buttons. */
-export function PanelSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function PanelSearch({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
   const { t } = useLingui();
   return (
     <div className="relative flex min-w-0 flex-1 items-center">
@@ -174,7 +184,7 @@ export function PanelSearch({ value, onChange }: { value: string; onChange: (v: 
         onKeyDown={(e) => {
           if (e.key === 'Escape') onChange('');
         }}
-        placeholder={t`Filter sessions…`}
+        placeholder={placeholder ?? t`Filter sessions…`}
         className="h-6 w-full min-w-0 rounded border border-[var(--border)] bg-[var(--bg)] pl-5 pr-5 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)] focus:border-[var(--accent)]"
       />
       {value && (
@@ -541,6 +551,8 @@ interface SessionContextMenuProps {
   onClose: () => void;
   onDuplicate: () => void;
   onRename: (name: string) => void;
+  /** Opens the summary editor modal. */
+  onEditSummary: () => void;
   /** Opens the "Move to workspace" picker; absent hides the row. */
   onRequestMove?: () => void;
   /** Moves the session into a new window; absent hides the row. */
@@ -561,6 +573,7 @@ function SessionContextMenu({
   onClose,
   onDuplicate,
   onRename,
+  onEditSummary,
   onRequestMove,
   onMoveToNewWindow,
   onSubShell,
@@ -686,6 +699,17 @@ function SessionContextMenu({
           Rename…
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => {
+          onClose();
+          onEditSummary();
+        }}
+        className={itemClass}
+      >
+        <FileText className="h-3.5 w-3.5 shrink-0" />
+        <Trans>Edit summary…</Trans>
+      </button>
       <button
         type="button"
         onClick={() => {
@@ -830,12 +854,6 @@ function toKebabCase(name: string): string {
     .toLowerCase();
 }
 
-function resolveSessionIcon(process?: string, sessionIcons?: Record<string, string>): string {
-  if (!process) return 'SquareTerminal';
-  const key = process.toLowerCase();
-  return sessionIcons?.[key] ?? 'SquareTerminal';
-}
-
 /** Render a sessionIcons value: a Lucide icon name or an inline SVG tag. */
 export function SessionIconGlyph({
   value,
@@ -898,6 +916,30 @@ export function SessionIconGlyph({
   return <IconComponent className={className} />;
 }
 
+export function resolvePluginIcon(plugin: { id: string; logo?: string }, bag: IconBag): string {
+  // Declaring `logo` is the has-an-icon capability: without it a plugin
+  // shows the generic Puzzle and the bag is not consulted.
+  if (plugin.logo === undefined) return 'Puzzle';
+  return resolveIcon(bag, plugin.id, plugin.logo);
+}
+
+/** A plugin's logo: `pluginIcons` override, else the declared `logo`, else a generic Puzzle. */
+export function PluginIcon({
+  plugin,
+  className = 'h-4 w-4 shrink-0',
+}: {
+  plugin: { id: string; logo?: string };
+  className?: string;
+}) {
+  const bag = useIconBag();
+  return (
+    <SessionIconGlyph
+      value={resolvePluginIcon(plugin, bag)}
+      className={className}
+    />
+  );
+}
+
 export function SessionIcon({
   process,
   className = 'h-4 w-4 shrink-0',
@@ -905,10 +947,10 @@ export function SessionIcon({
   process?: string;
   className?: string;
 }) {
-  const { settings } = useSettings();
+  const bag = useIconBag();
   return (
     <SessionIconGlyph
-      value={resolveSessionIcon(process, settings.sessionIcons)}
+      value={resolveProcessIcon(process, bag)}
       className={className}
     />
   );
@@ -988,6 +1030,11 @@ export function SessionItem({
   const { services } = useShellServices();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition>({ x: 0, y: 0 });
+  // Summary editor modal — `summaryWidth` snapshots the row's width so the
+  // modal's editing column wraps exactly like the panel's clamped render.
+  const [summaryEdit, setSummaryEdit] = useState(false);
+  const [summaryWidth, setSummaryWidth] = useState<number | undefined>(undefined);
+  const itemRef = useRef<HTMLDivElement>(null);
   const taskListRef = useRef<HTMLUListElement | null>(null);
   const [taskListMaxHeight, setTaskListMaxHeight] = useState<number | undefined>(undefined);
   const { pluginSettings } = usePluginSettings();
@@ -1034,14 +1081,15 @@ export function SessionItem({
   return (
     <>
       <div
+        ref={itemRef}
         onClick={onSelect}
         onDragOver={onDragOver}
         onDrop={onDrop}
         className={`relative mb-1 cursor-pointer rounded border transition ${
           isSelected
-            ? 'border-[var(--border)] border-l-0 bg-[var(--surface)] pl-px shadow-[inset_2px_0_0_var(--accent)]'
+            ? 'border-[var(--border)] border-l-0 bg-[var(--surface)] pl-px shadow-[inset_3px_0_0_var(--accent)]'
             : 'border-transparent hover:bg-[var(--surface)]'
-        }${isDragging ? ' opacity-40' : ''}${dropBefore ? ' shadow-[inset_0_2px_0_var(--accent)]' : ''}`}
+        }${isDragging ? ' opacity-40' : ''}${dropBefore ? ` before:absolute before:-top-px before:left-0 before:right-0 before:h-[3px] before:rounded-full before:bg-[var(--accent)] before:content-['']` : ''}`}
         data-tip={[session.name, ...rowTips].join('\n')}
       >
         <div
@@ -1105,7 +1153,7 @@ export function SessionItem({
 
         {session.summary && settings.sessionSummaries !== false && (
           <div
-            className="truncate px-2 pb-1.5 text-[11px] text-[var(--text-secondary)]"
+            className="line-clamp-3 whitespace-pre-line break-words px-2 pb-1.5 text-[11px] text-[var(--text-secondary)]"
             data-tip={session.summary}
           >
             {session.summary}
@@ -1148,7 +1196,9 @@ export function SessionItem({
                       <span className="inline-block w-4 shrink-0 select-none text-center text-[var(--text-secondary)]">
                         {task.status === 'completed' ? '✓' : '•'}
                       </span>
-                      <span className={task.status === 'completed' ? 'line-through text-[var(--text-secondary)]' : ''}>
+                      <span
+                        className={`min-w-0 break-words${task.status === 'completed' ? ' line-through text-[var(--text-secondary)]' : ''}`}
+                      >
                         {task.title}
                       </span>
                     </li>
@@ -1212,6 +1262,12 @@ export function SessionItem({
           })}
           onDuplicate={onDuplicate}
           onRename={onRename}
+          onEditSummary={() => {
+            // clientWidth excludes the row's border — exactly the width the
+            // summary element renders at.
+            setSummaryWidth(itemRef.current?.clientWidth);
+            setSummaryEdit(true);
+          }}
           onRequestMove={onRequestMove}
           onMoveToNewWindow={onMoveToNewWindow}
           onCloseSession={onCloseSession}
@@ -1246,6 +1302,17 @@ export function SessionItem({
               onOpenBrowser(session.id, cwd);
             })();
           }}
+        />
+      )}
+      {summaryEdit && (
+        <EditSessionSummaryModal
+          session={session}
+          width={summaryWidth}
+          onSave={(summary) => {
+            updateSession(session.id, { summary });
+            setSummaryEdit(false);
+          }}
+          onCancel={() => setSummaryEdit(false)}
         />
       )}
     </>

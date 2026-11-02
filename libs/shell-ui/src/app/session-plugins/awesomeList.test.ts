@@ -3,7 +3,14 @@ import type { ShellSession } from '../../types';
 import type { SessionViewContext, PluginApi } from './plugin';
 import { pluginCommands } from './plugin';
 import { bindAppRuntime } from '../appRuntime';
-import { isUrl, kindOf, readItems, awesomeListPlugin } from './awesomeList';
+import {
+  isUrl,
+  kindOf,
+  matchesQuery,
+  readItems,
+  splitCommandSpec,
+  awesomeListPlugin,
+} from './awesomeList';
 
 const statPath = vi.fn();
 bindAppRuntime({
@@ -51,21 +58,65 @@ describe('readItems', () => {
       { path: '/x' },
     ]);
   });
-  it('keeps id and label', () => {
-    const items = readItems({ items: [{ id: 'a', path: '/x', label: 'X' }] });
-    expect(items).toEqual([{ id: 'a', path: '/x', label: 'X' }]);
+  it('keeps id, label and command type', () => {
+    const items = readItems({
+      items: [
+        { id: 'a', path: '/x', label: 'X' },
+        { id: 'b', path: 'make test', type: 'command' },
+      ],
+    });
+    expect(items).toEqual([
+      { id: 'a', path: '/x', label: 'X' },
+      { id: 'b', path: 'make test', type: 'command' },
+    ]);
   });
 });
 
 describe('kindOf', () => {
   it('classifies urls before stat', () => {
-    expect(kindOf('https://x.dev', { path: '', isDir: true, isFile: false })).toBe('url');
+    expect(kindOf({ path: 'https://x.dev' }, { path: '', isDir: true, isFile: false })).toBe('url');
+  });
+  it('classifies commands before anything else', () => {
+    expect(kindOf({ path: 'make test', type: 'command' })).toBe('command');
+    expect(
+      kindOf({ path: 'https://x.dev', type: 'command' }, { path: '', isDir: false, isFile: true }),
+    ).toBe('command');
   });
   it('uses stat for paths', () => {
-    expect(kindOf('/d', { path: '/d', isDir: true, isFile: false })).toBe('dir');
-    expect(kindOf('/f', { path: '/f', isDir: false, isFile: true })).toBe('file');
-    expect(kindOf('/gone', null)).toBe('missing');
-    expect(kindOf('/gone')).toBe('missing');
+    expect(kindOf({ path: '/d' }, { path: '/d', isDir: true, isFile: false })).toBe('dir');
+    expect(kindOf({ path: '/f' }, { path: '/f', isDir: false, isFile: true })).toBe('file');
+    expect(kindOf({ path: '/gone' }, null)).toBe('missing');
+    expect(kindOf({ path: '/gone' })).toBe('missing');
+  });
+});
+
+describe('splitCommandSpec', () => {
+  it('returns the bare command', () => {
+    expect(splitCommandSpec('git status')).toEqual({ command: 'git status', label: undefined });
+    expect(splitCommandSpec('FOO=bar make test')).toEqual({
+      command: 'FOO=bar make test',
+      label: undefined,
+    });
+  });
+  it('splits an optional label on " = "', () => {
+    expect(splitCommandSpec('deploy = ./deploy.sh prod')).toEqual({
+      command: './deploy.sh prod',
+      label: 'deploy',
+    });
+  });
+  it('returns null for empty input', () => {
+    expect(splitCommandSpec('')).toBeNull();
+    expect(splitCommandSpec('   ')).toBeNull();
+  });
+});
+
+describe('matchesQuery', () => {
+  it('matches label and path, case-insensitive', () => {
+    expect(matchesQuery({ path: '/work/Proj' }, 'proj')).toBe(true);
+    expect(matchesQuery({ path: '/x', label: 'Deploy' }, 'dep')).toBe(true);
+    expect(matchesQuery({ path: 'make test', type: 'command' }, 'TEST')).toBe(true);
+    expect(matchesQuery({ path: '/x' }, 'nope')).toBe(false);
+    expect(matchesQuery({ path: '/x' }, '  ')).toBe(true);
   });
 });
 
@@ -79,15 +130,19 @@ describe('axn-awesome command', () => {
     }));
   });
 
-  it('ls prints a numbered list', async () => {
+  it('ls prints a numbered list, commands marked with $', async () => {
     const ctx = makeCtx({
       items: [
         { path: '/a', label: 'A' },
         { path: 'https://x.dev' },
+        { path: 'make test', type: 'command', label: 'test' },
+        { path: 'docker ps', type: 'command' },
       ],
     });
     const out = await awesome().run?.(ctx, 'ls', 'axn-awesome ls');
-    expect(out).toBe(`printf '%s\\n' '1. A — /a' '2. https://x.dev'`);
+    expect(out).toBe(
+      `printf '%s\\n' '1. A — /a' '2. https://x.dev' '3. test — $ make test' '4. $ docker ps'`,
+    );
   });
 
   it('add resolves paths via stat_path and merges app state', async () => {
@@ -113,6 +168,90 @@ describe('axn-awesome command', () => {
     expect(readItems(appData)).toEqual([
       { id: expect.any(String), path: 'https://x.dev', label: 'My Site' },
     ]);
+  });
+
+  it('cmd stores a command with optional label', async () => {
+    const appData: Record<string, unknown> = {};
+    await awesome().run?.(makeCtx(appData), 'cmd git status', 'axn-awesome cmd git status');
+    await awesome().run?.(
+      makeCtx(appData),
+      'cmd deploy = ./deploy.sh prod',
+      'axn-awesome cmd deploy = ./deploy.sh prod',
+    );
+    expect(readItems(appData)).toEqual([
+      { id: expect.any(String), path: 'git status', type: 'command', label: undefined },
+      { id: expect.any(String), path: './deploy.sh prod', type: 'command', label: 'deploy' },
+    ]);
+    expect(statPath).not.toHaveBeenCalled();
+  });
+
+  it('run replaces the typed line with the stored command', async () => {
+    const appData: Record<string, unknown> = {
+      items: [
+        { path: '/a' },
+        { path: 'make test', type: 'command', label: 'test' },
+      ],
+    };
+    const ctx = makeCtx(appData);
+    expect(await awesome().run?.(ctx, 'run 2', 'axn-awesome run 2')).toBe('make test');
+    expect(await awesome().run?.(ctx, 'run test', 'axn-awesome run test')).toBe('make test');
+    expect(readItems(appData)).toHaveLength(2);
+  });
+
+  it('run dispatches stored commands through runCommand when available', async () => {
+    const ctx = makeCtx({ items: [{ path: 'axn-git', type: 'command' }] });
+    // Swallowed by the dispatch (e.g. an axn-* command that handled itself).
+    ctx.runCommand = vi.fn(async () => false);
+    expect(await awesome().run?.(ctx, 'run 1', 'axn-awesome run 1')).toBe(false);
+    expect(ctx.runCommand).toHaveBeenCalledWith('axn-git');
+    // A replacement/feedback string from the dispatch is returned verbatim.
+    ctx.runCommand = vi.fn(async () => 'echo "hi"');
+    expect(await awesome().run?.(ctx, 'run 1', 'axn-awesome run 1')).toBe('echo "hi"');
+    // Pass-through — a plain command replaces the typed line as before.
+    ctx.runCommand = vi.fn(async () => undefined);
+    expect(await awesome().run?.(ctx, 'run 1', 'axn-awesome run 1')).toBe('axn-git');
+  });
+
+  it('completes subcommands and run/rm targets', async () => {
+    const ctx = makeCtx({
+      items: [
+        { path: '/a/b', label: 'Bee' },
+        { path: 'make test', type: 'command', label: 'test' },
+        { path: 'docker ps', type: 'command', label: 'two words' },
+      ],
+    });
+    const cmd = awesome();
+    expect(cmd.completeArg?.(ctx, '')).toEqual(['ls', 'add', 'cmd', 'run', 'rm']);
+    expect(cmd.completeArg?.(ctx, 'r')).toEqual(['run', 'rm']);
+    // run offers command items only — index and label.
+    expect(await cmd.completeArg?.(ctx, 'run ')).toEqual([
+      'run 2',
+      'run test',
+      'run 3',
+      'run "two words"',
+    ]);
+    expect(await cmd.completeArg?.(ctx, 'run te')).toEqual(['run test']);
+    // rm offers every item — index, label, basename for path bookmarks.
+    expect(await cmd.completeArg?.(ctx, 'rm ')).toEqual([
+      'rm 1',
+      'rm Bee',
+      'rm b',
+      'rm 2',
+      'rm test',
+      'rm 3',
+      'rm "two words"',
+    ]);
+    expect(await cmd.completeArg?.(ctx, 'ls anything')).toEqual([]);
+  });
+
+  it('run refuses bookmarks and unknown names', async () => {
+    const ctx = makeCtx({ items: [{ path: '/a', label: 'A' }] });
+    expect(await awesome().run?.(ctx, 'run A', 'axn-awesome run A')).toBe(
+      `echo 'awesome: A is a bookmark, not a command'`,
+    );
+    expect(await awesome().run?.(ctx, 'run 9', 'axn-awesome run 9')).toBe(
+      `echo 'awesome: no item 9'`,
+    );
   });
 
   it('rm removes by index, label or path suffix', async () => {

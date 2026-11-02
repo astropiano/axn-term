@@ -1,5 +1,6 @@
 # Rosé Pine (rosepinetheme.com), main variant. Pine (green) was 3.3:1 on
 # base; it is lifted. UI layers from base, surface and overlay; accent iris.
+# Palette: Rosé Pine <https://github.com/rose-pine/palette>, MIT. Copyright (c) mvllow; Copyright (c) 2023 Rosé Pine.
 # Adjusted for legibility (hue kept, lightness moved):
 #   green: #31748F -> #3A8AAA
 #   brightBlack: #6E6A86 -> #706C89

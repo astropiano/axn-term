@@ -108,6 +108,13 @@ export interface SessionBackend {
    * size. Absent on local backends (nothing shared to relax).
    */
   releasePty?(sessionId: string): void;
+  /**
+   * Write once the slave tty is in raw mode (ECHO/ICANON cleared) — for
+   * emulator query replies (OSC 10/11/12 color reports) that a cooked+echo
+   * tty would echo back as visible text. Desktop only; absent → caller
+   * falls back to a delay.
+   */
+  writeWhenRaw?(sessionId: string, data: string): void;
   close(sessionId: string): void;
   /** Raw PTY output. Must be subscribed before createSession to avoid losing early output. */
   onOutput(sessionId: string, cb: (data: Uint8Array) => void): Unsubscribe;
@@ -157,6 +164,17 @@ export interface SessionBackend {
   mkdir?(sessionId: string, path: string): Promise<void>;
   /** Binary read for previews (images etc.); absent disables binary previews. */
   readBytes?(sessionId: string, path: string): Promise<Uint8Array>;
+  /**
+   * True when sessions run on this machine, so a dropped file's own path
+   * (from a `file://` URI) is valid inside them.
+   */
+  readonly localFiles?: boolean;
+  /**
+   * Store the contents of a file dropped onto the session's terminal where
+   * the session can read it (a fresh private temp dir) and resolve with its
+   * path — for drops that carry no path. Absent → such drops are ignored.
+   */
+  saveDroppedFile?(sessionId: string, name: string, bytes: Uint8Array): Promise<string>;
   /**
    * Watch a directory for changes; absent means directory views refresh only
    * on explicit actions.
@@ -231,6 +249,13 @@ export interface ShellServices {
    * Absent where notifications are unavailable.
    */
   notify?(title: string, body?: string): void;
+  /**
+   * Files dropped onto this window, with their own paths, where the webview
+   * takes file drops natively (desktop on Linux: WebKitGTK hides a dropped
+   * file's path from the page's drop event). Absent elsewhere — the page's
+   * drop events carry those drops.
+   */
+  onFileDrop?(cb: (paths: string[]) => void): Unsubscribe;
 }
 
 /** File access used by hover-card content previews and the editor. */
@@ -275,6 +300,8 @@ export interface RemoteConsoleSnapshot {
   sessions?: string[];
   /** The session id this client is attached/pinned to. */
   sessionId?: string;
+  /** The hub URL this viewer/authority is bound to (viewer only). */
+  authorityUrl?: string;
 }
 
 export interface RemoteConsole {

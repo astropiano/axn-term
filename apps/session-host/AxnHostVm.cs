@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using Ramphastos.Core;
 using Ramphastos.Protocol;
 
-namespace Astropiano.AxnTerm.SessionHost;
+namespace AxnTerm.SessionHost;
 
 /// <summary>Synced workspace — shared so every device renders the same name.</summary>
 public sealed class RemoteWorkspaceInfo : SyncedObject
@@ -135,7 +135,7 @@ public sealed class RemotePtyInfo : SyncedObject
 /// The underlying PTYs live in <see cref="PtyHost"/>, so they survive the
 /// Ramphastos session itself (suspend/resume, reconnect, re-attach).
 /// </summary>
-public sealed class AxnHostVm : ApplicationModel
+public sealed class AxnHostVm : ApplicationModel, IDisposable
 {
     private readonly PtyHost _host;
     private readonly ILogger<AxnHostVm> _logger;
@@ -195,12 +195,29 @@ public sealed class AxnHostVm : ApplicationModel
     // Touched both inside the actor turn (tear-down) and by background pump
     // continuations (registration) — concurrent for safety.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SessionStream> _streams = new();
+    /// <summary>PTYs this session publishes, with their output subscription.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, PtyAttachment> _attachments = new();
 
     public AxnHostVm(PtyHost host, ControlBroker control, ILogger<AxnHostVm> logger)
     {
         _host = host;
         _control = control;
         _logger = logger;
+    }
+
+    /// <summary>The Ramphastos session is gone: stop receiving PTY output.
+    /// The PTYs themselves live on in the host.</summary>
+    public void Dispose()
+    {
+        foreach (var id in _attachments.Keys)
+        {
+            if (_attachments.TryRemove(id, out var attachment))
+            {
+                attachment.Close();
+            }
+        }
+        _controlChannel?.Dispose();
+        _controlChannel = null;
     }
 
     // ---- `axn-term session …` (ControlBroker) ----
@@ -355,6 +372,11 @@ public sealed class AxnHostVm : ApplicationModel
         string id, int cols = 80, int rows = 24, string? cmd = null, string? cwd = null,
         string? sessionId = null, string? workspaceId = null, string? name = null, string? kind = null)
     {
+        if (!PtyHost.IsValidPtyId(id))
+        {
+            return new JsonObject { ["ok"] = false, ["error"] = "invalid pty id" };
+        }
+
         // Reattach: a live PTY with this id already exists — the client gets
         // the existing stream, no respawn (spawned=false, like the desktop).
         if (TryLive(id, out var live))
@@ -383,11 +405,6 @@ public sealed class AxnHostVm : ApplicationModel
         return new JsonObject { ["ok"] = true, ["spawned"] = true, ["id"] = id };
     }
 
-    /// <summary>
-    /// Update a published PTY's session-model fields — rename, workspace
-    /// move, re-parenting after a sub-shell promotion. Null args leave the
-    /// field untouched; empty string clears it.
-    /// </summary>
     /// <summary>Recent PTY output for late attachers (base64) — replayed
     /// client-side before live stream frames so a fresh attach isn't blank.</summary>
     [Command]
@@ -400,6 +417,11 @@ public sealed class AxnHostVm : ApplicationModel
         return new JsonObject { ["ok"] = true, ["data"] = Convert.ToBase64String(pty.TailSnapshot()) };
     }
 
+    /// <summary>
+    /// Update a published PTY's session-model fields — rename, workspace
+    /// move, re-parenting after a sub-shell promotion. Null args leave the
+    /// field untouched; empty string clears it.
+    /// </summary>
     [Command]
     public JsonObject SetPtyMeta(
         string id, string? sessionId = null, string? workspaceId = null,
@@ -480,6 +502,11 @@ public sealed class AxnHostVm : ApplicationModel
         else if (_host.Sessions.TryGetValue(id, out var pty))
         {
             TearDown(pty, reason: "closed");
+        }
+        else if (_infos.Remove(id, out var stale))
+        {
+            // Dead entry whose PTY another session already removed.
+            Ptys.Remove(stale);
         }
         else
         {
@@ -575,7 +602,8 @@ public sealed class AxnHostVm : ApplicationModel
             Ptys.Add(info);
         }
 
-        if (_streams.ContainsKey(pty.Id) || pty.ExitCode is not null)
+        var attachment = new PtyAttachment();
+        if (pty.ExitCode is not null || !_attachments.TryAdd(pty.Id, attachment))
         {
             return info;
         }
@@ -601,53 +629,65 @@ public sealed class AxnHostVm : ApplicationModel
 
         // OpenStreamAsync posts to the session mailbox — awaiting it inside
         // this actor turn would deadlock, so continue out of band.
-        _ = OpenAndPumpAsync(pty, streamName);
+        _ = OpenAndPumpAsync(pty, streamName, attachment);
         return info;
     }
 
-    private async Task OpenAndPumpAsync(PtySession pty, string streamName)
+    private async Task OpenAndPumpAsync(PtySession pty, string streamName, PtyAttachment attachment)
     {
         var stream = await Session!.OpenStreamAsync(streamName);
         if (stream is null)
         {
             _logger.LogWarning("Stream {Stream} never materialized", streamName);
+            _attachments.TryRemove(KeyValuePair.Create(pty.Id, attachment));
             return;
         }
         _streams[pty.Id] = stream;
-        _ = PumpPtyAsync(pty, stream);
+        // PTY output → stream frames (fanned out to every connection). The
+        // PTY's own pump reads; other sessions and /ws get the same bytes.
+        // Exit closes with "exited[:code]", which funnels through the
+        // declaration's OnClose → TearDown inside the actor turn.
+        attachment.Set(pty.SubscribeOutput(
+            data =>
+            {
+                stream.Write(data);
+                return ValueTask.CompletedTask;
+            },
+            exitCode => stream.Close(exitCode is { } code ? $"exited:{code}" : "exited")));
     }
 
-    /// <summary>PTY stdout → stream frames (fanned out to every connection).</summary>
-    private async Task PumpPtyAsync(PtySession pty, SessionStream stream)
+    /// <summary>One published PTY's output subscription; closing it before
+    /// the stream opened drops the subscription as soon as it arrives.</summary>
+    private sealed class PtyAttachment
     {
-        var buffer = new byte[8192];
-        try
+        private readonly object _lock = new();
+        private IDisposable? _subscription;
+        private bool _closed;
+
+        public void Set(IDisposable subscription)
         {
-            while (true)
+            lock (_lock)
             {
-                var read = await pty.Pty.ReaderStream.ReadAsync(buffer.AsMemory());
-                if (read <= 0)
+                if (!_closed)
                 {
-                    break;
+                    _subscription = subscription;
+                    return;
                 }
-                pty.AppendTail(buffer.AsSpan(0, read));
-                stream.Write(buffer.AsMemory(0, read));
             }
+            subscription.Dispose();
         }
-        catch (IOException) { }
-        catch (OperationCanceledException) { }
-        catch (ObjectDisposedException) { }
 
-        int? exitCode = null;
-        try
+        public void Close()
         {
-            exitCode = pty.Pty.ExitCode;
+            IDisposable? subscription;
+            lock (_lock)
+            {
+                _closed = true;
+                subscription = _subscription;
+                _subscription = null;
+            }
+            subscription?.Dispose();
         }
-        catch { /* not exited yet / unavailable */ }
-
-        // Closing with reason "exited[:code]" funnels through StreamCloseOp →
-        // the declaration's OnClose → TearDown — all in the actor turn.
-        stream.Close(exitCode is { } code ? $"exited:{code}" : "exited");
     }
 
     /// <summary>
@@ -658,6 +698,10 @@ public sealed class AxnHostVm : ApplicationModel
     private void TearDown(PtySession pty, string? reason)
     {
         _streams.TryRemove(pty.Id, out _);
+        if (_attachments.TryRemove(pty.Id, out var attachment))
+        {
+            attachment.Close();
+        }
         _host.Kill(pty);
 
         var exited = reason?.StartsWith("exited") == true;
@@ -667,13 +711,15 @@ public sealed class AxnHostVm : ApplicationModel
             code = parsed;
         }
 
-        if (exited && _infos.TryGetValue(pty.Id, out var info))
+        if (exited && _infos.TryGetValue(pty.Id, out var info) && _host.Sessions.ContainsKey(pty.Id))
         {
             // Keep the host registration and the entry — clients see the dead
             // terminal (task state stays readable) until closePty removes it.
+            // The process is gone, so its descriptors can go now.
             pty.ExitCode = code;
             info.Status = "exited";
             info.ExitCode = code;
+            pty.DisposePty();
         }
         else
         {

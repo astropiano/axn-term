@@ -18,6 +18,20 @@ export interface SessionAttention {
   message?: string;
   /** critical (default): red pulsing dot; warning: orange. */
   level?: AttentionLevel;
+  /**
+   * Declared action buttons shown in the attention modal. `id` is routed
+   * back: `goto-session:<sessionId>` is handled by the app itself,
+   * `<plugin>:<action>` to that plugin's `onAttentionAction`. `data` carries
+   * the raiser's serializable payload (e.g. MR url/iid/title).
+   */
+  actions?: AttentionAction[];
+  data?: unknown;
+}
+
+/** A button declared on an attention flag (see SessionAttention.actions). */
+export interface AttentionAction {
+  id: string;
+  label: string;
 }
 
 export type BannerLevel = 'info' | 'warning' | 'error';
@@ -181,6 +195,13 @@ export interface ShellSession {
   customName?: string;
   autoName?: string;
   topic: string;
+  /**
+   * Short user/agent-settable annotation for the session — set via
+   * `axn-session-summary`, `axn-session set --summary`, or the session
+   * context menu's "Edit summary…" (cap: SESSION_SUMMARY_MAX chars),
+   * rendered clamped to 3 lines in the panel behind the
+   * `sessionSummaries` setting.
+   */
   summary: string;
   status?: SessionStatus;
   tasks: Task[];

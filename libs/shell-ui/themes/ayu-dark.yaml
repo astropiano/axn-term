@@ -1,6 +1,7 @@
 # Ayu Dark (github.com/ayu-theme). Magenta was Ayu's pale yellow (#FAE994),
 # indistinguishable from yellow in most CLIs; it now uses Ayu's purple. UI
 # colours from Ayu's editor palette.
+# Palette: Ayu <https://github.com/ayu-theme/ayu-colors>, MIT. Copyright (c) Konstantin Pschera <me@kons.ch>.
 # Adjusted for legibility (hue kept, lightness moved):
 #   brightBlack: #686868 -> #696969
 id: ayu-dark

@@ -160,6 +160,10 @@ Vars reach actions two ways:
 - **Templates** — `{{key}}` in `command`, `prompt` and `prompt-file`
   substitutes the value (built-ins `state`, `workflow`, `action`, `cwd`,
   `tracking`, `model`, `promptFile`, `workflow_token` win name collisions).
+  In `command`, a value always arrives as one literal shell word, also
+  inside `"…"` or `'…'` (the quote is closed and reopened around it);
+  placeholders inside backticks, `${…}`, `$((…))`, `$'…'` or a heredoc
+  are refused — use the environment var instead.
 - **Environment** — every launched action runs as
   `AXN_WORKFLOW=<id> AXN_STATE=<state> AXN_ACTION=<name> KEY=<value> … <cmd>`
   (camelCase/kebab keys → SNAKE), for `shell`, `sub-shell` and `headless`

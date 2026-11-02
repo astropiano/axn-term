@@ -55,6 +55,8 @@ export interface HookRuntime extends HookEventSource {
   ptyEventFile?: string;
   resolveTried?: boolean;
   pollTimer?: ReturnType<typeof setInterval>;
+  /** The agent is running: set by ensureHookPolling, cleared on release. */
+  pollWanted?: boolean;
   /** Once a hook event was applied, deterministic hook state owns session.status. */
   hooksOwnStatus?: boolean;
   /** A read is in flight — a slow backend must not have two consume the same lines. */
@@ -263,6 +265,7 @@ export function ensureHookPolling(
   stateKey = spec.stateKey ?? spec.agent,
 ): void {
   const rt = getHookRuntime(spec, ctx.session.id);
+  rt.pollWanted = true;
   if (rt.pollTimer) return;
   if (!rt.eventFile && !rt.ptyEventFile) {
     if (rt.resolveTried) return;
@@ -279,6 +282,8 @@ export function ensureHookPolling(
       );
       if (!rt.eventFile && !rt.ptyEventFile) return;
       if (runtimes.get(runtimeKey(spec, ctx.session.id)) !== rt) return;
+      // the agent may have exited (released) while this was resolving
+      if (!rt.pollWanted || rt.pollTimer) return;
       rt.pollTimer = setInterval(
         () => void pollEventFile(ctx, spec, stateKey),
         EVENT_POLL_MS,
@@ -292,7 +297,9 @@ export function ensureHookPolling(
 
 export function stopHookPolling(spec: AgentHookSpec, sessionId: string): void {
   const rt = runtimes.get(runtimeKey(spec, sessionId));
-  if (rt?.pollTimer) {
+  if (!rt) return;
+  rt.pollWanted = false;
+  if (rt.pollTimer) {
     clearInterval(rt.pollTimer);
     rt.pollTimer = undefined;
   }

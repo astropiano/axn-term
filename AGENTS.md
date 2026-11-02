@@ -44,8 +44,8 @@
   fs/exec/cwd/fg/tty map to VM commands. Kept behind a subpath export so the
   desktop build doesn't need the ramphastos-client dependency. Selected in
   `apps/web` via `VITE_RAMPHASTOS_URL` (absent → `WsBackend`). Client dep is a
-  sibling-checkout alias (`@ramphastos/ramphastos-client` → `../ramphastos`,
-  mounted at `/ramphastos` in containers); rebuild the client package's `dist/`
+  sibling-checkout alias (`ramphastos-client` → `dev/libraries/ramphastos`,
+  mounted at `/libraries` in containers); rebuild the client package's `dist/`
   when its sources change. End-to-end: `tests/ramphastos-e2e.mjs` (raw protocol)
   and `tests/remote-backend-e2e.mjs` (backend surface; run with
   `node --experimental-strip-types`), both against a locally running
@@ -72,11 +72,34 @@
   forgotten on a left click or typing — and terminals honour OSC 52 clipboard
   writes via `handleClipboardWrites`, because TUIs with their own mouse
   selection such as Claude Code copy that way and leave xterm with no
-  selection; reads (`?`) are refused), Cut/Copy/Paste/
+  selection; reads (`?`) are refused — and OSC 10/11/12 color reports that
+  xterm.js emits on the input channel are routed by the per-PTY ordered
+  writer `createTerminalInput` (`terminalRenderer.ts`, shared by
+  `ShellTerminal` and `SubShellView`; *every* write to that PTY — keys,
+  hidden-command writes, Shift+Enter — goes through it): a fresh
+  `getForegroundProcess` probe decides — a real program foreground = live
+  asker → the reply is written as soon as the probe returns
+  (real terminals never delay; devin's startup probe and p10k-style
+  readers poll stdin with a deadline, and a late reply lands as typed
+  `11;rgb:…` inside their input — never gate live answers on raw mode),
+  a shell comm or dead foreground = dead letter → dropped (beats every
+  real terminal, which echoes the reply at the prompt), a hung probe
+  delivers after 1 s, and when no probe exists the backend's
+  `writeWhenRaw`/`write_when_raw` termios gate or a ~75 ms delay is the
+  fallback. Input after a pending report queues behind it: devin sends
+  `ESC]10;? ESC]11;? ESC[c` and treats the DA1 answer as its sentinel,
+  so a DA1 reply overtaking a report still in its async probe made
+  devin type `10;rgb:…11;rgb:…` into its input on every launch — the
+  `devin --osc` flow fixture models exactly that sentinel), Cut/Copy/Paste/
   Select all for text fields, plus "Reload window" (also `⌘⇧R`/`Ctrl+Shift+R`,
   `isReloadShortcut` — terminals let it through; it saves state first and,
   running no React cleanup, keeps the PTYs, which the reloaded window
-  reattaches)), `PathActionMenu` /
+  reattaches; every live terminal's serialized screen is stashed in
+  sessionStorage first (`stashTerminalReplays`, `takeReloadReplay` in
+  `terminalRegistry.ts`), so the reloaded window repaints scrollback and
+  the alt screen of a running TUI instead of coming back blank —
+  sessionStorage dies with the app session, same as the PTYs, so a fresh
+  start never replays a dead terminal)), `PathActionMenu` /
   `FileHoverPreview`, themes, `SettingsProvider`, session types, terminal
   links/registry, platform labels. Tooltips are the shared `TooltipHost`
   (`app/Tooltip.tsx`, mounted once in `ShellApp`): put `data-tip="..."` on an
@@ -90,6 +113,23 @@
   (`app/ErrorBoundary.tsx`): one per session sub-view tab (error panel with
   Reload view / Close tab) and a root one in `ShellApp` (Reload window —
   a page reload runs no React cleanup, so PTYs survive and reattach).
+  Drags from outside the window are cancelled in capture by
+  `app/dropGuard.ts` (installed once in `ShellApp`), so neither the webview
+  nor any view's drop target sees them; only `application/x-axn-*` drags and
+  drags that started in the window pass. The guard hands the foreign ones to
+  `app/fileDrop.ts`: files and links dropped on a terminal are pasted,
+  shell-quoted, at the prompt (how Claude Code picks up images); anywhere
+  else nothing happens and the cursor shows no-drop. WebKitGTK hides a
+  dropped file's path from the page, so on Linux the desktop keeps Tauri's
+  native drop handler and `services.onFileDrop` delivers the paths (terminal
+  = the last `dragover` target); macOS/Windows disable it and the page's
+  `drop` carries the files — saved via `backend.saveDroppedFile` (desktop:
+  the `save_dropped_file` command, raw IPC body + `x-file-name` header, into
+  `<runtime dir>/axn-term-drops/`). Web and remote viewers have no
+  `saveDroppedFile`, so file drops there paste nothing. As a backstop the
+  Tauri windows refuse any navigation away from the app
+  (`is_app_navigation` in `window.rs`): a page replaced by an opened file
+  also loses the close handler, so the window could not be closed.
   Terminal unmount cleanups (`ShellTerminal`, `SubShellView`) wrap every
   teardown step in `safely()` (`terminalRenderer.ts`) and dispose the
   renderer addon before the xterm — an exception escaping an effect
@@ -164,7 +204,10 @@ state/subscribe/signIn/signOut/getAccessToken; the signed-in JWT wins over
 the static `remoteAuthorityToken` dev fallback and a sign-in flip restarts
 the authority so its hello carries the token. The gateway binds the
 mirrored session to the JWT `sub` — viewers must authenticate as the same
-account; `RemoteAuthority__AllowAnonymous=true` bypasses this for dev.
+account; `RemoteAuthority__AllowAnonymous=true` bypasses this for dev
+(off by default). Hello tokens must come from an allowed OIDC client
+(`azp`): `RemoteAuthority__ClientIds` (comma list), unset =
+`Authentication:ClientId` plus the desktop's `axn-term-desktop`.
 
 Session plugins can declare per-session state, which is stored inside `state.json`
 under `sessions[].pluginState.<plugin-id>`. Plugin lifecycle hooks (`onOutput`,
@@ -174,7 +217,20 @@ API and a `writeToSession` helper for sending input to the session PTY.
 swallow it (the devin plugin uses it to arm its `/exit` capture and to
 invalidate the remembered session when the user launches `devin -r <name>`
 manually). Handlers may return a Promise; the replacement line is written
-once it resolves.
+once it resolves. The outcome of a hidden-command line follows one
+procedure (`applySessionCommandResult` in `app/hiddenCommands.ts`): a
+handler returning `undefined` submits the line to the shell unchanged;
+`false` swallows it silently; a plain string replaces the line and runs in
+the shell (e.g. `devin -r <name>`); and the `echo "<msg>"` shape is the
+feedback convention — a message for the user, not a command. With the
+terminal's `writeDisplay` channel the typed line stays on screen and
+`<msg>` is drawn below it like real command output (the `\x15` kill goes
+to the PTY after the display write so the shell's line erase lands on the
+empty line underneath); without it the `echo` is typed into the shell as
+a fallback. The remote `axn-term session command` path (`controlReply` in
+`app/controlCommands.ts`) parses the same `echo` shape back into the CLI's
+reply text. Covered by the `command feedback (display channel)` cases in
+`hiddenCommands.test.ts`.
 
 Plugins can declare hidden commands via `commands?: (string | PluginCommand)[]`
 — they join the built-in `axn-*` names for Tab completion. A plain string is
@@ -205,6 +261,37 @@ HEAD as a "Changes vs <ref>" section; echoes an error outside a repo) and
 — see below) are implemented this
 way.
 
+Plugins declare `logo` — a Lucide icon name or an inline `<svg>` tag
+(the `sessionIcons` value format) — as the has-an-icon capability: only
+plugins that declare it get the Logo field on their Settings → Plugins page
+and resolve bag overrides in `PluginIcon`/`resolvePluginIcon`
+(`SessionPanel.tsx`); undeclared plugins render a generic Puzzle and the bag
+is not consulted. Users override a declared logo per plugin through the
+flat icon bag (`customIcons`, or legacy `pluginIcons`, keyed by plugin id) —
+that is how brand marks axn-term does not ship (Docker, GitHub, GitLab) can
+be restored locally. A `logo` on a plugin that also declares
+`processPattern` doubles as the session-icon fallback for matching
+foreground processes (`resolveProcessIcon`, `app/iconModel.ts`), so for the
+agent plugins whose id is the process name (`devin`, `claude`, `codex`,
+`opencode`, `vibe`; `antigravity` covers `agy` via its pattern) the Logo
+field and the Session-icons row edit the same icon.
+
+Custom icons live in one flat bag: `customIcons` in config.yaml keyed by
+process name or plugin id (the `sessionIcons`/`pluginIcons` maps still merge
+in underneath — `collectIconBag`, `app/iconModel.ts`). Session rows resolve
+`bag[process]` first, then the logo of the registered plugin whose
+`processPattern` matches (`bag[plugin.id]` override, else the declared
+`logo`), then the terminal glyph — `registerSessionViewPlugin` feeds that
+lookup via `registerIconPlugin`, so external plugins join the same
+resolution. The bag is a shared
+setting: ShellApp publishes it as `app:icons` through `platform
+.publishSharedState` (desktop authority → `RemoteAuthority.setSharedState`
+replica patch; a remote viewer → `/vm/setPluginState` upstream), and the
+authority applies client writes back into its own config via
+`onSharedState`. Viewers resolve icons from the synced bag overlaid on their
+local settings (`IconBagContext`/`useIconBag`), so every screen shows the
+same icons while theme/plugins/zoom stay per-device.
+
 Every `PluginApi` ctx comes from one builder, `createPluginApi(session,
 plugin, deps)` (`session-plugins/plugin.ts`): ShellApp's lifecycle dispatch
 passes live lookups (`getLiveSession`, `getSessionCount`) and `onAttention`
@@ -218,10 +305,23 @@ app-level counterpart of `pluginState`, backed by window state
 
 Built-in hidden session/workspace commands (intercepted before plugins):
 
-- `axn-session [path]` — open a new session in the current workspace. No
+- `axn-session <subcommand>` — session management. `create` opens a new
+  session (`axn-session create [path] [-w|--workspace <name>]
+  [-n|--name <name>] [--background] [--summary <text>]`); the bare legacy
+  spelling `axn-session [flags] [path]` is an implicit `create`. No
   argument or `.` starts it in the current session's cwd; an absolute or
-  relative path starts it there (validated via `stat_path`, echoes an error
-  otherwise).
+  relative path starts it there (validated via `stat_path`, echoes an
+  error otherwise). `-w`/`--workspace` targets a workspace by name —
+  created when absent, like `axn-session-mv`; `-n`/`--name` names the
+  session; `--background` opens it without selecting it or dismissing a
+  covering plugin view (agents spawning sessions don't steal focus);
+  `--summary` sets the new session's `summary` field.
+  `axn-session set` mutates the *current* session:
+  `axn-session set [--summary <text>] [--name|--title <name>]` — at least
+  one flag required (usage error otherwise); an empty quoted value clears
+  the field (same convention as bare `axn-rename`/`axn-session-summary`).
+  Feedback echoes as command output (`renamed to '…'`/`name cleared`,
+  `summary updated`/`summary cleared`).
 - `axn-session-mv <workspace>` — move the current session to another
   workspace, creating the workspace if it does not exist. The session
   context menu's "Move to workspace…" opens `MoveToWorkspaceModal`: every
@@ -293,11 +393,19 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   process-reported name, same as the reset icon in the context menu); in a
   sub-shell it renames only that tab (no argument restores the default label).
 - `axn-session-summary [text]` — set the session's `summary` field — a
-  one-line description rendered under the session title in the panel (behind
-  the `sessionSummaries` setting) and under the title on dev-workflow kanban
-  cards. Matching outer quotes are stripped, text is capped at 200 chars
-  (`SESSION_SUMMARY_MAX` in `app/hiddenCommands.ts`), and no argument clears
-  it. Agents use it to keep the session's displayed description current.
+  short description rendered clamped to 3 lines under the session title in
+  the panel (behind the `sessionSummaries` setting) and under the title on
+  dev-workflow kanban cards; full text stays in the tooltip. Matching
+  outer quotes are stripped, text is capped at 400 chars
+  (`SESSION_SUMMARY_MAX` in `app/hiddenCommands.ts`), and no argument
+  clears it. `axn-session set --summary <text>` is the equivalent spelling
+  on the `axn-session` umbrella command (also reachable as
+  `axn-term session set --summary …` over the control socket). Agents use
+  it to keep the session's displayed description current. The session
+  context menu's "Edit summary…" (`app/EditSessionSummaryModal.tsx`) edits
+  the same field: a textarea sized to the session row's width so wraps
+  match the panel, with a warning once the text runs past the three-line
+  clamp (measured on a hidden mirror of the panel's summary element).
 - `axn-install [args]` — runs `axn-term install <args>` in the shell (the
   running binary's path is resolved via `current_exe_path`, so it also works
   in dev builds where `axn-term` is not on PATH).
@@ -542,7 +650,11 @@ section, so `<plugin>.enabled: true` enables the preview too (still opt-in).
 ## CLI subcommands and agent skills
 
 `main.rs` routes argv before Tauri starts (`src-tauri/src/cli.rs`): bare
-`axn-term` launches the app; `axn-term session summary|rename|focus|command …`
+`axn-term` launches the app — one instance per `$AXN_TERM_STATE_DIR`: a
+launch that finds a live control socket asks the running app to focus a
+window and exits (a stale socket is replaced), so `pnpm tauri dev` from an
+axn-term terminal needs its own `AXN_TERM_STATE_DIR`; an unknown subcommand
+prints usage and exits 2. `axn-term session summary|rename|focus|command …`
 runs an `axn-*` command for the terminal it is invoked from — over the
 control socket (`src-tauri/src/control.rs`, `$AXN_TERM_STATE_DIR/control.sock`,
 0600): every PTY gets `AXN_TERM_PTY_ID` + a random `AXN_TERM_PTY_SECRET` +
@@ -710,7 +822,10 @@ UI strings are localized with [Lingui](https://lingui.dev) 6 (macros via
 - `libs/shell-ui/src/i18n.test.ts` fails when a compiled catalog misses an
   `en` message id or a non-`en` `.po` entry has an empty `msgstr` — a missing
   translation surfaces in the UI as untranslated English (or a raw hash id
-  where no `message` fallback exists).
+  where no `message` fallback exists). The same file also runs
+  `lingui check sync` (`pnpm i18n:check`), which fails when a wrapped string
+  was added to the code but never extracted — the catalog-vs-catalog checks
+  cannot see a msgid that never entered the .po files.
 - User-facing control: `language` setting in `config.yaml` (`en`/`ko`) and
   Settings → General → Language.
 
@@ -837,24 +952,44 @@ plugin view; right-clicking a hosted tab offers moving it back to any
 session. `Ctrl/⌘+Alt+←/→` cycles the hosted tabs while the view is active.
 
 The `awesome-list` plugin (`session-plugins/awesomeList.tsx`, FolderHeart
-rail icon) is a local bookmark list: folder/file paths and URLs kept in
-`pluginData['awesome-list'].items`. Clicking opens dirs as `browser` tabs and
-files as `editor` tabs inside the plugin view (files also get a Preview
-action, URLs open externally). Entries are added/edited/removed in the view
-or via the `axn-awesome` hidden command (`axn-awesome`/`ls` prints a numbered
-list, `add <path|url> [label]` resolves via `stat_path` against the session's
-live cwd, `rm <n|path|label>` removes); paths resolve via `stat_path` (`~`
-expands, nonexistent paths are flagged "not found" in the view).
-Right-clicking an entry opens a context menu built on the shared
-`PathActionMenu` (Open/Edit/Preview/Reveal/Copy Path, or Open/Copy URL for
-links) with `extraItems` for bookmark-specific Edit/Remove rows.
+rail icon) is a local favorites list: folder/file paths, URLs and shell
+commands (`type: 'command'`) kept in `pluginData['awesome-list'].items`.
+Clicking opens dirs as `browser` tabs and files as `editor` tabs inside the
+plugin view (files also get a Preview action, URLs open externally); clicking
+a command runs it in the current session — `renderView` ctx's
+`selectedSessionId` (the session selected when the view opened; the
+only session otherwise) — the line is routed through `runCommand` (so
+`axn-*` favorites dispatch) then written to the PTY with a trailing CR,
+and `selectSession` brings the terminal forward. "Run in another
+session…" (menu row) asks via the shared `pickFromList` picker, a
+hover/menu "Type into session" action writes the command without CR so
+it can be edited first, and "Copy command" uses `services.copyText`. Entries are added/edited/removed in the view — a leading `>`
+in the add input stores a command (`> [label =] command`, ` = ` separates
+the label) — or via the `axn-awesome` hidden command (`axn-awesome`/`ls`
+prints a numbered list with `$` marking commands, `add <path|url> [label]`
+resolves via `stat_path` against the session's live cwd, `cmd [<label> =]
+<command>` stores a command, `run <n|name>` routes the stored command
+through `runCommand` dispatch (so `axn-*` favorites dispatch; a plain
+command replaces the typed line), `rm <n|name>` removes — `completeArg`
+completes subcommand names and `run`/`rm` targets); paths resolve via `stat_path`
+(`~` expands, nonexistent paths are flagged "not found" in the view). A
+filter row above the list matches label and path/command; Enter activates
+the top match. Right-clicking a path entry opens a context menu built on
+the shared `PathActionMenu` (Open/Edit/Preview/Reveal/Copy Path, or
+Open/Copy URL for links) with `extraItems` for bookmark-specific
+Edit/Remove rows; command entries get a plain menu with Run/Type/Edit/Remove.
 
 The `glab-mr` plugin (`session-plugins/glabMr.tsx`) tracks GitLab merge
 requests via the `glab` CLI. Per session it runs `glab mr list -s <branch>
--F json` plus one `glab api projects/:fullpath/merge_requests/<iid>` detail
-call per MR (for `head_pipeline.status`) when the repo/branch signature
-changes or the cached list is >5 min stale; results live in pluginState
-`glab-mr.mrs`. App-wide it polls `glab api graphql` (single query over
+-F json` plus two `glab api` calls per MR —
+`projects/:fullpath/merge_requests/<iid>` (for `head_pipeline.status`) and
+`…/<iid>/discussions` (notes' `resolvable`/`resolved` → `openThreads`, by
+`countOpenThreads`; absent on failure so the panel falls back to the
+`blocking_discussions_resolved` boolean chip) — when the repo/branch
+signature changes or the cached list is >5 min stale; results live in
+pluginState `glab-mr.mrs`. The session-panel block shows `N open threads`;
+the renderView rows show the GraphQL `description` clamped to 3 lines.
+App-wide it polls `glab api graphql` (single query over
 `currentUser.assignedMergeRequests` ∪ `authoredMergeRequests` without
 assignee → "mine", and `reviewRequestedMergeRequests` → "review") on a
 `glab-mr.refresh-interval-seconds` cadence (default 120) — the rail teaser
@@ -866,7 +1001,10 @@ The `gh-pr` plugin (`session-plugins/ghPr.tsx`) is the GitHub twin, driven
 by `gh`. Per session it runs `gh pr list --head <branch> --json
 number,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,isCrossRepository,headRepositoryOwner`
 plus one batched `gh api graphql` call (PR numbers as `-F` variables) for
-`reviewThreads.isResolved` — resolution state is GraphQL-only. `--head`
+`reviewThreads.isResolved` — resolution state is GraphQL-only; the per-PR
+unresolved count lands in `openThreads` (the panel shows `N open threads`;
+the renderView rows show the fragment's `bodyText` clamped to 3 lines).
+`--head`
 matches the branch *name* in any fork, so `ownPrs` keeps same-repo PRs and
 fork PRs only from the owners of the remotes this checkout pushes to (origin
 plus the branch's push/tracking remote) — otherwise a session on `main` of a
@@ -976,13 +1114,13 @@ Example: `plugins/axn-demo-note/`.
 - The built-in `claude` plugin (`session-plugins/claude.ts`) is opt-in (`claude.enabled: true`). It parses Claude Code's rendered `Update Todos` block from the live screen into `session.tasks`/`session.progress` (it owns progress via `handlesProgress` while claude runs), can resume Claude Code (`restore-session: true`) — like devin it captures the conversation id from claude's exit hint (`Resume this session with:` / `claude [--worktree "<name>"] --resume <id>`; `onClose` sends Ctrl-C pairs so claude prints it, `onProcessEnd` reads it from the output tail for exits it did not drive) and restores that exact conversation behind the `pendingRestore` overlay, falling back to `claude -c` when no id was captured or a fresh `claude` launch invalidated it — and optionally bridges Claude Code **hooks** (`claude.install-hooks: true`, adapter `session-plugins/claudeHooks.ts` on the shared bridge below): `UserPromptSubmit`/`PreToolUse`/`PostToolUse` → `running` + flag cleared (PostToolUse un-blocks an approved permission at once), `PermissionRequest` → `blocked` + critical needs-you attention, `Notification` → a warning flag only — the status stays (claude also sends it when idling after `Stop`) and the bridge drops a hook-raised warning once the session is selected after it (`warningRaisedAt` vs `sessionLastSelectedAt`; critical flags wait for the next event); flags OS-notify for non-selected/unfocused sessions; `SubagentStop` is ignored (background subagents finish after `Stop`), `Stop` → `completed`, `StopFailure` → `blocked`, `SessionStart` → `idle`, `SessionEnd` clears the flag while process-end reconciliation owns the final badge. Once any hook event lands, hook state owns `session.status` and the screen scan only contributes task content; without hooks the todo-parse fallback still drives tasks/progress/status.
 
 
-- Agent **hook bridging** is shared and public: the pure, dependency-free half lives in `libs/plugin-sdk` `hooks.ts` (`AgentHookSpec`/`AgentHookEffect`, `agentHookScript`/`agentHookScriptPath`, `agentEventDir`/`agentEventFile`/`agentEventLog`, `readHookLog`, `mergeHookSettings`/`removeHookSettings`, `parseHookEvent`), the host half in `session-plugins/agentHookBridge.ts` (runtime map, tty resolution + poll loop, config sync, `hookStatusOwned`). A plugin declares `hookSpec` on its `SessionViewPlugin` object — built-in *or* external `.mjs` — and the host drives the bridge for it: on output dispatch `maybeWireHookSpec` syncs the agent's config per the plugin's `installHooks` setting and starts the poll while `processPattern` matches, `releaseHookSpec` on process end stops polling and clears the flag (spec-only plugins get the default terminal badge — 'completed' persists, anything else → idle), `dropHookSpec` on session open/close forgets the runtime (all in `ShellApp`'s dispatch points). Built-ins (`claude`/`codex`/`antigravity`) declare `hookSpec` and keep only their extras (todo parsing, resume commands, `<agent>Seen` tracking) — nothing wires the bridge by hand. The spec itself carries the agent id, its event list, config file (`~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` — claude/codex use the grouped `hooks.<Event> = [{matcher?, hooks:[{type:'command', command}]}]` schema and a `hook_event_name` stdin payload; agy's file holds named hook groups `{"<name>": {enabled, <Event>: [...]}}` with a discriminator-free payload and a required JSON response, so its spec installs a wrapper script (`agy-hook.sh`) via custom `install`), and the event→status/attention map; agents with a non-JSON config (e.g. a JS plugin file) provide the spec and a custom `install` via the same contract. The bridge installs one script, `~/.axn-term/agent-hook.sh <agent>`, which appends each hook's stdin JSON as one line to `$AXN_TERM_STATE_DIR/<agent>-events/pty-<AXN_TERM_PTY_ID>.jsonl` (tty-named for terminals without the PTY id) — an append-only log per PTY: payloads over ~3.5 KB shrink to `hook_event_name`/`tool_name`/`notification_type` so every append is one atomic write, and past 64 KB the log rotates to `.jsonl.1` under a `mkdir` lock. While the agent is foreground the host polls the log (`pollHookEvents`/`readHookLog`, 1.5 s, offset + first-line cursor, reads the `.1` tail across a rotation) and applies every new event in order — the first read of a log applies only its newest event, and a warning never downgrades a live critical flag (`nextHookAttention`), so a PermissionRequest followed by a Notification stays "needs you". A latest-event `.json` from an older script is still read as a fallback. Hook events then own `session.status`. Agents in sub-shell tabs write to their tab PTY's own log: `SubShellView`'s 1 s foreground poll drives `createTabHookWatcher` (`app/subShellHooks.ts`) through the enabled plugin whose `processPattern` matches (`hookPluginFor`), setting `tab.hookStatus` (a dot on the tab — red pulsing for blocked) and `tab.hookAttention`, which `sessionAttention` rolls up as `tab:<label>` and OS-notifies when the tab is not in view; a warning clears once the tab is shown, a critical flag on the agent's next event. The same tick also tracks the tab agent's task list: plugins may declare a pure `screenTasks(lines)` (claude, devin), sub-shell xterms are registered in `terminalRegistry` under their tab id, and `tabTaskPatch` (`app/subShellTasks.ts`) stores `tab.tasks`/`tab.progress` — shown as done/total on the tab (list in its tooltip); a vanished block keeps the last list, an agent exit drops an unfinished one. Install merges axn-term-owned entries into the agent's config (foreign hooks/settings preserved, removed again when disabled — legacy `claude-hook.sh` entries are cleaned up too). The sandboxed manifest tier has no `hookSpec` yet — `mapEvent` is a function and cannot cross the iframe postMessage boundary; a declarative event→effect map in `plugin.json` is the planned bridge. The opt-in `codex` plugin (`session-plugins/codex.ts` + `codexHooks.ts`, `codex.enabled`/`install-hooks`/`restore-session` → `codex resume --last`, `axn-codex-resume`) maps `PreToolUse`/`PostToolUse`/`SubagentStart`/`SubagentStop`/`UserPromptSubmit` → `running`, `PermissionRequest` → `blocked` + critical flag, `Stop` → `completed`, `Interrupt`/`SessionStart` → `idle`; note codex requires new hooks to be trusted once via `/hooks` (trust review). The opt-in `opencode` plugin (`session-plugins/opencode.ts`, `opencode.enabled`/`restore-session`) mirrors the devin/claude resume flow without a hookSpec: it resolves the ended conversation via `opencode session list --format json -n 1` in the session cwd (project-global, so the top `ses_` id is adopted only when its `updated` timestamp falls inside the observed run window — otherwise `opencode -c`), plus an output-tail scan of the older TUI exit hint; records `opencode -s <id>`/`opencode -c` as the shared last-session record, tracks manual `opencode`/`-s` launches via `onCommand`, and auto-resumes reopened sessions when `opencodeActive`. The opt-in `opencode` plugin (`session-plugins/opencode.ts`, `opencode.enabled`/`restore-session`) mirrors the devin/claude resume flow without a hookSpec: it scans the output tail for the TUI's exit hint (`opencode -s ses_…`), records `opencode -s <id>` (or `opencode -c` when no id was seen) as the shared last-session record, tracks manual `opencode`/`-s` launches via `onCommand`, and auto-resumes reopened sessions when `opencodeActive`. The opt-in `antigravity` plugin (`session-plugins/antigravity.ts` + `antigravityHooks.ts`, same settings, `restore-session` → `agy -c`, `axn-agy-resume`) targets the Antigravity CLI (`agy`): `SessionStart` → `idle`, `PreInvocation`/`PostToolUse` → `running`, `Stop` → `completed` (`USER_CANCELED`/`ERROR` → `idle`). agy has no permission-request hook event, so no blocked/needs-you signal; `PreToolUse` is deliberately not wired — its required `decision` response would let a passive observer approve tools. The plugin also captures agy's `agy --conversation <id>` exit hint from output into `agyConversationId`, so `axn-agy-resume`/menu resume/`restore-session` can name the exact conversation, falling back to `agy -c` (most recent in the cwd).
+- Agent **hook bridging** is shared and public: the pure, dependency-free half lives in `libs/plugin-sdk` `hooks.ts` (`AgentHookSpec`/`AgentHookEffect`, `agentHookScript`/`agentHookScriptPath`, `agentEventDir`/`agentEventFile`/`agentEventLog`, `readHookLog`, `mergeHookSettings`/`removeHookSettings`, `parseHookEvent`), the host half in `session-plugins/agentHookBridge.ts` (runtime map, tty resolution + poll loop, config sync, `hookStatusOwned`). A plugin declares `hookSpec` on its `SessionViewPlugin` object — built-in *or* external `.mjs` — and the host drives the bridge for it: on output dispatch `maybeWireHookSpec` syncs the agent's config per the plugin's `installHooks` setting and starts the poll while `processPattern` matches, `releaseHookSpec` on process end stops polling and clears the flag (spec-only plugins get the default terminal badge — 'completed' persists, anything else → idle), `dropHookSpec` on session open/close forgets the runtime (all in `ShellApp`'s dispatch points). Built-ins (`claude`/`codex`/`antigravity`) declare `hookSpec` and keep only their extras (todo parsing, resume commands, `<agent>Seen` tracking) — nothing wires the bridge by hand. The spec itself carries the agent id, its event list, config file (`~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` — claude/codex use the grouped `hooks.<Event> = [{matcher?, hooks:[{type:'command', command}]}]` schema and a `hook_event_name` stdin payload; agy's file holds named hook groups `{"<name>": {enabled, <Event>: [...]}}` with a discriminator-free payload and a required JSON response, so its spec installs a wrapper script (`agy-hook.sh`) via custom `install`), and the event→status/attention map; agents with a non-JSON config (e.g. a JS plugin file) provide the spec and a custom `install` via the same contract. The bridge installs one script, `~/.axn-term/agent-hook.sh <agent>`, which appends each hook's stdin JSON as one line to `$AXN_TERM_STATE_DIR/<agent>-events/pty-<AXN_TERM_PTY_ID>.jsonl` (tty-named for terminals without the PTY id) — an append-only log per PTY: payloads over ~3.5 KB shrink to `hook_event_name`/`tool_name`/`notification_type` so every append is one atomic write, and past 64 KB the log rotates to `.jsonl.1` under a `mkdir` lock. While the agent is foreground the host polls the log (`pollHookEvents`/`readHookLog`, 1.5 s, offset + first-line cursor, reads the `.1` tail across a rotation) and applies every new event in order — the first read of a log applies only its newest event, and a warning never downgrades a live critical flag (`nextHookAttention`), so a PermissionRequest followed by a Notification stays "needs you". A latest-event `.json` from an older script is still read as a fallback. Hook events then own `session.status`. Agents in sub-shell tabs write to their tab PTY's own log: `SubShellView`'s 1 s foreground poll drives `createTabHookWatcher` (`app/subShellHooks.ts`) through the enabled plugin whose `processPattern` matches (`hookPluginFor`), setting `tab.hookStatus` (a dot on the tab — red pulsing for blocked) and `tab.hookAttention`, which `sessionAttention` rolls up as `tab:<label>` and OS-notifies when the tab is not in view; a warning clears once the tab is shown, a critical flag on the agent's next event. The same tick also tracks the tab agent's task list: plugins may declare a pure `screenTasks(lines)` (claude, devin), sub-shell xterms are registered in `terminalRegistry` under their tab id, and `tabTaskPatch` (`app/subShellTasks.ts`) stores `tab.tasks`/`tab.progress` — shown as done/total on the tab (list in its tooltip); a vanished block keeps the last list, an agent exit drops an unfinished one. Install merges axn-term-owned entries into the agent's config (foreign hooks/settings preserved, removed again when disabled — legacy `claude-hook.sh` entries are cleaned up too). The sandboxed manifest tier has no `hookSpec` yet — `mapEvent` is a function and cannot cross the iframe postMessage boundary; a declarative event→effect map in `plugin.json` is the planned bridge. The opt-in `codex` plugin (`session-plugins/codex.ts` + `codexHooks.ts`, `codex.enabled`/`install-hooks`/`restore-session` → `codex resume --last`, `axn-codex-resume`) maps `PreToolUse`/`PostToolUse`/`SubagentStart`/`SubagentStop`/`UserPromptSubmit` → `running`, `PermissionRequest` → `blocked` + critical flag, `Stop` → `completed`, `Interrupt`/`SessionStart` → `idle`; note codex requires new hooks to be trusted once via `/hooks` (trust review). The opt-in `opencode` plugin (`session-plugins/opencode.ts`, `opencode.enabled`/`restore-session`) mirrors the devin/claude resume flow without a hookSpec: it resolves the ended conversation via `opencode session list --format json -n 1` in the session cwd (project-global, so the top `ses_` id is adopted only when its `updated` timestamp falls inside the observed run window — otherwise `opencode -c`), plus an output-tail scan of the older TUI exit hint; records `opencode -s <id>`/`opencode -c` as the shared last-session record, tracks manual `opencode`/`-s` launches via `onCommand`, and auto-resumes reopened sessions when `opencodeActive`. The opt-in `antigravity` plugin (`session-plugins/antigravity.ts` + `antigravityHooks.ts`, same settings, `restore-session` → `agy -c`, `axn-agy-resume`) targets the Antigravity CLI (`agy`): `SessionStart` → `idle`, `PreInvocation`/`PostToolUse` → `running`, `Stop` → `completed` (`USER_CANCELED`/`ERROR` → `idle`). agy has no permission-request hook event, so no blocked/needs-you signal; `PreToolUse` is deliberately not wired — its required `decision` response would let a passive observer approve tools. The plugin also captures agy's `agy --conversation <id>` exit hint from output into `agyConversationId`, so `axn-agy-resume`/menu resume/`restore-session` can name the exact conversation, falling back to `agy -c` (most recent in the cwd).
 
 - The built-in `vibe` plugin (`session-plugins/vibe.tsx`, opt-in `vibe.enabled: true`) tracks Mistral Vibe sessions without a hook surface — Vibe has no documented lifecycle hooks, so detection is screen/output parsing like the pre-hook devin path: symbol-based task lines (`[ ]`/`[~]`/`[x]`/`[!]`, `○`/`●`/`✓`/`✗`) plus `Task X/Y` progress markers drive `session.tasks`/`progress`/`status` (parsed in a short window after an "updated todo list" marker), a terminal badge reconciles on process end ('completed' persists, else idle) and clears on a new submitted command, session names matching attention patterns (`? vibe`, "action required", …) raise a warning flag + `renderRow` `!` marker, and the idle timer flags a quiet session as "waiting for input"/"possibly finished" (`idle-timeout-seconds`, default 45). `/exit` inside vibe arms an 8 s exit-capture that reads the post-exit `vibe -r <name>` resume hint into `vibeSessionName` (+cwd), which powers `restore-session` (`pendingRestore` → `vibe -r <name>`) and `axn-vibe-resume` (with a `cd '<cwd>' &&` prefix when the recorded cwd differs). No `hookSpec` — nothing to bridge.
 - The built-in `dev-workflow` plugin (`session-plugins/devWorkflow.tsx`, opt-in `dev-workflow.enabled: true`) is a meta layer above agents: `plugins.yaml` defines workflows (`dev-workflow.workflows.<id>` — `states`, `start`, optional `transitions`, optional `vars` declarations, per-state `steps` as a map of named actions, each with `agent`/`prompt`/`prompt-file`/`command` templates, `run-in: shell|sub-shell|headless` and `auto` to fire on every entry into the step's state (start + later transitions — the on-enter hook); the flat single-action form parses as one anonymous `default` action; every action takes an optional `description` — the reserved `description` key in a named-actions map describes the state itself — shown as the session banner's lighter `detail` text and leading the Run buttons' tooltips). Declared vars are supplied by `axn-workflow-start <wf> [arg|key=value]`, card fields, `axn-workflow-set`, or the `axn-workflow-var[<token>]:` marker; they substitute into `{{key}}` templates and ride every launched action's env (`KEY=value`, plus `AXN_WORKFLOW`/`AXN_STATE`/`AXN_ACTION`/`AXN_WORKFLOW_TOKEN`). A `command` action's exit code is recorded as an informational check (`pluginState.checks['<state>:<name>']`, never gating) — via a printed `axn-workflow-check[<token>]:` trailer for `shell`, the `ctx.exec` result for `headless`, and the `subshell-exited` code for `sub-shell` (`openSubShell` returns the tab id, `onSubShellExit` resolves it). The state of record lives in the session's `pluginState` (persisted in state.json); an optional `tracking.file` (repo-root-relative or absolute, extension picks `.json` vs YAML) mirrors it as an agent-writable surface — agents can also move the workflow by printing a whole line `axn-workflow-state[<token>]: <state>`, report a check via `axn-workflow-check[<token>]: <name> <rc>`, or fire a named action via `axn-workflow-run[<token>]: <name>`, all adopted from PTY output. `<token>` is a random per-binding secret (`pluginState.token`, minted on bind, dropped on stop) handed only to launched actions as `$AXN_WORKFLOW_TOKEN`/`{{workflow_token}}` — tokenless marker lines (a `cat`ed hostile file) are ignored. Commands `axn-workflow-start`/`axn-workflow-set`/`axn-workflow-move`/`axn-workflow-run`/`axn-workflow`/`axn-workflow-stop`, start/move/run rows in the session context menu (`sessionMenuItems` — with several workflows a single "Start workflow…" row opens a searchable picker), a banner + under-session state chip, and a rail kanban view whose cards jump to sessions, move states via `sessionApi`, show editable var fields, and stack one run button per action with check badges. A workflow declaring a *required* `kind: mr` var also surfaces a button labelled with the workflow's `title` on glab-mr's MR rows (`mrStartWorkflows`; optional mr vars get none) via the `mrActions.ts` contribution registry: click → fetch the MR head ref (`merge-requests/N/head`, GitHub `pull/N/head`; the same button shows on gh-pr's PR rows; for `axn-mr-review` a bare `#N` means a GitHub PR and `!N` a GitLab MR unless the checkout is on GitHub — `reviewFetchRef`), `git worktree add` at the worktrees-plugin location, `openSession` there, bind the workflow with the MR vars pre-filled. See `docs/dev-workflow.md`.
 - The built-in `agents` plugin (`session-plugins/agents.tsx`, on by default — `agents.enabled: false` disables only the UI) owns **agent personas**: reusable `agents.personas.<name>` bundles in plugins.yaml (`cli` — defaults to the persona name, `model`, `args`, `prompt`/`prompt-file` — the first-message kickoff, `instructions`/`instructions-file` — the persistent identity, `description`; a bare string value is `cli` shorthand). On every ctx touch it mirrors the parsed list into the shared `agentRegistry.ts` module (the `mrActions.ts` contribution pattern — always in the bundle, so the schema stays available even when the plugin is disabled). Consumers: dev-workflow's `agent: <name>`/`{profile: <name>, …overrides}` step references (unresolved names degrade to `cli: <name>`). Launch lines are built by each CLI's registered **launcher** — `registerAgentLauncher` in `agentRegistry.ts`, built-in agent plugins register at module scope, `devWorkflow.agentLaunchLine` consults the registry: claude sends instructions via `--append-system-prompt(-file)`, codex via `-c developer_instructions=…`, devin and unregistered CLIs fold them into the seed prompt, and agy — which only accepts prompts via `-p`/`-i`/stdin — sends the seed through `-i` with instructions folded in (registered under both `agy` and `antigravity`). A launcher's refusal surfaces as session attention. Launch surfaces: `axn-agent <persona>` types the launch line in the current shell (`completeArg` offers persona names), the session and workspace context menus' single "New session with agent…" row opens a searchable persona picker (`pickFromList`, see below) and spawns a persona-named session seeded with the launch line (pending map → `onSessionOpen`, like worktrees; workspace rows use `defaultFolder` as cwd), and the rail bot icon opens a full-area view of persona cards (cli/model/prompt badges, live-session count, Launch button + a "running" session list grouped by workspace in panel order — a non-collapsible tree, so every agent shows where it lives). A launched/typed persona stamps `pluginState.agents.persona`, which drives the `renderRow` bot badge — the persona survives as the session's identity beyond process detection.
 - `session.process` is the foreground process identity: the process-group leader's argv resolved by `process_identity` (`src-tauri/src/lib.rs`) — exact argv tokens from `/proc/<pid>/cmdline` on Linux and `sysctl(KERN_PROCARGS2)` on macOS (comm via `proc_name` when another user's process refuses it), so paths with spaces stay one token; the cwd poll reads `/proc/<pid>/cwd` / `proc_pidinfo(PROC_PIDVNODEPATHINFO)` — the 1 s per-terminal polls never spawn `ps`/`lsof` — argv0 basename, except interpreter launches unwrap to the script (`python3.13 /x/bin/vibe` → `vibe`, `node cli.js` → `cli`, `python -m pkg` → the module). `sessionIcons` keys match this name (lowercased), so script-based tools (uv/pipx CLIs, npm shims) get icons and `processPattern` matches too.
-- The `docker` plugin (`session-plugins/docker.tsx`) is a rail-only indicator: the Docker whale SVG icon, running/stopped container counts, and a RAM-style used/free disk bar. Stats come from one `sh -c` probe via `backend.exec` (`command -v docker` + `docker info` gate, `docker ps -a --format '{{.State}}'` for counts, `docker system df --format '{{.Size}}'` for used bytes, `df -k` of `DockerRootDir` with `/` fallback for free space). The rail is session-less: desktop `plugin_exec` ignores the session id, web execs through the first session's host — the plugin hides when docker or exec is unavailable. `docker.refresh-interval-seconds` (default 15, min 5) sets the poll cadence; `system df` is slow, so polls never overlap. ≥80/≥90 % disk use raises a warning/critical app attention flag.
+- The `docker` plugin (`session-plugins/docker.tsx`) is a rail-only indicator: the Docker whale SVG icon, running/stopped container counts, and one rounded `BarStrip` triple bar — CPU / MEM / disk strips stacked under a single border, each strip filled with `pressureColor` and its percentage written into the bar (the label renders twice, once in track color and once in `--text-inverted` clipped to the fill, so glyphs flip color where the fill passes under them; per-strip `data-tip` carries the details). CPU and MEM strips show real **VM** pressure when possible — the probe `docker exec`s a read-only /proc snapshot inside the first running container (proc is not cgroup-namespaced, so cpuinfo/meminfo/stat report the VM kernel's numbers on colima/Desktop/podman-machine, host numbers on native Linux; CPU% is the /proc/stat jiffie delta between polls, MEM is MemAvailable-based); container `docker stats` sums are the fallback and stay in the tooltips. Disk likewise prefers `docker exec <cid> df -k /` (the VM's root fs — `df` of the host's `/` reported the macOS disk before). Two `sh -c` probes run via `backend.exec` on separate cadences: the fast per-poll `DOCKER_STATS_CMD` (`docker info` gate, `docker ps -a --format '{{.State}}'` counts, `docker stats --no-stream --format '{{.CPUPerc}}|{{.MemUsage}}'` container sums, `docker info --format '{{json .}}'` limits — docker `NCPU`/`MemTotal`, podman `host.cpus`/`host.memTotal` — and the `==vm==` container exec; each failed section prints `unavailable` and degrades to fallbacks) parsed by `parseDockerLive`, and the slow `DOCKER_DISK_CMD` (`docker system df --format '{{.Size}}'` + the df above, `DockerRootDir`/`Store.GraphRoot` host-side fallback) parsed by `parseDockerDisk` — `system df` walks every layer and takes seconds, so it runs only every `DISK_POLL_EVERY` (4) polls (~1 min at the default cadence) and keeps its last values on failure. The rail is session-less: desktop `plugin_exec` ignores the session id, web execs through the first session's host — the plugin hides when docker or exec is unavailable. `docker.refresh-interval-seconds` (default 15, min 5) sets the fast poll cadence; neither probe ever overlaps itself. ≥80/≥90 % disk or memory use raises a warning/critical app attention flag.
 - The `axn-dev` plugin (`session-plugins/axnDev.tsx`, Boxes rail icon) is a read-only mirror of `axn-dev list`: a shared `useSyncExternalStore` overview polls `axn-dev list` via `appRuntime().exec` on a `axn-dev.refresh-interval-seconds` cadence (default 30, min 10), parsed by the pure `parseAxnDevList` (global section at indent 2, project sections under `  <repo>:` headers at indent 4, endpoint lines and wrapped descriptions one level deeper — told apart by a URL-ish second token). The rail shows `running/found` (warning triangle when the CLI fails); clicking toggles the plugin view, which lists sections like `axn-dev list` — status dot, name, worktree badge, description, and clickable endpoint links for running scenarios — plus a persisted "running only" filter (`pluginData['axn-dev'].runningOnly`). No start/stop actions; `axn-dev serve` remains the full dashboard. The older external `plugins/axn-dev-scenarios.mjs` (opt-in, per-session row) is unaffected — different plugin id.
 - The built-in `worktrees` plugin (`session-plugins/worktrees.tsx`, opt-in `worktrees.enabled: true`) offers agent worktree isolation without any `axn-dev` dependency — plain `git` argv via `ctx.exec`. `git worktree add <dir> -b wt/<slug>` creates `<repo-parent>/worktrees/<repo>-wt-<slug>` (the axn-dev sibling-worktrees convention, so the CLI discovers them via `git worktree list`; `worktrees.worktree-root` overrides the parent), then `ctx.openSession(dir, slug)` spawns the session there — worktree-first, never a moved running shell. Entry points: session context menu ("New worktree session" / "New worktree with <agent>"), workspace context menu (when `defaultFolder` resolves to a repo), and `axn-worktree [name]`. The new session's `pluginState.worktree = { repoRoot, path, branch }` (stamped on `onSessionOpen` from a pending map, or detected once when a session opens inside a foreign-created linked worktree — e.g. dev-workflow's MR review) drives a `⎇` row badge, "Review worktree changes" (git tab at the path) and "Remove worktree" — `git worktree remove` refuses dirty trees, so failure re-raises the banner with a "Force remove" action, and success offers "Delete branch". The isolation nudge: when `session.process` matches `worktrees.agents` (default `claude, devin, codex, agy, vibe`) in a main checkout (`git-dir == git-common-dir`, probed once per session), a warning banner offers "New worktree session" (seeds the agent's resume command — `claude -c`, `devin -c`, `codex resume --last`, `agy -c`, `vibe -r`), with once-per-session re-raise and a persistent "Don't ask again" (`worktrees.suggest-isolation` gates it). `worktrees.default-agent` picks the seeded agent.
 - The built-in `scratchpad` plugin (`session-plugins/scratchpad.tsx`, opt-in — `scratchpad.enabled: true` plus the `scratchpad.patterns` setting, which has no default: `;`- or newline-separated `<repo-regex>: <dir>, <dir>` entries, e.g. `*: .local-drafts, drafts; axn-term: .ai, notes`; an entry without a repo part applies to all repos). The regex matches case-insensitively against the checkout dir basename AND the remote repo name, so one entry covers a repo and all its worktrees (`axn-term` also matches `axn-term-feat-foo`). Matching dirs union in order; the first *existing* dir is `primary` (else the first configured). Its in-panel surface is the session context menu only: one `Open <dir>/` row per configured folder (read from `pluginState.dirs` — sessionMenuItems is synchronous, so `onSessionOpen` and a debounced onOutput refresh resolve+store the dirs — falling back to a single "Open drafts" row before the first resolution), plus "New or open draft…" (`pickOrCreate`), "Copy agent hint" and "Tell agent about scratchpad". Drafts are plain files — agents read/write them with their own tools (filesystem-as-context), the plugin only has to say where they are: `axn-scratch ls|dir` echoes real paths into the scrollback, `axn-scratch hint` prints a paste-able AGENTS.md/CLAUDE.md hint, "Copy agent hint" puts it on the clipboard and "Tell agent about scratchpad" (offered when `agentInput` or an agent-ish process is foreground) types it into the session input *without* a newline. Creating a draft (`axn-scratch new <name>` or a bare name) mkdirs the primary dir, seeds a `*` `.gitignore` (self-ignoring folder — `scratchpad.gitignore-drafts` gates it) and opens the file in an editor tab; `axn-scratch open <name|n>` and bare names open existing drafts, `browse` opens the folder. Beyond the menu there is a `NotebookPen` rail icon opening the `hostsTabs` full-area view: drafts grouped by repo across all sessions, per-repo "copy hint" buttons, editor/browser hosted tabs (listings go through `PluginApi.listDir`, which resolves `null` where the backend lacks `listDir`).
@@ -997,6 +1135,7 @@ Example: `plugins/axn-demo-note/`.
 - Flows drive the app through its remote-control HTTP server (`AXN_TERM_REMOTE_CONTROL_PORT`). It only starts together with `AXN_TERM_REMOTE_CONTROL_TOKEN` (removed from the app's env, so PTYs never inherit it): every endpoint but `GET /health` requires `Authorization: Bearer <token>`, and requests whose `Host` is not `127.0.0.1:<port>`/`localhost:<port>` are rejected (DNS-rebinding guard). The adapter generates a token per run. The per-session output buffer behind `GET /sessions/<id>` (last ~200 KB) is only kept while the server is enabled.
 - The talk-tab resume flow is `flows/axn-term-talk-restore.xml` (seeded `agent` shell tab → `/exit` capture → `devin -r <name>` on reopen; plus the `devin -c` fallback when the app is killed mid-session).
 - The worktrees-plugin flow is `flows/axn-term-worktrees.xml` (temp git repo + `worktrees.enabled`; `POST /sessions/<id>/command` submits `axn-worktree <name>` through the frontend dispatch — unlike raw `/write` — then a fake `devin` launch in the main checkout must raise the isolation banner). Like the other flows it runs `target/release/axn-term` from `tauri build` — a plain `cargo build`/`cargo test` binary loads the Vite dev URL, so without `pnpm dev` no frontend starts and no session ever appears.
+- The file-drop flow is `flows/axn-term-drop-image.xml` (Linux): `startTestDisplay` runs a private X server (Xvfb, else rootful Xwayland) with a GTK drag source, `start` then launches the app there, and `flows/adapters/x11drive.py` performs a real XDND drag with XTEST — a synthetic DOM drop cannot reproduce the webview opening the file. It checks a drop beside the terminal types nothing and leaves the app loaded, a drop on the terminal pastes the image's quoted path (`wc -c ` + drop + Enter must count its bytes), and the window still closes from its close button. Variant `shell` is a plain shell session for flows that type into the terminal. On NVIDIA + Wayland the app needs `WEBKIT_DISABLE_DMABUF_RENDERER=1` in the flow's environment (Gdk "Error 71" otherwise); the test display sets it itself.
 - On macOS the bare `target/release/axn-term` binary cannot host WKWebView (the web content process dies at window creation); the adapter automatically prefers `target/release/bundle/macos/axn-term.app/Contents/MacOS/axn-term` next to `AXN_TERM_BINARY`, so run `tauri build --bundles app` once after frontend changes.
 - The flow adapter writes a `$SHELL` shim (`bin/axn-login-shell`) into the state dir: command sub-shells run `sh -c` with `login_shell_path()` — the login-shell PATH, not the app's env PATH — so the fake `devin` would be invisible without it. The shim answers the `-l -i -c env` probe with the flow bin dir prepended and (for zsh) routes startup through a proxy `ZDOTDIR` that re-sources the user's real dotfiles then re-prepends the bin dir, keeping the fake binaries first even after profiles rebuild PATH.
 - Run the real flow with `AXN_TERM_DEVIN_SESSION=<available-session> axn-dev flow -f flows/axn-term-restore-real-devin.xml --adapter axn-term=flows/adapters/axn-term.js`. The adapter verifies the exact configured name before reopening. Do not remove locks or close unrelated Devin instances to run it.
@@ -1116,7 +1255,12 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
   Select all for text fields, plus "Reload window" (also `⌘⇧R`/`Ctrl+Shift+R`,
   `isReloadShortcut` — terminals let it through; it saves state first and,
   running no React cleanup, keeps the PTYs, which the reloaded window
-  reattaches)), `PathActionMenu` /
+  reattaches; every live terminal's serialized screen is stashed in
+  sessionStorage first (`stashTerminalReplays`, `takeReloadReplay` in
+  `terminalRegistry.ts`), so the reloaded window repaints scrollback and
+  the alt screen of a running TUI instead of coming back blank —
+  sessionStorage dies with the app session, same as the PTYs, so a fresh
+  start never replays a dead terminal)), `PathActionMenu` /
   `FileHoverPreview`, themes, `SettingsProvider`, session types, terminal
   links/registry, platform labels. Tooltips are the shared `TooltipHost`
   (`app/Tooltip.tsx`, mounted once in `ShellApp`): put `data-tip="..."` on an
@@ -1204,7 +1348,10 @@ state/subscribe/signIn/signOut/getAccessToken; the signed-in JWT wins over
 the static `remoteAuthorityToken` dev fallback and a sign-in flip restarts
 the authority so its hello carries the token. The gateway binds the
 mirrored session to the JWT `sub` — viewers must authenticate as the same
-account; `RemoteAuthority__AllowAnonymous=true` bypasses this for dev.
+account; `RemoteAuthority__AllowAnonymous=true` bypasses this for dev
+(off by default). Hello tokens must come from an allowed OIDC client
+(`azp`): `RemoteAuthority__ClientIds` (comma list), unset =
+`Authentication:ClientId` plus the desktop's `axn-term-desktop`.
 
 Session plugins can declare per-session state, which is stored inside `state.json`
 under `sessions[].pluginState.<plugin-id>`. Plugin lifecycle hooks (`onOutput`,
@@ -1214,7 +1361,20 @@ API and a `writeToSession` helper for sending input to the session PTY.
 swallow it (the devin plugin uses it to arm its `/exit` capture and to
 invalidate the remembered session when the user launches `devin -r <name>`
 manually). Handlers may return a Promise; the replacement line is written
-once it resolves.
+once it resolves. The outcome of a hidden-command line follows one
+procedure (`applySessionCommandResult` in `app/hiddenCommands.ts`): a
+handler returning `undefined` submits the line to the shell unchanged;
+`false` swallows it silently; a plain string replaces the line and runs in
+the shell (e.g. `devin -r <name>`); and the `echo "<msg>"` shape is the
+feedback convention — a message for the user, not a command. With the
+terminal's `writeDisplay` channel the typed line stays on screen and
+`<msg>` is drawn below it like real command output (the `\x15` kill goes
+to the PTY after the display write so the shell's line erase lands on the
+empty line underneath); without it the `echo` is typed into the shell as
+a fallback. The remote `axn-term session command` path (`controlReply` in
+`app/controlCommands.ts`) parses the same `echo` shape back into the CLI's
+reply text. Covered by the `command feedback (display channel)` cases in
+`hiddenCommands.test.ts`.
 
 Plugins can declare hidden commands via `commands?: (string | PluginCommand)[]`
 — they join the built-in `axn-*` names for Tab completion. A plain string is
@@ -1258,10 +1418,23 @@ app-level counterpart of `pluginState`, backed by window state
 
 Built-in hidden session/workspace commands (intercepted before plugins):
 
-- `axn-session [path]` — open a new session in the current workspace. No
+- `axn-session <subcommand>` — session management. `create` opens a new
+  session (`axn-session create [path] [-w|--workspace <name>]
+  [-n|--name <name>] [--background] [--summary <text>]`); the bare legacy
+  spelling `axn-session [flags] [path]` is an implicit `create`. No
   argument or `.` starts it in the current session's cwd; an absolute or
-  relative path starts it there (validated via `stat_path`, echoes an error
-  otherwise).
+  relative path starts it there (validated via `stat_path`, echoes an
+  error otherwise). `-w`/`--workspace` targets a workspace by name —
+  created when absent, like `axn-session-mv`; `-n`/`--name` names the
+  session; `--background` opens it without selecting it or dismissing a
+  covering plugin view (agents spawning sessions don't steal focus);
+  `--summary` sets the new session's `summary` field.
+  `axn-session set` mutates the *current* session:
+  `axn-session set [--summary <text>] [--name|--title <name>]` — at least
+  one flag required (usage error otherwise); an empty quoted value clears
+  the field (same convention as bare `axn-rename`/`axn-session-summary`).
+  Feedback echoes as command output (`renamed to '…'`/`name cleared`,
+  `summary updated`/`summary cleared`).
 - `axn-session-mv <workspace>` — move the current session to another
   workspace, creating the workspace if it does not exist. The session
   context menu's "Move to workspace…" opens `MoveToWorkspaceModal`: every
@@ -1277,6 +1450,46 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   — output is broadcast to every window, so the target's terminals simply
   reattach. No ack within 3 s → the move is undone and an error banner
   shows.
+- `axn-session-window` — move the current session into a new window of its
+  own (also "Move to new window" in the session context menu; hidden for a
+  window's only session). Session rows also tear off Chrome-tab style
+  (`app/sessionTearOff.ts`): a row dragged out of the window and dropped
+  where no window takes it opens a new window for it, and a row dropped on
+  another window's panel (or anywhere in that window) moves there — before
+  the row it lands on, else appended to the selected workspace. All of it
+  rides the adopt hand-over above (PTYs, tabs, plugin state, scrollback).
+  Every cross-window hand-over (also "Move to workspace…") carries the
+  terminals' history: the PTYs only stream new output, so the source
+  serializes each xterm (`serializeTerminal` in `terminalRegistry.ts`,
+  `@xterm/addon-serialize` — colors, modes and a TUI's alternate screen
+  included) into the adopt request's `replay`, and the target's
+  `ShellTerminal`/`SubShellView` write it (`takePendingReplay`) before any
+  live output. The receiving window takes focus (`platform.window.focus`,
+  capability `core:window:allow-set-focus`). A secondary window emptied that
+  way while other windows remain deletes its saved state instead of being
+  restored empty at the next launch — unless it holds per-window data
+  (`pluginData`/`pluginTabs`); `main` and the last window always keep theirs.
+  Mechanics: the new window is created through `create_window` with
+  `options` (`boot` — the `encodeBootIntent` URL fragment `#axn-boot=…`,
+  validated URL-safe by `boot_fragment` in `lib.rs`; `x`/`y`/`width`/
+  `height` — the source window's size and, when known, the drop point;
+  Wayland compositors place windows themselves). `platform.window.bootIntent`
+  hands it to the new window, which boots *empty* (`useShellSessions`
+  `startEmpty`: one workspace named after the source's, no default shell;
+  only without saved state, so a reload is a normal restore), suspends the
+  empty-window auto-close and repeats `axn:window-ready` until it adopted
+  the session (20 s, then it closes again). The source waits for that
+  announcement (`openTearOffWindow`) before sending the adopt request.
+  Cross-window drops: the dragging window announces `axn:session-drag`/
+  `axn:session-drag-end`; other windows accept the HTML5 drop while one is
+  active (a window-level dragover/drop listener plus the panel's own
+  handlers) and claim it with `axn:session-drop`, which the source turns
+  into an adopt request with `beforeSessionId`. Whether the drag left the
+  window comes from `createDragExitTracker` (a lone `dragleave` — no
+  coordinates, which Wayland does not report outside the window); a
+  `dropEffect: 'none'` dragend outside waits `TEAR_OFF_CLAIM_GRACE_MS` for a
+  drop claim before opening a new window. Esc-cancelling a drag outside the
+  window is indistinguishable from dropping there, so it tears off too.
 - `axn-session-up` / `axn-session-down` — reorder the current session within
   its workspace.
 - `axn-workspace-up` / `axn-workspace-down` — reorder the current workspace.
@@ -1293,11 +1506,19 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   process-reported name, same as the reset icon in the context menu); in a
   sub-shell it renames only that tab (no argument restores the default label).
 - `axn-session-summary [text]` — set the session's `summary` field — a
-  one-line description rendered under the session title in the panel (behind
-  the `sessionSummaries` setting) and under the title on dev-workflow kanban
-  cards. Matching outer quotes are stripped, text is capped at 200 chars
-  (`SESSION_SUMMARY_MAX` in `app/hiddenCommands.ts`), and no argument clears
-  it. Agents use it to keep the session's displayed description current.
+  short description rendered clamped to 3 lines under the session title in
+  the panel (behind the `sessionSummaries` setting) and under the title on
+  dev-workflow kanban cards; full text stays in the tooltip. Matching
+  outer quotes are stripped, text is capped at 400 chars
+  (`SESSION_SUMMARY_MAX` in `app/hiddenCommands.ts`), and no argument
+  clears it. `axn-session set --summary <text>` is the equivalent spelling
+  on the `axn-session` umbrella command (also reachable as
+  `axn-term session set --summary …` over the control socket). Agents use
+  it to keep the session's displayed description current. The session
+  context menu's "Edit summary…" (`app/EditSessionSummaryModal.tsx`) edits
+  the same field: a textarea sized to the session row's width so wraps
+  match the panel, with a warning once the text runs past the three-line
+  clamp (measured on a hidden mirror of the panel's summary element).
 - `axn-install [args]` — runs `axn-term install <args>` in the shell (the
   running binary's path is resolved via `current_exe_path`, so it also works
   in dev builds where `axn-term` is not on PATH).
@@ -1542,7 +1763,11 @@ section, so `<plugin>.enabled: true` enables the preview too (still opt-in).
 ## CLI subcommands and agent skills
 
 `main.rs` routes argv before Tauri starts (`src-tauri/src/cli.rs`): bare
-`axn-term` launches the app; `axn-term session summary|rename|focus|command …`
+`axn-term` launches the app — one instance per `$AXN_TERM_STATE_DIR`: a
+launch that finds a live control socket asks the running app to focus a
+window and exits (a stale socket is replaced), so `pnpm tauri dev` from an
+axn-term terminal needs its own `AXN_TERM_STATE_DIR`; an unknown subcommand
+prints usage and exits 2. `axn-term session summary|rename|focus|command …`
 runs an `axn-*` command for the terminal it is invoked from — over the
 control socket (`src-tauri/src/control.rs`, `$AXN_TERM_STATE_DIR/control.sock`,
 0600): every PTY gets `AXN_TERM_PTY_ID` + a random `AXN_TERM_PTY_SECRET` +
@@ -1710,7 +1935,10 @@ UI strings are localized with [Lingui](https://lingui.dev) 6 (macros via
 - `libs/shell-ui/src/i18n.test.ts` fails when a compiled catalog misses an
   `en` message id or a non-`en` `.po` entry has an empty `msgstr` — a missing
   translation surfaces in the UI as untranslated English (or a raw hash id
-  where no `message` fallback exists).
+  where no `message` fallback exists). The same file also runs
+  `lingui check sync` (`pnpm i18n:check`), which fails when a wrapped string
+  was added to the code but never extracted — the catalog-vs-catalog checks
+  cannot see a msgid that never entered the .po files.
 - User-facing control: `language` setting in `config.yaml` (`en`/`ko`) and
   Settings → General → Language.
 
@@ -1837,24 +2065,44 @@ plugin view; right-clicking a hosted tab offers moving it back to any
 session. `Ctrl/⌘+Alt+←/→` cycles the hosted tabs while the view is active.
 
 The `awesome-list` plugin (`session-plugins/awesomeList.tsx`, FolderHeart
-rail icon) is a local bookmark list: folder/file paths and URLs kept in
-`pluginData['awesome-list'].items`. Clicking opens dirs as `browser` tabs and
-files as `editor` tabs inside the plugin view (files also get a Preview
-action, URLs open externally). Entries are added/edited/removed in the view
-or via the `axn-awesome` hidden command (`axn-awesome`/`ls` prints a numbered
-list, `add <path|url> [label]` resolves via `stat_path` against the session's
-live cwd, `rm <n|path|label>` removes); paths resolve via `stat_path` (`~`
-expands, nonexistent paths are flagged "not found" in the view).
-Right-clicking an entry opens a context menu built on the shared
-`PathActionMenu` (Open/Edit/Preview/Reveal/Copy Path, or Open/Copy URL for
-links) with `extraItems` for bookmark-specific Edit/Remove rows.
+rail icon) is a local favorites list: folder/file paths, URLs and shell
+commands (`type: 'command'`) kept in `pluginData['awesome-list'].items`.
+Clicking opens dirs as `browser` tabs and files as `editor` tabs inside the
+plugin view (files also get a Preview action, URLs open externally); clicking
+a command runs it in the current session — `renderView` ctx's
+`selectedSessionId` (the session selected when the view opened; the
+only session otherwise) — the line is routed through `runCommand` (so
+`axn-*` favorites dispatch) then written to the PTY with a trailing CR,
+and `selectSession` brings the terminal forward. "Run in another
+session…" (menu row) asks via the shared `pickFromList` picker, a
+hover/menu "Type into session" action writes the command without CR so
+it can be edited first, and "Copy command" uses `services.copyText`. Entries are added/edited/removed in the view — a leading `>`
+in the add input stores a command (`> [label =] command`, ` = ` separates
+the label) — or via the `axn-awesome` hidden command (`axn-awesome`/`ls`
+prints a numbered list with `$` marking commands, `add <path|url> [label]`
+resolves via `stat_path` against the session's live cwd, `cmd [<label> =]
+<command>` stores a command, `run <n|name>` routes the stored command
+through `runCommand` dispatch (so `axn-*` favorites dispatch; a plain
+command replaces the typed line), `rm <n|name>` removes — `completeArg`
+completes subcommand names and `run`/`rm` targets); paths resolve via `stat_path`
+(`~` expands, nonexistent paths are flagged "not found" in the view). A
+filter row above the list matches label and path/command; Enter activates
+the top match. Right-clicking a path entry opens a context menu built on
+the shared `PathActionMenu` (Open/Edit/Preview/Reveal/Copy Path, or
+Open/Copy URL for links) with `extraItems` for bookmark-specific
+Edit/Remove rows; command entries get a plain menu with Run/Type/Edit/Remove.
 
 The `glab-mr` plugin (`session-plugins/glabMr.tsx`) tracks GitLab merge
 requests via the `glab` CLI. Per session it runs `glab mr list -s <branch>
--F json` plus one `glab api projects/:fullpath/merge_requests/<iid>` detail
-call per MR (for `head_pipeline.status`) when the repo/branch signature
-changes or the cached list is >5 min stale; results live in pluginState
-`glab-mr.mrs`. App-wide it polls `glab api graphql` (single query over
+-F json` plus two `glab api` calls per MR —
+`projects/:fullpath/merge_requests/<iid>` (for `head_pipeline.status`) and
+`…/<iid>/discussions` (notes' `resolvable`/`resolved` → `openThreads`, by
+`countOpenThreads`; absent on failure so the panel falls back to the
+`blocking_discussions_resolved` boolean chip) — when the repo/branch
+signature changes or the cached list is >5 min stale; results live in
+pluginState `glab-mr.mrs`. The session-panel block shows `N open threads`;
+the renderView rows show the GraphQL `description` clamped to 3 lines.
+App-wide it polls `glab api graphql` (single query over
 `currentUser.assignedMergeRequests` ∪ `authoredMergeRequests` without
 assignee → "mine", and `reviewRequestedMergeRequests` → "review") on a
 `glab-mr.refresh-interval-seconds` cadence (default 120) — the rail teaser
@@ -1864,18 +2112,47 @@ the plugin's renderView listing both sets. `glab-mr.hostname` overrides the
 
 The `gh-pr` plugin (`session-plugins/ghPr.tsx`) is the GitHub twin, driven
 by `gh`. Per session it runs `gh pr list --head <branch> --json
-number,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup`
+number,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,isCrossRepository,headRepositoryOwner`
 plus one batched `gh api graphql` call (PR numbers as `-F` variables) for
-`reviewThreads.isResolved` — resolution state is GraphQL-only. Results
-live in pluginState `gh-pr.prs`. App-wide it polls `gh api graphql` with
+`reviewThreads.isResolved` — resolution state is GraphQL-only; the per-PR
+unresolved count lands in `openThreads` (the panel shows `N open threads`;
+the renderView rows show the fragment's `bodyText` clamped to 3 lines).
+`--head`
+matches the branch *name* in any fork, so `ownPrs` keeps same-repo PRs and
+fork PRs only from the owners of the remotes this checkout pushes to (origin
+plus the branch's push/tracking remote) — otherwise a session on `main` of a
+popular repo shows strangers' fork PRs named `main`. Results live in
+pluginState `gh-pr.prs`. App-wide it polls `gh api graphql` with
 `is:pr is:open assignee|author|review-requested:@me` searches on a
 `gh-pr.refresh-interval-seconds` cadence (default 120); `gh-pr.hostname`
-overrides `gh api --hostname` (GHES). It shares glab-mr's model fields and
-classification helpers — `mergeMine`, `openThreads`, `mrNeedsAction` +
-`prNeedsAction` (adds `changes_requested`), `mrWaitingForMe` — and renders
-the same rail/panel/row/view surfaces plus a `changes requested` badge;
-rows carry the shared `mrActions` providers (dev-workflow's `review`
-button already resolves `pull/N/head`).
+overrides `gh api --hostname` (GHES). The search fragment is sized under
+GitHub's 500,000-node query limit (`reviewThreads(first: 50)` ×
+`comments(last: 20)` — `last`, because `mrWaitingForMe` reads a thread's
+newest note). It shares glab-mr's model fields and classification helpers —
+`mergeMine`, `openThreads`, `mrNeedsAction` + `prNeedsAction` (adds
+`changes_requested`), `mrWaitingForMe` — and renders the same
+rail/panel/row/view surfaces plus a `changes requested` badge; rows carry
+the shared `mrActions` providers (dev-workflow's `review` button resolves
+`pull/N/head`).
+
+Both forge plugins are on by default and stay quiet where they don't apply
+(shared helpers in `session-plugins/forge.ts`):
+
+- A session only queries its own forge: `forgeOfRemote(repo.remote)` —
+  the plugin's `hostname` setting, else `github`/`gitlab` in the origin
+  host — makes gh-pr skip GitLab repos and glab-mr skip GitHub repos;
+  unknown hosts try the CLI.
+- Every command runs behind `forgeCliCommand` (a `command -v <cli>` guard
+  that fails with a fixed `axn-term: <cli> is not installed` marker), and
+  `classifyCliError` sorts overview failures into `missing`, `signed-out`
+  (`gh auth login` / `Invalid token` / an anonymous `currentUser: null`)
+  and `error`. `forgeRailMode` turns that into the rail: hidden while the
+  CLI is missing (and until the first result, so nothing flashes up), a
+  muted icon with a sign-in hint when signed out, the red triangle only
+  for real errors (network, API). The failure is kept through `loading`
+  so the rail doesn't flicker between polls.
+- All arguments reach `sh -c` single-quoted via `shellQuote` — git allows
+  branch names like `$(…)`, and the GraphQL queries carry `$variables`.
 
 The `git-inspect` plugin (`session-plugins/gitInspect.tsx`) is layered on
 `git-status` (titled `git` in Settings): `dependsOn: [{ id: 'git-status',
@@ -1900,7 +2177,7 @@ disabled.
 
 - Plugins are enabled per-user in `~/.axn-term/plugins.yaml` via `<settingsKey>.enabled: true|false`. Built-ins default to enabled; plugins loaded from `~/.axn-term/plugins/*.mjs` are always opt-in.
 - The Settings view (`app/SettingsModal.tsx`) is a centered modal with General/Plugins tabs. The Plugins tab lists every registered session-view and file-preview plugin on the left (with an enabled dot); the right side offers the `enabled` toggle plus the plugin's declared settings. Changes persist via `updatePluginSection` (`app/PluginSettingsProvider.tsx`) — a shallow section merge that rewrites plugins.yaml (`pluginSettingsToYaml` converts camelCase keys back to kebab-case; comments in the file are not preserved by UI writes). General also holds the font settings: `shellFontFamily`/`shellFontSize` (applied to session and sub-shell terminals via `resolveShellFont` in `libs/shell-ui/src/themes.ts`, default: Monaspace stack @14px) and `panelFontFamily`/`panelFontSize` (applied to the session-panel wrapper — the size scales it proportionally against the 12px base via CSS `zoom`).
-- Plugins declare UI-editable settings via `settings?: PluginSettingField[]` on `SessionViewPlugin` — pure data (`{ key, label, description?, type: 'boolean'|'number'|'string', default? }`) rendered generically, so external `.mjs` plugins can declare fields too. Built-ins may instead/additionally provide `renderSettings({ settings, update })` for a custom view. `git-status`, `glab-mr` and `gh-pr` each declare `show-in-panel` (gates `render` under the session; the legacy `show-in-header` key is still honored on read) and `show-in-title` (gates the `renderRow` indicator in the session's title row — and, for git-status/glab-mr/gh-pr, the `rowTip` tooltip explanation with it); `devin` (`restore-session`, `idle-timeout-seconds`), `claude`/`codex`/`antigravity` (`restore-session`, `install-hooks`), `vibe` (`restore-session`, `idle-timeout-seconds`) and `glab-mr` and `gh-pr` (`refresh-interval-seconds`, `hostname`) declare their fields as well.
+- Plugins declare UI-editable settings via `settings?: PluginSettingField[]` on `SessionViewPlugin` — pure data (`{ key, label, description?, type: 'boolean'|'number'|'string', default? }`) rendered generically, so external `.mjs` plugins can declare fields too. Built-ins may instead/additionally provide `renderSettings({ settings, update })` for a custom view. `git-status`, `glab-mr` and `gh-pr` each declare `show-in-panel` (gates `render` under the session; the legacy `show-in-header` key is still honored on read) and `show-in-title` (gates the `renderRow` indicator in the session's title row — and, for git-status/glab-mr/gh-pr, the `rowTip` tooltip explanation with it); `devin` (`restore-session`, `idle-timeout-seconds`), `claude`/`codex`/`antigravity` (`restore-session`, `install-hooks`), `vibe` (`restore-session`, `idle-timeout-seconds`), `glab-mr` and `gh-pr` (`refresh-interval-seconds`, `hostname`) declare their fields as well.
 - External `.mjs` plugins `export default` the plugin object (no JSX — `render` may return a string). They are loaded at startup through `loadExternalPlugins()` (`session-plugins/index.ts`) once `plugins.yaml` has been read — the file *watch* only reloads settings, newly dropped `.mjs` files need a restart. An `.mjs` plugin can also declare `hookSpec` (an `AgentHookSpec` from `@axn-term/plugin-sdk`, see "hook bridging" below): the host then drives the whole agent-hook bridge for it — config install per its `install-hooks` setting, event-file polling, mapped status/attention — with no lifecycle code of its own.
 - Example external plugin: `plugins/axn-dev-scenarios.mjs` (copy to `~/.axn-term/plugins/` and set `axn-dev-scenarios.enabled: true`).
 
@@ -1948,12 +2225,15 @@ Desktop reads plugin dirs via `list_external_plugin_dirs` /
 `read_external_plugin_file`; web has no plugin dirs (capability absent).
 Example: `plugins/axn-demo-note/`.
 - The built-in `claude` plugin (`session-plugins/claude.ts`) is opt-in (`claude.enabled: true`). It parses Claude Code's rendered `Update Todos` block from the live screen into `session.tasks`/`session.progress` (it owns progress via `handlesProgress` while claude runs), can resume Claude Code (`restore-session: true`) — like devin it captures the conversation id from claude's exit hint (`Resume this session with:` / `claude [--worktree "<name>"] --resume <id>`; `onClose` sends Ctrl-C pairs so claude prints it, `onProcessEnd` reads it from the output tail for exits it did not drive) and restores that exact conversation behind the `pendingRestore` overlay, falling back to `claude -c` when no id was captured or a fresh `claude` launch invalidated it — and optionally bridges Claude Code **hooks** (`claude.install-hooks: true`, adapter `session-plugins/claudeHooks.ts` on the shared bridge below): `UserPromptSubmit`/`PreToolUse`/`PostToolUse` → `running` + flag cleared (PostToolUse un-blocks an approved permission at once), `PermissionRequest` → `blocked` + critical needs-you attention, `Notification` → a warning flag only — the status stays (claude also sends it when idling after `Stop`) and the bridge drops a hook-raised warning once the session is selected after it (`warningRaisedAt` vs `sessionLastSelectedAt`; critical flags wait for the next event); flags OS-notify for non-selected/unfocused sessions; `SubagentStop` is ignored (background subagents finish after `Stop`), `Stop` → `completed`, `StopFailure` → `blocked`, `SessionStart` → `idle`, `SessionEnd` clears the flag while process-end reconciliation owns the final badge. Once any hook event lands, hook state owns `session.status` and the screen scan only contributes task content; without hooks the todo-parse fallback still drives tasks/progress/status.
-- Agent **hook bridging** is shared and public: the pure, dependency-free half lives in `libs/plugin-sdk` `hooks.ts` (`AgentHookSpec`/`AgentHookEffect`, `agentHookScript`/`agentHookScriptPath`, `agentEventDir`/`agentEventFile`/`agentEventLog`, `readHookLog`, `mergeHookSettings`/`removeHookSettings`, `parseHookEvent`), the host half in `session-plugins/agentHookBridge.ts` (runtime map, tty resolution + poll loop, config sync, `hookStatusOwned`). A plugin declares `hookSpec` on its `SessionViewPlugin` object — built-in *or* external `.mjs` — and the host drives the bridge for it: on output dispatch `maybeWireHookSpec` syncs the agent's config per the plugin's `installHooks` setting and starts the poll while `processPattern` matches, `releaseHookSpec` on process end stops polling and clears the flag (spec-only plugins get the default terminal badge — 'completed' persists, anything else → idle), `dropHookSpec` on session open/close forgets the runtime (all in `ShellApp`'s dispatch points). Built-ins (`claude`/`codex`/`antigravity`) declare `hookSpec` and keep only their extras (todo parsing, resume commands, `<agent>Seen` tracking) — nothing wires the bridge by hand. The spec itself carries the agent id, its event list, config file (`~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` — claude/codex use the grouped `hooks.<Event> = [{matcher?, hooks:[{type:'command', command}]}]` schema and a `hook_event_name` stdin payload; agy's file holds named hook groups `{"<name>": {enabled, <Event>: [...]}}` with a discriminator-free payload and a required JSON response, so its spec installs a wrapper script (`agy-hook.sh`) via custom `install`), and the event→status/attention map; agents with a non-JSON config (e.g. a JS plugin file) provide the spec and a custom `install` via the same contract. The bridge installs one script, `~/.axn-term/agent-hook.sh <agent>`, which appends each hook's stdin JSON as one line to `$AXN_TERM_STATE_DIR/<agent>-events/pty-<AXN_TERM_PTY_ID>.jsonl` (tty-named for terminals without the PTY id) — an append-only log per PTY: payloads over ~3.5 KB shrink to `hook_event_name`/`tool_name`/`notification_type` so every append is one atomic write, and past 64 KB the log rotates to `.jsonl.1` under a `mkdir` lock. While the agent is foreground the host polls the log (`pollHookEvents`/`readHookLog`, 1.5 s, offset + first-line cursor, reads the `.1` tail across a rotation) and applies every new event in order — the first read of a log applies only its newest event, and a warning never downgrades a live critical flag (`nextHookAttention`), so a PermissionRequest followed by a Notification stays "needs you". A latest-event `.json` from an older script is still read as a fallback. Hook events then own `session.status`. Agents in sub-shell tabs write to their tab PTY's own log: `SubShellView`'s 1 s foreground poll drives `createTabHookWatcher` (`app/subShellHooks.ts`) through the enabled plugin whose `processPattern` matches (`hookPluginFor`), setting `tab.hookStatus` (a dot on the tab — red pulsing for blocked) and `tab.hookAttention`, which `sessionAttention` rolls up as `tab:<label>` and OS-notifies when the tab is not in view; a warning clears once the tab is shown, a critical flag on the agent's next event. The same tick also tracks the tab agent's task list: plugins may declare a pure `screenTasks(lines)` (claude, devin), sub-shell xterms are registered in `terminalRegistry` under their tab id, and `tabTaskPatch` (`app/subShellTasks.ts`) stores `tab.tasks`/`tab.progress` — shown as done/total on the tab (list in its tooltip); a vanished block keeps the last list, an agent exit drops an unfinished one. Install merges axn-term-owned entries into the agent's config (foreign hooks/settings preserved, removed again when disabled — legacy `claude-hook.sh` entries are cleaned up too). The sandboxed manifest tier has no `hookSpec` yet — `mapEvent` is a function and cannot cross the iframe postMessage boundary; a declarative event→effect map in `plugin.json` is the planned bridge. The opt-in `codex` plugin (`session-plugins/codex.ts` + `codexHooks.ts`, `codex.enabled`/`install-hooks`/`restore-session` → `codex resume --last`, `axn-codex-resume`) maps `PreToolUse`/`PostToolUse`/`SubagentStart`/`SubagentStop`/`UserPromptSubmit` → `running`, `PermissionRequest` → `blocked` + critical flag, `Stop` → `completed`, `Interrupt`/`SessionStart` → `idle`; note codex requires new hooks to be trusted once via `/hooks` (trust review). The opt-in `antigravity` plugin (`session-plugins/antigravity.ts` + `antigravityHooks.ts`, same settings, `restore-session` → `agy -c`, `axn-agy-resume`) targets the Antigravity CLI (`agy`): `SessionStart` → `idle`, `PreInvocation`/`PostToolUse` → `running`, `Stop` → `completed` (`USER_CANCELED`/`ERROR` → `idle`). agy has no permission-request hook event, so no blocked/needs-you signal; `PreToolUse` is deliberately not wired — its required `decision` response would let a passive observer approve tools. The plugin also captures agy's `agy --conversation <id>` exit hint from output into `agyConversationId`, so `axn-agy-resume`/menu resume/`restore-session` can name the exact conversation, falling back to `agy -c` (most recent in the cwd).
+
+
+- Agent **hook bridging** is shared and public: the pure, dependency-free half lives in `libs/plugin-sdk` `hooks.ts` (`AgentHookSpec`/`AgentHookEffect`, `agentHookScript`/`agentHookScriptPath`, `agentEventDir`/`agentEventFile`/`agentEventLog`, `readHookLog`, `mergeHookSettings`/`removeHookSettings`, `parseHookEvent`), the host half in `session-plugins/agentHookBridge.ts` (runtime map, tty resolution + poll loop, config sync, `hookStatusOwned`). A plugin declares `hookSpec` on its `SessionViewPlugin` object — built-in *or* external `.mjs` — and the host drives the bridge for it: on output dispatch `maybeWireHookSpec` syncs the agent's config per the plugin's `installHooks` setting and starts the poll while `processPattern` matches, `releaseHookSpec` on process end stops polling and clears the flag (spec-only plugins get the default terminal badge — 'completed' persists, anything else → idle), `dropHookSpec` on session open/close forgets the runtime (all in `ShellApp`'s dispatch points). Built-ins (`claude`/`codex`/`antigravity`) declare `hookSpec` and keep only their extras (todo parsing, resume commands, `<agent>Seen` tracking) — nothing wires the bridge by hand. The spec itself carries the agent id, its event list, config file (`~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` — claude/codex use the grouped `hooks.<Event> = [{matcher?, hooks:[{type:'command', command}]}]` schema and a `hook_event_name` stdin payload; agy's file holds named hook groups `{"<name>": {enabled, <Event>: [...]}}` with a discriminator-free payload and a required JSON response, so its spec installs a wrapper script (`agy-hook.sh`) via custom `install`), and the event→status/attention map; agents with a non-JSON config (e.g. a JS plugin file) provide the spec and a custom `install` via the same contract. The bridge installs one script, `~/.axn-term/agent-hook.sh <agent>`, which appends each hook's stdin JSON as one line to `$AXN_TERM_STATE_DIR/<agent>-events/pty-<AXN_TERM_PTY_ID>.jsonl` (tty-named for terminals without the PTY id) — an append-only log per PTY: payloads over ~3.5 KB shrink to `hook_event_name`/`tool_name`/`notification_type` so every append is one atomic write, and past 64 KB the log rotates to `.jsonl.1` under a `mkdir` lock. While the agent is foreground the host polls the log (`pollHookEvents`/`readHookLog`, 1.5 s, offset + first-line cursor, reads the `.1` tail across a rotation) and applies every new event in order — the first read of a log applies only its newest event, and a warning never downgrades a live critical flag (`nextHookAttention`), so a PermissionRequest followed by a Notification stays "needs you". A latest-event `.json` from an older script is still read as a fallback. Hook events then own `session.status`. Agents in sub-shell tabs write to their tab PTY's own log: `SubShellView`'s 1 s foreground poll drives `createTabHookWatcher` (`app/subShellHooks.ts`) through the enabled plugin whose `processPattern` matches (`hookPluginFor`), setting `tab.hookStatus` (a dot on the tab — red pulsing for blocked) and `tab.hookAttention`, which `sessionAttention` rolls up as `tab:<label>` and OS-notifies when the tab is not in view; a warning clears once the tab is shown, a critical flag on the agent's next event. The same tick also tracks the tab agent's task list: plugins may declare a pure `screenTasks(lines)` (claude, devin), sub-shell xterms are registered in `terminalRegistry` under their tab id, and `tabTaskPatch` (`app/subShellTasks.ts`) stores `tab.tasks`/`tab.progress` — shown as done/total on the tab (list in its tooltip); a vanished block keeps the last list, an agent exit drops an unfinished one. Install merges axn-term-owned entries into the agent's config (foreign hooks/settings preserved, removed again when disabled — legacy `claude-hook.sh` entries are cleaned up too). The sandboxed manifest tier has no `hookSpec` yet — `mapEvent` is a function and cannot cross the iframe postMessage boundary; a declarative event→effect map in `plugin.json` is the planned bridge. The opt-in `codex` plugin (`session-plugins/codex.ts` + `codexHooks.ts`, `codex.enabled`/`install-hooks`/`restore-session` → `codex resume --last`, `axn-codex-resume`) maps `PreToolUse`/`PostToolUse`/`SubagentStart`/`SubagentStop`/`UserPromptSubmit` → `running`, `PermissionRequest` → `blocked` + critical flag, `Stop` → `completed`, `Interrupt`/`SessionStart` → `idle`; note codex requires new hooks to be trusted once via `/hooks` (trust review). The opt-in `opencode` plugin (`session-plugins/opencode.ts`, `opencode.enabled`/`restore-session`) mirrors the devin/claude resume flow without a hookSpec: it scans the output tail for the TUI's exit hint (`opencode -s ses_…`), records `opencode -s <id>` (or `opencode -c` when no id was seen) as the shared last-session record, tracks manual `opencode`/`-s` launches via `onCommand`, and auto-resumes reopened sessions when `opencodeActive`. The opt-in `antigravity` plugin (`session-plugins/antigravity.ts` + `antigravityHooks.ts`, same settings, `restore-session` → `agy -c`, `axn-agy-resume`) targets the Antigravity CLI (`agy`): `SessionStart` → `idle`, `PreInvocation`/`PostToolUse` → `running`, `Stop` → `completed` (`USER_CANCELED`/`ERROR` → `idle`). agy has no permission-request hook event, so no blocked/needs-you signal; `PreToolUse` is deliberately not wired — its required `decision` response would let a passive observer approve tools. The plugin also captures agy's `agy --conversation <id>` exit hint from output into `agyConversationId`, so `axn-agy-resume`/menu resume/`restore-session` can name the exact conversation, falling back to `agy -c` (most recent in the cwd).
+
 - The built-in `vibe` plugin (`session-plugins/vibe.tsx`, opt-in `vibe.enabled: true`) tracks Mistral Vibe sessions without a hook surface — Vibe has no documented lifecycle hooks, so detection is screen/output parsing like the pre-hook devin path: symbol-based task lines (`[ ]`/`[~]`/`[x]`/`[!]`, `○`/`●`/`✓`/`✗`) plus `Task X/Y` progress markers drive `session.tasks`/`progress`/`status` (parsed in a short window after an "updated todo list" marker), a terminal badge reconciles on process end ('completed' persists, else idle) and clears on a new submitted command, session names matching attention patterns (`? vibe`, "action required", …) raise a warning flag + `renderRow` `!` marker, and the idle timer flags a quiet session as "waiting for input"/"possibly finished" (`idle-timeout-seconds`, default 45). `/exit` inside vibe arms an 8 s exit-capture that reads the post-exit `vibe -r <name>` resume hint into `vibeSessionName` (+cwd), which powers `restore-session` (`pendingRestore` → `vibe -r <name>`) and `axn-vibe-resume` (with a `cd '<cwd>' &&` prefix when the recorded cwd differs). No `hookSpec` — nothing to bridge.
-- The built-in `dev-workflow` plugin (`session-plugins/devWorkflow.tsx`, opt-in `dev-workflow.enabled: true`) is a meta layer above agents: `plugins.yaml` defines workflows (`dev-workflow.workflows.<id>` — `states`, `start`, optional `transitions`, optional `vars` declarations, per-state `steps` as a map of named actions, each with `agent`/`prompt`/`prompt-file`/`command` templates, `run-in: shell|sub-shell|headless` and `auto` to fire on every entry into the step's state (start + later transitions — the on-enter hook); the flat single-action form parses as one anonymous `default` action; every action takes an optional `description` — the reserved `description` key in a named-actions map describes the state itself — shown as the session banner's lighter `detail` text and leading the Run buttons' tooltips). Declared vars are supplied by `axn-workflow-start <wf> [arg|key=value]`, card fields, `axn-workflow-set`, or the `axn-workflow-var[<token>]:` marker; they substitute into `{{key}}` templates and ride every launched action's env (`KEY=value`, plus `AXN_WORKFLOW`/`AXN_STATE`/`AXN_ACTION`/`AXN_WORKFLOW_TOKEN`). A `command` action's exit code is recorded as an informational check (`pluginState.checks['<state>:<name>']`, never gating) — via a printed `axn-workflow-check[<token>]:` trailer for `shell`, the `ctx.exec` result for `headless`, and the `subshell-exited` code for `sub-shell` (`openSubShell` returns the tab id, `onSubShellExit` resolves it). The state of record lives in the session's `pluginState` (persisted in state.json); an optional `tracking.file` (repo-root-relative or absolute, extension picks `.json` vs YAML) mirrors it as an agent-writable surface — agents can also move the workflow by printing a whole line `axn-workflow-state[<token>]: <state>`, report a check via `axn-workflow-check[<token>]: <name> <rc>`, or fire a named action via `axn-workflow-run[<token>]: <name>`, all adopted from PTY output. `<token>` is a random per-binding secret (`pluginState.token`, minted on bind, dropped on stop) handed only to launched actions as `$AXN_WORKFLOW_TOKEN`/`{{workflow_token}}` — tokenless marker lines (a `cat`ed hostile file) are ignored. Commands `axn-workflow-start`/`axn-workflow-set`/`axn-workflow-move`/`axn-workflow-run`/`axn-workflow`/`axn-workflow-stop`, start/move/run rows in the session context menu (`sessionMenuItems` — with several workflows a single "Start workflow…" row opens a searchable picker), a banner + under-session state chip, and a rail kanban view whose cards jump to sessions, move states via `sessionApi`, show editable var fields, and stack one run button per action with check badges. A workflow declaring a *required* `kind: mr` var also surfaces a button labelled with the workflow's `title` on glab-mr's MR rows (`mrStartWorkflows`; optional mr vars get none) via the `mrActions.ts` contribution registry: click → fetch the MR head ref (`merge-requests/N/head`, GitHub `pull/N/head`), `git worktree add` at the worktrees-plugin location, `openSession` there, bind the workflow with the MR vars pre-filled. See `docs/dev-workflow.md`.
+- The built-in `dev-workflow` plugin (`session-plugins/devWorkflow.tsx`, opt-in `dev-workflow.enabled: true`) is a meta layer above agents: `plugins.yaml` defines workflows (`dev-workflow.workflows.<id>` — `states`, `start`, optional `transitions`, optional `vars` declarations, per-state `steps` as a map of named actions, each with `agent`/`prompt`/`prompt-file`/`command` templates, `run-in: shell|sub-shell|headless` and `auto` to fire on every entry into the step's state (start + later transitions — the on-enter hook); the flat single-action form parses as one anonymous `default` action; every action takes an optional `description` — the reserved `description` key in a named-actions map describes the state itself — shown as the session banner's lighter `detail` text and leading the Run buttons' tooltips). Declared vars are supplied by `axn-workflow-start <wf> [arg|key=value]`, card fields, `axn-workflow-set`, or the `axn-workflow-var[<token>]:` marker; they substitute into `{{key}}` templates and ride every launched action's env (`KEY=value`, plus `AXN_WORKFLOW`/`AXN_STATE`/`AXN_ACTION`/`AXN_WORKFLOW_TOKEN`). A `command` action's exit code is recorded as an informational check (`pluginState.checks['<state>:<name>']`, never gating) — via a printed `axn-workflow-check[<token>]:` trailer for `shell`, the `ctx.exec` result for `headless`, and the `subshell-exited` code for `sub-shell` (`openSubShell` returns the tab id, `onSubShellExit` resolves it). The state of record lives in the session's `pluginState` (persisted in state.json); an optional `tracking.file` (repo-root-relative or absolute, extension picks `.json` vs YAML) mirrors it as an agent-writable surface — agents can also move the workflow by printing a whole line `axn-workflow-state[<token>]: <state>`, report a check via `axn-workflow-check[<token>]: <name> <rc>`, or fire a named action via `axn-workflow-run[<token>]: <name>`, all adopted from PTY output. `<token>` is a random per-binding secret (`pluginState.token`, minted on bind, dropped on stop) handed only to launched actions as `$AXN_WORKFLOW_TOKEN`/`{{workflow_token}}` — tokenless marker lines (a `cat`ed hostile file) are ignored. Commands `axn-workflow-start`/`axn-workflow-set`/`axn-workflow-move`/`axn-workflow-run`/`axn-workflow`/`axn-workflow-stop`, start/move/run rows in the session context menu (`sessionMenuItems` — with several workflows a single "Start workflow…" row opens a searchable picker), a banner + under-session state chip, and a rail kanban view whose cards jump to sessions, move states via `sessionApi`, show editable var fields, and stack one run button per action with check badges. A workflow declaring a *required* `kind: mr` var also surfaces a button labelled with the workflow's `title` on glab-mr's MR rows (`mrStartWorkflows`; optional mr vars get none) via the `mrActions.ts` contribution registry: click → fetch the MR head ref (`merge-requests/N/head`, GitHub `pull/N/head`; the same button shows on gh-pr's PR rows; for `axn-mr-review` a bare `#N` means a GitHub PR and `!N` a GitLab MR unless the checkout is on GitHub — `reviewFetchRef`), `git worktree add` at the worktrees-plugin location, `openSession` there, bind the workflow with the MR vars pre-filled. See `docs/dev-workflow.md`.
 - The built-in `agents` plugin (`session-plugins/agents.tsx`, on by default — `agents.enabled: false` disables only the UI) owns **agent personas**: reusable `agents.personas.<name>` bundles in plugins.yaml (`cli` — defaults to the persona name, `model`, `args`, `prompt`/`prompt-file` — the first-message kickoff, `instructions`/`instructions-file` — the persistent identity, `description`; a bare string value is `cli` shorthand). On every ctx touch it mirrors the parsed list into the shared `agentRegistry.ts` module (the `mrActions.ts` contribution pattern — always in the bundle, so the schema stays available even when the plugin is disabled). Consumers: dev-workflow's `agent: <name>`/`{profile: <name>, …overrides}` step references (unresolved names degrade to `cli: <name>`). Launch lines are built by each CLI's registered **launcher** — `registerAgentLauncher` in `agentRegistry.ts`, built-in agent plugins register at module scope, `devWorkflow.agentLaunchLine` consults the registry: claude sends instructions via `--append-system-prompt(-file)`, codex via `-c developer_instructions=…`, devin and unregistered CLIs fold them into the seed prompt, and agy — which only accepts prompts via `-p`/`-i`/stdin — sends the seed through `-i` with instructions folded in (registered under both `agy` and `antigravity`). A launcher's refusal surfaces as session attention. Launch surfaces: `axn-agent <persona>` types the launch line in the current shell (`completeArg` offers persona names), the session and workspace context menus' single "New session with agent…" row opens a searchable persona picker (`pickFromList`, see below) and spawns a persona-named session seeded with the launch line (pending map → `onSessionOpen`, like worktrees; workspace rows use `defaultFolder` as cwd), and the rail bot icon opens a full-area view of persona cards (cli/model/prompt badges, live-session count, Launch button + a "running" session list grouped by workspace in panel order — a non-collapsible tree, so every agent shows where it lives). A launched/typed persona stamps `pluginState.agents.persona`, which drives the `renderRow` bot badge — the persona survives as the session's identity beyond process detection.
 - `session.process` is the foreground process identity: the process-group leader's argv resolved by `process_identity` (`src-tauri/src/lib.rs`) — exact argv tokens from `/proc/<pid>/cmdline` on Linux and `sysctl(KERN_PROCARGS2)` on macOS (comm via `proc_name` when another user's process refuses it), so paths with spaces stay one token; the cwd poll reads `/proc/<pid>/cwd` / `proc_pidinfo(PROC_PIDVNODEPATHINFO)` — the 1 s per-terminal polls never spawn `ps`/`lsof` — argv0 basename, except interpreter launches unwrap to the script (`python3.13 /x/bin/vibe` → `vibe`, `node cli.js` → `cli`, `python -m pkg` → the module). `sessionIcons` keys match this name (lowercased), so script-based tools (uv/pipx CLIs, npm shims) get icons and `processPattern` matches too.
-- The `docker` plugin (`session-plugins/docker.tsx`) is a rail-only indicator: the Docker whale SVG icon, running/stopped container counts, and a RAM-style used/free disk bar. Stats come from one `sh -c` probe via `backend.exec` (`command -v docker` + `docker info` gate, `docker ps -a --format '{{.State}}'` for counts, `docker system df --format '{{.Size}}'` for used bytes, `df -k` of `DockerRootDir` with `/` fallback for free space). The rail is session-less: desktop `plugin_exec` ignores the session id, web execs through the first session's host — the plugin hides when docker or exec is unavailable. `docker.refresh-interval-seconds` (default 15, min 5) sets the poll cadence; `system df` is slow, so polls never overlap. ≥80/≥90 % disk use raises a warning/critical app attention flag.
+- The `docker` plugin (`session-plugins/docker.tsx`) is a rail-only indicator: the Docker whale SVG icon, running/stopped container counts, and one rounded `BarStrip` triple bar — CPU / MEM / disk strips stacked under a single border, each strip filled with `pressureColor` and its percentage written into the bar (the label renders twice, once in track color and once in `--text-inverted` clipped to the fill, so glyphs flip color where the fill passes under them; per-strip `data-tip` carries the details). CPU and MEM strips show real **VM** pressure when possible — the probe `docker exec`s a read-only /proc snapshot inside the first running container (proc is not cgroup-namespaced, so cpuinfo/meminfo/stat report the VM kernel's numbers on colima/Desktop/podman-machine, host numbers on native Linux; CPU% is the /proc/stat jiffie delta between polls, MEM is MemAvailable-based); container `docker stats` sums are the fallback and stay in the tooltips. Disk likewise prefers `docker exec <cid> df -k /` (the VM's root fs — `df` of the host's `/` reported the macOS disk before). Two `sh -c` probes run via `backend.exec` on separate cadences: the fast per-poll `DOCKER_STATS_CMD` (`docker info` gate, `docker ps -a --format '{{.State}}'` counts, `docker stats --no-stream --format '{{.CPUPerc}}|{{.MemUsage}}'` container sums, `docker info --format '{{json .}}'` limits — docker `NCPU`/`MemTotal`, podman `host.cpus`/`host.memTotal` — and the `==vm==` container exec; each failed section prints `unavailable` and degrades to fallbacks) parsed by `parseDockerLive`, and the slow `DOCKER_DISK_CMD` (`docker system df --format '{{.Size}}'` + the df above, `DockerRootDir`/`Store.GraphRoot` host-side fallback) parsed by `parseDockerDisk` — `system df` walks every layer and takes seconds, so it runs only every `DISK_POLL_EVERY` (4) polls (~1 min at the default cadence) and keeps its last values on failure. The rail is session-less: desktop `plugin_exec` ignores the session id, web execs through the first session's host — the plugin hides when docker or exec is unavailable. `docker.refresh-interval-seconds` (default 15, min 5) sets the fast poll cadence; neither probe ever overlaps itself. ≥80/≥90 % disk or memory use raises a warning/critical app attention flag.
 - The `axn-dev` plugin (`session-plugins/axnDev.tsx`, Boxes rail icon) is a read-only mirror of `axn-dev list`: a shared `useSyncExternalStore` overview polls `axn-dev list` via `appRuntime().exec` on a `axn-dev.refresh-interval-seconds` cadence (default 30, min 10), parsed by the pure `parseAxnDevList` (global section at indent 2, project sections under `  <repo>:` headers at indent 4, endpoint lines and wrapped descriptions one level deeper — told apart by a URL-ish second token). The rail shows `running/found` (warning triangle when the CLI fails); clicking toggles the plugin view, which lists sections like `axn-dev list` — status dot, name, worktree badge, description, and clickable endpoint links for running scenarios — plus a persisted "running only" filter (`pluginData['axn-dev'].runningOnly`). No start/stop actions; `axn-dev serve` remains the full dashboard. The older external `plugins/axn-dev-scenarios.mjs` (opt-in, per-session row) is unaffected — different plugin id.
 - The built-in `worktrees` plugin (`session-plugins/worktrees.tsx`, opt-in `worktrees.enabled: true`) offers agent worktree isolation without any `axn-dev` dependency — plain `git` argv via `ctx.exec`. `git worktree add <dir> -b wt/<slug>` creates `<repo-parent>/worktrees/<repo>-wt-<slug>` (the axn-dev sibling-worktrees convention, so the CLI discovers them via `git worktree list`; `worktrees.worktree-root` overrides the parent), then `ctx.openSession(dir, slug)` spawns the session there — worktree-first, never a moved running shell. Entry points: session context menu ("New worktree session" / "New worktree with <agent>"), workspace context menu (when `defaultFolder` resolves to a repo), and `axn-worktree [name]`. The new session's `pluginState.worktree = { repoRoot, path, branch }` (stamped on `onSessionOpen` from a pending map, or detected once when a session opens inside a foreign-created linked worktree — e.g. dev-workflow's MR review) drives a `⎇` row badge, "Review worktree changes" (git tab at the path) and "Remove worktree" — `git worktree remove` refuses dirty trees, so failure re-raises the banner with a "Force remove" action, and success offers "Delete branch". The isolation nudge: when `session.process` matches `worktrees.agents` (default `claude, devin, codex, agy, vibe`) in a main checkout (`git-dir == git-common-dir`, probed once per session), a warning banner offers "New worktree session" (seeds the agent's resume command — `claude -c`, `devin -c`, `codex resume --last`, `agy -c`, `vibe -r`), with once-per-session re-raise and a persistent "Don't ask again" (`worktrees.suggest-isolation` gates it). `worktrees.default-agent` picks the seeded agent.
 - The built-in `scratchpad` plugin (`session-plugins/scratchpad.tsx`, opt-in — `scratchpad.enabled: true` plus the `scratchpad.patterns` setting, which has no default: `;`- or newline-separated `<repo-regex>: <dir>, <dir>` entries, e.g. `*: .local-drafts, drafts; axn-term: .ai, notes`; an entry without a repo part applies to all repos). The regex matches case-insensitively against the checkout dir basename AND the remote repo name, so one entry covers a repo and all its worktrees (`axn-term` also matches `axn-term-feat-foo`). Matching dirs union in order; the first *existing* dir is `primary` (else the first configured). Its in-panel surface is the session context menu only: one `Open <dir>/` row per configured folder (read from `pluginState.dirs` — sessionMenuItems is synchronous, so `onSessionOpen` and a debounced onOutput refresh resolve+store the dirs — falling back to a single "Open drafts" row before the first resolution), plus "New or open draft…" (`pickOrCreate`), "Copy agent hint" and "Tell agent about scratchpad". Drafts are plain files — agents read/write them with their own tools (filesystem-as-context), the plugin only has to say where they are: `axn-scratch ls|dir` echoes real paths into the scrollback, `axn-scratch hint` prints a paste-able AGENTS.md/CLAUDE.md hint, "Copy agent hint" puts it on the clipboard and "Tell agent about scratchpad" (offered when `agentInput` or an agent-ish process is foreground) types it into the session input *without* a newline. Creating a draft (`axn-scratch new <name>` or a bare name) mkdirs the primary dir, seeds a `*` `.gitignore` (self-ignoring folder — `scratchpad.gitignore-drafts` gates it) and opens the file in an editor tab; `axn-scratch open <name|n>` and bare names open existing drafts, `browse` opens the folder. Beyond the menu there is a `NotebookPen` rail icon opening the `hostsTabs` full-area view: drafts grouped by repo across all sessions, per-repo "copy hint" buttons, editor/browser hosted tabs (listings go through `PluginApi.listDir`, which resolves `null` where the backend lacks `listDir`).
