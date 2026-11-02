@@ -60,6 +60,9 @@ export interface AppSettings {
   defaultShell?: string;
   devinTaskParserEnabled?: boolean;
   sessionIcons?: Record<string, string>;
+  pluginIcons?: Record<string, string>;
+  /** Flat custom-icon bag (process names + plugin ids) — synced across remote viewers. */
+  customIcons?: Record<string, string>;
   /** Shell terminal font family. Empty/unset = built-in monospace stack. */
   shellFontFamily?: string;
   /** Shell terminal font size in px (default 14). */
@@ -75,7 +78,7 @@ export interface AppSettings {
   panelFontSize?: number;
   /** Overall UI chrome scale in percent (100 = native). Excludes terminals. */
   uiZoom?: number;
-  /** Render `session.summary` (set via `axn-session-summary`) in the panel. */
+  /** Render `session.summary` (set via `axn-session-summary`/`axn-session set --summary`) in the panel. */
   sessionSummaries?: boolean;
   /**
    * Terminal cell renderer: `auto` (WebGL → canvas → DOM fallback chain,
@@ -103,8 +106,6 @@ export interface AppSettings {
    * drive them. Applied on app start.
    */
   remoteAuthorityUrl?: string;
-  /** Session id under which terminals are mirrored on the hub. */
-  remoteAuthoritySession?: string;
   /** Optional user JWT for identity-bound hubs (anonymous dev hubs: unset). */
   remoteAuthorityToken?: string;
   /**
@@ -115,6 +116,17 @@ export interface AppSettings {
   remoteAuthIssuer?: string;
   /** OIDC public client id used for the device-flow sign-in. */
   remoteAuthClientId?: string;
+  /**
+   * App log verbosity — desktop only (web has no file logger). Applies live;
+   * `LOG_LEVEL` env still overrides at process start. Default: `info`.
+   */
+  logLevel?: 'error' | 'warn' | 'info' | 'debug' | 'trace';
+  /**
+   * App log folder — desktop only. Default is the OS-standard location
+   * (macOS `~/Library/Logs/axn-term`); `AXN_TERM_LOG_DIR` env overrides.
+   * Changing it takes effect on the next app start.
+   */
+  logDir?: string;
 }
 
 export const defaultSettings: AppSettings = {

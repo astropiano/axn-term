@@ -27,6 +27,7 @@ import type { ExternalPreviewSpec } from '../preview-plugins';
 import { sandboxedPlugin } from './sandbox';
 import type { SandboxPluginSpec } from './sandbox';
 import { axnLog } from '../log';
+import { registerIconPlugin } from '../iconModel';
 
 export * from './plugin';
 export { gitStatusPlugin } from './gitStatus';
@@ -80,12 +81,15 @@ const defaultPlugins: SessionViewPlugin[] = [
 
 let plugins: SessionViewPlugin[] = [...defaultPlugins];
 
+plugins.forEach(registerIconPlugin);
+
 export function getSessionViewPlugins(): readonly SessionViewPlugin[] {
   return plugins;
 }
 
 export function registerSessionViewPlugin(plugin: SessionViewPlugin): void {
   plugins = [...plugins.filter((p) => p.id !== plugin.id), plugin];
+  registerIconPlugin(plugin);
 }
 
 /**

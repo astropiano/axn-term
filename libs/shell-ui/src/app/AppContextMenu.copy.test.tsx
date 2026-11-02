@@ -6,7 +6,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Terminal } from '@xterm/xterm';
 import type { ShellServices } from '@axn-term/session-backend';
 import { i18n } from '../i18n';
+import { SettingsProvider } from '../SettingsProvider';
 import { AppContextMenu, appMenuTarget } from './AppContextMenu';
+
+const emptyConfigStore = {
+  load: () => Promise.resolve(null),
+  save: () => Promise.resolve(),
+};
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -25,15 +31,17 @@ describe('terminal Copy', () => {
     await act(async () => {
       root.render(
         <I18nProvider i18n={i18n}>
-          <AppContextMenu
-            x={0}
-            y={0}
-            target={target}
-            services={services}
-            reloadShortcut="⌘⇧R"
-            onReload={() => {}}
-            onClose={() => {}}
-          />
+          <SettingsProvider configStore={emptyConfigStore}>
+            <AppContextMenu
+              x={0}
+              y={0}
+              target={target}
+              services={services}
+              reloadShortcut="⌘⇧R"
+              onReload={() => {}}
+              onClose={() => {}}
+            />
+          </SettingsProvider>
         </I18nProvider>,
       );
     });

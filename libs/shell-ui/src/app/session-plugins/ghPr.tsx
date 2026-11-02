@@ -10,8 +10,11 @@ import {
   GitPullRequestClosed,
 } from 'lucide-react';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
-import type { ShellSession } from '../../types';
+import type { ShellSession, SessionAttention} from '../../types';
 import { sessionLastSelectedAt } from '../attention';
+import { getSessionViewPlugins, isPluginEnabled } from './index';
+import { PluginIcon } from '../SessionPanel';
+import type { PluginSettings } from '../pluginSettings';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
 import { shellQuote } from '../../shellQuote';
 import {
@@ -56,6 +59,8 @@ interface SessionPr {
   conflicts: boolean;
   /** true when no resolvable review thread is left open. */
   discussionsResolved: boolean;
+  /** Unresolved review threads; absent when the threads fetch failed. */
+  openThreads?: number;
   /** mergeStateStatus, lowercased (e.g. `clean`, `blocked`, `behind`). */
   mergeStatus: string;
   /** Aggregated statusCheckRollup, lowercased; null when no checks exist. */
@@ -203,29 +208,29 @@ export function threadsCommand(numbers: number[]): string {
 }
 
 /**
- * Unresolved-thread flag per PR number, one batched graphql call — `gh pr
+ * Unresolved-thread count per PR number, one batched graphql call — `gh pr
  * list`/`view` don't expose reviewThreads (resolution is GraphQL-only) and
  * placeholders only substitute in `-F` values, so the numbers ride as
  * variables. On any failure the map stays empty → threads read as resolved.
  */
-async function fetchThreadsResolved(
+async function fetchOpenThreads(
   ctx: SessionViewContext & PluginApi,
   root: string,
   numbers: number[],
-): Promise<Map<number, boolean>> {
-  const resolved = new Map<number, boolean>();
-  if (numbers.length === 0) return resolved;
+): Promise<Map<number, number>> {
+  const open = new Map<number, number>();
+  if (numbers.length === 0) return open;
   try {
     const out = await ctx.exec(threadsCommand(numbers), root);
     const repo = (JSON.parse(out) as RawThreadsResponse).data?.repository ?? {};
     numbers.forEach((n, i) => {
       const nodes = repo[`p${i}`]?.reviewThreads?.nodes;
-      if (nodes) resolved.set(n, nodes.every((t) => t.isResolved));
+      if (nodes) open.set(n, nodes.filter((t) => !t.isResolved).length);
     });
   } catch {
     // gh missing/unauth'd/non-GitHub — threads read as resolved
   }
-  return resolved;
+  return open;
 }
 
 async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
@@ -259,27 +264,29 @@ async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
   }
 
   // Review threads come from one batched graphql call (list/view JSON
-  // doesn't carry them; see fetchThreadsResolved).
+  // doesn't carry them; see fetchOpenThreads).
   const top = list.slice(0, 5);
-  const threadsResolved = await fetchThreadsResolved(
+  const openThreadCounts = await fetchOpenThreads(
     ctx,
     root,
     top.map((i) => i.number ?? 0).filter(Boolean),
   );
-  const prs = top.map(
-    (item): SessionPr => ({
+  const prs = top.map((item): SessionPr => {
+    const openThreads = openThreadCounts.get(item.number ?? 0);
+    return {
       number: item.number ?? 0,
       reference: `#${item.number}`,
       title: item.title ?? '',
       url: item.url ?? '',
       draft: item.isDraft ?? false,
       conflicts: item.mergeable === 'CONFLICTING',
-      discussionsResolved: threadsResolved.get(item.number ?? 0) ?? true,
+      discussionsResolved: openThreads === undefined ? true : openThreads === 0,
+      openThreads,
       mergeStatus: (item.mergeStateStatus ?? '').toLowerCase(),
       checks: rollupStatus(item.statusCheckRollup),
       reviewDecision: (item.reviewDecision ?? '').toLowerCase(),
-    }),
-  );
+    };
+  });
 
   ctx.updatePluginState({ prs });
 }
@@ -337,10 +344,52 @@ function raisePrWatch(
   entry: PrWatchEntry,
   message: string,
   critical = false,
+  actions?: SessionAttention['actions'],
+  data?: unknown,
 ) {
-  api.setAttention({ level: critical ? 'critical' : 'warning', message });
+  api.setAttention({
+    level: critical ? 'critical' : 'warning',
+    message,
+    actions,
+    data,
+  });
   entry.flag = message;
   entry.flagAt = Date.now();
+}
+
+/** "Go to session" buttons for every session with this PR checked out,
+ * else a "create worktree" action when the worktrees plugin is enabled. */
+function prWatchActions(
+  pr: SessionPr,
+  sessions: ShellSession[],
+  api: SessionViewContext & PluginApi,
+): SessionAttention['actions'] {
+  const holders = sessions.filter((s) =>
+    ((s.pluginState?.['gh-pr'] as { prs?: SessionPr[] } | undefined)?.prs ?? []).some(
+      (m) => m.url === pr.url,
+    ),
+  );
+  const actions: SessionAttention['actions'] = holders.map((s) => ({
+    id: `goto-session:${s.id}`,
+    label: `Go to ${s.name}`,
+  }));
+  const all = getSessionViewPlugins();
+  const wt = all.find((p) => p.id === 'worktrees');
+  if (
+    holders.length === 0 &&
+    wt &&
+    isPluginEnabled(
+      wt,
+      (api.pluginSettings ?? {}) as PluginSettings,
+      all,
+    )
+  ) {
+    actions.push({
+      id: 'worktrees:mr-worktree',
+      label: `Create worktree for PR #${pr.number}`,
+    });
+  }
+  return actions.length ? actions : undefined;
 }
 
 /**
@@ -412,12 +461,14 @@ async function prWatchTick(args: {
         delete e.flag;
         delete e.flagAt;
       } else if (prev && !e.flag) {
+        const actions = prWatchActions(pr, args.sessions, api);
+        const data = { pr: { url: pr.url, reference: pr.reference, title: pr.title } };
         if (prev.pipeline !== 'failed' && entry.pipeline === 'failed')
-          raisePrWatch(api, e, `checks failed on ${pr.reference}`, true);
+          raisePrWatch(api, e, `checks failed on ${pr.reference}`, true, actions, data);
         else if (entry.unresolved > prev.unresolved)
-          raisePrWatch(api, e, `new unresolved thread on ${pr.reference}`);
+          raisePrWatch(api, e, `new unresolved thread on ${pr.reference}`, false, actions, data);
         else if (entry.notes > prev.notes)
-          raisePrWatch(api, e, `new comment on ${pr.reference}`);
+          raisePrWatch(api, e, `new comment on ${pr.reference}`, false, actions, data);
       }
     }
   }
@@ -433,7 +484,7 @@ async function prWatchTick(args: {
 // threads × 20 comments ≈ 120k nodes; threads(100) × comments(50) was 620k
 // and failed every refresh). `comments(last:)`: mrWaitingForMe looks at the
 // newest note of a thread.
-const PR_FRAGMENT = `... on PullRequest { number title url isDraft mergeable headRefName baseRefName updatedAt reviewDecision author { login } assignees(first: 20) { nodes { login } } reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } } repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } reviewThreads(first: 50) { nodes { isResolved comments(last: 20) { nodes { author { login } } } } } reviews(last: 30, states: APPROVED) { nodes { author { login } } } }`;
+const PR_FRAGMENT = `... on PullRequest { number title bodyText url isDraft mergeable headRefName baseRefName updatedAt reviewDecision author { login } assignees(first: 20) { nodes { login } } reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } } repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } reviewThreads(first: 50) { nodes { isResolved comments(last: 20) { nodes { author { login } } } } } reviews(last: 30, states: APPROVED) { nodes { author { login } } } }`;
 
 const PR_OVERVIEW_QUERY = `query {
   viewer { login }
@@ -476,6 +527,7 @@ export function usePrOverview(): PrOverview {
 interface RawGqlPr {
   number?: number;
   title?: string;
+  bodyText?: string;
   url?: string;
   isDraft?: boolean;
   mergeable?: string;
@@ -513,6 +565,7 @@ export function normalizePr(raw: RawGqlPr): GhPrItem {
     iid: number,
     reference: `#${number}`,
     title: raw.title ?? '',
+    description: raw.bodyText ?? '',
     url: raw.url ?? '',
     project,
     sourceBranch: raw.headRefName ?? '',
@@ -651,46 +704,58 @@ function SessionPrs({ ctx }: { ctx: SessionViewContext & PluginApi }) {
   return (
     <div className="mb-2">
       <div className="flex flex-col gap-1 text-[10px]">
-        {prs.map((pr) => (
-          <div key={pr.number} className="flex flex-col gap-0.5">
-            <div className="flex items-center gap-1">
-              <a
-                href={pr.url}
-                target="_blank"
-                rel="noreferrer"
-                className="truncate font-semibold text-[var(--accent)] hover:underline"
-                data-tip={pr.title}
-              >
-                {pr.reference} {pr.title}
-              </a>
-              <PrActions
-                pr={{ iid: pr.number, reference: pr.reference, title: pr.title, url: pr.url }}
-                env={env}
-              />
+        {prs.map((pr) => {
+          // `openThreads` is authoritative once fetched; snapshots without it
+          // fall back to the boolean `discussionsResolved` chip.
+          const threadLabel =
+            pr.openThreads !== undefined
+              ? pr.openThreads > 0
+                ? `${pr.openThreads} open thread${pr.openThreads === 1 ? '' : 's'}`
+                : null
+              : pr.discussionsResolved
+                ? null
+                : 'open threads';
+          return (
+            <div key={pr.number} className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-1">
+                <a
+                  href={pr.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate font-semibold text-[var(--accent)] hover:underline"
+                  data-tip={`GitHub · ${pr.title}`}
+                >
+                  {pr.reference} {pr.title}
+                </a>
+                <PrActions
+                  pr={{ iid: pr.number, reference: pr.reference, title: pr.title, url: pr.url }}
+                  env={env}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {pr.draft && (
+                  <span className="rounded bg-slate-500/20 px-1 text-slate-600">draft</span>
+                )}
+                {pr.conflicts && (
+                  <span className="rounded bg-[color-mix(in_srgb,var(--red)_20%,transparent)] px-1 text-[var(--red)]">conflicts</span>
+                )}
+                {pr.reviewDecision === 'changes_requested' && (
+                  <span className="flex items-center gap-0.5 text-[var(--red)]">
+                    <GitPullRequestClosed className="h-3 w-3" />
+                    changes requested
+                  </span>
+                )}
+                {threadLabel && (
+                  <span className="flex items-center gap-0.5 text-[var(--orange)]">
+                    <MessageSquare className="h-3 w-3" />
+                    {threadLabel}
+                  </span>
+                )}
+                {pr.checks && <ChecksChip status={pr.checks} />}
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {pr.draft && (
-                <span className="rounded bg-slate-500/20 px-1 text-slate-600">draft</span>
-              )}
-              {pr.conflicts && (
-                <span className="rounded bg-[color-mix(in_srgb,var(--red)_20%,transparent)] px-1 text-[var(--red)]">conflicts</span>
-              )}
-              {pr.reviewDecision === 'changes_requested' && (
-                <span className="flex items-center gap-0.5 text-[var(--red)]">
-                  <GitPullRequestClosed className="h-3 w-3" />
-                  changes requested
-                </span>
-              )}
-              {!pr.discussionsResolved && (
-                <span className="flex items-center gap-0.5 text-[var(--orange)]">
-                  <MessageSquare className="h-3 w-3" />
-                  open threads
-                </span>
-              )}
-              {pr.checks && <ChecksChip status={pr.checks} />}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -775,7 +840,10 @@ function GhPrRail({
           : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
       }`}
     >
-      <GitPullRequest className={`h-3.5 w-3.5${mode === 'signed-out' ? ' opacity-50' : ''}`} />
+      <PluginIcon
+        plugin={ghPrPlugin}
+        className={`h-3.5 w-3.5${mode === 'signed-out' ? ' opacity-50' : ''}`}
+      />
       {mode === 'signed-out' ? null : mode === 'error' ? (
         <AlertTriangle className="h-3 w-3 text-[var(--red)]" />
       ) : (
@@ -830,51 +898,58 @@ function PrRow({ pr, badge, env }: { pr: GhPrItem; badge?: string; env: MrRowEnv
         href={pr.url}
         target="_blank"
         rel="noreferrer"
-        className="flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
+        className="min-w-0 flex-1 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
         data-tip={`${pr.project}\n${pr.sourceBranch} → ${pr.targetBranch}`}
       >
-        <span className="shrink-0 font-semibold text-[var(--accent)]">{pr.reference}</span>
-        <span className="max-w-44 shrink-0 truncate text-[var(--text-secondary)]">
-          {projectShort(pr.project)}
+        <span className="flex items-center gap-2">
+          <span className="shrink-0 font-semibold text-[var(--accent)]">{pr.reference}</span>
+          <span className="max-w-44 shrink-0 truncate text-[var(--text-secondary)]">
+            {projectShort(pr.project)}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{pr.title}</span>
+          {badge && (
+            <span className="shrink-0 rounded bg-[var(--accent)]/15 px-1 text-[9px] font-semibold text-[var(--accent)]">
+              {badge}
+            </span>
+          )}
+          {pr.draft && (
+            <span className="shrink-0 rounded bg-slate-500/20 px-1 text-[9px] text-slate-500">
+              draft
+            </span>
+          )}
+          {pr.conflicts && (
+            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
+              <AlertTriangle className="h-3 w-3" />
+              conflicts
+            </span>
+          )}
+          {pr.reviewDecision === 'changes_requested' && (
+            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
+              <GitPullRequestClosed className="h-3 w-3" />
+              changes
+            </span>
+          )}
+          {threads > 0 && (
+            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--orange)]">
+              <MessageSquare className="h-3 w-3" />
+              {threads}
+            </span>
+          )}
+          {pr.pipeline && (
+            <span className="shrink-0 text-[9px]">
+              <ChecksChip status={pr.pipeline} />
+            </span>
+          )}
+          {pr.approved && (
+            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--green)]">
+              <Check className="h-3 w-3" />
+              approved
+            </span>
+          )}
         </span>
-        <span className="min-w-0 flex-1 truncate">{pr.title}</span>
-        {badge && (
-          <span className="shrink-0 rounded bg-[var(--accent)]/15 px-1 text-[9px] font-semibold text-[var(--accent)]">
-            {badge}
-          </span>
-        )}
-        {pr.draft && (
-          <span className="shrink-0 rounded bg-slate-500/20 px-1 text-[9px] text-slate-500">
-            draft
-          </span>
-        )}
-        {pr.conflicts && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
-            <AlertTriangle className="h-3 w-3" />
-            conflicts
-          </span>
-        )}
-        {pr.reviewDecision === 'changes_requested' && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
-            <GitPullRequestClosed className="h-3 w-3" />
-            changes
-          </span>
-        )}
-        {threads > 0 && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--orange)]">
-            <MessageSquare className="h-3 w-3" />
-            {threads}
-          </span>
-        )}
-        {pr.pipeline && (
-          <span className="shrink-0 text-[9px]">
-            <ChecksChip status={pr.pipeline} />
-          </span>
-        )}
-        {pr.approved && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--green)]">
-            <Check className="h-3 w-3" />
-            approved
+        {pr.description && (
+          <span className="mt-0.5 line-clamp-3 whitespace-pre-line break-words text-[10px] text-[var(--text-secondary)]">
+            {pr.description}
           </span>
         )}
       </a>
@@ -1046,7 +1121,8 @@ function GhPrView({ close, env }: { close: () => void; env: MrRowEnv }) {
 
 export const ghPrPlugin: SessionViewPlugin = {
   id: 'gh-pr',
-  title: 'pull requests',
+  title: 'GitHub pull requests',
+  logo: 'GitPullRequest',
   version: '0.1.0',
   settings: [
     {
@@ -1120,7 +1196,7 @@ export const ghPrPlugin: SessionViewPlugin = {
         target="_blank"
         rel="noreferrer"
         onClick={(e) => e.stopPropagation()}
-        data-tip={prs.map((m) => `${m.reference} ${m.title}`).join('\n')}
+        data-tip={['GitHub', ...prs.map((m) => `${m.reference} ${m.title}`)].join('\n')}
         className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)] hover:underline"
       >
         <GitPullRequest className="h-2.5 w-2.5" />

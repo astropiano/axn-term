@@ -28,7 +28,9 @@ if [[ "$ASSET_COUNT" -lt 50 ]]; then
 fi
 
 PKGNAME="axn-term"
-PKGVER=$(node -p "require('$TAURI_CONF').version")
+# pacman splits name-pkgver-pkgrel on "-", so a SemVer pre-release
+# (1.4.0-rc.1) becomes 1.4.0_rc.1, as Arch packages spell it.
+PKGVER=$(node -p "require('$TAURI_CONF').version" | tr '-' '_')
 PKGREL=1
 ARCH="x86_64"
 PKGFILE="$OUTPUT_DIR/${PKGNAME}-${PKGVER}-${PKGREL}-${ARCH}.pkg.tar.zst"

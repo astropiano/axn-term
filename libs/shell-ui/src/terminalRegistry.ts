@@ -61,6 +61,56 @@ export function takePendingReplay(id: string): string | undefined {
   return data;
 }
 
+// Reload replays live in sessionStorage under one JSON map keyed like
+// `terminals`. sessionStorage survives `location.reload()` but not an app
+// restart — exactly the lifetime of the backend PTYs, so a respawned shell
+// never sees a dead terminal's stale screen.
+const REPLAY_STORAGE_KEY = 'axn-term:terminal-replays';
+
+function replayStorage(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Serialize every live terminal for the next page load — called from the
+ * Reload window path before `location.reload()`. PTYs survive the reload,
+ * so each reattaching terminal restores its screen (scrollback, colors,
+ * the alternate screen of a running TUI) instead of coming back blank.
+ */
+export function stashTerminalReplays(storage: Storage | null = replayStorage()): void {
+  if (!storage) return;
+  const replays: Record<string, string> = {};
+  for (const id of terminals.keys()) {
+    const data = serializeTerminal(id);
+    if (data) replays[id] = data;
+  }
+  try {
+    storage.setItem(REPLAY_STORAGE_KEY, JSON.stringify(replays));
+  } catch {
+    // Quota exceeded — reload without replays rather than not reloading.
+  }
+}
+
+/** One-shot reload replay for `id`, mirroring `takePendingReplay`. */
+export function takeReloadReplay(id: string, storage: Storage | null = replayStorage()): string | undefined {
+  if (!storage) return undefined;
+  try {
+    const raw = storage.getItem(REPLAY_STORAGE_KEY);
+    if (!raw) return undefined;
+    const replays = JSON.parse(raw) as Record<string, unknown>;
+    const data = replays[id];
+    delete replays[id];
+    storage.setItem(REPLAY_STORAGE_KEY, JSON.stringify(replays));
+    return typeof data === 'string' ? data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function terminalSize(id: string): { cols: number; rows: number } | undefined {
   const term = terminals.get(id);
   return term ? { cols: term.cols, rows: term.rows } : undefined;
@@ -72,6 +122,12 @@ export function registerTerminal(sessionId: string, term: Terminal): void {
 
 export function unregisterTerminal(sessionId: string, term: Terminal): void {
   if (terminals.get(sessionId) === term) terminals.delete(sessionId);
+}
+
+/** The id `term` is registered under (session id, or a sub-shell's tab id). */
+export function terminalIdOf(term: Terminal): string | undefined {
+  for (const [id, t] of terminals) if (t === term) return id;
+  return undefined;
 }
 
 /**

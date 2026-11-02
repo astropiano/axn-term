@@ -32,11 +32,15 @@
         "http://axn-term.localhost:8092/*",
         "http://localhost:5175/*",
         "http://localhost:5176/*",
+        "https://axn-term.192.168.1.202.nip.io:18092/*",
+        "https://192.168.1.202:18092/*",
         "https://axn-term.localhost:18092/*",
         "https://axn-term.localhost:18091/*",
         "https://axn-term.localhost:8092/*",
         "https://localhost:5175/*",
-        "https://localhost:5176/*"
+        "https://localhost:5176/*",
+        "https://axn-term-host-1.local:18092/*",
+        "https://axn-term.local:18092/*"
       ],
       "webOrigins": [
         "http://axn-term.localhost:18092",
@@ -44,11 +48,15 @@
         "http://axn-term.localhost:8092",
         "http://localhost:5175",
         "http://localhost:5176",
+        "https://axn-term.192.168.1.202.nip.io:18092",
+        "https://192.168.1.202:18092",
         "https://axn-term.localhost:18092",
         "https://axn-term.localhost:18091",
         "https://axn-term.localhost:8092",
         "https://localhost:5175",
-        "https://localhost:5176"
+        "https://localhost:5176",
+        "https://axn-term-host-1.local:18092",
+        "https://axn-term.local:18092"
       ],
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,

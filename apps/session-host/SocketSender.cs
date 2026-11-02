@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 
-namespace Astropiano.AxnTerm.SessionHost;
+namespace AxnTerm.SessionHost;
 
 /// <summary>
 /// Serializes every send on one WebSocket. A WebSocket allows only one

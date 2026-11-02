@@ -8,11 +8,14 @@ import {
   PluginSettingsProvider,
   SettingsModal,
   ErrorBoundary,
+  useWindowIds,
+  windowRank,
+  remoteSessionName,
 } from '@axn-term/shell-ui';
 import { tauriBackend, tauriServices, tauriFileReader } from '@axn-term/session-backend/tauri';
 import type { RemoteAuthority } from '@axn-term/session-backend/remote';
 import { desktopPlatform } from './platform';
-import { createRemoteAuthority, withAuthorityReflect } from './remoteAuthority';
+import { authorityStatus, createRemoteAuthority, withAuthorityReflect } from './remoteAuthority';
 import { listen } from '@tauri-apps/api/event';
 
 // macOS Preferences… opens this app in a second native window with
@@ -77,6 +80,13 @@ export default function App() {
     );
   }, [fileAccessRoots]);
 
+  // Push the configured log level into the Rust file logger — the config
+  // watch makes edits apply to the running app (LOG_LEVEL env wins at
+  // process start; this command wins afterwards).
+  useEffect(() => {
+    invoke('set_log_level', { level: settings.logLevel ?? 'info' }).catch(() => {});
+  }, [settings.logLevel]);
+
   // Opt-in remote authority (settings.remoteAuthorityUrl, or
   // VITE_REMOTE_AUTHORITY_URL for dev): publishes this window's terminals to
   // a client-authoritative hub so remote viewers can drive the desktop's
@@ -90,43 +100,113 @@ export default function App() {
       [],
     ),
     useCallback(
-      () => desktopPlatform.remoteAuth?.get().state ?? 'signedOut',
+      () => {
+        try {
+          return desktopPlatform.remoteAuth?.get().state ?? 'signedOut';
+        } catch {
+          return 'signedOut';
+        }
+      },
       [],
     ),
   );
-  // A published session needs a unique id on the shared hub — two devices
-  // with the same id collide (the later hello wins the session). Generate a
-  // stable random one the first time remote is enabled; the setting stays
-  // editable in the remote console for an explicit name.
-  useEffect(() => {
-    if (settings.remoteEnabled === false) return;
-    if (!settings.remoteAuthorityUrl) return;
-    if (settings.remoteAuthoritySession) return;
-    updateSettings({
-      remoteAuthoritySession: `host-${crypto.randomUUID().slice(0, 8)}`,
-    });
-  }, [settings.remoteEnabled, settings.remoteAuthorityUrl,
-      settings.remoteAuthoritySession, updateSettings]);
+  // A published session needs a unique, stable device id on the shared
+  // hub — two devices with the same id collide (the later hello wins the
+  // session). This is device identity, not a user setting: a name field in
+  // config.yaml invited exactly the multi-authority collision it caused,
+  // so it lives in webview storage where nothing edits it.
+  const [remoteDevice] = useState(() => {
+    try {
+      let id = localStorage.getItem('axn-remote-device');
+      if (!id) {
+        id = `host-${crypto.randomUUID().slice(0, 8)}`;
+        localStorage.setItem('axn-remote-device', id);
+      }
+      return id;
+    } catch {
+      return `host-${crypto.randomUUID().slice(0, 8)}`;
+    }
+  });
+  // Per-window authority session id: every window publishes its own
+  // mirrored session — the shared base name alone would make all windows
+  // fight over one session (the hub replaces authority on re-attach).
+  // Rank = position in the live window set, so names compact when a lower
+  // window closes (mac, mac-2, mac-3…).
+  const windowId = desktopPlatform.window?.id ?? 'main';
+  const liveWindowIds = useWindowIds(desktopPlatform.peers, windowId);
+  const remoteSession = remoteSessionName(
+    remoteDevice,
+    windowRank(liveWindowIds, windowId),
+  );
+
   useEffect(() => {
     if (settings.remoteEnabled === false) {
       setAuthority(undefined);
       return;
     }
-    const next = createRemoteAuthority({
-      url: settings.remoteAuthorityUrl,
-      session: settings.remoteAuthoritySession,
-      token: settings.remoteAuthorityToken,
-      // Signed-in account JWT wins; the static setting/env stays a dev fallback.
-      getToken: async () =>
-        (await desktopPlatform.remoteAuth?.getAccessToken?.().catch(() => undefined)) ??
-        settings.remoteAuthorityToken,
-      webSocketOnly: true,
-    });
+    // Remote publishing must never take the app down — any failure here
+    // (malformed settings, connect throw, Reflect crash) degrades to
+    // authority-undefined + 'failed', the shell keeps running.
+    let next: RemoteAuthority | undefined;
+    try {
+      next = createRemoteAuthority({
+        url: settings.remoteAuthorityUrl,
+        session: remoteSession,
+        token: settings.remoteAuthorityToken,
+        // Signed-in account JWT wins; the static setting/env stays a dev fallback.
+        getToken: async () =>
+          (await desktopPlatform.remoteAuth?.getAccessToken?.().catch(() => undefined)) ??
+          settings.remoteAuthorityToken,
+        webSocketOnly: true,
+        onSharedState: (key, data) => {
+          // A remote viewer edited shared icons — persist into config.yaml.
+          if (key !== 'app:icons') return;
+          try {
+            updateSettings({ customIcons: (data ? JSON.parse(data) : {}) as Record<string, string> });
+          } catch {
+            // opaque/invalid payload — ignore
+          }
+        },
+      });
+    } catch (e) {
+      console.error('remote authority setup failed', e);
+      authorityStatus.set('failed', e instanceof Error ? e.message : String(e));
+    }
     setAuthority(next);
     return () => {
       next?.stop().catch(() => {});
     };
-  }, [settings.remoteEnabled, settings.remoteAuthorityUrl, settings.remoteAuthoritySession, settings.remoteAuthorityToken, remoteAuthState]);
+  }, [settings.remoteEnabled, settings.remoteAuthorityUrl, remoteSession, settings.remoteAuthorityToken, remoteAuthState]);
+
+  // Local xterm resizes join the claim set instead of writing the PTY
+  // size directly — a viewer's smaller claim still wins, so the mirrored
+  // geometry never flickers between the owner's size and a remote
+  // claimant's ('sometimes the smallest wins' was this race).
+  // The wrapper's identity MUST be stable: PTY leases are keyed on the
+  // backend object (ptyLifetime WeakMap), so a swapped object makes the
+  // mount effect release the lease and kill the real PTY — which is what
+  // emptied the session list and auto-closed the app on every sign-in.
+  const authorityRef = useRef<RemoteAuthority | undefined>(authority);
+  authorityRef.current = authority;
+  const arbitratedBackend = useMemo(
+    () =>
+      Object.assign(Object.create(Object.getPrototypeOf(tauriBackend)), tauriBackend, {
+        resize: (clientId: string, cols: number, rows: number) => {
+          const a = authorityRef.current;
+          if (!a) {
+            tauriBackend.resize(clientId, cols, rows);
+            return;
+          }
+          try {
+            a.claimOwnerSize(clientId, cols, rows);
+          } catch {
+            // Arbitration must never break local resizes.
+            tauriBackend.resize(clientId, cols, rows);
+          }
+        },
+      }),
+    [],
+  );
   const platform = useMemo(
     () => (authority ? withAuthorityReflect(authority, desktopPlatform) : desktopPlatform),
     [authority],
@@ -136,7 +216,7 @@ export default function App() {
 
   return (
     <ShellApp
-      backend={tauriBackend}
+      backend={arbitratedBackend}
       services={tauriServices}
       platform={platform}
       fileReader={fileReader}

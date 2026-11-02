@@ -2,7 +2,7 @@ using Docker.DotNet;
 using Docker.DotNet.Models;
 using System.Net;
 
-namespace Astropiano.AxnTerm.Gateway;
+namespace AxnTerm.Gateway;
 
 public sealed class SessionHostContainerService : IDisposable
 {
@@ -291,8 +291,8 @@ public sealed class SessionHostContainerService : IDisposable
             $"PUID={_puid}",
             $"PGID={_pgid}",
             "TERM=xterm-256color",
-            $"PTY_CMD=/bin/bash",
-            $"PTY_ARGS=",
+            "PTY_CMD=/bin/bash",
+            "PTY_ARGS=",
             $"PTY_CWD={ptyCwd}",
             $"HOME={home}",
             $"AXN_STATE_DIR={_stateDir}",

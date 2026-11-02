@@ -4,7 +4,7 @@ env:
   # bare :26 is not a published tag — pin a real one (26.0 is usually cached)
   KEYCLOAK_IMAGE: "quay.io/keycloak/keycloak:26.0"
   # LAN serving via raw IP — no DNS involved at all: shell on
-  # https://<lan-ip>:18092, keycloak :18093, gateway :18094 (all
+  # https://<host>.local:18092 (mDNS, DHCP-proof) or the LAN IP, keycloak :18093, gateway :18094 (all
   # self-signed via Caddy internal CA — required because the Keycloak
   # client enforces PKCE S256, and crypto.subtle only exists in secure
   # contexts). Clients must accept the cert once (or trust the CA from
@@ -18,18 +18,22 @@ env:
   REMOTE_AUTHORITY_ANON: "false"
   AXN_KC_PORT: "18093"
   AXN_GW_PORT: "18094"
-  # ramphastos hub instead of per-PTY /ws sockets
   # ramphastos sources for the session-host build + vite alias
-  # (dir containing the astropiano sibling checkouts)
-  AXN_LIBS_ROOT: "../../.."
+  AXN_LIBS_ROOT: "../../../../libraries"
   # external additional_contexts (sibling checkouts) — grant bake fs access
   BUILDX_BAKE_ENTITLEMENTS_FS: "0"
-  AXN_TLS: "internal"
-  AXN_SCHEME: "https"
-  AXN_WS_SCHEME: "wss"
-  VITE_RAMPHASTOS_URL: "wss://axn-term-gateway.localhost:18092/ramphastos"
+  # Fixed dev cert pair in ./certs (AXN_CERT_DIR mount) — generated once,
+  # never rotates across restarts, so one-time CA trust suffices. Falls
+  # back to `internal` when the files are absent (set AXN_TLS=internal).
+  AXN_TLS: "/certs/axn-term-dev.pem /certs/axn-term-dev-key.pem"
   # disable_redirects: cert automation on (tls internal needs it), no :80
   # http→https redirect listener
+  # Remote-only shell: no cloud/hosted session path — the account's
+  # mirrored desktops are the only sessions (viewer attach or nothing).
+  AXN_REMOTE_ONLY: "1"
+  # Server-side twin of the above: /ws + /cloud + /ramphastos are not
+  # mapped, so a container session is impossible even if a client tries.
+  HUB_CLOUD_ENABLED: "false"
   AXN_AUTO_HTTPS: "disable_redirects"
   AXN_DOMAIN: "localhost"
   KEYCLOAK_REALM: "axn-term"

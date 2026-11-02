@@ -56,6 +56,7 @@ function PluginViewsExample() {
               openTab: () => {},
               sessions: storySessions,
               workspaces: [],
+              selectedSessionId: storySessions[0]?.id,
               selectSession: () => setActiveId(null),
               sessionApi: () => undefined,
             })

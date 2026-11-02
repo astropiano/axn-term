@@ -1,7 +1,7 @@
 import { spawn, execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, openSync, writeFileSync, readFileSync, realpathSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:net";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -56,6 +56,25 @@ function logTail(env, count = 30) {
   } catch (error) {
     return `no log at ${path}: ${error.message}`;
   }
+}
+
+/**
+ * Fail when the app log shows a React error boundary: the window then shows
+ * the crash screen, not the app. `logPath` overrides the state-dir log.
+ */
+export function assertNoErrorBoundary(env, where, logPath) {
+  const path = logPath ?? join(env.AXN_TERM_STATE_DIR, "axn-term.log");
+  let text;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return;
+  }
+  const at = text.indexOf("[error-boundary]");
+  if (at < 0) return;
+  const lineStart = text.lastIndexOf("\n", at) + 1;
+  const excerpt = text.slice(lineStart).split("\n").slice(0, 8).join("\n");
+  throw new Error(`axn-term hit its error boundary (${where}) — see ${path}:\n${excerpt}`);
 }
 
 async function waitForHealth(env, child, timeoutMs = 60000) {
@@ -226,7 +245,14 @@ async function startApp(env) {
       PATH: `${binDir}:${process.env.PATH}`,
       // Agent hook installs write here instead of the user's ~/.claude etc.
       ...(env.AXN_TERM_AGENT_CONFIG_ROOT ? { AXN_TERM_AGENT_CONFIG_ROOT: env.AXN_TERM_AGENT_CONFIG_ROOT } : {}),
-      ...(existsSync(shellShim) ? { SHELL: shellShim } : {}),
+      ...(env.AXN_TERM_SHELL_PATH
+        ? { SHELL: env.AXN_TERM_SHELL_PATH }
+        : existsSync(shellShim) ? { SHELL: shellShim } : {}),
+      ...(env.AXN_TERM_INPUTRC ? { INPUTRC: env.AXN_TERM_INPUTRC } : {}),
+      // startTestDisplay: run on the private X server instead of the user's
+      // desktop (GTK would pick Wayland first while WAYLAND_DISPLAY is set).
+      // The X server has no GPU buffers for WebKit's DMA-BUF renderer.
+      ...(env.AXN_TERM_TEST_DISPLAY ? { ...testDisplayEnv(env), WEBKIT_DISABLE_DMABUF_RENDERER: "1" } : {}),
     },
     stdio: ["ignore", logFd, logFd],
     detached: true,
@@ -250,6 +276,13 @@ async function startApp(env) {
       sessionId = sessions[0];
     }
     if (sessionId) break;
+    // A crashed frontend never creates sessions; fail now, not after 60 s.
+    try {
+      assertNoErrorBoundary(env, "app start");
+    } catch (error) {
+      try { process.kill(-child.pid); } catch { /* already gone */ }
+      throw error;
+    }
     if (Date.now() - start > 5000 && (Date.now() - start) % 3000 < 200) {
       process.stderr.write(`[axnTerm] waiting for session, target=${target}, have=${JSON.stringify(sessions)}\n`);
     }
@@ -268,8 +301,8 @@ async function startApp(env) {
   // Give the new window(s) a moment to mount their listeners so remote events
   // like close-now / close-window are actually received.
   await sleep(1000);
-
   env.AXN_TERM_SESSION_ID = sessionId;
+  assertNoErrorBoundary(env, "app start");
   return sessionId;
 }
 
@@ -280,6 +313,7 @@ async function closeApp(env) {
   if (child) {
     await waitForProcessExit(child);
     procs.delete(stateDir);
+    assertNoErrorBoundary(env, "app close");
     return;
   }
   // Subprocess mode: the app was started by an earlier step's process, so its
@@ -290,6 +324,7 @@ async function closeApp(env) {
     try {
       await rc(env, "/health", { signal: AbortSignal.timeout(1000) });
     } catch {
+      assertNoErrorBoundary(env, "app close");
       return;
     }
     await sleep(200);
@@ -331,6 +366,14 @@ function buildInitialState(stateDir, cwd, variant, devinSessionName) {
       },
     },
   };
+
+  if (variant === "shell" || variant === "input" || variant === "git-restore") {
+    // Just a shell at its prompt — for flows that type into the terminal.
+    devinSession.name = "shell";
+    devinSession.topic = "shell";
+    devinSession.pluginState = undefined;
+    devinSession.output = "";
+  }
 
   if (variant === "worktrees" || variant === "mr-review") {
     // A plain shell session in a real git repo — the worktrees plugin's
@@ -391,7 +434,11 @@ function buildInitialState(stateDir, cwd, variant, devinSessionName) {
   const mainWindow = {
     id: "main",
     name: "main",
-    workspaces: [{ id: workspaceId1, name: "axn-term" }],
+    workspaces: [
+      { id: workspaceId1, name: "axn-term" },
+      // An empty second workspace: a target for dragging the session row.
+      ...(variant === "shell" ? [{ id: workspaceId2, name: "extra" }] : []),
+    ],
     sessions: [devinSession],
     selectedWorkspaceId: workspaceId1,
     selectedSessionId: sessionId,
@@ -429,10 +476,13 @@ function buildInitialState(stateDir, cwd, variant, devinSessionName) {
 }
 
 async function prepare(env) {
-  if (env.AXN_TERM_USE_REAL_DEVIN === "true" && !env.AXN_TERM_DEVIN_SESSION) {
+  if (env.AXN_TERM_USE_REAL_DEVIN === "true" && !env.AXN_TERM_DEVIN_SESSION
+      && (env.AXN_TERM_TEST_VARIANT ?? "single") !== "shell") {
     throw new Error("Set AXN_TERM_DEVIN_SESSION to an available real Devin session before running this flow");
   }
   const variant = env.AXN_TERM_TEST_VARIANT ?? "single";
+  delete env.AXN_TERM_SHELL_PATH;
+  delete env.AXN_TERM_INPUTRC;
   // A flow run inside axn-term inherits the app's own AXN_TERM_STATE_DIR
   // (~/.axn-term) — writing the test state.json/plugins.yaml there would
   // clobber the user's real config. An explicit state dir must be new.
@@ -474,6 +524,15 @@ case "$1" in
   -c|--continue) echo "Continuing devin session: gray-party" ;;
   -p) echo "explanation text"; exit 0 ;;
   --) echo "SEEDED TALK SESSION" ;;
+  # Like a real TUI, devin queries the terminal's colors at start — then
+  # exits fast, before the raw-mode gate can release xterm's reply. The
+  # reply must be dropped at the bare shell, never echoed as text.
+  --osc-exit) printf '\\033]10;?\\007\\033]11;?\\007\\033]12;?\\007'; echo "devin interactive"; exit 0 ;;
+  # Same queries and stays alive — like real devin a raw-mode reader sends
+  # ESC]10;? ESC]11;? ESC[c and stops at the DA1 answer (its sentinel);
+  # a color reply arriving after it is printed as typed input. Run as a
+  # child, not exec'd, so the foreground comm stays "devin".
+  --osc) python3 "$(dirname "$0")/devin-osc-probe.py"; echo "devin interactive" ;;
   *) echo "devin interactive" ;;
 esac
 
@@ -491,6 +550,38 @@ while IFS= read -r line; do
 done
 `,
       { mode: 0o755 },
+    );
+    // devin's startup color probe, captured from devin in a PTY: OSC 10/11
+    // queries followed by DA1. Replies before the DA1 answer are consumed;
+    // anything after it lands in devin's input field as text — the leak a
+    // DA1 reply overtaking an OSC reply (async alive probe) produced.
+    writeFileSync(
+      join(binDir, "devin-osc-probe.py"),
+      String.raw`import os, re, select, sys, termios, time, tty
+fd = sys.stdin.fileno()
+saved = termios.tcgetattr(fd)
+tty.setraw(fd)
+try:
+    os.write(sys.stdout.fileno(), b"\x1b]10;?\x07\x1b]11;?\x07\x1b[c")
+    buf = b""
+    deadline = time.time() + 3
+    while time.time() < deadline and not re.search(rb"\x1b\[\?[\d;]*c", buf):
+        if select.select([fd], [], [], 0.05)[0]:
+            buf += os.read(fd, 4096)
+    parts = re.split(rb"\x1b\[\?[\d;]*c", buf, maxsplit=1)
+    answered = b"11;rgb:" in parts[0]
+    late = parts[1] if len(parts) > 1 else b""
+    end = time.time() + 2
+    while time.time() < end:
+        if select.select([fd], [], [], 0.05)[0]:
+            late += os.read(fd, 4096)
+finally:
+    termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+typed = re.sub(rb"[\x00-\x1f]", b"", late.replace(b"\x1b]", b"")).decode(errors="replace")
+if typed:
+    print("devin input: " + typed)
+print("devin colors: " + ("answered" if answered else "missing"))
+`,
     );
   }
 
@@ -571,6 +662,33 @@ while :; do sleep 1; done
     }
   }
 
+  if (variant === "input") {
+    // A sandboxed plugin with an async 'line' hook: every submitted line
+    // waits for its pass-through answer.
+    const dir = join(stateDir, "plugins", "line-hook");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "plugin.json"),
+      JSON.stringify({ id: "line-hook", title: "line-hook", version: "0.1.0", permissions: ["terminal-input"] }),
+    );
+    writeFileSync(
+      join(dir, "plugin.mjs"),
+      `axn.on('sessionOpen', ({ sessionId }) => axn.session(sessionId).updateState({ ready: true }));
+axn.on('line', async ({ sessionId, line }) => {
+  await axn.session(sessionId).updateState({ ready: true, lastLine: line });
+  return undefined;
+});
+`,
+    );
+    // Bash without bracketed paste: a paste arrives as plain text plus \r.
+    // SHELL=/bin/bash so the app sees its own shell as idle (process name
+    // equals the shell name) and tracks typed lines.
+    if (!existsSync("/bin/bash")) throw new Error("the input variant needs /bin/bash");
+    env.AXN_TERM_SHELL_PATH = "/bin/bash";
+    env.AXN_TERM_INPUTRC = join(stateDir, "inputrc");
+    writeFileSync(env.AXN_TERM_INPUTRC, "set enable-bracketed-paste off\n");
+  }
+
   // A $SHELL shim: command sub-shells (`sh -c <command>`) run with the
   // PATH captured by login_shell_path() — `$SHELL -l -i -c env` — not the
   // app's own env PATH, so the fake `devin` would otherwise be invisible.
@@ -638,6 +756,11 @@ fi
             auto: true
 `;
   }
+  if (variant === "input") {
+    plugins += `line-hook:
+  enabled: true
+`;
+  }
   if (variant === "claude") {
     plugins += `claude:
   enabled: true
@@ -695,9 +818,32 @@ dev-workflow:
     sessionCwd = repoDir;
   }
 
+  if (variant === "git-restore") {
+    // A Next.js-style bracket path: as a pathspec "app/[id]/page.tsx" also
+    // matches app/d/page.tsx. Deleted vs. edited, both unstaged.
+    const repoDir = join(stateDir, "repo");
+    mkdirSync(join(repoDir, "app", "[id]"), { recursive: true });
+    mkdirSync(join(repoDir, "app", "d"), { recursive: true });
+    const git = (args) => execFileSync("git", args, { cwd: repoDir, stdio: "pipe" }).toString();
+    git(["init", "-b", "main"]);
+    git(["config", "user.email", "flow@axn-term.test"]);
+    git(["config", "user.name", "axn-term flow"]);
+    writeFileSync(join(repoDir, "app", "[id]", "page.tsx"), "export default 'id page';\n");
+    writeFileSync(join(repoDir, "app", "d", "page.tsx"), "export default 'd page';\n");
+    git(["add", "."]);
+    git(["commit", "-m", "init"]);
+    rmSync(join(repoDir, "app", "[id]", "page.tsx"));
+    writeFileSync(join(repoDir, "app", "d", "page.tsx"), "export default 'd page, EDITED';\n");
+    env.AXN_TERM_REPO_DIR = repoDir;
+    sessionCwd = repoDir;
+  }
+
   const devinSessionName = env.AXN_TERM_DEVIN_SESSION ?? "green-aurora";
   const state = buildInitialState(stateDir, sessionCwd, variant, devinSessionName);
   writeFileSync(join(stateDir, "state.json"), JSON.stringify(state, null, 2));
+  const [ws1, ws2] = state.windows[0].workspaces;
+  env.AXN_TERM_WORKSPACE_1 = ws1?.id ?? "";
+  env.AXN_TERM_WORKSPACE_2 = ws2?.id ?? "";
 
   return `state dir prepared: ${stateDir}, variant: ${variant}`;
 }
@@ -766,6 +912,631 @@ async function waitForTabField(env, predicate, timeoutMs = 30000) {
     return true;
   }, timeoutMs);
   return found;
+}
+
+// ---- File drop (real XDND drag on a private X server) ----------------------
+// A drop is OS input: neither the remote-control API nor a synthetic DOM event
+// can fake it (only a real drop makes the webview open the file). The flow
+// runs the app on its own X server — Xvfb when installed, else a rootful
+// Xwayland window — and drives it with XTEST through x11drive.py, so the
+// user's desktop never sees the input.
+
+// 1×1 PNG.
+const DROP_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64",
+);
+// A space in the name: the pasted path must arrive shell-quoted.
+const DROP_IMAGE_NAME = "drop image.png";
+
+/** Terminal output with escape sequences removed (shells highlight pasted text). */
+function plainOutput(output) {
+  return output.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g, "");
+}
+
+function testDisplayEnv(env) {
+  return { ...process.env, DISPLAY: env.AXN_TERM_TEST_DISPLAY, WAYLAND_DISPLAY: "", GDK_BACKEND: "x11", NO_AT_BRIDGE: "1" };
+}
+
+function x11drive(env, args) {
+  return execFileSync("python3", [join(__dirname, "x11drive.py"), ...args], {
+    env: testDisplayEnv(env),
+    encoding: "utf8",
+  });
+}
+
+/** Geometry of the mapped top-level window titled `name`. */
+function findX11Window(env, name) {
+  const line = x11drive(env, ["find", name]).trim().split("\n")[0];
+  if (!line) return undefined;
+  const [id, x, y, w, h] = line.split(" ").map(Number);
+  return { id, x, y, w, h };
+}
+
+async function waitForX11Window(env, name, timeoutMs = 15000) {
+  const start = Date.now();
+  for (;;) {
+    const win = findX11Window(env, name);
+    if (win) return win;
+    if (Date.now() - start > timeoutMs) throw new Error(`no '${name}' window on the test display`);
+    await sleep(200);
+  }
+}
+
+function onPath(cmd) {
+  try {
+    execFileSync("sh", ["-c", `command -v ${cmd}`], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function startTestDisplay(env) {
+  if (process.platform !== "linux") throw new Error("the file-drop flow needs Linux/X11");
+  let n = 90;
+  while (existsSync(`/tmp/.X11-unix/X${n}`) || existsSync(`/tmp/.X${n}-lock`)) n++;
+  const display = `:${n}`;
+  let server;
+  if (onPath("Xvfb")) server = ["Xvfb", [display, "-screen", "0", "1400x900x24"]];
+  else if (onPath("Xwayland") && process.env.WAYLAND_DISPLAY) {
+    server = ["Xwayland", [display, "-geometry", "1400x900"]];
+  } else throw new Error("the file-drop flow needs Xvfb, or Xwayland inside a Wayland session");
+  const logFd = openSync(join(env.AXN_TERM_STATE_DIR, "x-server.log"), "a");
+  const child = spawn(server[0], server[1], { stdio: ["ignore", logFd, logFd], detached: true });
+  child.unref();
+  env.AXN_TERM_TEST_DISPLAY = display;
+  env.AXN_TERM_TEST_DISPLAY_PID = String(child.pid);
+  const start = Date.now();
+  while (!existsSync(`/tmp/.X11-unix/X${n}`)) {
+    if (Date.now() - start > 10000) throw new Error(`${server[0]} did not start on ${display}`);
+    await sleep(100);
+  }
+
+  // A file-manager stand-in offering the image as text/uri-list.
+  const image = join(env.AXN_TERM_STATE_DIR, "drop", DROP_IMAGE_NAME);
+  mkdirSync(dirname(image), { recursive: true });
+  writeFileSync(image, DROP_PNG);
+  const sourceLog = openSync(join(env.AXN_TERM_STATE_DIR, "drag-source.log"), "a");
+  const source = spawn("python3", [join(__dirname, "x11drive.py"), "source", image, "1150", "50"], {
+    env: testDisplayEnv(env),
+    stdio: ["ignore", sourceLog, sourceLog],
+    detached: true,
+  });
+  source.unref();
+  env.AXN_TERM_DRAG_SOURCE_PID = String(source.pid);
+  env.AXN_TERM_DROP_IMAGE = image;
+  await waitForX11Window(env, "drag-source");
+  return `test display ${display} (${server[0]})`;
+}
+
+function stopTestDisplay(env) {
+  for (const key of ["AXN_TERM_DRAG_SOURCE_PID", "AXN_TERM_TEST_DISPLAY_PID"]) {
+    const pid = Number(env[key]);
+    if (pid) {
+      try {
+        process.kill(pid);
+      } catch { /* already gone */ }
+    }
+    delete env[key];
+  }
+  delete env.AXN_TERM_TEST_DISPLAY;
+}
+
+/**
+ * Print a unique mark in the session and return a reader for the output after
+ * it. The remote-control buffer is capped, so offsets into it shift.
+ */
+async function outputAfterMark(env, id) {
+  const mark = `drop-mark-${randomBytes(4).toString("hex")}`;
+  // The typed line never contains the mark itself, only its output does.
+  await writeToSession(env, id, `printf '%s-%s\\n' drop-mark ${mark.slice("drop-mark-".length)}\r`);
+  const after = async () => {
+    const output = plainOutput(await getSessionOutput(env, id));
+    const at = output.lastIndexOf(`${mark}\r\n`);
+    return at < 0 ? undefined : output.slice(at + mark.length + 2);
+  };
+  const start = Date.now();
+  while ((await after()) === undefined) {
+    if (Date.now() - start > 10000) throw new Error("the shell never printed the output mark");
+    await sleep(200);
+  }
+  return after;
+}
+
+/** Drag the image from the drag source to a point in the axn-term window (fractions of its size). */
+async function dragImageTo(env, fx, fy) {
+  const src = await waitForX11Window(env, "drag-source");
+  const app = await waitForX11Window(env, "axn-term");
+  const to = [app.x + app.w * fx, app.y + app.h * fy].map((v) => String(Math.round(v)));
+  x11drive(env, ["drag", String(src.x + src.w / 2), String(src.y + src.h / 2), ...to]);
+}
+
+/**
+ * Drop beside the terminal (on the session panel): nothing may reach the
+ * prompt, and the webview must not open the image in place of the app.
+ */
+async function dropBesideTerminal(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  const after = await outputAfterMark(env, id);
+  await dragImageTo(env, 0.15, 0.8);
+  await sleep(1500);
+  const typed = await after();
+  if (typed.includes("image.png")) {
+    throw new Error(`a drop beside the terminal reached the prompt: ${JSON.stringify(typed)}`);
+  }
+  // A replaced page runs no frontend command; a live one types this line.
+  await sendCommand(env, id, "echo app-still-$((40 + 2))");
+  const start = Date.now();
+  while (!(await after()).includes("app-still-42")) {
+    if (Date.now() - start > 10000) {
+      throw new Error("the app stopped answering after the drop — the webview opened the image");
+    }
+    await sleep(250);
+  }
+  return "drop beside the terminal ignored";
+}
+
+/**
+ * Drop the image onto the terminal behind a typed `wc -c `, then run the
+ * line: the shell must count the image's bytes, which proves the pasted path
+ * is the file's and is quoted correctly.
+ */
+async function dropOnTerminal(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  const image = env.AXN_TERM_DROP_IMAGE;
+  const since = await outputAfterMark(env, id);
+  await writeToSession(env, id, "wc -c ");
+  await dragImageTo(env, 0.7, 0.5);
+  const start = Date.now();
+  while (!(await since()).includes(DROP_IMAGE_NAME)) {
+    if (Date.now() - start > 10000) {
+      throw new Error(`the dropped image's path never reached the prompt: ${JSON.stringify(await since())}`);
+    }
+    await sleep(250);
+  }
+  await writeToSession(env, id, "\r");
+  const expected = `${DROP_PNG.length} ${image}`;
+  const ranAt = Date.now();
+  while (!(await since()).includes(expected)) {
+    if (Date.now() - ranAt > 10000) {
+      throw new Error(`expected '${expected}' from the pasted line, got ${JSON.stringify(await since())}`);
+    }
+    await sleep(250);
+  }
+  return `dropped image pasted as its path: ${image}`;
+}
+
+/**
+ * The app's own drags must keep working beside the native file-drop handler
+ * (Linux): drag the session row onto the "extra" workspace with the mouse —
+ * a real HTML5 drag inside WebKitGTK — and the session must move there.
+ */
+async function dragSessionToWorkspace(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  const app = await waitForX11Window(env, "axn-term");
+  if (!env.AXN_TERM_WORKSPACE_2) throw new Error("the variant has no second workspace to drag to");
+  // Default 800x600 window: the session row is the first card under the
+  // "axn-term" workspace, "extra" (empty, "no sessions") is below it.
+  const row = [app.x + 180, app.y + 125];
+  const extra = [app.x + 110, app.y + 220];
+  x11drive(env, ["drag", ...row, ...extra].map(String));
+  const workspaceOf = (state) =>
+    (state.windows ?? []).flatMap((w) => w.sessions ?? []).find((s) => s.id === id)?.workspaceId;
+  const before = env.AXN_TERM_WORKSPACE_1;
+  try {
+    await waitForState(env, (state) => workspaceOf(state) === env.AXN_TERM_WORKSPACE_2, 10000);
+  } catch {
+    throw new Error(`the session stayed in workspace ${before} after the drag`);
+  }
+  return "session row dragged to another workspace";
+}
+
+/**
+ * Press the window's close button (WM_DELETE_WINDOW) and confirm the dialog
+ * with Enter: the app must exit. A window whose page was replaced never
+ * answers the close button.
+ */
+async function closeWithWindowButton(env) {
+  const app = await waitForX11Window(env, "axn-term");
+  x11drive(env, ["close", String(app.id)]);
+  await sleep(1000);
+  // No window manager hands out keyboard focus: click the dialog's backdrop
+  // (below the dialog, which does nothing) before pressing Enter.
+  x11drive(env, ["click", String(Math.round(app.x + app.w / 2)), String(Math.round(app.y + app.h * 0.9))]);
+  await sleep(200);
+  x11drive(env, ["key", "Return"]);
+  const start = Date.now();
+  while (Date.now() - start < 15000) {
+    try {
+      await rc(env, "/health", { signal: AbortSignal.timeout(1000) });
+    } catch {
+      return "window closed by its close button";
+    }
+    await sleep(200);
+  }
+  throw new Error("the window did not close after its close button was pressed");
+}
+
+// ---- Regression checks (flows/axn-term-regressions.xml) ---------------------
+
+/** The frontend answers a /command line (only a mounted app does) and no crash was logged. */
+/**
+ * OSC color-report regression: a program querying terminal colors then
+ * exiting fast (devin --osc-exit) must not leak the xterm reply into the
+ * shell prompt — and a subsequent axn-* line must still be intercepted.
+ */
+/**
+ * Same OSC leak check against the REAL devin binary: its startup color
+ * queries (and any re-query on resume/restore) must never echo a reply
+ * into its own input or the shell after exit.
+ */
+/**
+ * Real devin's workspace-trust prompt ("trust this folder?") blocks a fresh
+ * session until answered — the flow accepts it: wait briefly for trust UI,
+ * then Enter (the default "proceed" row). No-op when the folder is already
+ * trusted, so this is the general way to drive a real coding agent.
+ */
+/**
+ * Strip caret-form kernel echoes (`^[]11;rgb:…^[\`) — the line discipline's
+ * echo of our reply on a cooked+echo tty; real terminals show it identically
+ * and devin's TUI repaints over it. What remains bare (`11;rgb:` without the
+ * `^[]` introducer) is reply text rendered as typed input — the real leak.
+ */
+function stripCaretEcho(out) {
+  return out.replace(/\^\[\](?:10|11|12);rgb:[0-9a-fA-F/]+(?:\^\[\\|\^G)/g, "");
+}
+
+async function devinTrustIfPrompted(env, id) {
+  // Answer devin's interactive prompts (workspace trust, `devin -r`
+  // resume-directory picker) until none appear — each match consumes output
+  // so the loop only fires on NEW prompts. Enter accepts the default row.
+  const marker = /\u2191\u2193 select|✓ Trust|Resume this session|trust this (folder|directory|workspace)|proceed\b/i;
+  let seen = 0, answered = 0;
+  for (let i = 0; i < 8; i++) {
+    let out = "";
+    const t0 = Date.now();
+    let hit = false;
+    while (Date.now() - t0 < 15000) {
+      out = await getSessionOutput(env, id);
+      if (marker.test(out.slice(seen))) { hit = true; break; }
+      await sleep(400);
+    }
+    seen = out.length;
+    if (!hit) return answered > 0;
+    await writeToSession(env, id, "\r");
+    answered++;
+    await sleep(1000);
+  }
+  return answered > 0;
+}
+
+/**
+ * OSC leak check on the RESTORE path: the seeded state marks devin active,
+ * so the app itself relaunches `devin -r <name>` on open — queries answered
+ * while the session reattaches must not echo into devin's input.
+ */
+async function oscRestoreDevin(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  // The app injects the resume itself — no typed launch. Prove devin is
+  // foreground, then watch for leaked replies through the gate window.
+  await waitForState(env, (st) => {
+    const s = (st.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id);
+    return s && s.process === "devin";
+  }, 30000).catch(async () => {
+    const tail = (await getSessionOutput(env, id)).slice(-300);
+    throw new Error(`restored devin never became foreground; tail: ${JSON.stringify(tail)}`);
+  });
+  await devinTrustIfPrompted(env, id);
+  await sleep(8000);
+  const out = stripCaretEcho(await getSessionOutput(env, id));
+  const leak = /\d+;rgb:|;rgb:/.exec(out);
+  if (leak) {
+    throw new Error(`OSC report leaked on devin restore: ${JSON.stringify(out.slice(Math.max(0, leak.index - 120), leak.index + 80))}`);
+  }
+  return "restored devin: no OSC leak";
+}
+
+async function oscRealDevin(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  // Wait for an idle shell before typing — a `devin\r` written during
+  // session bring-up is lost.
+  await waitForState(env, (st) => {
+    const s = (st.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id);
+    return s && (!s.process || /^(zsh|bash|sh|fish|dash)$/.test(s.process));
+  }, 15000).catch(() => {
+    throw new Error("the session never reported an idle shell before launching devin");
+  });
+  const launch = env.AXN_TERM_DEVIN_SESSION ? `devin -r ${env.AXN_TERM_DEVIN_SESSION}` : "devin";
+  await writeToSession(env, id, `${launch}\r`);
+  // Prove devin is actually foreground — a failed -r in the wrong cwd
+  // would silently fall back to the shell and pass the rgb check vacuously.
+  await waitForState(env, (st) => {
+    const s = (st.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id);
+    return s && s.process === "devin";
+  }, 20000).catch(async () => {
+    const tail = (await getSessionOutput(env, id)).slice(-300);
+    throw new Error(`real devin never became the foreground process; tail: ${JSON.stringify(tail)}`);
+  });
+  // TUI start + color queries + the raw-gate window.
+  await devinTrustIfPrompted(env, id);
+  await sleep(8000);
+  const during = stripCaretEcho(await getSessionOutput(env, id));
+  const leak = /\d+;rgb:|;rgb:/.exec(during);
+  if (leak) {
+    throw new Error(`OSC report leaked inside real devin: ${JSON.stringify(during.slice(Math.max(0, leak.index - 120), leak.index + 80))}`);
+  }
+  await writeToSession(env, id, "/exit\r");
+  await sleep(2500);
+  const after = stripCaretEcho(await getSessionOutput(env, id));
+  const late = /\d+;rgb:|;rgb:/.exec(after);
+  if (late) {
+    throw new Error(`OSC report leaked at the shell after devin exited: ${JSON.stringify(after.slice(Math.max(0, late.index - 120), late.index + 80))}`);
+  }
+  return "real devin: no OSC leak";
+}
+
+async function oscCheck(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  await writeToSession(env, id, "devin --osc-exit\r");
+  await waitForOutput(env, id, (o) => o.includes("devin interactive"), 20000);
+  // Back at a bare shell: a direct query from the prompt is the second
+  // leak path — the reply answers nobody and must be dropped too. The
+  // desktop reports the shell's own comm (zsh, bash, …) as `process` when
+  // the shell itself is foreground — that is the idle state.
+  await waitForState(env, (st) => {
+    const s = (st.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id);
+    return s && (!s.process || /^(zsh|bash|sh|fish|dash)$/.test(s.process));
+  }, 15000).catch(() => {
+    throw new Error("the session never returned to an idle shell after devin --osc-exit");
+  });
+  await writeToSession(env, id, "printf '\\033]11;?\\007'\r");
+  // Any reply released into the cooked tty lands within a moment — give it
+  // the raw-gate window plus slack, then look for the echo.
+  await sleep(2000);
+  const out = await getSessionOutput(env, id);
+  const leak = /\d+;rgb:|;rgb:/.exec(out);
+  if (leak) {
+    throw new Error(`OSC color report leaked into the shell: ${JSON.stringify(out.slice(Math.max(0, leak.index - 80), leak.index + 80))}`);
+  }
+  // The report must not have poisoned the input buffer: a plain shell
+  // line still executes (stray reply bytes would have corrupted it).
+  const tag = `OSCINPUT_${Math.random().toString(36).slice(2, 8)}`;
+  await writeToSession(env, id, `echo ${tag}-$((6*7))\r`);
+  await waitForOutput(env, id, (o) => o.includes(`${tag}-42`), 15000)
+    .catch(async () => {
+      const tail = (await getSessionOutput(env, id)).slice(-300);
+      throw new Error(`the input line was poisoned by an OSC reply; tail: ${JSON.stringify(tail)}`);
+    });
+  // And hidden-command dispatch still works — axn-session opens a session.
+  const before = (await getSessions(env)).length;
+  await sendCommand(env, id, "axn-session . --background");
+  await waitForState(env, (st) =>
+    (st.windows ?? []).flatMap((w) => w.sessions ?? []).length > before, 15000)
+    .catch(async () => {
+      const tail = (await getSessionOutput(env, id)).slice(-300);
+      throw new Error(`axn-session was not dispatched after the OSC replies; tail: ${JSON.stringify(tail)}`);
+    });
+  // Alive raw reader with devin's DA1 sentinel: the color replies must
+  // reach it before the DA1 answer — one arriving after it is typed text.
+  await writeToSession(env, id, "devin --osc\r");
+  await waitForOutput(env, id, (o) => o.includes("devin interactive"), 15000);
+  const live = stripCaretEcho(await getSessionOutput(env, id));
+  if (/\d+;rgb:|;rgb:/.test(live)) {
+    throw new Error("OSC report arrived after the DA1 sentinel — typed into a still-running devin's input");
+  }
+  if (!live.includes("devin colors: answered")) {
+    throw new Error("devin's color query got no reply before its DA1 sentinel");
+  }
+  await writeToSession(env, id, "/exit\r");
+  return "no OSC leak, input clean, axn-session dispatched";
+}
+
+async function checkAlive(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  const tag = randomBytes(3).toString("hex");
+  await sendCommand(env, id, `echo alive-${tag}-$((40 + 2))`);
+  try {
+    await waitForOutput(env, id, (s) => s.includes(`alive-${tag}-42`), 20000);
+  } catch {
+    throw new Error(`the frontend did not run a /command line; ${logTail(env)}`);
+  }
+  assertNoErrorBoundary(env, "running app");
+  return "frontend alive, no error boundary";
+}
+
+/** Print AXN_TERM_FLOOD_BYTES (default 8 MB) in the session; the shell reports how long it took. */
+async function floodOutput(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  const bytes = Number(env.AXN_TERM_FLOOD_BYTES ?? 8000000);
+  const tag = `FLOOD_${randomBytes(3).toString("hex")}_MS`;
+  // The echoed command line shows "$((", only the result has digits after the tag.
+  await writeToSession(
+    env,
+    id,
+    `s=$(date +%s%N); head -c ${bytes} /dev/zero | tr '\\0' x; echo; echo ${tag} $(( ($(date +%s%N)-s)/1000000 ))\r`,
+  );
+  const re = new RegExp(`${tag} (\\d+)`);
+  let out;
+  try {
+    out = await waitForOutput(env, id, (o) => re.test(o), 120000);
+  } catch {
+    throw new Error(`the ${bytes}-byte flood did not finish within 120 s`);
+  }
+  return Number(re.exec(out)[1]);
+}
+
+async function floodBaseline(env) {
+  const ms = await floodOutput(env);
+  env.AXN_TERM_FLOOD_BASELINE_MS = String(ms);
+  return `baseline flood: ${ms} ms`;
+}
+
+/**
+ * A closed window must not keep throttling PTY output. Limit: 8 s
+ * (AXN_TERM_FLOOD_MAX_MS) or 5x the baseline on a slow machine.
+ */
+async function floodAfterClose(env) {
+  const ms = await floodOutput(env);
+  const baseline = Number(env.AXN_TERM_FLOOD_BASELINE_MS ?? 0);
+  const limit = Math.max(Number(env.AXN_TERM_FLOOD_MAX_MS ?? 8000), 5 * baseline);
+  const summary = `flood after closed window: ${ms} ms (baseline ${baseline} ms, limit ${limit} ms)`;
+  if (ms > limit) throw new Error(`output throttled — ${summary}`);
+  return summary;
+}
+
+function linePluginState(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  return (readStateFile(env).windows ?? []).flatMap((w) => w.sessions ?? [])
+    .find((s) => s.id === id)?.pluginState?.["line-hook"] ?? {};
+}
+
+/** Click the terminal so it has keyboard focus (no window manager hands it out). */
+async function focusTerminal(env) {
+  const app = await waitForX11Window(env, "axn-term");
+  x11drive(env, ["click", String(Math.round(app.x + app.w * 0.7)), String(Math.round(app.y + app.h * 0.5))]);
+  await sleep(300);
+}
+
+/**
+ * Paste "echo PASTE_OK_$((40+2))" plus newline with Shift+Insert while a
+ * plugin's async line hook is active: the shell must run it exactly once.
+ */
+async function pasteLine(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  try {
+    await waitForState(env, () => linePluginState(env).ready === true, 30000);
+  } catch {
+    throw new Error(`the line-hook plugin never loaded; ${logTail(env)}`);
+  }
+  // Hidden-command tracking only runs while the shell itself is foreground.
+  await waitForState(env, (st) => {
+    const s = (st.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id);
+    return s && !s.process;
+  }, 15000).catch(() => {
+    throw new Error("the session never reported an idle shell");
+  });
+  const after = await outputAfterMark(env, id);
+  // With bracketed paste on, the hook never sees the pasted line: no test.
+  const raw = await getSessionOutput(env, id);
+  if (raw.slice(raw.lastIndexOf("drop-mark-")).includes("\x1b[?2004h")) {
+    throw new Error("the session's bash still turns on bracketed paste (INPUTRC overridden?)");
+  }
+  const clipLog = openSync(join(env.AXN_TERM_STATE_DIR, "clipboard.log"), "a");
+  const clip = spawn("python3", [join(__dirname, "x11drive.py"), "clipboard", "echo PASTE_OK_$((40+2))\n"], {
+    env: testDisplayEnv(env),
+    stdio: ["ignore", clipLog, clipLog],
+  });
+  try {
+    await sleep(700);
+    await focusTerminal(env);
+    x11drive(env, ["key", "Shift_L+Insert"]);
+    const ran = () => after().then((o) => (o.match(/PASTE_OK_42/g) ?? []).length);
+    const start = Date.now();
+    while ((await ran()) === 0) {
+      if (Date.now() - start > 10000) {
+        const hooked = linePluginState(env).lastLine ?? "(none)";
+        throw new Error(
+          `the pasted line never ran (line hook saw: ${JSON.stringify(hooked)}); terminal after the paste: ${JSON.stringify(await after())}`,
+        );
+      }
+      await sleep(250);
+    }
+    await sleep(1500);
+    const runs = await ran();
+    if (runs !== 1) throw new Error(`the pasted line ran ${runs} times`);
+    const hooked = linePluginState(env).lastLine ?? "";
+    if (!hooked.includes("PASTE_OK_")) {
+      throw new Error(`the async line hook did not see the pasted line (saw ${JSON.stringify(hooked)})`);
+    }
+    return "pasted line ran once through the async line hook";
+  } finally {
+    clip.kill();
+  }
+}
+
+/**
+ * Open an unreadable file with typed `axn-edit`, press Ctrl+S in the editor:
+ * the file must keep its contents. The file lives under $HOME (the fs scope).
+ */
+async function editorReadFail(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  const dir = mkdtempSync(join(homedir(), ".cache", "axn-term-flow-"));
+  const file = join(dir, `locked-${randomBytes(3).toString("hex")}.txt`);
+  writeFileSync(file, "KEEP ME\n");
+  // Write-only: the read fails, a write would still truncate it.
+  chmodSync(file, 0o200);
+  try {
+    await waitForState(env, (st) => {
+      const s = (st.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id);
+      return s && !s.process;
+    }, 15000).catch(() => {
+      throw new Error("the session never reported an idle shell");
+    });
+    await focusTerminal(env);
+    x11drive(env, ["type", `axn-edit ${file}`]);
+    x11drive(env, ["key", "Return"]);
+    try {
+      await waitForState(env, (st) =>
+        (st.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id)?.editors
+          ?.some((e) => e.path === file), 15000);
+    } catch {
+      throw new Error(`typed axn-edit did not open an editor tab; ${logTail(env)}`);
+    }
+    await sleep(2000);
+    // Click into the editor body, then save.
+    await focusTerminal(env);
+    x11drive(env, ["key", "Control_L+s"]);
+    await sleep(2500);
+    chmodSync(file, 0o600);
+    const now = readFileSync(file, "utf8");
+    if (now !== "KEEP ME\n") throw new Error(`Ctrl+S after a failed read overwrote the file with ${JSON.stringify(now)}`);
+    return "unreadable file kept its contents after Ctrl+S";
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Open Git Inspect for the session's repo. */
+async function openGitInspect(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  await sendCommand(env, id, "axn-git");
+  await waitForState(env, (st) =>
+    (st.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id)?.editors
+      ?.some((e) => e.kind === "git"), 15000);
+  // Let the status list load.
+  await sleep(2500);
+  return "git inspect open";
+}
+
+/**
+ * Git Inspect: right-click the deleted app/[id]/page.tsx, pick "Restore
+ * deleted file". The file must come back and the edited app/d/page.tsx keep
+ * its change.
+ */
+async function gitRestoreDeleted(env) {
+  const repo = env.AXN_TERM_REPO_DIR;
+  const app = await waitForX11Window(env, "axn-term");
+  // Default 800x600 window: the first unstaged row is "D app/[id]/page.tsx".
+  const row = [app.x + 400, app.y + 121];
+  x11drive(env, ["click", ...row, 3].map(String));
+  await sleep(800);
+  // The menu opens at the pointer: title, Stage, Restore deleted file, Copy path.
+  x11drive(env, ["click", String(row[0] + 60), String(row[1] + 67)]);
+  const restored = join(repo, "app", "[id]", "page.tsx");
+  const start = Date.now();
+  while (!existsSync(restored)) {
+    if (Date.now() - start > 10000) {
+      throw new Error("app/[id]/page.tsx was not restored — the row or menu click missed");
+    }
+    await sleep(200);
+  }
+  await sleep(500);
+  const edited = readFileSync(join(repo, "app", "d", "page.tsx"), "utf8");
+  if (!edited.includes("EDITED")) {
+    throw new Error(`restoring app/[id]/page.tsx also reset app/d/page.tsx (now ${JSON.stringify(edited)})`);
+  }
+  return "deleted file restored, app/d/page.tsx kept its edit";
 }
 
 export async function run(step, env) {
@@ -1028,8 +1799,67 @@ export async function run(step, env) {
       return `hooks: session ${s.status}/${s.pluginState.claude.attention.level}, tab ${tab.hookStatus}/${tab.hookAttention.level}, tab tasks ${done}/${tab.tasks.length} (${tab.progress}%)`;
     }
 
+    // File-drop flow (flows/axn-term-drop-image.xml). On failure the app and
+    // the test display are torn down so the next flow starts clean.
+    case "startTestDisplay":
+      return await startTestDisplay(env);
+
+    case "screenshot": {
+      const file = step.args?.file ?? join(env.AXN_TERM_STATE_DIR, "screen.png");
+      x11drive(env, ["shot", file]);
+      return `screenshot: ${file}`;
+    }
+
+    case "dropBesideTerminal":
+    case "dropOnTerminal":
+    case "dragSessionToWorkspace":
+    case "closeWithWindowButton": {
+      const steps = { dropBesideTerminal, dropOnTerminal, dragSessionToWorkspace, closeWithWindowButton };
+      try {
+        return await steps[action](env);
+      } catch (error) {
+        await closeApp(env).catch(() => {});
+        stopTestDisplay(env);
+        throw error;
+      } finally {
+        if (action === "closeWithWindowButton") stopTestDisplay(env);
+      }
+    }
+
     case "close": {
       await closeApp(env);
+      return "app closed";
+    }
+
+    case "checkAlive":
+    case "oscRestoreDevin":
+    case "oscRealDevin":
+    case "oscCheck":
+    case "floodBaseline":
+    case "floodAfterClose":
+    case "pasteLine":
+    case "editorReadFail":
+    case "openGitInspect":
+    case "gitRestoreDeleted": {
+      const steps = {
+        checkAlive, oscRestoreDevin, oscRealDevin, oscCheck, floodBaseline, floodAfterClose, pasteLine, editorReadFail, openGitInspect, gitRestoreDeleted,
+      };
+      try {
+        return await steps[action](env);
+      } catch (error) {
+        await closeApp(env).catch(() => {});
+        stopTestDisplay(env);
+        throw error;
+      }
+    }
+
+    // Close the app after a test-display flow and stop the display.
+    case "closeAndStopDisplay": {
+      try {
+        await closeApp(env);
+      } finally {
+        stopTestDisplay(env);
+      }
       return "app closed";
     }
 

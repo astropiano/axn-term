@@ -148,8 +148,10 @@ axn-dev flow -f flows/axn-term-shortcuts.xml
 The `docker-compose.build.yml` and `build/` directory share a common Docker builder pattern:
 
 - `build/desktop/Dockerfile` — Node + Rust + Tauri Linux build environment.
+- `build/windows/Dockerfile` — Node + Rust + cargo-xwin + NSIS, cross-compiles the Windows app.
 - `build/init-builders.sh` — build the builder images once.
 - `build/build-desktop.sh` — compile the desktop app and place artifacts in `./artifacts/`.
+- `build/build-desktop-windows.sh` — cross-compile the Windows installer into `./artifacts/windows/`.
 - `build/build-server.sh` — build the online server images (`server` profile).
 - `build/build-all.sh` — both of the above.
 
@@ -171,6 +173,33 @@ host binaries: `build/build-server.sh` builds `axn-term-gateway:latest` and
 `axn-term-online` scenario uses, so the scenario runs what it builds. Build
 them into the engine the gateway's `DOCKER_SOCK` points at.
 
+## Releases
+
+Versions follow [SemVer](https://semver.org) and come from git tags
+(`vMAJOR.MINOR.PATCH`, optionally with a pre-release part like `-rc.1`). The
+version in `package.json`/`tauri.conf.json`/`Cargo.toml` stays at its
+development value; release builds stamp the tag's version in
+(`build/scripts/set-version.sh`).
+
+To cut a release:
+
+1. Tag the commit on the branch you release from and push the tag:
+
+   ```bash
+   git tag v1.4.0
+   git push origin v1.4.0
+   ```
+
+2. In GitLab: **Build → Pipelines → Run pipeline**, select the tag `v1.4.0`,
+   **Run pipeline**.
+
+The pipeline (`.gitlab-ci.yml`) checks the tag is a SemVer release tag,
+builds the builder images from `build/desktop` and `build/windows`, builds
+the Linux (deb, rpm, AppImage, Arch package) and Windows (NSIS installer)
+apps, uploads them to the project's package registry and publishes a GitLab
+release for the tag with download links. Pushing a tag alone does not start
+a build, and no pipeline runs for branches or MRs.
+
 ## Building the desktop app locally
 
 ### Option A — Docker builder (recommended, no host Rust needed)
@@ -188,6 +217,34 @@ This writes the artifacts to `./artifacts/desktop/`:
 - `artifacts/desktop/bin/axn-term` — raw Linux binary
 - `artifacts/desktop/bundle/` — installer packages (`.deb`, `.AppImage`, etc.)
 - `artifacts/desktop/axn-term-*.pkg.tar.zst` — Arch Linux pacman package
+
+### Windows build
+
+The Windows app is cross-compiled on Linux (target `x86_64-pc-windows-msvc`,
+via [cargo-xwin](https://github.com/rust-cross/cargo-xwin)), so no Windows
+machine is needed:
+
+```bash
+./build/build-desktop-windows.sh
+# or: pnpm build:desktop:windows
+```
+
+This writes:
+
+- `artifacts/windows/bundle/axn-term_<version>_x64-setup.exe` — NSIS installer
+  (per-user install; downloads the WebView2 runtime if it is missing)
+- `artifacts/windows/bin/axn-term.exe` — raw executable
+
+The first run downloads the MSVC CRT and Windows SDK (~700 MB) into the
+`desktop-xwin-cache` volume. Only NSIS is built — MSI needs WiX, which only
+runs on Windows. The installer is unsigned, so SmartScreen warns on first
+launch.
+
+On Windows new terminals open PowerShell 7 (`pwsh`) if installed, else
+Windows PowerShell; `$SHELL` or the configured shell still wins. Not yet
+available on Windows: `axn-term session …` from inside a terminal (needs the
+Unix control socket), foreground-process and cwd tracking, and the
+login-shell PATH lookup.
 
 ### Arch Linux install
 

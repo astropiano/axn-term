@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# pre-push hook: verify every submodule SHA being pushed exists on its remote.
+# Only submodules whose recorded SHA changes in this push are checked.
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+if [ ! -f "$REPO_ROOT/.gitmodules" ]; then
+    exit 0
+fi
+
+declare -a SUB_PATHS
+declare -a SUB_URLS
+
+while IFS= read -r line; do
+    key=$(printf '%s' "$line" | awk '{print $1}')
+    path=$(printf '%s' "$line" | sed 's/^[^ ]* //')
+    name=${key#submodule.}
+    name=${name%.path}
+    url=$(git config -f "$REPO_ROOT/.gitmodules" --get "submodule.$name.url" 2>/dev/null || true)
+    if [ -n "$url" ]; then
+        SUB_PATHS+=("$path")
+        SUB_URLS+=("$url")
+    fi
+done < <(git config -f "$REPO_ROOT/.gitmodules" --get-regexp '^submodule\..*\.path$' 2>/dev/null || true)
+
+if [ ${#SUB_PATHS[@]} -eq 0 ]; then
+    exit 0
+fi
+
+errors=0
+
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+        continue
+    fi
+
+    for i in "${!SUB_PATHS[@]}"; do
+        sub_path="${SUB_PATHS[$i]}"
+        sub_url="${SUB_URLS[$i]}"
+
+        recorded=$(git rev-parse "${local_sha}:${sub_path}" 2>/dev/null || true)
+        if [ -z "$recorded" ]; then
+            continue
+        fi
+
+        # Skip unchanged submodules.
+        if [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+            old=$(git rev-parse "${remote_sha}:${sub_path}" 2>/dev/null || true)
+            if [ "$old" = "$recorded" ]; then
+                continue
+            fi
+        fi
+
+        tmp=$(mktemp -d)
+        cleanup() { rm -rf "$tmp"; }
+        trap cleanup EXIT
+
+        git init --bare "$tmp" --quiet
+        git --git-dir="$tmp" remote add origin "$sub_url"
+
+        if ! git --git-dir="$tmp" fetch --depth=1 origin "$recorded" >/dev/null 2>&1; then
+            echo "Error: submodule '${sub_path}' in ${local_ref} points to ${recorded:0:12}, which could not be fetched from ${sub_url}." >&2
+            echo "       Push the submodule commit to its remote before pushing this repo, or use --no-verify to skip." >&2
+            errors=1
+            continue
+        fi
+
+        if ! git --git-dir="$tmp" cat-file -e "$recorded" 2>/dev/null; then
+            echo "Error: submodule '${sub_path}' in ${local_ref} points to ${recorded:0:12}, which is not present on ${sub_url}." >&2
+            errors=1
+            continue
+        fi
+
+        trap - EXIT
+        rm -rf "$tmp"
+    done
+done
+
+if [ "$errors" -ne 0 ]; then
+    exit 1
+fi

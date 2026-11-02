@@ -3,11 +3,13 @@ import { AlertOctagon, AlertTriangle, ChevronRight } from 'lucide-react';
 import type { RailFlag } from './attention';
 
 interface AttentionModalProps {
-  /** Every raised flag — session flags navigate on click. */
+  /** Every raised flag — session flags offer a "Go to session" button. */
   flags: RailFlag[];
   onClose: () => void;
   /** Navigate to the session a flag belongs to. */
   onNavigate?: (sessionId: string) => void;
+  /** Run a declared attention action (`goto-session:<id>` handled by caller). */
+  onAction?: (flag: RailFlag, actionId: string) => void;
 }
 
 /**
@@ -15,7 +17,7 @@ interface AttentionModalProps {
  * pulsing indicator in the left rail. Esc or clicking the backdrop closes it.
  * Session-bound flags are clickable and jump to that session.
  */
-export function AttentionModal({ flags, onClose, onNavigate }: AttentionModalProps) {
+export function AttentionModal({ flags, onClose, onNavigate, onAction }: AttentionModalProps) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -64,27 +66,48 @@ export function AttentionModal({ flags, onClose, onNavigate }: AttentionModalPro
                 </div>
               </>
             );
-            const activate = flag.onClick
-              ? () => {
-                  flag.onClick!();
-                  onClose();
-                }
-              : flag.sessionId && onNavigate
-                ? () => onNavigate(flag.sessionId!)
-                : undefined;
+            // Buttons only — a flag with no declared action and no
+            // session/app binding is inert (no implicit navigation).
+            const buttons: { key: string; label: string; run: () => void }[] = [];
+            if (flag.sessionId && onNavigate) {
+              buttons.push({
+                key: 'goto',
+                label: `Go to ${flag.sessionName ?? 'session'}`,
+                run: () => onNavigate(flag.sessionId!),
+              });
+            }
+            for (const a of flag.attention.actions ?? []) {
+              buttons.push({
+                key: `a:${a.id}`,
+                label: a.label,
+                run: () => onAction?.(flag, a.id),
+              });
+            }
+            if (flag.onClick) {
+              buttons.push({ key: 'app', label: 'Open', run: flag.onClick });
+            }
             return (
               <li key={flag.source}>
-                {activate ? (
-                  <button
-                    type="button"
-                    onClick={activate}
-                    className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition hover:bg-[var(--surface-hover)]"
-                  >
-                    {body}
-                    <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                  </button>
-                ) : (
-                  <div className="flex items-start gap-2 px-1.5 py-1 text-xs">{body}</div>
+                <div className="flex items-start gap-2 px-1.5 py-1 text-xs">
+                  {body}
+                </div>
+                {buttons.length > 0 && (
+                  <div className="mb-1 ml-7 flex flex-wrap gap-1">
+                    {buttons.map((b) => (
+                      <button
+                        key={b.key}
+                        type="button"
+                        onClick={() => {
+                          b.run();
+                          onClose();
+                        }}
+                        className="flex items-center gap-1 rounded border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--accent)] transition hover:bg-[var(--surface-hover)]"
+                      >
+                        {b.label}
+                        <ChevronRight className="h-3 w-3" />
+                      </button>
+                    ))}
+                  </div>
                 )}
               </li>
             );

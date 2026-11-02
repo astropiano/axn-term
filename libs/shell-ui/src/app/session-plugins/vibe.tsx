@@ -478,11 +478,11 @@ function VibeTasks({ ctx }: { ctx: SessionViewContext & PluginApi }): ReactNode 
               {statusIcons[task.status]}
             </span>
             <span
-              className={
+              className={`min-w-0 break-words ${
                 task.status === 'completed'
                   ? 'line-through text-[var(--text-secondary)]'
                   : 'text-[var(--text-primary)]'
-              }
+              }`}
             >
               {task.title}
             </span>
@@ -510,6 +510,7 @@ function VibeRow({ ctx }: { ctx: SessionViewContext & PluginApi }): ReactNode {
 export const vibePlugin: SessionViewPlugin = {
   id: 'vibe',
   title: 'vibe',
+  logo: 'Bot',
   version: '0.1.0',
   stateKey: 'vibe',
   settingsKey: 'vibe',

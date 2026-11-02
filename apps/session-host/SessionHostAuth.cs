@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Astropiano.AxnTerm.SessionHost;
+namespace AxnTerm.SessionHost;
 
 /// <summary>
 /// Shared-secret check between the gateway and this host. Session hosts

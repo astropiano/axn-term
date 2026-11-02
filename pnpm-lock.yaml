@@ -93,8 +93,8 @@ importers:
         specifier: ^5.4.1
         version: 5.4.1
       lucide-react:
-        specifier: ^1.42.0
-        version: 1.42.0(react@19.2.8)
+        specifier: ^1.61.0
+        version: 1.61.0(@types/react@19.2.18)(react@19.2.8)
       marked:
         specifier: ^18.0.14
         version: 18.0.14
@@ -238,8 +238,8 @@ importers:
         specifier: ^5.4.1
         version: 5.4.1
       lucide-react:
-        specifier: ^0.400.0 || ^1.0.0
-        version: 1.42.0(react@19.2.8)
+        specifier: ^1.61.0
+        version: 1.61.0(@types/react@19.2.18)(react@19.2.8)
       marked:
         specifier: ^18.0.14
         version: 18.0.14
@@ -3376,10 +3376,14 @@ packages:
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  lucide-react@1.42.0:
-    resolution: {integrity: sha512-b3jprplnoLS8n5etw1z8xODe3hF/yjKATrTitsrKrnjUhCef5BdDct6Ppv3zVvzFwmtfWgLO6XNM3C9fAD93ug==}
+  lucide-react@1.61.0:
+    resolution: {integrity: sha512-v2SQPPPNjnr+BlhL9Spuzmo5yR+hLkftfuE4E3jaxdNPgSH0hJKPcLJBP7yAta87jQNPsSERS59PJjCJ/CorBA==}
     peerDependencies:
+      '@types/react': '*'
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
 
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
@@ -7401,9 +7405,11 @@ snapshots:
     dependencies:
       react: 19.2.8
 
-  lucide-react@1.42.0(react@19.2.8):
+  lucide-react@1.61.0(@types/react@19.2.18)(react@19.2.8):
     dependencies:
       react: 19.2.8
+    optionalDependencies:
+      '@types/react': 19.2.18
 
   lz-string@1.5.0: {}
 

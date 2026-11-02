@@ -51,6 +51,14 @@ export interface PluginManifest {
   version?: string;
   description?: string;
   /**
+   * The plugin's icon — a Lucide icon name or inline `<svg>` tag (the
+   * `sessionIcons` value format). Declaring it is the has-an-icon
+   * capability: the Logo override field appears in Settings → Plugins, and
+   * with `processPattern` it doubles as the session icon for matching
+   * foreground processes.
+   */
+  logo?: string;
+  /**
    * Bind the plugin to a foreground process: a regex matched against the
    * session's `process`. When it stops matching, `processEnd` fires.
    */

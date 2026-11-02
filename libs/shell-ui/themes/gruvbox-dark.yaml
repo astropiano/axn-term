@@ -1,5 +1,6 @@
 # Gruvbox Dark (github.com/morhetz/gruvbox). Normal red was 2.7:1 on bg0; it
 # is lifted. UI colours from Gruvbox's bg0_h/bg1/bg2 layers, accent yellow.
+# Palette: Gruvbox <https://github.com/morhetz/gruvbox>, MIT. Copyright (c) morhetz <morhetz@gmail.com>.
 # Adjusted for legibility (hue kept, lightness moved):
 #   red: #CC241D -> #E8655F
 #   blue: #458588 -> #509B9E

@@ -37,10 +37,12 @@ import { GitGraph } from './GitGraph';
 import {
   assignLanes,
   gitBackendHandle, git,
+  indexBlob,
   parseLog,
   parseNameStatusZ,
   parsePorcelainZ,
   splitStatus,
+  unstagedBaseSpecs,
   LOG_FORMAT,
 } from './gitClient';
 import type { CommitFile, GitCommit, StatusFile, WorktreeStatus } from './gitClient';
@@ -308,7 +310,7 @@ function MonacoDiff({
 
 async function showBlob(sessionId: string, root: string, spec: string): Promise<string | null> {
   try {
-    return await git(sessionId, root, ['show', spec]);
+    return await git(sessionId, root, ['show', spec, '--']);
   } catch {
     return null;
   }
@@ -589,12 +591,16 @@ export function GitInspectView({
       } else if (area === 'staged') {
         original = (await showBlob(sessionId, root, `HEAD:${oldPath}`)) ?? '';
         modified =
-          f.index === 'D' ? '' : ((await showBlob(sessionId, root, `:${path}`)) ?? (await readDisk(sessionId, root, path)));
+          f.index === 'D' ? '' : ((await showBlob(sessionId, root, indexBlob(path))) ?? (await readDisk(sessionId, root, path)));
       } else {
-        original =
-          (await showBlob(sessionId, root, `:${oldPath}`)) ??
-          (await showBlob(sessionId, root, `HEAD:${oldPath}`)) ??
-          '';
+        original = '';
+        for (const spec of unstagedBaseSpecs(f)) {
+          const blob = await showBlob(sessionId, root, spec);
+          if (blob !== null) {
+            original = blob;
+            break;
+          }
+        }
         modified = f.worktree === 'D' ? '' : await readDisk(sessionId, root, path);
       }
       if (seq !== loadSeq.current) return;

@@ -86,6 +86,58 @@ export function windowLabels(
   return labels;
 }
 
+/**
+ * A window's rank in the live set — 'main' is 0, the rest follow in id
+ * order. Ranks compact automatically when a lower window closes, which is
+ * what drives window numbering and (for remote publishing) per-window
+ * session ids: rank 0 publishes `<name>`, rank n publishes `<name>-<n+1>`.
+ */
+export function windowRank(windowIds: readonly string[], windowId: string): number {
+  const ordered = [
+    ...(windowIds.includes('main') ? ['main'] : []),
+    ...windowIds.filter((id) => id !== 'main').sort(),
+  ];
+  const i = ordered.indexOf(windowId);
+  return i === -1 ? ordered.length : i;
+}
+
+/** Per-window remote session id derived from the live-set rank. */
+export function remoteSessionName(base: string, rank: number): string {
+  return rank === 0 ? base : `${base}-${rank + 1}`;
+}
+
+/**
+ * Live window ids (self included) — announced over the same peers topics
+ * the workspace directory uses, so this stays in sync without a second
+ * announcement channel.
+ */
+export function useWindowIds(
+  peers: PeerChannel | undefined,
+  windowId: string | undefined,
+): string[] {
+  const [live, setLive] = useState<string[]>([]);
+  useEffect(() => {
+    if (!peers || !windowId) return;
+    setLive([windowId]);
+    const unsubs = [
+      peers.subscribe(TOPIC_WORKSPACES, (payload) => {
+        const p = payload as WorkspacesAnnouncement;
+        if (!p?.windowId) return;
+        setLive((prev) => (prev.includes(p.windowId) ? prev : [...prev, p.windowId]));
+      }),
+      peers.subscribe(TOPIC_WINDOW_GONE, (payload) => {
+        const gone = (payload as { windowId?: string })?.windowId;
+        if (!gone) return;
+        setLive((prev) => prev.filter((id) => id !== gone));
+      }),
+    ];
+    // New windows announce on query — no extra heartbeat needed.
+    peers.publish(TOPIC_WORKSPACES_QUERY, { from: windowId });
+    return () => unsubs.forEach((u) => u());
+  }, [peers, windowId]);
+  return live;
+}
+
 /** All move targets — this window's workspaces first, then other windows'. */
 export function workspaceTargets(
   currentId: string,

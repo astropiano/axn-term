@@ -23,6 +23,7 @@ export { SettingsModal } from './app/SettingsModal';
 export { ErrorBoundary } from './app/ErrorBoundary';
 export * from './app/useMemoryStats';
 export * from './app/attention';
+export { windowRank, remoteSessionName, useWindowIds } from './app/windowPeers';
 export * from './app/restoring';
 export { encodeBootIntent, parseBootIntent, type WindowBootIntent } from './app/sessionTearOff';
 export * from './app/session-plugins';

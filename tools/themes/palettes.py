@@ -85,17 +85,6 @@ was pure white on a near-white background; it is a mid grey now.""",
   ui=dict(bg='#F8F9FA', bgSecondary='#FCFCFC', surface='#FCFCFC', surfaceHover='#EEF0F2',
           border='#DCDFE3', accent='#FA8D3E')),
 
-T('breeze-dark', 'Breeze Dark', 'dark', 'improved', 'KDE Plasma\'s own.',
-  """Breeze Dark (KDE Plasma / Konsole). The selection was Breeze's bright
-highlight blue, which left white text at 2.4:1; it is darkened. Bright red and
-bright magenta were darker than their normal shades; they are lifted.""",
-  ansi('#232627', '#FCFCFC', '#FCFCFC', '#3DAEE9',
-       ['#232627', '#ED1515', '#11D116', '#F67400', '#1D99F3', '#9B59B6', '#1ABC9C', '#FCFCFC'],
-       ['#7F8C8D', '#C0392B', '#1CDC9A', '#FDBC4B', '#3DAEE9', '#8E44AD', '#16A085', '#FFFFFF'],
-       orange='#F67400', violet='#9B59B6'),
-  ui=dict(bg='#202326', bgSecondary='#1D1F22', surface='#292C30', surfaceHover='#313539',
-          textSecondary='#A1A9B1', border='#3A3F45', accent='#3DAEE9', accentHover='#57BDEC')),
-
 T('catppuccin-latte', 'Catppuccin Latte', 'light', 'improved', 'Pastel, gentle, light.',
   """Catppuccin Latte (catppuccin.com). UI colours from Latte's mantle, crust and
 surface layers. Yellow, green and pink were too light for text on base (down to
@@ -251,4 +240,210 @@ and the neutral accents for brights.""",
        orange='#AF3A03', violet='#8F3F71'),
   ui=dict(bg='#F2E5BC', bgSecondary='#FBF1C7', surface='#FBF1C7', surfaceHover='#EBDBB2',
           border='#D5C4A1', textSecondary='#665C54', accent='#076678', accentHover='#427B58')),
+
+# ---------------------------------------------------------------- popular additions
+T('github-dark', 'GitHub Dark', 'dark', 'new', 'github.com after dark.',
+  """GitHub Dark Default (github.com/primer/github-vscode-theme), colours from
+@primer/primitives 7.10 with the theme's own text overrides. UI layers from
+GitHub's canvas inset/default/overlay; accent blue.""",
+  ansi('#0D1117', '#E6EDF3', '#2F81F7', '#1E4273',
+       ['#484F58', '#FF7B72', '#3FB950', '#D29922', '#58A6FF', '#BC8CFF', '#39C5CF', '#B1BAC4'],
+       ['#6E7681', '#FFA198', '#56D364', '#E3B341', '#79C0FF', '#D2A8FF', '#56D4DD', '#FFFFFF'],
+       orange='#DB6D28', violet='#BC8CFF'),
+  ui=dict(bg='#010409', bgSecondary='#0D1117', surface='#161B22', surfaceHover='#21262D',
+          border='#30363D', textSecondary='#7D8590', accent='#2F81F7', accentHover='#58A6FF')),
+
+T('github-light', 'GitHub Light', 'light', 'new', 'github.com, the familiar white.',
+  """GitHub Light Default (github.com/primer/github-vscode-theme), colours from
+@primer/primitives 7.10 with the theme's own text overrides. GitHub's ANSI
+brights are already tuned for white; UI layers from its canvas and borders.""",
+  ansi('#FFFFFF', '#1F2328', '#0969DA', '#BBDFFF',
+       ['#24292F', '#CF222E', '#116329', '#4D2D00', '#0969DA', '#8250DF', '#1B7C83', '#6E7781'],
+       ['#57606A', '#A40E26', '#1A7F37', '#633C01', '#218BFF', '#A475F9', '#3192AA', '#8C959F'],
+       orange='#BC4C00', violet='#8250DF'),
+  ui=dict(bg='#F6F8FA', bgSecondary='#FFFFFF', surface='#FFFFFF', surfaceHover='#EAEEF2',
+          border='#D0D7DE', text='#1F2328', textSecondary='#656D76', accent='#0969DA')),
+
+T('catppuccin-frappe', 'Catppuccin Frappé', 'dark', 'new', 'Pastel on muted slate.',
+  """Catppuccin Frappé (catppuccin.com), the lightest of the dark flavours. ANSI
+colours are Catppuccin's official terminal mapping (palette ansiColors);
+bright black (surface2) is lifted to 3.5:1. UI from mantle, base and surface
+layers; accent mauve.""",
+  ansi('#303446', '#C6D0F5', '#F2D5CF', '#51576D',
+       ['#51576D', '#E78284', '#A6D189', '#E5C890', '#8CAAEE', '#F4B8E4', '#81C8BE', '#A5ADCE'],
+       ['#626880', '#E67172', '#8EC772', '#D9BA73', '#7B9EF0', '#F2A4DB', '#5ABFB5', '#B5BFE2'],
+       orange='#EF9F76', violet='#CA9EE6'),
+  ui=dict(bg='#292C3C', bgSecondary='#303446', surface='#303446', surfaceHover='#414559',
+          border='#51576D', textSecondary='#A5ADCE', accent='#CA9EE6', accentHover='#BABBF1')),
+
+T('catppuccin-macchiato', 'Catppuccin Macchiato', 'dark', 'new', 'Pastel on deep slate.',
+  """Catppuccin Macchiato (catppuccin.com), between Frappé and Mocha. ANSI
+colours are Catppuccin's official terminal mapping (palette ansiColors);
+bright black (surface2) is lifted to 3.5:1. UI from mantle, base and surface
+layers; accent mauve.""",
+  ansi('#24273A', '#CAD3F5', '#F4DBD6', '#494D64',
+       ['#494D64', '#ED8796', '#A6DA95', '#EED49F', '#8AADF4', '#F5BDE6', '#8BD5CA', '#A5ADCB'],
+       ['#5B6078', '#EC7486', '#8CCF7F', '#E1C682', '#78A1F6', '#F2A9DD', '#63CBC0', '#B8C0E0'],
+       orange='#F5A97F', violet='#C6A0F6'),
+  ui=dict(bg='#1E2030', bgSecondary='#24273A', surface='#24273A', surfaceHover='#363A4F',
+          border='#494D64', textSecondary='#A5ADCB', accent='#C6A0F6', accentHover='#B7BDF8')),
+
+T('tokyo-night-storm', 'Tokyo Night Storm', 'dark', 'new', 'Tokyo Night under storm clouds.',
+  """Tokyo Night Storm (github.com/enkia/tokyo-night-vscode-theme): the lighter,
+bluer Tokyo Night. Terminal colours from the theme's own terminal.ansi* set;
+its bright black (#414868) disappeared on the background and is lifted.""",
+  ansi('#24283B', '#C0CAF5', '#C0CAF5', '#373D5A',
+       ['#414868', '#F7768E', '#73DACA', '#E0AF68', '#7AA2F7', '#BB9AF7', '#7DCFFF', '#8089B3'],
+       ['#414868', '#F7768E', '#73DACA', '#E0AF68', '#7AA2F7', '#BB9AF7', '#7DCFFF', '#A9B1D6'],
+       orange='#FF9E64', violet='#BB9AF7'),
+  ui=dict(bg='#1F2335', bgSecondary='#24283B', surface='#24283B', surfaceHover='#292E42',
+          textSecondary='#545C7E', accent='#7AA2F7')),
+
+T('tokyo-night-light', 'Tokyo Night Light', 'light', 'new', 'Tokyo Night by day.',
+  """Tokyo Night Light (github.com/enkia/tokyo-night-vscode-theme). Terminal
+colours from the theme's terminal.ansi* set. Its bright black was the text
+colour itself, so it now uses the theme's comment grey (#9699A3), darkened to
+3.5:1 so autosuggestions stay dim but readable.""",
+  ansi('#E6E7ED', '#343B58', '#363C4D', '#D7D9E1',
+       ['#343B58', '#8C4351', '#33635C', '#8F5E15', '#2959AA', '#7B43BA', '#006C86', '#707280'],
+       ['#9699A3', '#8C4351', '#33635C', '#8F5E15', '#2959AA', '#7B43BA', '#006C86', '#707280'],
+       orange='#965027', violet='#7B43BA'),
+  ui=dict(bg='#D6D8DF', bgSecondary='#E6E7ED', surface='#E6E7ED', surfaceHover='#DCDEE3',
+          border='#C1C2C7', textSecondary='#707280', accent='#2959AA')),
+
+T('monokai', 'Monokai', 'dark', 'new', 'The classic: hot pink, lime and olive black.',
+  """Monokai as shipped with Visual Studio Code (extensions/theme-monokai).
+Terminal and UI colours from that theme; its blended selection is flattened.
+The darker normal red, blue and magenta are lifted to read on the background.
+Hot pink is the accent.""",
+  ansi('#272822', '#F8F8F2', '#F8F8F0', '#575A5A',
+       ['#333333', '#C4265E', '#86B42B', '#B3B42B', '#6A7EC8', '#8C6BC8', '#56ADBC', '#E3E3DD'],
+       ['#666666', '#F92672', '#A6E22E', '#E2E22E', '#819AFF', '#AE81FF', '#66D9EF', '#F8F8F2'],
+       orange='#FD971F', violet='#AE81FF'),
+  ui=dict(bg='#1E1F1C', bgSecondary='#272822', surface='#272822', surfaceHover='#3E3D32',
+          border='#414339', accent='#F92672', accentHover='#AE81FF')),
+
+T('night-owl', 'Night Owl', 'dark', 'new', 'For the night owls, by Sarah Drasner.',
+  """Night Owl (github.com/sdras/night-owl-vscode-theme). Terminal colours from
+the theme's terminal.ansi* set; bright black (#575656) was 2.4:1 and is
+lifted. Deep navy UI, accent blue.""",
+  ansi('#011627', '#D6DEEB', '#80A4C2', '#1D3B53',
+       ['#011627', '#EF5350', '#22DA6E', '#C5E478', '#82AAFF', '#C792EA', '#21C7A8', '#FFFFFF'],
+       ['#575656', '#EF5350', '#22DA6E', '#FFEB95', '#82AAFF', '#C792EA', '#7FDBCA', '#FFFFFF'],
+       orange='#F78C6C', violet='#C792EA'),
+  ui=dict(bg='#011627', accent='#82AAFF', accentHover='#7FDBCA')),
+
+T('tomorrow-night', 'Tomorrow Night', 'dark', 'new', 'Chris Kempson\'s quiet classic.',
+  """Tomorrow Night (github.com/chriskempson/tomorrow-theme). Uses the published
+Tomorrow Night palette for normal colours (the repo's Xresources file has
+much darker variants); bright black is the comment grey. Red is nudged up to
+4.5:1.""",
+  ansi('#1D1F21', '#C5C8C6', '#AEAFAD', '#373B41',
+       ['#282A2E', '#CC6666', '#B5BD68', '#F0C674', '#81A2BE', '#B294BB', '#8ABEB7', '#C5C8C6'],
+       ['#969896', '#CC6666', '#B5BD68', '#F0C674', '#81A2BE', '#B294BB', '#8ABEB7', '#FFFFFF'],
+       orange='#DE935F', violet='#B294BB'),
+  ui=dict(surfaceHover='#282A2E', border='#373B41', accent='#81A2BE', accentHover='#8ABEB7')),
+
+T('one-light', 'One Light', 'light', 'new', 'One Dark\'s daytime twin.',
+  """One Half Light (github.com/sonph/onehalf), the terminal port of Atom's One
+Light. White was the background itself; it uses One Half's comment grey.
+The accents are darkened within their hue for text on #FAFAFA.""",
+  ansi('#FAFAFA', '#383A42', '#4F525D', '#BFCEFF',
+       ['#383A42', '#E45649', '#50A14F', '#C18401', '#0184BC', '#A626A4', '#0997B3', '#A0A1A7'],
+       ['#4F525D', '#DF6C75', '#98C379', '#E4C07A', '#61AFEF', '#C577DD', '#56B5C1', '#FFFFFF'],
+       orange='#C18401', violet='#A626A4'),
+  ui=dict(bg='#F0F0F0', bgSecondary='#FAFAFA', surface='#FAFAFA', border='#E5E5E5',
+          accent='#0184BC')),
+
+T('everforest-light', 'Everforest Light', 'light', 'new', 'Green-based, on warm paper.',
+  """Everforest Light, medium (github.com/sainnhe/everforest). Same mapping as
+Everforest Dark: bg layers for chrome, grey2 for bright black. Its accents and
+foreground are pastel on paper (fg 5.2:1) and are darkened within their hue
+to read as text.""",
+  ansi('#FDF6E3', '#5C6A72', '#5C6A72', '#E6E2CC',
+       ['#5C6A72', '#F85552', '#8DA101', '#DFA000', '#3A94C5', '#DF69BA', '#35A77C', '#939F91'],
+       ['#829181', '#F85552', '#8DA101', '#DFA000', '#3A94C5', '#DF69BA', '#35A77C', '#BDC3AF'],
+       orange='#F57D26', violet='#DF69BA'),
+  ui=dict(bg='#F4F0D9', bgSecondary='#FDF6E3', surface='#FDF6E3', surfaceHover='#EFEBD4',
+          border='#E0DCC7', textSecondary='#829181', accent='#8DA101', accentHover='#35A77C')),
+
+T('vscode-dark', 'VS Code Dark', 'dark', 'new', 'Visual Studio Code\'s Dark Modern.',
+  """Visual Studio Code's Dark Modern: terminal colours as published in Windows
+Terminal's "VSCode Dark Modern" scheme, UI from VS Code's dark_modern theme.
+Red, blue, magenta and bright black were under target on #1F1F1F and are
+lifted.""",
+  ansi('#1F1F1F', '#CCCCCC', '#FFFFFF', '#264F78',
+       ['#000000', '#CD3131', '#0DBC79', '#E5E510', '#2472C8', '#BC3FBC', '#11A8CD', '#E5E5E5'],
+       ['#666666', '#F14C4C', '#23D18B', '#F5F543', '#3B8EEA', '#D670D6', '#29B8DB', '#E5E5E5']),
+  ui=dict(bg='#181818', bgSecondary='#1F1F1F', surface='#1F1F1F', border='#2B2B2B',
+          textSecondary='#9D9D9D', accent='#4DAAFC')),
+
+T('vscode-light', 'VS Code Light', 'light', 'new', 'Visual Studio Code\'s Light Modern.',
+  """Visual Studio Code's Light Modern: terminal colours as published in Windows
+Terminal's "VSCode Light Modern" scheme, UI from VS Code's light_modern theme.
+Green and yellow were too light for text on white and are darkened.""",
+  ansi('#FFFFFF', '#3B3B3B', '#005FB8', '#ADD6FF',
+       ['#000000', '#CD3131', '#00BC00', '#949800', '#0451A5', '#BC05BC', '#0598BC', '#555555'],
+       ['#666666', '#CD3131', '#14CE14', '#B5BA00', '#0451A5', '#BC05BC', '#0598BC', '#A5A5A5']),
+  ui=dict(bg='#F8F8F8', bgSecondary='#FFFFFF', surface='#FFFFFF', surfaceHover='#F2F2F2',
+          border='#E5E5E5', accent='#005FB8')),
 ]
+
+# Where each ported palette comes from and under which licence. gen.py writes
+# the credit into every theme YAML (the YAMLs are bundled raw, so it ships in
+# the app) and builds THIRD_PARTY_NOTICES.md from this table. Every theme
+# outside the 'axn' group must have an entry.
+UPSTREAM = {
+    'ayu':        ('Ayu', 'https://github.com/ayu-theme/ayu-colors', 'MIT',
+                   'Copyright (c) Konstantin Pschera <me@kons.ch>'),
+    'catppuccin': ('Catppuccin', 'https://github.com/catppuccin/palette', 'MIT',
+                   'Copyright (c) 2021 Catppuccin'),
+    'dracula':    ('Dracula', 'https://github.com/dracula/dracula-theme', 'MIT',
+                   'Copyright (c) 2023 Dracula Theme'),
+    'github':     ('GitHub VS Code theme + Primer primitives', 'https://github.com/primer/github-vscode-theme', 'MIT',
+                   'Copyright (c) 2020 Primer; Copyright (c) 2018 GitHub Inc.'),
+    'gruvbox':    ('Gruvbox', 'https://github.com/morhetz/gruvbox', 'MIT',
+                   'Copyright (c) morhetz <morhetz@gmail.com>'),
+    'one-dark':   ('One Dark (Atom)', 'https://github.com/atom/one-dark-syntax', 'MIT',
+                   'Copyright (c) 2016 GitHub Inc.'),
+    'onehalf':    ('One Half', 'https://github.com/sonph/onehalf', 'MIT',
+                   'Copyright (c) 2019 Son A. Pham <sp@sonpham.me>'),
+    'solarized':  ('Solarized', 'https://github.com/altercation/solarized', 'MIT',
+                   'Copyright (c) 2011 Ethan Schoonover'),
+    'tokyo-night': ('Tokyo Night', 'https://github.com/enkia/tokyo-night-vscode-theme', 'MIT',
+                    'Copyright (c) 2018-present Enkia'),
+    'nord':       ('Nord', 'https://github.com/nordtheme/nord', 'MIT',
+                   'Copyright (c) 2016-present Sven Greb <development@svengreb.de>'),
+    'rose-pine':  ('Rosé Pine', 'https://github.com/rose-pine/palette', 'MIT',
+                   'Copyright (c) mvllow; Copyright (c) 2023 Rosé Pine'),
+    'kanagawa':   ('Kanagawa', 'https://github.com/rebelot/kanagawa.nvim', 'MIT',
+                   'Copyright (c) 2021 Tommaso Laurenzi'),
+    'everforest': ('Everforest', 'https://github.com/sainnhe/everforest', 'MIT',
+                   'Copyright (c) 2019 sainnhe'),
+    'vscode':     ('Visual Studio Code', 'https://github.com/microsoft/vscode', 'MIT',
+                   'Copyright (c) 2015 - present Microsoft Corporation'),
+    'windows-terminal': ('Windows Terminal', 'https://github.com/microsoft/terminal', 'MIT',
+                         'Copyright (c) Microsoft Corporation'),
+    'night-owl':  ('Night Owl', 'https://github.com/sdras/night-owl-vscode-theme', 'MIT',
+                   'Copyright (c) 2018 Sarah Drasner'),
+    'tomorrow':   ('Tomorrow', 'https://github.com/chriskempson/tomorrow-theme', 'MIT',
+                   'Copyright (c) 2011 Chris Kempson'),
+}
+
+# theme id -> UPSTREAM keys it draws on
+SOURCES = {
+    'ayu-dark': ['ayu'], 'ayu-light': ['ayu'],
+    'catppuccin-latte': ['catppuccin'], 'catppuccin-mocha': ['catppuccin'],
+    'catppuccin-frappe': ['catppuccin'], 'catppuccin-macchiato': ['catppuccin'],
+    'dracula': ['dracula'], 'gruvbox-dark': ['gruvbox'], 'gruvbox-light': ['gruvbox'],
+    'one-dark': ['one-dark'], 'one-light': ['onehalf'],
+    'solarized-dark': ['solarized'], 'solarized-light': ['solarized'],
+    'tokyo-night': ['tokyo-night'], 'tokyo-night-storm': ['tokyo-night'],
+    'tokyo-night-light': ['tokyo-night'],
+    'nord': ['nord'], 'rose-pine': ['rose-pine'], 'rose-pine-dawn': ['rose-pine'],
+    'kanagawa': ['kanagawa'], 'everforest-dark': ['everforest'], 'everforest-light': ['everforest'],
+    'github-dark': ['github'], 'github-light': ['github'],
+    'monokai': ['vscode'], 'vscode-dark': ['windows-terminal', 'vscode'],
+    'vscode-light': ['windows-terminal', 'vscode'],
+    'night-owl': ['night-owl'], 'tomorrow-night': ['tomorrow'],
+}

@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { parseOutputFrame } from './tauri';
+import { describe, expect, it, vi } from 'vitest';
+
+const invoke = vi.hoisted(() => vi.fn());
+vi.mock('@tauri-apps/api/core', async (orig) => ({
+  ...(await orig<typeof import('@tauri-apps/api/core')>()),
+  invoke,
+}));
+
+import { parseOutputFrame, TauriBackend } from './tauri';
 
 function frame(id: string, data: number[]): ArrayBuffer {
   const idBytes = new TextEncoder().encode(id);
@@ -23,5 +30,17 @@ describe('parseOutputFrame', () => {
     const { sessionId, data } = parseOutputFrame(new Uint8Array(frame(id, [])));
     expect(sessionId).toBe(id);
     expect(data.length).toBe(0);
+  });
+});
+
+describe('TauriBackend.saveDroppedFile', () => {
+  it('sends the bytes as a raw IPC body and the name percent-encoded in a header', async () => {
+    invoke.mockResolvedValueOnce('/run/user/1000/axn-term-drops/1/my shot.png');
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const path = await new TauriBackend().saveDroppedFile('s1', 'my shot ä.png', bytes);
+    expect(path).toBe('/run/user/1000/axn-term-drops/1/my shot.png');
+    expect(invoke).toHaveBeenCalledWith('save_dropped_file', bytes, {
+      headers: { 'x-file-name': 'my%20shot%20%C3%A4.png' },
+    });
   });
 });

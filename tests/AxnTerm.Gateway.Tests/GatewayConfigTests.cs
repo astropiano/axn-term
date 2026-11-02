@@ -1,6 +1,6 @@
-using Astropiano.AxnTerm.Gateway;
+using AxnTerm.Gateway;
 
-namespace Astropiano.AxnTerm.Gateway.Tests;
+namespace AxnTerm.Gateway.Tests;
 
 public class GatewayConfigTests
 {

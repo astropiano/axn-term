@@ -24,12 +24,17 @@ export function gitBackendHandle(): SessionBackend {
   return gitBackend;
 }
 
+/**
+ * Run `git <args>`. Paths are always literal (`--literal-pathspecs`): file
+ * names like `app/[id]/page.tsx` or `:x` must not act as globs or magic
+ * pathspecs, or a restore/stage would hit other files too.
+ */
 export function git(sessionId: string, cwd: string, args: string[]): Promise<string> {
   const backend = gitBackend;
   if (!backend?.execGit) {
     return Promise.reject(new Error('git is not available in this environment'));
   }
-  return backend.execGit(sessionId, cwd, args);
+  return backend.execGit(sessionId, cwd, ['--literal-pathspecs', ...args]);
 }
 
 /**
@@ -164,6 +169,21 @@ export function parsePorcelainZ(out: string): StatusFile[] {
     files.push(file);
   }
   return files;
+}
+
+/** `git show` spec for the index (stage 0) copy of a path. */
+export function indexBlob(path: string): string {
+  // explicit stage, so a file named `1:x` is not read as stage 1 of `x`
+  return `:0:${path}`;
+}
+
+/**
+ * Where the "working tree" diff of an unstaged row starts: the index copy of
+ * the file under its current name (after a staged rename the old name is
+ * gone from the index), else HEAD (conflicts have no stage-0 entry).
+ */
+export function unstagedBaseSpecs(f: StatusFile): string[] {
+  return [indexBlob(f.path), `HEAD:${f.oldPath ?? f.path}`];
 }
 
 export interface WorktreeStatus {

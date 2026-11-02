@@ -721,7 +721,11 @@ function AxnDevView({
           axn-dev scenarios
         </span>
         <div className="min-w-0 flex-1">
-          <PanelSearch value={query} onChange={(v) => updateAppState({ query: v })} />
+          <PanelSearch
+            value={query}
+            onChange={(v) => updateAppState({ query: v })}
+            placeholder="Filter scenarios…"
+          />
         </div>
         <button
           type="button"

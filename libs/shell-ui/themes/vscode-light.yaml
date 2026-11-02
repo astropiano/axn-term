@@ -1,0 +1,57 @@
+# Visual Studio Code's Light Modern: terminal colours as published in Windows
+# Terminal's "VSCode Light Modern" scheme, UI from VS Code's light_modern theme.
+# Green and yellow were too light for text on white and are darkened.
+# Palette: Windows Terminal <https://github.com/microsoft/terminal>, MIT. Copyright (c) Microsoft Corporation.
+# Palette: Visual Studio Code <https://github.com/microsoft/vscode>, MIT. Copyright (c) 2015 - present Microsoft Corporation.
+# Adjusted for legibility (hue kept, lightness moved):
+#   green: #00BC00 -> #008900
+#   yellow: #949800 -> #767900
+#   cyan: #0598BC -> #04809E
+#   brightGreen: #14CE14 -> #11AB11
+#   brightYellow: #B5BA00 -> #959900
+#   ui.textSecondary: #767676 -> #727272
+id: vscode-light
+name: VS Code Light
+mode: light
+
+colors:
+  background: '#FFFFFF'
+  foreground: '#3B3B3B'
+  cursor: '#005FB8'
+  cursorAccent: '#FFFFFF'
+  selectionBackground: '#ADD6FF'
+  selectionForeground: '#3B3B3B'
+
+  black: '#000000'
+  red: '#CD3131'
+  green: '#008900'
+  yellow: '#767900'
+  blue: '#0451A5'
+  magenta: '#BC05BC'
+  cyan: '#04809E'
+  white: '#555555'
+
+  brightBlack: '#666666'
+  brightRed: '#CD3131'
+  brightGreen: '#11AB11'
+  brightYellow: '#959900'
+  brightBlue: '#0451A5'
+  brightMagenta: '#BC05BC'
+  brightCyan: '#0598BC'
+  brightWhite: '#A5A5A5'
+
+  orange: '#F97316'
+  violet: '#BC05BC'
+
+ui:
+  bg: '#F8F8F8'
+  bgSecondary: '#FFFFFF'
+  surface: '#FFFFFF'
+  surfaceHover: '#F2F2F2'
+  text: '#3B3B3B'
+  textSecondary: '#727272'
+  textInverted: '#FFFFFF'
+  border: '#E5E5E5'
+  accent: '#005FB8'
+  accentHover: '#125492'
+  cursor: '#005FB8'

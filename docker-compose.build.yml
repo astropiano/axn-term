@@ -5,6 +5,7 @@ name: axn-term-build
 # Usage:
 #   docker compose -f docker-compose.build.yml build              # build desktop builder once
 #   docker compose -f docker-compose.build.yml run --rm desktop-build
+#   docker compose -f docker-compose.build.yml run --rm desktop-windows-build   # Windows NSIS installer
 #   docker compose -f docker-compose.build.yml --profile server build gateway-image session-host-image
 #   ./build/build-all.sh                                          # desktop artifacts + server images
 #
@@ -20,9 +21,9 @@ services:
     image: axn-term-desktop-builder:latest
     volumes:
       - .:/src:ro
-      # Sibling ramphastos checkout — the ramphastos-client vite alias
-      # (../../../ramphastos/...) resolves to /ramphastos inside the container.
-      - ${AXN_LIBS_ROOT:-..}/ramphastos:/ramphastos:ro
+      # dev/libraries — the ramphastos-client vite alias resolves to
+      # /libraries inside the container (same relative depth).
+      - ${AXN_LIBS_ROOT:-../../libraries}:/libraries:ro
       - desktop-cargo-cache:/cache/cargo
       - desktop-pnpm-cache:/cache/pnpm
       - desktop-vite-cache:/cache/vite
@@ -33,14 +34,31 @@ services:
       - HOST_GID=${HOST_GID:-1000}
     command: /src/build/scripts/build-desktop.sh
 
+  # Windows desktop app, cross-compiled with cargo-xwin + NSIS.
+  desktop-windows-build:
+    build:
+      context: ./build/windows
+      dockerfile: Dockerfile
+    image: axn-term-windows-builder:latest
+    volumes:
+      - .:/src:ro
+      - ${AXN_LIBS_ROOT:-../../libraries}:/libraries:ro
+      - desktop-windows-cargo-cache:/cache/cargo
+      - desktop-pnpm-cache:/cache/pnpm
+      - desktop-vite-cache:/cache/vite
+      - desktop-xwin-cache:/cache/xwin
+      - ./artifacts:/output
+    environment:
+      - CARGO_HOME=/cache/cargo
+      - HOST_UID=${HOST_UID:-1000}
+      - HOST_GID=${HOST_GID:-1000}
+    command: /src/build/scripts/build-desktop-windows.sh
+
   # WebSocket gateway — validates JWTs and spawns per-user session hosts.
   gateway-image:
     profiles: [server]
     build:
       context: .
-      additional_contexts:
-        # Sibling checkouts — land at /<repo> inside the build.
-        libraries: ${AXN_LIBS_ROOT:-..}
       dockerfile: apps/gateway/Dockerfile
     image: axn-term-gateway:latest
 
@@ -51,8 +69,6 @@ services:
       context: ./scenarios/axn-term-online/session-host
       additional_contexts:
         axn-term: .
-        # Sibling checkouts — land at /<repo> inside the build.
-        libraries: ${AXN_LIBS_ROOT:-..}
       dockerfile: Dockerfile
     image: axn-term-host:latest
 
@@ -60,3 +76,5 @@ volumes:
   desktop-cargo-cache:
   desktop-pnpm-cache:
   desktop-vite-cache:
+  desktop-windows-cargo-cache:
+  desktop-xwin-cache:

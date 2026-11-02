@@ -176,3 +176,124 @@ export function safely(scope: string, fn: () => void): void {
     axnLog('warn', 'terminal', `${scope} failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
+
+/**
+ * OSC 10/11/12 color-report replies that xterm.js emits on the input channel
+ * when a program queries the terminal colors (`ESC ] 1x ; ?`). TUIs commonly
+ * ask before switching the tty to raw mode — while the tty is still in
+ * cooked+echo mode the kernel echoes the reply as visible text
+ * (`10;rgb:…11;rgb:…` at the prompt). Delaying a report briefly gives the
+ * reader time to reach raw mode, so it is consumed as input instead of
+ * echoed. Backends with `writeWhenRaw` gate the reply on the slave's real
+ * termios (ECHO/ICANON cleared) — deterministic. Others fall back to a short
+ * delay. Only a chunk that consists *entirely* of color reports is gated —
+ * user input in the same chunk always goes straight through.
+ */
+export const OSC_COLOR_REPORT_RE = /^(\x1b\]1[012];[^\x07\x1b]+(?:\x07|\x1b\\))+$/;
+const OSC_COLOR_REPORT_DELAY_MS = 75;
+
+/** A hung alive probe must not freeze input — deliver after this (fail-open). */
+const OSC_REPORT_PROBE_TIMEOUT_MS = 1000;
+
+export interface TerminalInput {
+  /** Terminal input (xterm `onData`, key bar): OSC color reports are gated. */
+  send: (data: string) => void;
+  /** Raw PTY write that still queues behind a pending report. */
+  write: (data: string) => void;
+}
+
+/**
+ * Per-PTY input writer. OSC color reports are handled by `reportTarget`,
+ * when given: it freshly resolves whether a program is still foreground —
+ * a live asker gets the answer as soon as the probe returns (real terminals
+ * never delay; devin's startup probe and friends poll with a deadline and a
+ * late reply lands as typed `11;rgb:…` in their input), while a shell-comm
+ * or missing foreground means dead letter → dropped. Without `reportTarget`
+ * falls back to `writeWhenRaw` (raw-mode polling), then to a plain ~75 ms
+ * delayed write.
+ *
+ * Everything written after a gated report waits behind it, so the PTY sees
+ * input in the order xterm produced it. Askers send a DA1 query (`ESC[c`)
+ * after their OSC queries as a sentinel — once its answer arrives they stop
+ * waiting for color replies, so a DA1 reply overtaking a report still in
+ * its async probe leaves the report to be read as typed `10;rgb:…11;rgb:…`
+ * (devin, every launch). `writeWhenRaw` holds reports backend-side and
+ * cannot keep this order.
+ */
+export function createTerminalInput(
+  write: (data: string) => void,
+  writeWhenRaw?: (data: string) => void,
+  reportTarget?: () => Promise<boolean>,
+): TerminalInput {
+  const queue: (string | Promise<string | null>)[] = [];
+  let draining = false;
+  const drain = async () => {
+    if (draining) return;
+    draining = true;
+    while (queue.length > 0) {
+      const item = queue.shift()!;
+      const data = typeof item === 'string' ? item : await item;
+      if (data !== null) safely('terminal input', () => write(data));
+    }
+    draining = false;
+  };
+  const writeOrdered = (data: string) => {
+    if (queue.length === 0 && !draining) write(data);
+    else queue.push(data);
+  };
+  const enqueue = (pending: Promise<string | null>) => {
+    queue.push(pending);
+    void drain();
+  };
+  const send = (data: string) => {
+    if (!OSC_COLOR_REPORT_RE.test(data)) return writeOrdered(data);
+    // Normalize every reply to BEL terminator: xterm.js reports with ST
+    // (`\x1b\\`) but TUIs that query with BEL (devin, crossterm) often only
+    // parse BEL-terminated replies — an ST reply is unrecognized and gets
+    // rendered as typed input (`11;rgb:…` in the agent's text field).
+    const report = data.replace(/\x1b\\/g, '\x07');
+    if (reportTarget) {
+      // A live asker gets the answer NOW — the program holds its tty
+      // quiet only briefly (devin's startup probe, p10k instant prompt);
+      // every delay (raw-mode polling, timers) lands the reply after the
+      // window and it echoes as typed `11;rgb:…`. Real terminals answer
+      // immediately; a shell-comm/no foreground = dead letter, dropped.
+      enqueue(
+        new Promise<string | null>((resolve) => {
+          const timer = setTimeout(() => resolve(report), OSC_REPORT_PROBE_TIMEOUT_MS);
+          reportTarget().then(
+            (alive) => resolve(alive ? report : null),
+            () => resolve(report),
+          ).finally(() => clearTimeout(timer));
+        }),
+      );
+    } else if (writeWhenRaw) {
+      writeWhenRaw(report);
+    } else {
+      enqueue(new Promise((resolve) => setTimeout(() => resolve(report), OSC_COLOR_REPORT_DELAY_MS)));
+    }
+  };
+  return { send, write: writeOrdered };
+}
+
+/** Foreground comms that mean "the shell itself" — not a program asking. */
+const SHELL_FOREGROUND_RE = /^(ba|z|da|fi)?sh$|^fish$|^nu$|^(pwsh|powershell|cmd)(\.exe)?$/;
+
+/**
+ * `reportTarget` for `sendTerminalInput` built on the backend's fresh
+ * `getForegroundProcess` — null (web) or a shell comm (desktop returns the
+ * fg pgrp leader's name, e.g. `zsh`) means the shell itself is foreground,
+ * so no asker remains and the report is dropped. A failed read delivers
+ * (fail-open: losing a legit answer is worse than an echoed one).
+ */
+export function oscReportTarget(
+  getForeground: ((id: string) => Promise<string | null>) | undefined,
+  sessionId: string,
+): (() => Promise<boolean>) | undefined {
+  if (!getForeground) return undefined;
+  return () =>
+    getForeground(sessionId).then(
+      (fg) => !!fg && !SHELL_FOREGROUND_RE.test(fg),
+      () => true,
+    );
+}

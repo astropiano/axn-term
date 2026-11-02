@@ -1,10 +1,10 @@
 using System.Security.Claims;
 using System.Text.RegularExpressions;
-using Astropiano.AxnTerm.Gateway;
+using AxnTerm.Gateway;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
 
-namespace Astropiano.AxnTerm.Gateway.Tests;
+namespace AxnTerm.Gateway.Tests;
 
 public class UserIdentityTests
 {
@@ -43,6 +43,36 @@ public class UserIdentityTests
         Assert.NotEqual(UserIdentity.ToUserId("john.doe"), UserIdentity.ToUserId("john_doe."));
         Assert.NotEqual(UserIdentity.ToUserId("Jürgen"), UserIdentity.ToUserId("jürgen"));
         Assert.Equal(UserIdentity.ToUserId("john.doe"), UserIdentity.ToUserId("john.doe"));
+    }
+
+    [Theory]
+    [InlineData("john.doe")]
+    [InlineData("Alice")]
+    [InlineData("a.very.long.user.name.that.goes.on.and.on@example.com")]
+    [InlineData("123.abc")]
+    public void ANameEqualToAnotherUsersHashedIdGetsADifferentId(string lossy)
+    {
+        var victim = UserIdentity.ToUserId(lossy);
+
+        var squatter = UserIdentity.ToUserId(victim);
+
+        Assert.NotEqual(victim, squatter);
+        Assert.Matches(LinuxUserName, squatter);
+        // Hashing the squatter's name again does not land on either.
+        Assert.NotEqual(squatter, UserIdentity.ToUserId(squatter));
+    }
+
+    [Theory]
+    [InlineData("release-2024")]
+    [InlineData("build-1234567")]
+    [InlineData("build-123456789")]
+    [InlineData("abc-1234567g")]
+    [InlineData("1abc-30f69670")]
+    [InlineData("abc_30f69670")]
+    [InlineData("averyveryveryverylongname1-30f69670")]
+    public void CleanNamesOutsideTheHashedShapeKeepTheirId(string name)
+    {
+        Assert.Equal(name, UserIdentity.ToUserId(name));
     }
 
     [Theory]

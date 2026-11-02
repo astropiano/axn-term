@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setupI18n } from '@lingui/core';
 import { messages as en } from './locales/en/messages';
@@ -76,4 +77,24 @@ describe('message sources (.po)', () => {
       expect(untranslated).toEqual([]);
     });
   }
+});
+
+describe('catalog drift', () => {
+  // The suites above compare catalog ↔ catalog; they cannot see a t`…`
+  // string added to the code but never extracted — its hashed id is then
+  // absent from every compiled catalog and the UI renders the raw id.
+  // `check sync` re-runs extraction and diffs the committed .po files.
+  it('committed catalogs match `lingui extract` output', () => {
+    const root = fileURLToPath(new URL('../../../', import.meta.url));
+    const res = spawnSync(
+      process.execPath,
+      ['node_modules/@lingui/cli/dist/lingui.js', 'check', 'sync'],
+      { cwd: root, encoding: 'utf8', timeout: 60_000 },
+    );
+    expect(
+      res.status,
+      '`lingui check sync` found catalog drift — run `pnpm i18n:extract` then `pnpm i18n:compile`:\n' +
+        `${res.stdout}${res.stderr}`,
+    ).toBe(0);
+  }, 60_000);
 });

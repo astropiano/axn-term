@@ -147,6 +147,11 @@ button {
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-primary);
+  /* untrusted markup: keep positioned content inside the preview */
+  position: relative;
+  contain: paint;
+  isolation: isolate;
+  overflow-x: auto;
 }
 
 .axn-prose h1,

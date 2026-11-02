@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace Astropiano.AxnTerm.Gateway;
+namespace AxnTerm.Gateway;
 
 /// <summary>
 /// Per-user capability/entitlement map, persisted as JSON under the

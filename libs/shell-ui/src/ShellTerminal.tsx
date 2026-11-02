@@ -7,8 +7,8 @@ import { placeHoverCard } from './hoverCardPlacement';
 import type { ShellSession } from './types';
 import { useSettings } from './SettingsProvider';
 import { getXtermColors, resolveShellFont } from './themes';
-import { registerTerminal, takePendingReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, type TerminalInput } from './terminalRegistry';
-import { applyTerminalRenderer, repaintTerminal, safely } from './terminalRenderer';
+import { registerTerminal, takePendingReplay, takeReloadReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, type TerminalInput } from './terminalRegistry';
+import { applyTerminalRenderer, createTerminalInput, oscReportTarget, repaintTerminal, safely } from './terminalRenderer';
 import { acquirePty } from './ptyLifetime';
 import { foregroundStatusPatch } from './foregroundStatus';
 import {
@@ -278,9 +278,10 @@ export function ShellTerminal({
       void Promise.resolve(services.copyText(text)).catch(() => {});
     });
     registerTerminal(session.id, term);
-    // A session moved in from another window: show its history first — the
-    // output listener attaches later, so live output follows in order.
-    const replay = takePendingReplay(session.id);
+    // A session moved in from another window, or the page reloaded with
+    // live PTYs: show its restored screen first — the output listener
+    // attaches later, so live output follows in order.
+    const replay = takePendingReplay(session.id) ?? takeReloadReplay(session.id);
     if (replay) term.write(replay);
     // GPU renderers are demand-driven: hidden terminals keep xterm's DOM
     // renderer so a wall of mounted sessions doesn't exhaust the WebGL
@@ -346,6 +347,28 @@ export function ShellTerminal({
     const onPaste = (e: ClipboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      // Image clipboard content (screenshots): save it like a dropped file
+      // and paste the path — the same convention agents already expect.
+      const imageItem = [...(e.clipboardData?.items ?? [])].find((i) =>
+        i.type.startsWith('image/'),
+      );
+      const imageFile = imageItem?.getAsFile();
+      if (imageFile && backend.saveDroppedFile) {
+        void imageFile
+          .arrayBuffer()
+          .then((buf) =>
+            backend.saveDroppedFile!(
+              sessionId,
+              imageFile.name || `paste-${Date.now()}.png`,
+              new Uint8Array(buf),
+            ),
+          )
+          .then((path) => {
+            if (path) term.paste(`'${path.replace(/'/g, "'\\''")}' `);
+          })
+          .catch(() => {});
+        return;
+      }
       const text = e.clipboardData?.getData('text/plain') ?? '';
       if (text) {
         term.paste(text);
@@ -667,11 +690,23 @@ export function ShellTerminal({
         };
         termEl?.addEventListener('mouseup', onSelectionMouseUp);
 
+        // One ordered writer per PTY: input after an OSC report waits until
+        // the report's alive probe settles (DA1 must never overtake it).
+        const ptyInput = createTerminalInput(
+          (d) => backend.write(ptyId, d),
+          backend.writeWhenRaw ? (d) => backend.writeWhenRaw!(ptyId, d) : undefined,
+          oscReportTarget(
+            backend.getForegroundProcess
+              ? (id) => backend.getForegroundProcess!(id)
+              : undefined,
+            ptyId,
+          ),
+        );
         // Track the current input line so "hidden commands" (axn-edit)
         // can be intercepted before they are submitted to the shell.
         // Agent input is tracked only to notify plugins before a manual /exit.
         const hiddenInput = createHiddenCommandInput({
-          write: (d) => backend.write(ptyId, d),
+          write: ptyInput.write,
           mode: () => {
             const process = sessionRef.current.process;
             if (!process) return 'full';
@@ -680,6 +715,8 @@ export function ShellTerminal({
           onEditorRequest: (path) => onEditorRequestRef.current?.(sessionId, path),
           onBrowserRequest: (path) => onBrowserRequestRef.current?.(sessionId, path),
           onPreviewRequest: (path) => onPreviewRequestRef.current?.(sessionId, path),
+          writeDisplay: (d) => term.write(d),
+          writeReport: ptyInput.send,
           onSessionCommand: (line) => onSessionCommandRef.current?.(sessionId, line),
           onCompleteInput: (line) =>
             active ? (onCompleteInputRef.current?.(sessionId, line) ?? Promise.resolve([])) : Promise.resolve([]),
@@ -704,7 +741,7 @@ export function ShellTerminal({
             !event.metaKey;
           if (isShiftEnter) {
             if (event.type === 'keydown') {
-              backend.write(ptyId, '\x1b[200~\n\x1b[201~');
+              ptyInput.write('\x1b[200~\n\x1b[201~');
             }
             return false;
           }
@@ -717,7 +754,7 @@ export function ShellTerminal({
         const sendInput = (data: string) => {
           if (hiddenInput(data)) return;
 
-          backend.write(ptyId, data);
+          ptyInput.send(data);
           // Poll cwd shortly after the user presses Enter so cd changes are
           // persisted quickly instead of waiting for the next interval.
           if (data.includes('\r') || data.includes('\n')) {
@@ -867,6 +904,11 @@ export function ShellTerminal({
   useEffect(() => {
     if (!isVisible || !terminal.current || !fitAddon.current) return;
     fitAddon.current.fit();
+    // A backend that released the stream on hide gets it back here: at an
+    // unchanged size fit() fires no onResize, so nothing else would.
+    if (backend.releasePty) {
+      backend.resize(session.mainPtyId ?? session.id, terminal.current.cols, terminal.current.rows);
+    }
     // A display:none terminal pauses xterm's renderer (IntersectionObserver),
     // and the webview can drop the accelerated canvas' backing (and WebGL's
     // glyph atlas) meanwhile — repaint from freshly rasterized glyphs.

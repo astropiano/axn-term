@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OSC color-report regression on the devin RESTORE path: the seeded state
+  marks devin active, so the app relaunches `devin -r <name>` itself on
+  open — the startup color queries answered while the session reattaches
+  must never echo into devin's input (or anywhere else).
+-->
+<flows>
+  <flow name="axn-term - devin session restore never leaks OSC replies">
+    <tags><tag>axn-term</tag><tag>regression</tag></tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="single" />
+        <var name="AXN_TERM_USE_REAL_DEVIN" value="true" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Seeded state: devin session marked active — app restores it on open">
+        <assert that="contains" value="state dir prepared" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch axn-term — devin -r is injected by the restore">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="oscRestoreDevin" description="Restored devin is foreground; no rgb echo in its output">
+        <assert that="contains" value="restored devin: no OSC leak" />
+      </step>
+      <step adapter="axn-term" action="close" description="Close axn-term">
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+</flows>

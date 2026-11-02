@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
-namespace Astropiano.AxnTerm.SessionHost;
+namespace AxnTerm.SessionHost;
 
 /// <summary>
 /// The control endpoint programs inside our terminals talk to: plain HTTP on

@@ -4,7 +4,7 @@ import { shellPlatform } from '../../platform';
 import { useShellPlatform } from '../../services';
 import { useSettings } from '../../SettingsProvider';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ChevronsLeftRightEllipsis } from 'lucide-react';
+import { ChevronsLeftRightEllipsis, GlobeCode } from 'lucide-react';
 import type { RemoteConsoleSnapshot } from '@axn-term/session-backend';
 import type { SessionViewPlugin } from './plugin';
 
@@ -20,6 +20,11 @@ import type { SessionViewPlugin } from './plugin';
 const IDLE_SNAPSHOT: RemoteConsoleSnapshot = {
   role: 'authority', state: 'idle', ptys: [], claims: {},
 };
+/** Stable fallbacks — useSyncExternalStore compares getSnapshot results, so
+ *  a fresh-object fallback re-renders forever (crashed the app on web,
+ *  where remoteAuth is absent). */
+const NO_SUBSCRIBE = () => () => {};
+const SIGNED_OUT_AUTH: RemoteAuthSnap = { state: 'signedOut' };
 
 /** Connected clients — the /viewers roster when present (clients that
  *  announced themselves), falling back to ids seen holding a claim. */
@@ -36,7 +41,103 @@ function viewerLabel(id: string, snap: RemoteConsoleSnapshot, t: (literals: Temp
   return snap.viewers?.[id]?.name ?? `device ${id.slice(0, 8)}`;
 }
 
+type RemoteAuthSnap = {
+  state: 'signedOut' | 'pending' | 'signedIn' | 'error';
+  user?: string;
+  userCode?: string;
+  verificationUri?: string;
+  error?: string;
+};
+type RemoteAuthActions = {
+  signIn(opts?: { openBrowser?: boolean }): Promise<void>;
+  signOut(): Promise<void>;
+};
+
+const authBtnCls =
+  'rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)] disabled:opacity-50';
+
+/** Sign-in/out controls — one actionable button per auth state, so a
+ *  failed browser hop (expired code, untrusted cert, closed tab) can
+ *  never strand the user in a state with no way forward or back. */
+export function RemoteAuthRow({
+  auth,
+  remoteAuth,
+  issuerConfigured,
+}: {
+  auth: RemoteAuthSnap;
+  remoteAuth: RemoteAuthActions;
+  issuerConfigured: boolean;
+}) {
+  if (auth.state === 'signedIn') {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-[var(--text-secondary)]">
+          <Trans>Signed in as {auth.user ?? ''}</Trans>
+        </span>
+        <button
+          type="button"
+          className={authBtnCls}
+          onClick={() => void remoteAuth.signOut()}
+        >
+          <Trans>Sign out</Trans>
+        </button>
+      </div>
+    );
+  }
+  if (auth.state === 'pending') {
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-[var(--text-secondary)]">
+          <Trans>Enter code {auth.userCode ?? ''} in the browser to finish sign-in.</Trans>
+        </span>
+        {auth.verificationUri ? (
+          <span className="select-all break-all text-[10px] text-[var(--text-secondary)]">
+            {auth.verificationUri}
+          </span>
+        ) : null}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={authBtnCls}
+            disabled={!issuerConfigured}
+            onClick={() => void remoteAuth.signIn()}
+          >
+            <Trans>Sign in…</Trans>
+          </button>
+          <button
+            type="button"
+            className={authBtnCls}
+            onClick={() => void remoteAuth.signOut()}
+          >
+            <Trans>Cancel</Trans>
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        className={authBtnCls}
+        disabled={!issuerConfigured}
+        onClick={() => void remoteAuth.signIn()}
+      >
+        <Trans>Sign in…</Trans>
+      </button>
+      {auth.state === 'error' ? (
+        <span className="text-xs text-[var(--error,#e05)]">{auth.error}</span>
+      ) : issuerConfigured ? (
+        <span className="text-xs text-[var(--text-secondary)]"><Trans>Not signed in</Trans></span>
+      ) : null}
+    </div>
+  );
+}
+
 function stateLabel(snap: RemoteConsoleSnapshot): string {
+  // A retry in flight is 'connecting', not a failure — the authority's
+  // token/backoff gap otherwise flashes 'Failed' before going green.
+  if (snap.retrying) return 'Connecting…';
   if (snap.role === 'authority') {
     if (snap.state === 'ready' || snap.state === 'connected') return 'Publishing';
     if (snap.state === 'connecting' || snap.state === 'reconnecting') return 'Connecting…';
@@ -58,9 +159,11 @@ function stateLabel(snap: RemoteConsoleSnapshot): string {
 function RemoteConnectionOverlay({
   snap,
   retryNow,
+  signOut,
 }: {
   snap: RemoteConsoleSnapshot;
   retryNow?: () => void;
+  signOut?: () => void;
 }) {
   const { t } = useLingui();
   const lost = snap.role === 'viewer' &&
@@ -111,6 +214,15 @@ function RemoteConnectionOverlay({
             <Trans>Retry now</Trans>
           </button>
         )}
+        {signOut && (
+          <button
+            type="button"
+            onClick={signOut}
+            className="rounded border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+          >
+            <Trans>Sign out</Trans>
+          </button>
+        )}
       </div>
     </div>,
     document.body,
@@ -139,9 +251,14 @@ function RemoteRailItem({
   if (!show) return null;
   const count = viewerIds(snap).length;
   const live = snap.state === 'ready' || snap.state === 'connected';
+  const connecting =
+    !live &&
+    (snap.retrying ||
+      snap.state === 'connecting' ||
+      snap.state === 'reconnecting');
   return (
     <>
-      <RemoteConnectionOverlay snap={snap} retryNow={console_?.retryNow} />
+      <RemoteConnectionOverlay snap={snap} retryNow={console_?.retryNow} signOut={shellPlatform()?.signOut} />
       <button
         type="button"
         onClick={onToggle}
@@ -156,14 +273,16 @@ function RemoteRailItem({
             : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
       }`}
     >
-      <ChevronsLeftRightEllipsis className="h-4 w-4" />
+      <GlobeCode className="h-4 w-4" />
       <span
         className={`absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full ${
           live
             ? 'bg-green-500'
-            : active
-              ? 'bg-[var(--accent)]'
-              : 'bg-[var(--text-secondary)]'
+            : connecting
+              ? 'animate-pulse bg-[var(--accent)]'
+              : active
+                ? 'bg-[var(--accent)]'
+                : 'bg-[var(--text-secondary)]'
         }`}
       />
       <span
@@ -192,8 +311,8 @@ function RemoteConsoleView() {
   const platform = useShellPlatform();
   const remoteAuth = platform.remoteAuth;
   const auth = useSyncExternalStore(
-    remoteAuth?.subscribe ?? (() => () => {}),
-    remoteAuth?.get ?? (() => ({ state: 'signedOut' as const })),
+    remoteAuth?.subscribe ?? NO_SUBSCRIBE,
+    remoteAuth?.get ?? (() => SIGNED_OUT_AUTH),
   );
 
   const inputCls =
@@ -216,18 +335,6 @@ function RemoteConsoleView() {
               updateSettings({ remoteAuthorityUrl: e.currentTarget.value || undefined })
             }
             placeholder="ws://<gateway>:<port>/remote"
-            className={inputCls}
-          />
-        </div>
-        <div className={rowCls}>
-          <span className={labelCls}><Trans>Session name</Trans></span>
-          <input
-            type="text"
-            value={settings.remoteAuthoritySession ?? ''}
-            onChange={(e) =>
-              updateSettings({ remoteAuthoritySession: e.currentTarget.value || undefined })
-            }
-            placeholder="optional"
             className={inputCls}
           />
         </div>
@@ -269,47 +376,11 @@ function RemoteConsoleView() {
         </div>
         {remoteAuth ? (
           <div className="mt-1">
-            {auth.state === 'signedIn' ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[var(--text-secondary)]">
-                  <Trans>Signed in as {auth.user ?? ''}</Trans>
-                </span>
-                <button
-                  type="button"
-                  className="rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)]"
-                  onClick={() => void remoteAuth.signOut()}
-                >
-                  <Trans>Sign out</Trans>
-                </button>
-              </div>
-            ) : auth.state === 'pending' ? (
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-[var(--text-secondary)]">
-                  <Trans>Enter code {auth.userCode ?? ''} in the browser to finish sign-in.</Trans>
-                </span>
-                {auth.verificationUri ? (
-                  <span className="select-all break-all text-[10px] text-[var(--text-secondary)]">
-                    {auth.verificationUri}
-                  </span>
-                ) : null}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)] disabled:opacity-50"
-                  disabled={!settings.remoteAuthIssuer}
-                  onClick={() => void remoteAuth.signIn()}
-                >
-                  <Trans>Sign in…</Trans>
-                </button>
-                {auth.state === 'error' ? (
-                  <span className="text-xs text-[var(--error,#e05)]">{auth.error}</span>
-                ) : settings.remoteAuthIssuer ? (
-                  <span className="text-xs text-[var(--text-secondary)]"><Trans>Not signed in</Trans></span>
-                ) : null}
-              </div>
-            )}
+            <RemoteAuthRow
+              auth={auth}
+              remoteAuth={remoteAuth}
+              issuerConfigured={Boolean(settings.remoteAuthIssuer)}
+            />
           </div>
         ) : null}
       </div>
@@ -394,9 +465,45 @@ function RemoteConsoleView() {
         )}
       </div>
 
-      {/* Host-side connection config — the hub/auth fields that used to
-          live in the Settings modal. */}
-      {configSection}
+      {snap.role === 'viewer' ? (
+        // Client view: where this device is attached to + account sign-out.
+        // The host config form is meaningless here (it configures publishing).
+        <div className="mt-5">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+            <Trans>Connected to</Trans>
+          </div>
+          <div className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]">
+            {snap.authorityUrl && (
+              <div className="select-all break-all">{snap.authorityUrl}</div>
+            )}
+            {snap.hostName && (
+              <div>
+                {snap.hostDevice ? `${snap.hostDevice} · ` : ''}{snap.hostName}
+              </div>
+            )}
+            {snap.sessionId && (
+              <div>
+                <Trans>Session: {snap.sessionId.includes('/') ? snap.sessionId.slice(snap.sessionId.indexOf('/') + 1) : snap.sessionId}</Trans>
+              </div>
+            )}
+            {platform.signOut && (
+              <div className="mt-1">
+                <button
+                  type="button"
+                  className={authBtnCls}
+                  onClick={() => platform.signOut?.()}
+                >
+                  <Trans>Sign out</Trans>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        // Host-side connection config — the hub/auth fields that used to
+        // live in the Settings modal.
+        configSection
+      )}
     </div>
   );
 }

@@ -1,0 +1,53 @@
+# Tokyo Night Storm (github.com/enkia/tokyo-night-vscode-theme): the lighter,
+# bluer Tokyo Night. Terminal colours from the theme's own terminal.ansi* set;
+# its bright black (#414868) disappeared on the background and is lifted.
+# Palette: Tokyo Night <https://github.com/enkia/tokyo-night-vscode-theme>, MIT. Copyright (c) 2018-present Enkia.
+# Adjusted for legibility (hue kept, lightness moved):
+#   white: #8089B3 -> #868FB7
+#   brightBlack: #414868 -> #727CA7
+#   ui.textSecondary: #545C7E -> #8189AB
+id: tokyo-night-storm
+name: Tokyo Night Storm
+mode: dark
+
+colors:
+  background: '#24283B'
+  foreground: '#C0CAF5'
+  cursor: '#C0CAF5'
+  cursorAccent: '#24283B'
+  selectionBackground: '#373D5A'
+  selectionForeground: '#C0CAF5'
+
+  black: '#414868'
+  red: '#F7768E'
+  green: '#73DACA'
+  yellow: '#E0AF68'
+  blue: '#7AA2F7'
+  magenta: '#BB9AF7'
+  cyan: '#7DCFFF'
+  white: '#868FB7'
+
+  brightBlack: '#727CA7'
+  brightRed: '#F7768E'
+  brightGreen: '#73DACA'
+  brightYellow: '#E0AF68'
+  brightBlue: '#7AA2F7'
+  brightMagenta: '#BB9AF7'
+  brightCyan: '#7DCFFF'
+  brightWhite: '#A9B1D6'
+
+  orange: '#FF9E64'
+  violet: '#BB9AF7'
+
+ui:
+  bg: '#1F2335'
+  bgSecondary: '#24283B'
+  surface: '#24283B'
+  surfaceHover: '#292E42'
+  text: '#C0CAF5'
+  textSecondary: '#8189AB'
+  textInverted: '#24283B'
+  border: '#434860'
+  accent: '#7AA2F7'
+  accentHover: '#8FAEF6'
+  cursor: '#C0CAF5'

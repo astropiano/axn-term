@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OSC color-report regression against the REAL devin CLI: its startup
+  color queries must never echo a reply into devin's own input or into
+  the shell after exit.
+-->
+<flows>
+  <flow name="axn-term - real devin OSC color queries never leak">
+    <description>
+      Launch real devin inside a session (devin -r &lt;name&gt; when
+      AXN_TERM_DEVIN_SESSION is set), watch for `rgb:` echo in the output
+      during the run and after /exit.
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+      <tag>regression</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="shell" />
+        <var name="AXN_TERM_USE_REAL_DEVIN" value="true" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Temp state dir; no fake devin — the real binary runs">
+        <assert that="contains" value="state dir prepared" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch axn-term">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="oscRealDevin" description="Run real devin, then /exit — no rgb echo inside it or at the prompt">
+        <assert that="contains" value="real devin: no OSC leak" />
+      </step>
+      <step adapter="axn-term" action="close" description="Close axn-term">
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+</flows>

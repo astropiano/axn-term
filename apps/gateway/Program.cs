@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.WebSockets;
 using System.Security.Claims;
-using Astropiano.AxnTerm.Gateway;
+using AxnTerm.Gateway;
 using Ramphastos.Core;
 using Ramphastos.Server;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -118,6 +118,7 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+builder.Services.AddCors();
 builder.Services.AddSingleton<SessionHostContainerService>();
 builder.Services.AddSingleton(sp => new UserCapabilities(
     builder.Configuration["AXN_STATE_DIR"] ?? "/tmp/axn-term"));
@@ -142,14 +143,26 @@ builder.Services.AddSingleton(sp => new UserCapabilities(
 // RemoteAuthority:AllowAnonymous=true opens the endpoint for local dev.
 var remoteAllowAnonymous =
     string.Equals(builder.Configuration["RemoteAuthority:AllowAnonymous"], "true", StringComparison.OrdinalIgnoreCase);
+// Authorized parties (azp) for hello tokens — see GatewayAuth.RemoteClientIds.
+var remoteClientIds = GatewayAuth.RemoteClientIds(builder.Configuration["RemoteAuthority:ClientIds"], clientId);
 var jwtHandler = new JwtSecurityTokenHandler();
+// Set after Build() — the hello callback runs long after startup.
+ILogger? remoteLog = null;
+// Keep claim names verbatim — the default inbound mapping renames "sub" to
+// NameIdentifier, which would make the <sub>/<session> namespace check below
+// resolve to preferred_username instead and always reject valid hellos.
+jwtHandler.MapInboundClaims = false;
 builder.Services.AddRamphastos(
-    _ => new RelayVm(),
+    // Null factory = client-authoritative hub: a viewer hello to an unknown
+    // session claims a mirrored slot (authority_offline), never a server-
+    // owned session that would permanently reject the authority's attach.
+    _ => (Ramphastos.Core.ApplicationModel?)null,
     opts =>
     {
         opts.AuthorizeHello = hello =>
         {
-            Console.WriteLine($"[remote] hello role={hello.Role} session={hello.Session} anon={remoteAllowAnonymous}");
+            remoteLog?.LogInformation("[remote] hello role={Role} session={Session} anon={Anon}",
+                hello.Role, hello.Session, remoteAllowAnonymous);
             if (remoteAllowAnonymous)
             {
                 return true;
@@ -157,7 +170,7 @@ builder.Services.AddRamphastos(
             var sub = ValidateJwt(hello.Auth);
             if (sub is null)
             {
-                Console.WriteLine("[remote] hello denied: jwt invalid");
+                remoteLog?.LogWarning("[remote] hello denied: jwt invalid");
                 return false;
             }
             // Tenant isolation is structural: every session id lives in the
@@ -170,6 +183,7 @@ builder.Services.AddRamphastos(
     });
 
 var app = builder.Build();
+remoteLog = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("AxnTerm.Gateway.Remote");
 
 // Resolve eagerly so misconfiguration (JWT validation, session-host
 // isolation policy, resource limits) fails the gateway at startup, not on
@@ -177,13 +191,19 @@ var app = builder.Build();
 app.Services.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>().Get(JwtBearerDefaults.AuthenticationScheme);
 app.Services.GetRequiredService<SessionHostContainerService>();
 
+// CORS: the shell is served from a different origin than the gateway
+// (localhost subdomains, mDNS names, LAN IPs — all on distinct ports), so
+// /remote/sessions et al. must answer preflight. Token-bound endpoints are
+// the auth boundary; the origin set legitimately varies in dev/LAN use.
+app.UseCors(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 // Client-authoritative "remote" hub (desktop mirror) — see AddRamphastos
 // above. Deliberately NOT RequireAuthorization: hello-level token check
 // instead (desktops have no JWT). Hub__RemoteEnabled toggles the surface.
-if (builder.Configuration.GetValue("Hub__RemoteEnabled", true))
+if (builder.Configuration.GetValue("Hub:RemoteEnabled", true))
 {
     app.MapRamphastos("/remote");
 }
@@ -198,7 +218,7 @@ app.UseWebSockets(new WebSocketOptions
 // instead of typing session ids. Owner-scoped — same sub check as the
 // viewer hello. In AllowAnonymous dev mode the endpoint still requires a
 // JWT (there is no owner to match otherwise).
-if (builder.Configuration.GetValue("Hub__RemoteEnabled", true))
+if (builder.Configuration.GetValue("Hub:RemoteEnabled", true))
 {
     app.MapGet("/remote/sessions", [Microsoft.AspNetCore.Authorization.Authorize] (ClaimsPrincipal user) =>
     {
@@ -207,13 +227,24 @@ if (builder.Configuration.GetValue("Hub__RemoteEnabled", true))
         // Live mirrored sessions in this caller's namespace — the same
         // '<sub>/' rule AuthorizeHello enforces.
         var manager = app.Services.GetRequiredService<RamphastosConnectionHandler>().Manager;
-        var sessions = sub is null
-            ? Array.Empty<string>()
-            : manager.Sessions
-                .Select(s => s.Id)
-                .Where(id => id.StartsWith(sub + "/", StringComparison.Ordinal))
+        var mirrors = sub is null
+            ? Array.Empty<ClientSession>()
+            : manager.Endpoints
+                .OfType<ClientSession>()
+                .Where(s => s.Id.StartsWith(sub + "/", StringComparison.Ordinal))
                 .ToArray();
-        return Results.Ok(new { sessions });
+        return Results.Ok(new
+        {
+            // Bare ids — the original shape; older clients String() every
+            // entry, so objects here would become '[object Object]' ids.
+            sessions = mirrors.Select(s => s.Id).ToArray(),
+            // Rich shape for current clients: offline mirrors stay listed
+            // (the desktop may return), but viewers must know which are
+            // attachable right now.
+            sessionDetails = mirrors
+                .Select(s => (object)new { id = s.Id, online = s.AuthorityOnline })
+                .ToArray(),
+        });
     });
 }
 
@@ -253,11 +284,16 @@ capsGroup.MapPut("/users/{userId}/capabilities", [Microsoft.AspNetCore.Authoriza
     return Results.Json(caps.Get(userId));
 });
 
-app.Map("/ws", [Microsoft.AspNetCore.Authorization.Authorize] async (
+// The three session-host proxy endpoints share one body: WS check →
+// resolve the caller's user → ensure their host → raw-frame bridge. They
+// differ only in the upstream path and which query params go along.
+static async Task ProxySessionHostWebSocket(
     HttpContext context,
     SessionHostContainerService hosts,
     ILogger<Program> logger,
-    CancellationToken cancellationToken) =>
+    CancellationToken cancellationToken,
+    string hostPath,
+    string? queryString)
 {
     if (!context.WebSockets.IsWebSocketRequest)
     {
@@ -277,49 +313,42 @@ app.Map("/ws", [Microsoft.AspNetCore.Authorization.Authorize] async (
         var agentHost = await hosts.EnsureSessionHostAsync(userId, cancellationToken);
 
         using var serverSocket = await context.WebSockets.AcceptWebSocketAsync();
-        await WebSocketProxy.RunAsync(serverSocket, agentHost, "/ws", WebSocketProxy.ForwardedQuery(context.Request.Query), cancellationToken);
+        await WebSocketProxy.RunAsync(serverSocket, agentHost, hostPath, queryString, cancellationToken);
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "WebSocket /ws failed for user {UserId}", userId);
+        logger.LogError(ex, "WebSocket {HostPath} failed for user {UserId}", hostPath, userId);
         context.Abort();
     }
-});
+}
 
-// "cloud" hub on the session host — one multiplexed connection carrying
-// the synced projection, commands and pty:<id> streams. The proxy forwards
-// raw WebSocket frames only, so clients must connect with the SignalR
-// WebSockets transport and skipNegotiation. /ramphastos kept as an alias.
-// Hub__CloudEnabled toggles the surface.
-if (builder.Configuration.GetValue("Hub__CloudEnabled", true))
+// Hosted session paths — per-user session-host containers behind /ws and
+// the multiplexed /cloud + /ramphastos hubs. Hub__CloudEnabled=false makes
+// this a remote-only gateway: mirrored desktops via /remote are the only
+// sessions, and a container PTY cannot be reached at all.
+if (builder.Configuration.GetValue("Hub:CloudEnabled", true))
 {
-    foreach (var cloudPath in new[] { "/cloud", "/ramphastos" })
-    app.Map(cloudPath, [Microsoft.AspNetCore.Authorization.Authorize] async (
+app.Map("/ws", [Microsoft.AspNetCore.Authorization.Authorize] (
     HttpContext context,
     SessionHostContainerService hosts,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
-{
-    if (!context.WebSockets.IsWebSocketRequest)
-    {
-        context.Response.StatusCode = StatusCodes.Status400BadRequest;
-        return;
-    }
+    ProxySessionHostWebSocket(
+        context, hosts, logger, cancellationToken,
+        "/ws", WebSocketProxy.ForwardedQuery(context.Request.Query)));
 
-    var userId = ResolveUserId(context.User, context.Request.Query);
-    try
-    {
-        var agentHost = await hosts.EnsureSessionHostAsync(userId, cancellationToken);
-
-        using var serverSocket = await context.WebSockets.AcceptWebSocketAsync();
-        await WebSocketProxy.RunAsync(serverSocket, agentHost, "/ramphastos", context.Request.QueryString.Value, cancellationToken);
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "WebSocket cloud hub failed for user {UserId}", userId);
-        context.Abort();
-    }
-    });
+// The proxy forwards raw WebSocket frames only, so clients must connect
+// with the SignalR WebSockets transport and skipNegotiation. /ramphastos
+// kept as an alias.
+    foreach (var cloudPath in new[] { "/cloud", "/ramphastos" })
+    app.Map(cloudPath, [Microsoft.AspNetCore.Authorization.Authorize] (
+    HttpContext context,
+    SessionHostContainerService hosts,
+    ILogger<Program> logger,
+    CancellationToken cancellationToken) =>
+    ProxySessionHostWebSocket(
+        context, hosts, logger, cancellationToken,
+        "/ramphastos", context.Request.QueryString.Value));
 }
 
 // Recreate my session host: drops the container; the next /ws connect
@@ -340,83 +369,20 @@ app.MapPost("/session/recreate", [Microsoft.AspNetCore.Authorization.Authorize] 
     return Results.NoContent();
 });
 
-app.Map("/tasks", [Microsoft.AspNetCore.Authorization.Authorize] async (
+app.Map("/tasks", [Microsoft.AspNetCore.Authorization.Authorize] (
     HttpContext context,
     SessionHostContainerService hosts,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
-{
-    if (!context.WebSockets.IsWebSocketRequest)
-    {
-        context.Response.StatusCode = StatusCodes.Status400BadRequest;
-        return;
-    }
-
-    var userId = UserIdentity.Resolve(context.User);
-    if (userId is null)
-    {
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return;
-    }
-
-    try
-    {
-        var agentHost = await hosts.EnsureSessionHostAsync(userId, cancellationToken);
-
-        using var serverSocket = await context.WebSockets.AcceptWebSocketAsync();
-        await WebSocketProxy.RunAsync(serverSocket, agentHost, "/tasks", null, cancellationToken);
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "WebSocket /tasks failed for user {UserId}", userId);
-        context.Abort();
-    }
-});
+    ProxySessionHostWebSocket(
+        context, hosts, logger, cancellationToken,
+        "/tasks", null));
 
 app.Run();
-static string ResolveUserId(ClaimsPrincipal user, IQueryCollection query)
-{
-    var name = user.Identity?.Name;
-    if (!string.IsNullOrWhiteSpace(name))
-    {
-        return Sanitize(name);
-    }
-
-    name = user.FindFirst("preferred_username")?.Value;
-    if (!string.IsNullOrWhiteSpace(name))
-    {
-        return Sanitize(name);
-    }
-
-    name = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-        ?? user.FindFirst("sub")?.Value;
-    if (!string.IsNullOrWhiteSpace(name))
-    {
-        return Sanitize(name);
-    }
-
-    if (!string.IsNullOrWhiteSpace(query["user"]))
-    {
-        return Sanitize(query["user"]!);
-    }
-
-    return Sanitize(
-        Environment.GetEnvironmentVariable("DEFAULT_USER") ?? "dev");
-}
-
-static string Sanitize(string userId)
-{
-    var safe = string.Concat(
-        userId.ToLowerInvariant()
-            .Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'));
-    safe = safe.Trim('-', '_');
-    return string.IsNullOrEmpty(safe) ? "dev" : safe;
-}
-
 /// <summary>
-/// Validate a hello-carried JWT against the same JWKS/parameters as the
-/// HTTP routes; returns the stable subject (sub, falling back to
-/// preferred_username / nameidentifier) or null when invalid.
+/// Validate a hello-carried JWT against the same JWKS/parameters and azp
+/// rule as the HTTP routes; returns the stable subject (sub, falling back
+/// to preferred_username / nameidentifier) or null when invalid.
 /// </summary>
 string? ValidateJwt(string? token)
 {
@@ -428,11 +394,12 @@ string? ValidateJwt(string? token)
     {
         var oidc = jwksConfig.GetConfigurationAsync(CancellationToken.None)
             .GetAwaiter().GetResult();
-        tokenValidationParameters.IssuerSigningKeys = oidc.SigningKeys;
-        var principal = jwtHandler.ValidateToken(token, tokenValidationParameters, out _);
-        return principal.FindFirst("sub")?.Value
-            ?? principal.FindFirst("preferred_username")?.Value
-            ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        // Clone per validation: mutating the shared parameters would leak
+        // refreshed keys into the JwtBearer handler and race concurrent
+        // hellos.
+        var parms = tokenValidationParameters.Clone();
+        parms.IssuerSigningKeys = oidc.SigningKeys;
+        return GatewayAuth.ValidateHelloToken(jwtHandler, token, parms, remoteClientIds);
     }
     catch
     {

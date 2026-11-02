@@ -13,7 +13,7 @@ import {
 // The iframe-side client is injected verbatim into the sandboxed document —
 // it must stay dependency-free plain JS.
 import shimSource from '../../../../plugin-sdk/src/shim.js?raw';
-import { sanitizePreviewHtml } from '../preview-plugins/html';
+import { previewContainStyle, sanitizePreviewHtml } from '../preview-plugins/html';
 import { shellServices } from '../../services';
 import { axnLog } from '../log';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
@@ -196,6 +196,7 @@ function SandboxedSurface({
           ? 'truncate text-[10px] text-[var(--text-secondary)]'
           : 'border-t border-[var(--border)] px-3 py-1 text-[11px] text-[var(--text-secondary)]'
       }
+      style={previewContainStyle}
       onClick={(e) => {
         const el = (e.target as HTMLElement).closest('[data-axn-action]');
         const action = el?.getAttribute('data-axn-action');
@@ -418,7 +419,7 @@ class PluginSandbox {
         case 'openBrowser': return ctx.openBrowser(a(0));
         case 'openTab': return ctx.openTab(a(0));
         case 'openSubShell': return ctx.openSubShell(a(0), a(1), a(2), a(3));
-        case 'openSession': return ctx.openSession(a(0), a(1), a(2));
+        case 'openSession': return ctx.openSession(a(0), a(1), a(2), a(3));
         case 'getWorkspace': return ctx.getWorkspace();
         case 'getWorkspaces': return ctx.getWorkspaces?.() ?? [];
         case 'runCommand': return ctx.runCommand?.(a(0) as string) ?? undefined;
@@ -656,6 +657,7 @@ export function sandboxedPlugin(spec: SandboxPluginSpec): SandboxedPlugin {
   const stub: SandboxedPlugin = {
     id: m.id,
     title: m.title,
+    logo: m.logo,
     version: m.version,
     stateKey: m.id,
     settingsKey: m.id,

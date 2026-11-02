@@ -2,9 +2,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
-using Astropiano.AxnTerm.Gateway;
+using AxnTerm.Gateway;
 
-namespace Astropiano.AxnTerm.Gateway.Tests;
+namespace AxnTerm.Gateway.Tests;
 
 public class WebSocketProxyTests
 {

@@ -38,7 +38,8 @@ import {
   isPluginEnabled,
 } from './session-plugins';
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
-import { keepPtyAlive, serializeTerminal, setPendingReplay, takePtyKeepAlive, terminalAt } from '../terminalRegistry';
+import { keepPtyAlive, serializeTerminal, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf } from '../terminalRegistry';
+import { createFileDrop } from './fileDrop';
 import { MoveToWorkspaceModal } from './MoveToWorkspaceModal';
 import { runSubShellClosers } from './subShellAgents';
 import { PickerHost } from './pickerHost';
@@ -76,6 +77,7 @@ import {
 } from './PluginSettingsProvider';
 import { normalizePluginSettings, pluginSettingsToYaml } from './pluginSettings';
 import { axnLog } from './log';
+import { IconBagContext, collectIconBag, ICONS_PLUGIN_DATA_KEY, ICONS_SHARED_KEY, type IconBag } from './iconModel';
 import { bindAppRuntime } from './appRuntime';
 import { bindGitBackend } from './gitClient';
 import { AttentionDot } from './AttentionDot';
@@ -91,6 +93,7 @@ import { CloseConfirmModal } from './CloseConfirmModal';
 import { TabContextMenu } from './TabContextMenu';
 import { useSessionCommands } from './useSessionCommands';
 import { SessionTabStrip } from './SessionTabStrip';
+import { tabStripTabClasses } from './tabStyles';
 import { browserTabPatch, resolveSessionPath } from './shellCommandSupport';
 import { installDropGuard } from './dropGuard';
 import type { AgentCli, EditorTab, SessionAttention, ShellSession, WindowState } from '../types';
@@ -219,6 +222,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     applySessionAutoName,
     duplicateSession,
     updateSession,
+    updateSessionWith,
     mergePluginState,
     pluginTabs,
     pluginData,
@@ -417,6 +421,12 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   }>({ timer: null, fired: false, origin: { x: 0, y: 0 }, el: null });
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  // Progress through the plugin onClose hooks (plus sub-shell closers and the
+  // final save) while the "collecting session state" modal is up.
+  const [closingProgress, setClosingProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
   const taskState = useAgentTasks(
     selectedSession?.id ?? null,
     updateSession,
@@ -504,13 +514,6 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       sessionId: string,
       tab: { path: string; kind: 'editor' | 'browser' | 'preview' | 'git'; base?: string },
     ) => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return;
-      const resolved = resolvePath(session.cwd, tab.path);
-      const editors = session.editors ?? [];
-      const existing = editors.find(
-        (e) => e.path === resolved && (e.kind ?? 'editor') === tab.kind,
-      );
       const prefix =
         tab.kind === 'browser'
           ? 'br'
@@ -519,18 +522,26 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             : tab.kind === 'git'
               ? 'git'
               : 'ed';
-      const id = existing?.id ?? `${prefix}-${crypto.randomUUID()}`;
-      updateSession(sessionId, {
-        // A base change on an existing git tab retargets its compare section.
-        editors: existing
-          ? editors.map((e) =>
-              e.id === existing.id && e.base !== tab.base ? { ...e, base: tab.base } : e,
-            )
-          : [...editors, { id, path: resolved, kind: tab.kind, base: tab.base }],
-        activeTab: id,
+      const newId = `${prefix}-${crypto.randomUUID()}`;
+      updateSessionWith(sessionId, (session) => {
+        const resolved = resolvePath(session.cwd, tab.path);
+        const editors = session.editors ?? [];
+        const existing = editors.find(
+          (e) => e.path === resolved && (e.kind ?? 'editor') === tab.kind,
+        );
+        const id = existing?.id ?? newId;
+        return {
+          // A base change on an existing git tab retargets its compare section.
+          editors: existing
+            ? editors.map((e) =>
+                e.id === existing.id && e.base !== tab.base ? { ...e, base: tab.base } : e,
+              )
+            : [...editors, { id, path: resolved, kind: tab.kind, base: tab.base }],
+          activeTab: id,
+        };
       });
     },
-    [updateSession],
+    [updateSessionWith],
   );
 
   // Open a sub-shell tab for a session: `sh -c <command>` for a one-shot
@@ -540,27 +551,28 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // re-spawns resume the agent session instead of re-running `command`.
   const openSubShell = useCallback(
     (sessionId: string, command?: string, cwd?: string, label?: string, agent?: AgentCli) => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return undefined;
+      if (!sessionsRef.current.some((s) => s.id === sessionId)) return undefined;
       const id = `sh-${crypto.randomUUID()}`;
-      updateSession(sessionId, {
+      updateSessionWith(sessionId, (session) => ({
         editors: [
           ...(session.editors ?? []),
           { id, path: '', kind: 'shell', command, cwd, label, agent },
         ],
         activeTab: id,
-      });
+      }));
       return id;
     },
-    [updateSession]
+    [updateSessionWith]
   );
 
   // Opening a session — plugin api, `axn-session`, the panel's New button —
   // selects it and dismisses a covering plugin view so the user lands on it.
+  // `background` (`axn-session --background`, plugin openSession) does
+  // neither — the session spawns without taking focus.
   const openSession = useCallback(
-    (workspaceId?: string, cwd?: string, name?: string) => {
-      setActivePluginView(null);
-      addSession(workspaceId, cwd, name);
+    (workspaceId?: string, cwd?: string, name?: string, background?: boolean) => {
+      if (!background) setActivePluginView(null);
+      return addSession(workspaceId, cwd, name, background);
     },
     [addSession],
   );
@@ -839,7 +851,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       for (const plugin of enabledPluginsRef.current) {
         if (plugin.hookSpec) dropHookSpec(plugin, buildPluginApi(session, plugin));
       }
-      closeSession(sessionId);
+      closeSession(sessionId, 'moved to other window');
     },
     [platform.peers, windowId, closeSession, buildPluginApi],
   );
@@ -1075,8 +1087,28 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
 
   // Dropped files/URLs/text from outside must never navigate the webview —
   // only x-axn drags and drags that started inside this window reach drop
-  // targets (see dropGuard.ts).
-  useEffect(() => installDropGuard(window), []);
+  // targets (see dropGuard.ts). Foreign drops on a terminal paste their
+  // paths at the prompt (fileDrop.ts).
+  useEffect(() => {
+    const save = backend.saveDroppedFile?.bind(backend);
+    const fileDrop = createFileDrop({
+      terminalAt,
+      localPaths: backend.localFiles === true,
+      onNativeDrop: services.onFileDrop?.bind(services),
+      saveFile: save
+        ? (term, name, bytes) => {
+            const id = terminalIdOf(term);
+            if (!id) return Promise.reject(new Error('terminal has no session'));
+            return save(id, name, bytes);
+          }
+        : undefined,
+    });
+    const uninstall = installDropGuard(window, fileDrop);
+    return () => {
+      uninstall();
+      fileDrop.dispose();
+    };
+  }, [backend, services]);
 
   // The whole window is a drop target for a foreign session: drops the
   // session panel did not place (it preventDefaults its own) land in the
@@ -1304,6 +1336,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   const closeNow = useCallback(async () => {
     if (closingRef.current) return;
     closingRef.current = true;
+    axnLog('info', 'shell', `closeNow (sessions=${sessionsRef.current.length}, shutdown=${shutdownRequestedRef.current})`);
     flushSessionOutputRef.current();
     const win = platform.window;
 
@@ -1312,9 +1345,22 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       // and capture any state they emit before the PTY is destroyed. While that
       // runs, show a modal so the user knows the close is in progress — but only
       // when there is actually a plugin collecting session state.
+      const onClosePlugins = enabledPluginsRef.current.filter((p) => p.onClose);
       const collectState =
-        sessionsRef.current.length > 0 && enabledPluginsRef.current.some((p) => p.onClose);
-      if (collectState) setClosing(true);
+        sessionsRef.current.length > 0 && onClosePlugins.length > 0;
+      if (collectState) {
+        setClosing(true);
+        // One step per session×plugin onClose, plus the sub-shell closers and
+        // the state save at the end, so the bar only fills when really done.
+        setClosingProgress({
+          done: 0,
+          total: sessionsRef.current.length * onClosePlugins.length + 2,
+        });
+      }
+      const tickClosingProgress = () =>
+        setClosingProgress((p) =>
+          p ? { ...p, done: Math.min(p.done + 1, p.total) } : p,
+        );
       await Promise.all(sessionsRef.current.map(async (session) => {
         for (const plugin of enabledPluginsRef.current) {
           const ctx = buildPluginApi(session, plugin);
@@ -1324,12 +1370,15 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             await plugin.onClose(ctx);
           } catch (e) {
             console.warn(`[plugin:${plugin.id}] onClose failed for session ${session.id}:`, e);
+          } finally {
+            tickClosingProgress();
           }
         }
       }));
       // Sub-shell tabs running an agent: stop them gracefully too, so their
       // exit hints (exact conversation ids) land before the state is saved.
       await runSubShellClosers();
+      tickClosingProgress();
 
       // Grab the latest cwd for the active session before the PTY goes away.
       const current = selectedSessionRef.current;
@@ -1343,6 +1392,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       }
 
       await saveNow();
+      tickClosingProgress();
     } catch (e) {
       console.error('Failed to flush state before close:', e);
     } finally {
@@ -1353,6 +1403,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   const removeAndClose = useCallback(async () => {
     if (closingRef.current) return;
     closingRef.current = true;
+    axnLog('info', 'shell', 'removeAndClose');
     try {
       await (platform.window?.deleteState?.() ?? platform.stateStore.delete?.(windowId));
     } catch (e) {
@@ -1365,6 +1416,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   useEffect(() => {
     let closing = false;
     const unlisten = platform.window?.onCloseRequested?.(async () => {
+      axnLog('info', 'shell', `onCloseRequested (sessions=${sessionsRef.current.length}, shutdown=${shutdownRequestedRef.current}, closing=${closingRef.current || closing})`);
       if (closingRef.current || closing) return;
       closing = true;
       try {
@@ -1403,7 +1455,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           }
         }),
       );
-      closeSession(sessionId);
+      closeSession(sessionId, 'user close');
     },
     [buildPluginApi, closeSession],
   );
@@ -1417,7 +1469,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       const session = sessionsRef.current.find(
         (s) => s.id === ptyId || ptyIdOf(s) === ptyId,
       );
-      if (session) closeSession(session.id);
+      axnLog('info', 'shell', `session-exit pty ${ptyId} → session ${session?.id ?? 'none'}`);
+      if (session) closeSession(session.id, 'pty exited');
     });
     return () => unlisten?.();
   }, [closeSession, backend]);
@@ -1488,6 +1541,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       void removeAndClose();
       return;
     }
+    axnLog('info', 'shell', `autoCloseWhenEmpty → window.close() (window=${windowId})`);
     platform.window?.close?.();
   }, [loaded, sessions.length, platform, awaitingAdoption, otherWindowWorkspaces, removeAndClose, windowId]);
 
@@ -1512,6 +1566,10 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     null,
   );
   const reloadWindow = useCallback(async () => {
+    // Snapshot every live terminal's screen for the reloaded page — the PTYs
+    // survive, so each reattaching view restores its scrollback (see
+    // stashTerminalReplays).
+    stashTerminalReplays();
     await saveNow().catch(() => {});
     window.location.reload();
   }, [saveNow]);
@@ -1751,20 +1809,21 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           const stat = await backend.statPath(targetPty, '/', resolved).catch(() => null);
           if (!stat) await backend.writeFile(targetPty, resolved, '').catch(() => {});
         }
-        const latest = sessionsRef.current.find((s) => s.id === sessionId);
-        if (!latest) return;
-        const editors = latest.editors ?? [];
-        const existing = editors.find(
-          (e) => e.path === resolved && (e.kind ?? 'editor') === 'editor',
-        );
-        const id = existing?.id ?? `ed-${crypto.randomUUID()}`;
-        updateSession(sessionId, {
-          editors: existing ? editors : [...editors, { id, path: resolved, kind: 'editor' }],
-          activeTab: id,
+        const newId = `ed-${crypto.randomUUID()}`;
+        updateSessionWith(sessionId, (latest) => {
+          const editors = latest.editors ?? [];
+          const existing = editors.find(
+            (e) => e.path === resolved && (e.kind ?? 'editor') === 'editor',
+          );
+          const id = existing?.id ?? newId;
+          return {
+            editors: existing ? editors : [...editors, { id, path: resolved, kind: 'editor' }],
+            activeTab: id,
+          };
         });
       });
     },
-    [updateSession]
+    [updateSessionWith]
   );
 
   // Read-only preview tab rendered by the matching preview plugin
@@ -1776,18 +1835,19 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       // Resolve relative paths now so `axn-preview x.png` and a hover-card
       // Preview (which passes the absolute path) share one tab.
       void resolveSessionPath(backend, () => platform.homeDir(), session, path, ptyId).then((resolved) => {
-        const latest = sessionsRef.current.find((s) => s.id === sessionId);
-        if (!latest) return;
-        const editors = latest.editors ?? [];
-        const existing = editors.find((e) => e.path === resolved && e.kind === 'preview');
-        const id = existing?.id ?? `pv-${crypto.randomUUID()}`;
-        updateSession(sessionId, {
-          editors: existing ? editors : [...editors, { id, path: resolved, kind: 'preview' }],
-          activeTab: id,
+        const newId = `pv-${crypto.randomUUID()}`;
+        updateSessionWith(sessionId, (latest) => {
+          const editors = latest.editors ?? [];
+          const existing = editors.find((e) => e.path === resolved && e.kind === 'preview');
+          const id = existing?.id ?? newId;
+          return {
+            editors: existing ? editors : [...editors, { id, path: resolved, kind: 'preview' }],
+            activeTab: id,
+          };
         });
       });
     },
-    [updateSession]
+    [updateSessionWith]
   );
 
   const openBrowser = useCallback(
@@ -1795,11 +1855,10 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session) return;
       void resolveSessionPath(backend, () => platform.homeDir(), session, path, ptyId).then((resolved) => {
-        const latest = sessionsRef.current.find((s) => s.id === sessionId);
-        if (latest) updateSession(sessionId, browserTabPatch(latest, resolved));
+        updateSessionWith(sessionId, (latest) => browserTabPatch(latest, resolved));
       });
     },
-    [updateSession]
+    [updateSessionWith]
   );
 
   const { registerEditor, requestClose: requestEditorClose, dialog: editorCloseDialog } = useEditorClose();
@@ -1809,17 +1868,15 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       const tab = current?.editors?.find((e) => e.id === tabId);
       if (!tab) return;
       requestEditorClose(tab, () => {
-        const latest = sessionsRef.current.find((s) => s.id === session.id);
-        if (!latest) return;
+        if (!sessionsRef.current.some((s) => s.id === session.id)) return;
         if (tab.kind === 'shell') backend.close(tabId);
-        const editors = (latest.editors ?? []).filter((e) => e.id !== tabId);
-        updateSession(latest.id, {
-          editors,
+        updateSessionWith(session.id, (latest) => ({
+          editors: (latest.editors ?? []).filter((e) => e.id !== tabId),
           activeTab: (latest.activeTab ?? 'shell') === tabId ? 'shell' : latest.activeTab,
-        });
+        }));
       });
     },
-    [updateSession, requestEditorClose]
+    [updateSessionWith, requestEditorClose]
   );
 
   // Patch fields on an editor tab — SubShellView uses it to persist an
@@ -1827,56 +1884,52 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // captured.
   const updateEditorTab = useCallback(
     (sessionId: string, tabId: string, patch: Partial<EditorTab>) => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return;
-      updateSession(sessionId, {
+      updateSessionWith(sessionId, (session) => ({
         editors: (session.editors ?? []).map((e) =>
           e.id === tabId ? { ...e, ...patch } : e
         ),
-      });
+      }));
     },
-    [updateSession]
+    [updateSessionWith]
   );
 
   const renameTab = useCallback(
     (sessionId: string, tabId: string, label: string) => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return;
       const trimmed = label.trim();
-      updateSession(sessionId, {
+      updateSessionWith(sessionId, (session) => ({
         // An empty label clears the override → default label (command/dir).
         editors: (session.editors ?? []).map((e) =>
           e.id === tabId ? { ...e, label: trimmed || undefined } : e
         ),
-      });
+      }));
     },
-    [updateSession]
+    [updateSessionWith]
   );
 
   const reorderTab = useCallback(
     (session: ShellSession, dragId: string, targetId: string) => {
-      const editors = [...(session.editors ?? [])];
-      const from = editors.findIndex((e) => e.id === dragId);
-      const to = editors.findIndex((e) => e.id === targetId);
-      if (from === -1 || to === -1 || from === to) return;
-      const [moved] = editors.splice(from, 1);
-      editors.splice(to, 0, moved);
-      updateSession(session.id, { editors });
+      updateSessionWith(session.id, (latest) => {
+        const editors = [...(latest.editors ?? [])];
+        const from = editors.findIndex((e) => e.id === dragId);
+        const to = editors.findIndex((e) => e.id === targetId);
+        if (from === -1 || to === -1 || from === to) return null;
+        const [moved] = editors.splice(from, 1);
+        editors.splice(to, 0, moved);
+        return { editors };
+      });
     },
-    [updateSession]
+    [updateSessionWith]
   );
 
   const setEditorDirty = useCallback(
     (sessionId: string, editorId: string, dirty: boolean) => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return;
-      updateSession(sessionId, {
+      updateSessionWith(sessionId, (session) => ({
         editors: (session.editors ?? []).map((e) =>
           e.id === editorId ? { ...e, dirty } : e
         ),
-      });
+      }));
     },
-    [updateSession]
+    [updateSessionWith]
   );
 
   // --- Plugin-hosted tabs (plugins declaring `hostsTabs`) -------------------
@@ -1885,17 +1938,19 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // opening a browse/edit tab for a bookmarked path.
   const openPluginTab = useCallback(
     (pluginId: string, tab: { path: string; kind: 'editor' | 'browser' | 'preview' }) => {
-      const set = pluginTabsRef.current[pluginId] ?? { editors: [] };
-      const existing = set.editors.find(
-        (e) => e.path === tab.path && (e.kind ?? 'editor') === tab.kind,
-      );
       const prefix = tab.kind === 'browser' ? 'br' : tab.kind === 'preview' ? 'pv' : 'ed';
-      const id = existing?.id ?? `${prefix}-${crypto.randomUUID()}`;
-      updatePluginTabs(pluginId, {
-        editors: existing
-          ? set.editors
-          : [...set.editors, { id, path: tab.path, kind: tab.kind }],
-        activeTab: id,
+      const newId = `${prefix}-${crypto.randomUUID()}`;
+      updatePluginTabs(pluginId, (set) => {
+        const existing = set.editors.find(
+          (e) => e.path === tab.path && (e.kind ?? 'editor') === tab.kind,
+        );
+        const id = existing?.id ?? newId;
+        return {
+          editors: existing
+            ? set.editors
+            : [...set.editors, { id, path: tab.path, kind: tab.kind }],
+          activeTab: id,
+        };
       });
     },
     [updatePluginTabs]
@@ -1906,12 +1961,11 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       const tab = pluginTabsRef.current[pluginId]?.editors.find((e) => e.id === tabId);
       if (!tab) return;
       requestEditorClose(tab, () => {
-        const set = pluginTabsRef.current[pluginId];
-        if (!set) return;
-        updatePluginTabs(pluginId, {
+        if (!pluginTabsRef.current[pluginId]) return;
+        updatePluginTabs(pluginId, (set) => ({
           editors: set.editors.filter((e) => e.id !== tabId),
           activeTab: (set.activeTab ?? 'view') === tabId ? 'view' : set.activeTab,
-        });
+        }));
       });
     },
     [updatePluginTabs, requestEditorClose]
@@ -1924,18 +1978,19 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     (session: ShellSession, tabId: string, pluginId: string) => {
       const tab = (session.editors ?? []).find((e) => e.id === tabId);
       if (!tab || tab.kind === 'shell' || tab.kind === 'git') return;
-      const patch: Partial<ShellSession> = {
-        editors: (session.editors ?? []).filter((e) => e.id !== tabId),
-      };
-      if ((session.activeTab ?? 'shell') === tabId) patch.activeTab = 'shell';
-      updateSession(session.id, patch);
-      const set = pluginTabsRef.current[pluginId] ?? { editors: [] };
-      updatePluginTabs(pluginId, {
+      updateSessionWith(session.id, (latest) => {
+        const patch: Partial<ShellSession> = {
+          editors: (latest.editors ?? []).filter((e) => e.id !== tabId),
+        };
+        if ((latest.activeTab ?? 'shell') === tabId) patch.activeTab = 'shell';
+        return patch;
+      });
+      updatePluginTabs(pluginId, (set) => ({
         editors: [...set.editors, tab],
         activeTab: tab.id,
-      });
+      }));
     },
-    [updateSession, updatePluginTabs]
+    [updateSessionWith, updatePluginTabs]
   );
 
   // Send a plugin-hosted tab back to a session; selecting the session closes
@@ -1946,27 +2001,26 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       const tab = set?.editors.find((e) => e.id === tabId);
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!set || !tab || !session) return;
-      updatePluginTabs(pluginId, {
-        editors: set.editors.filter((e) => e.id !== tabId),
-        activeTab: (set.activeTab ?? 'view') === tabId ? 'view' : set.activeTab,
-      });
-      updateSession(sessionId, {
-        editors: [...(session.editors ?? []), tab],
+      updatePluginTabs(pluginId, (latest) => ({
+        editors: latest.editors.filter((e) => e.id !== tabId),
+        activeTab: (latest.activeTab ?? 'view') === tabId ? 'view' : latest.activeTab,
+      }));
+      updateSessionWith(sessionId, (latest) => ({
+        editors: [...(latest.editors ?? []), tab],
         activeTab: tab.id,
-      });
+      }));
       setActivePluginView(null);
       setSelectedSessionId(sessionId);
     },
-    [updatePluginTabs, updateSession, setSelectedSessionId]
+    [updatePluginTabs, updateSessionWith, setSelectedSessionId]
   );
 
   const setPluginEditorDirty = useCallback(
     (pluginId: string, tabId: string, dirty: boolean) => {
-      const set = pluginTabsRef.current[pluginId];
-      if (!set) return;
-      updatePluginTabs(pluginId, {
+      if (!pluginTabsRef.current[pluginId]) return;
+      updatePluginTabs(pluginId, (set) => ({
         editors: set.editors.map((e) => (e.id === tabId ? { ...e, dirty } : e)),
-      });
+      }));
     },
     [updatePluginTabs]
   );
@@ -1992,6 +2046,27 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     return tab?.kind === 'shell' ? tab.id : null;
   })();
 
+  // Effective icon bag: local settings overlaid by the synced `app:icons`
+  // entry — the authority's bag wins per key on every device.
+  const iconBag = useMemo<IconBag>(
+    () => ({
+      ...collectIconBag(settings),
+      ...((pluginData[ICONS_PLUGIN_DATA_KEY] ?? {}) as IconBag),
+    }),
+    [settings, pluginData],
+  );
+  // Publish the effective bag whenever it changes — desktop authority
+  // patches replicas, a remote viewer's write rides /vm/setPluginState
+  // upstream and the authority applies it into its own settings.
+  const iconBagJson = JSON.stringify(iconBag);
+  const lastPublishedIcons = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    // Not before load: pluginData is still empty, the bag would be local-only.
+    if (!loaded || iconBagJson === lastPublishedIcons.current) return;
+    lastPublishedIcons.current = iconBagJson;
+    platform.publishSharedState?.(ICONS_SHARED_KEY, iconBagJson);
+  }, [loaded, iconBagJson, platform]);
+
   if (!loaded || !selectedSession) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[var(--bg)] text-[var(--text-primary)]">
@@ -2001,6 +2076,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   }
 
   return (
+    <IconBagContext.Provider value={iconBag}>
     <ShellServicesProvider services={mergedServices} fileReader={fileReader}>
     <MemoryStatsProvider active={enabledPlugins.some((p) => p.needsMemoryStats)}>
     <div
@@ -2402,11 +2478,9 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                     type="button"
                     onClick={() => updatePluginTabs(viewPlugin.id, { activeTab: 'view' })}
                     data-tip={viewPlugin.title}
-                    className={`flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[11px] transition ${
-                      viewTab === 'view'
-                        ? 'bg-[var(--surface)] text-[var(--text-primary)]'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-                    }`}
+                    className={`relative flex shrink-0 items-center gap-1.5 px-2 text-[11px] transition ${tabStripTabClasses(
+                      viewTab === 'view',
+                    )}`}
                   >
                     {viewPlugin.title}
                   </button>
@@ -2424,11 +2498,9 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                           y: e.clientY,
                         });
                       }}
-                      className={`flex h-6 shrink-0 items-center rounded pl-2 pr-1 text-[11px] transition ${
-                        viewTab === ed.id
-                          ? 'bg-[var(--surface)] text-[var(--text-primary)]'
-                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-                      }`}
+                      className={`relative flex shrink-0 items-center pl-2 pr-1 text-[11px] transition ${tabStripTabClasses(
+                        viewTab === ed.id,
+                      )}`}
                     >
                       <button
                         type="button"
@@ -2480,6 +2552,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                       : undefined,
                     sessions,
                     workspaces,
+                    selectedSessionId,
                     selectSession: handleSelectSession,
                     sessionApi: (sessionId) => {
                       const s = sessionsRef.current.find((x) => x.id === sessionId);
@@ -2626,6 +2699,31 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             handleSelectSession(sessionId);
             setAttentionOpen(false);
           }}
+          onAction={(flag, actionId) => {
+            // `goto-session:<id>` is handled by the app; `<plugin>:<act>`
+            // routes to that plugin's onAttentionAction with the ctx bound
+            // to the flag's session.
+            if (actionId.startsWith('goto-session:')) {
+              const sessionId = actionId.slice('goto-session:'.length);
+              const target = sessionsRef.current.find((s) => s.id === sessionId);
+              if (target) setSelectedWorkspaceId(target.workspaceId);
+              handleSelectSession(sessionId);
+              return;
+            }
+            const sep = actionId.indexOf(':');
+            const targetPlugin = enabledPluginsRef.current.find(
+              (p) => p.id === (sep === -1 ? flag.pluginId : actionId.slice(0, sep)),
+            );
+            const session = flag.sessionId
+              ? sessionsRef.current.find((s) => s.id === flag.sessionId)
+              : undefined;
+            if (!targetPlugin?.onAttentionAction || !session) return;
+            targetPlugin.onAttentionAction(
+              buildPluginApi(session, targetPlugin),
+              sep === -1 ? actionId : actionId.slice(sep + 1),
+              flag.attention,
+            );
+          }}
         />
       )}
       {closing && (
@@ -2637,6 +2735,21 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             <p className="text-xs text-[var(--text-secondary)]">
               Collecting session state from plugins before closing.
             </p>
+            {closingProgress && (
+              <div className="mt-3 flex items-center gap-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded bg-[var(--bg)]">
+                  <div
+                    className="h-full bg-[var(--accent)] transition-all"
+                    style={{
+                      width: `${Math.min(100, Math.round((closingProgress.done / closingProgress.total) * 100))}%`,
+                    }}
+                  />
+                </div>
+                <span className="text-[10px] text-[var(--text-secondary)]">
+                  {Math.min(100, Math.round((closingProgress.done / closingProgress.total) * 100))}%
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2656,6 +2769,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     </div>
     </MemoryStatsProvider>
     </ShellServicesProvider>
+    </IconBagContext.Provider>
   );
 }
 

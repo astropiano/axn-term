@@ -12,6 +12,7 @@ import {
   resetMrOverview,
   glabMrPlugin,
   openThreads,
+  countOpenThreads,
   myOpenThreads,
   myThreadsAnswered,
   mrNeedsAction,
@@ -35,6 +36,7 @@ function mr(partial: Partial<GlabMrItem> = {}): GlabMrItem {
     iid: 1,
     reference: '!1',
     title: 'mr',
+    description: '',
     url: 'https://gitlab.com/a/b/-/merge_requests/1',
     project: 'a/b',
     sourceBranch: 'feat',
@@ -64,6 +66,31 @@ describe('openThreads', () => {
       ],
     });
     expect(openThreads(m)).toBe(1);
+  });
+});
+
+describe('countOpenThreads', () => {
+  it('counts REST discussions holding an unresolved resolvable note', () => {
+    expect(
+      countOpenThreads([
+        { notes: [{ resolvable: true, resolved: false }] },
+        { notes: [{ resolvable: true, resolved: true }] },
+        { notes: [{ resolvable: false, resolved: null }] },
+        {
+          notes: [
+            { resolvable: true, resolved: true },
+            { resolvable: false },
+          ],
+        },
+        {
+          notes: [
+            { resolvable: true, resolved: true },
+            { resolvable: true, resolved: false },
+          ],
+        },
+        {},
+      ]),
+    ).toBe(2);
   });
 });
 
@@ -236,6 +263,7 @@ describe('glab command lines', () => {
     const argv = argvOf(mrOverviewCommand('gitlab.acme.io'), cwd);
     expect(argv.slice(0, 4)).toEqual(['api', 'graphql', '--hostname', 'gitlab.acme.io']);
     expect(argv[5]).toMatch(/^query=query \{ currentUser \{/);
+    expect(argv[5]).toContain('description');
   });
 });
 

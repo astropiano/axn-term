@@ -1,4 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+
+const AUTO_CLOSE_SECONDS = 10;
 
 interface CloseConfirmModalProps {
   sessionCount: number;
@@ -8,6 +10,21 @@ interface CloseConfirmModalProps {
 }
 
 export function CloseConfirmModal({ sessionCount, runningCount, onCancel, onConfirm }: CloseConfirmModalProps) {
+  const [secondsLeft, setSecondsLeft] = useState(AUTO_CLOSE_SECONDS);
+
+  useEffect(() => {
+    // Clamped at 0: the modal can stay mounted while the real close runs.
+    const timer = setInterval(
+      () => setSecondsLeft((s) => Math.max(0, s - 1)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (secondsLeft <= 0) onConfirm();
+  }, [secondsLeft, onConfirm]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel();
@@ -36,6 +53,9 @@ export function CloseConfirmModal({ sessionCount, runningCount, onCancel, onConf
             Running processes will be terminated.
           </p>
         )}
+        <p className="mb-3 text-xs text-[var(--text-secondary)]">
+          Closing automatically in {secondsLeft}s — Cancel keeps the window open.
+        </p>
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -49,7 +69,7 @@ export function CloseConfirmModal({ sessionCount, runningCount, onCancel, onConf
             onClick={onConfirm}
             className="rounded bg-[var(--red)] px-3 py-1.5 text-xs text-[var(--text-inverted)] hover:opacity-90"
           >
-            Close
+            Close ({secondsLeft}s)
           </button>
         </div>
       </div>

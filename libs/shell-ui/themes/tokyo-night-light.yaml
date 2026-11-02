@@ -1,0 +1,53 @@
+# Tokyo Night Light (github.com/enkia/tokyo-night-vscode-theme). Terminal
+# colours from the theme's terminal.ansi* set. Its bright black was the text
+# colour itself, so it now uses the theme's comment grey (#9699A3), darkened to
+# 3.5:1 so autosuggestions stay dim but readable.
+# Palette: Tokyo Night <https://github.com/enkia/tokyo-night-vscode-theme>, MIT. Copyright (c) 2018-present Enkia.
+# Adjusted for legibility (hue kept, lightness moved):
+#   brightBlack: #9699A3 -> #767986
+#   ui.textSecondary: #707280 -> #5C5D69
+id: tokyo-night-light
+name: Tokyo Night Light
+mode: light
+
+colors:
+  background: '#E6E7ED'
+  foreground: '#343B58'
+  cursor: '#363C4D'
+  cursorAccent: '#E6E7ED'
+  selectionBackground: '#D7D9E1'
+  selectionForeground: '#343B58'
+
+  black: '#343B58'
+  red: '#8C4351'
+  green: '#33635C'
+  yellow: '#8F5E15'
+  blue: '#2959AA'
+  magenta: '#7B43BA'
+  cyan: '#006C86'
+  white: '#707280'
+
+  brightBlack: '#767986'
+  brightRed: '#8C4351'
+  brightGreen: '#33635C'
+  brightYellow: '#8F5E15'
+  brightBlue: '#2959AA'
+  brightMagenta: '#7B43BA'
+  brightCyan: '#006C86'
+  brightWhite: '#707280'
+
+  orange: '#965027'
+  violet: '#7B43BA'
+
+ui:
+  bg: '#D6D8DF'
+  bgSecondary: '#E6E7ED'
+  surface: '#E6E7ED'
+  surfaceHover: '#DCDEE3'
+  text: '#343B58'
+  textSecondary: '#5C5D69'
+  textInverted: '#E6E7ED'
+  border: '#C1C2C7'
+  accent: '#2959AA'
+  accentHover: '#2C5091'
+  cursor: '#363C4D'

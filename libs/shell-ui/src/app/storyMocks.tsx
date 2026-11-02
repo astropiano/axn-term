@@ -18,7 +18,12 @@ import { getSessionViewPlugins } from './session-plugins';
 // glab GraphQL call; `getMemoryStats` feeds the RAM bar.
 // ---------------------------------------------------------------------------
 
-const STORY_DOCKER_PROBE = `==states==
+// Fast-probe output: 6 running / 2 exited. The ==vm== exec supplies the
+// strip values — ~71% VM memory (yellow); cpuStat deltas produce a VM CPU
+// reading from the second poll on. The ==stats== container sums stay in
+// the tooltips.
+const STORY_DOCKER_LIVE = `==states==
+running
 running
 running
 running
@@ -26,7 +31,23 @@ running
 running
 exited
 exited
-==sizes==
+==limits==
+{"NCPU":6,"MemTotal":16734031872}
+==stats==
+180.50%|5.5GiB / 15.58GiB
+35.20%|2.1GiB / 15.58GiB
+12.30%|1.2GiB / 15.58GiB
+8.00%|1.5GiB / 15.58GiB
+4.10%|512MiB / 15.58GiB
+1.90%|340MiB / 15.58GiB
+==vm==
+6
+MemTotal:       16734032 kB
+MemAvailable:    4900000 kB
+cpu  120000 300 480000 9200000 40000 0 12000 0 0 0`;
+
+// Slow disk-probe output: ~48 GB of docker objects, ~91 GB free (~35%, green).
+const STORY_DOCKER_DISK = `==sizes==
 8.9GB
 290MB
 37GB
@@ -184,6 +205,8 @@ export const storyPluginData: Record<string, unknown> = {
       { id: 'a1', path: '~/dev' },
       { id: 'a2', path: 'https://gitlab.com/axn-term', label: 'GitLab' },
       { id: 'a3', path: '/tmp/notes.md' },
+      { id: 'a4', path: 'git status --short --branch', label: 'status', type: 'command' },
+      { id: 'a5', path: 'docker compose logs -f --tail 50', type: 'command' },
     ],
   },
   'dev-workflow': {
@@ -237,7 +260,13 @@ export const storyBackend: SessionBackend = {
   close: () => {},
   onOutput: () => () => {},
   exec: (_id, command) =>
-    Promise.resolve(command.includes('docker ps -a') ? STORY_DOCKER_PROBE : ''),
+    Promise.resolve(
+      command.includes('docker stats')
+        ? STORY_DOCKER_LIVE
+        : command.includes('docker system df')
+          ? STORY_DOCKER_DISK
+          : '',
+    ),
   getMemoryStats: () => Promise.resolve(STORY_MEM_STATS),
 };
 
@@ -387,6 +416,7 @@ export function StoryRail({
                 appState: pluginData[settingsKey],
                 updateAppState: () => {},
                 sessions: storySessions,
+                sessionApi: () => undefined,
               })}
             </div>
           );

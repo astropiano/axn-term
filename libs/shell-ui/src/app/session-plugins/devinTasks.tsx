@@ -679,11 +679,11 @@ function DevinTasks({ ctx }: { ctx: SessionViewContext & PluginApi }) {
               {statusIcons[task.status]}
             </span>
             <span
-              className={
+              className={`min-w-0 break-words ${
                 task.status === 'completed'
                   ? 'line-through text-[var(--text-secondary)]'
                   : 'text-[var(--text-primary)]'
-              }
+              }`}
             >
               {task.title}
             </span>
@@ -700,6 +700,7 @@ function DevinTasks({ ctx }: { ctx: SessionViewContext & PluginApi }) {
 export const devinPlugin: SessionViewPlugin = {
   id: 'devin',
   title: 'devin',
+  logo: 'Bot',
   version: '0.1.0',
   stateKey: 'devin',
   settingsKey: 'devin',

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Porta.Pty;
 
-namespace Astropiano.AxnTerm.SessionHost;
+namespace AxnTerm.SessionHost;
 
 /// <summary>
 /// Routes /ws JSON control messages (resize, fs-*, cwd, fg-process, exec) to
@@ -51,7 +51,7 @@ public sealed class WsControlRouter
             case "fs-read"
                 when TryGetString(msg, "requestId", out var requestId) && TryGetString(msg, "path", out var path):
             {
-                var base64 = msg.TryGetProperty("encoding", out var enc) && enc.GetString() == "base64";
+                var base64 = StringProperty(msg, "encoding") == "base64";
                 requests.RunOrdered(() => RespondAsync(sender,
                     () => _host.ReadFile(pty, path!, base64, cancellationToken), "fs-read-result", requestId!, cancellationToken));
                 return true;
@@ -123,7 +123,15 @@ public sealed class WsControlRouter
                     string[]? argv = null;
                     if (msg.TryGetProperty("argv", out var argvProp) && argvProp.ValueKind == JsonValueKind.Array)
                     {
-                        argv = argvProp.EnumerateArray().Select(e => e.GetString() ?? "").ToArray();
+                        if (argvProp.EnumerateArray().Any(e => e.ValueKind != JsonValueKind.String))
+                        {
+                            await RespondAsync(sender,
+                                () => Task.FromResult(new System.Text.Json.Nodes.JsonObject
+                                    { ["ok"] = false, ["error"] = "argv entries must be strings" }),
+                                "exec-result", requestId9!, cancellationToken);
+                            return;
+                        }
+                        argv = argvProp.EnumerateArray().Select(e => e.GetString()!).ToArray();
                     }
                     var command = TryGetString(msg, "command", out var cmd) ? cmd : null;
                     var cwd = TryGetString(msg, "cwd", out var cw) ? cw : null;
@@ -159,7 +167,19 @@ public sealed class WsControlRouter
         }
         catch (Exception ex)
         {
+            // Answer anyway so the client's request does not hang.
             _logger.LogError(ex, "Control request failed");
+            try
+            {
+                await sender.SendJsonAsync(new System.Text.Json.Nodes.JsonObject
+                {
+                    ["type"] = type, ["requestId"] = requestId, ["ok"] = false, ["error"] = ex.Message,
+                }, cancellationToken);
+            }
+            catch (Exception)
+            {
+                // the session is closing
+            }
         }
     }
 
@@ -185,6 +205,10 @@ public sealed class WsControlRouter
             return false;
         }
     }
+
+    /// <summary>The property's value when it is a JSON string, else null.</summary>
+    internal static string? StringProperty(JsonElement msg, string name) =>
+        TryGetString(msg, name, out var value) ? value : null;
 
     private static bool TryGetString(JsonElement msg, string name, out string? value)
     {

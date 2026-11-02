@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace Astropiano.AxnTerm.SessionHost;
+namespace AxnTerm.SessionHost;
 
 public sealed record ProcessResult(int ExitCode, byte[] Stdout, string Stderr, bool TimedOut, bool OutputLimitExceeded)
 {

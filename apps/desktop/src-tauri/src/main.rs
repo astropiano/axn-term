@@ -3,7 +3,7 @@
 
 fn main() {
     // CLI subcommands (`axn-term install --skills …`) run without starting the
-    // app; anything else falls through to the GUI.
+    // app; no arguments, options and paths fall through to the GUI.
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some(code) = axn_shell_lib::cli::run_cli(&args) {
         std::process::exit(code);

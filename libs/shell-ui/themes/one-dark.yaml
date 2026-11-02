@@ -1,6 +1,7 @@
 # One Dark (Atom). Bright black was 2.0:1, so comments and autosuggestions
 # vanished; it uses One Dark Pro's comment grey, lifted to 3.5:1. Foreground
 # lifted from 6.6:1. UI layers from Atom's sidebar and borders.
+# Palette: One Dark (Atom) <https://github.com/atom/one-dark-syntax>, MIT. Copyright (c) 2016 GitHub Inc..
 # Adjusted for legibility (hue kept, lightness moved):
 #   foreground: #ABB2BF -> #B2B9C5
 #   red: #E06C75 -> #E17079

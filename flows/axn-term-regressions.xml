@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Regression flows for bugs found on 2026-10-30. The adapter also fails any
+  flow whose app log shows the React error boundary.
+-->
+<flows>
+  <flow name="axn-term - app starts and restarts without crashing">
+    <description>
+      The app must mount its UI on a fresh start and again on the restore path,
+      never falling into the error boundary (a hook after an early return in
+      ShellApp crashed every launch).
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+      <tag>regression</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="shell" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Create temp state: one window, one shell session">
+        <assert that="contains" value="state dir prepared" />
+      </step>
+      <step adapter="axn-term" action="start" description="First launch">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="checkAlive" description="The UI runs a /command line and logged no crash">
+        <assert that="contains" value="frontend alive, no error boundary" />
+      </step>
+      <step adapter="axn-term" action="close" description="Close so state is saved">
+        <assert that="contains" value="app closed" />
+      </step>
+      <step adapter="axn-term" action="start" description="Second launch restores the saved state">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="checkAlive" description="The restored UI is alive too">
+        <assert that="contains" value="frontend alive, no error boundary" />
+      </step>
+      <step adapter="axn-term" action="close" description="Close again">
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term - closed window does not throttle terminal output">
+    <description>
+      After an extra window was opened and closed, a session printing 8 MB
+      must finish about as fast as before (a closed window's dead listener
+      used to slow it from ~1 s to ~35 s). Limit: 8 s, or 5x the baseline
+      on a slow machine (AXN_TERM_FLOOD_MAX_MS overrides 8 s).
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+      <tag>regression</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="shell" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Create temp state: one window, one shell session">
+        <assert that="contains" value="state dir prepared" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch axn-term">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="floodBaseline" description="Print 8 MB with one window open">
+        <assert that="contains" value="baseline flood" />
+      </step>
+      <step adapter="axn-term" action="createWindow" description="Open a second window">
+        <assert that="contains" value="window created" />
+      </step>
+      <step adapter="axn-term" action="closeWindow" description="Close the second window">
+        <assert that="contains" value="window closed" />
+      </step>
+      <step adapter="axn-term" action="floodAfterClose" description="Print 8 MB again: must stay under the limit">
+        <assert that="contains" value="flood after closed window" />
+      </step>
+      <step adapter="axn-term" action="close" description="Close axn-term">
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term - pasted line with Enter reaches the shell">
+    <description>
+      With a plugin's async line hook active, a pasted "command + newline"
+      arrives as one input chunk. The shell must still get the command and
+      run it once (the chunk used to be swallowed, only the Enter was sent).
+      Real Shift+Insert paste on a private X server; bash without bracketed
+      paste.
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+      <tag>regression</tag>
+      <tag>linux</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="input" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Temp state: bash session plus a sandboxed plugin with an async line hook">
+        <assert that="contains" value="state dir prepared" />
+      </step>
+      <step adapter="axn-term" action="startTestDisplay" description="Start a private X server">
+        <assert that="contains" value="test display" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch axn-term on the test display">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="pasteLine" description="Paste 'echo PASTE_OK_$((40+2))' plus newline into the terminal">
+        <assert that="contains" value="pasted line ran once" />
+      </step>
+      <step adapter="axn-term" action="closeAndStopDisplay" description="Close axn-term and the X server">
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term - Ctrl+S after a failed read keeps the file">
+    <description>
+      Open a write-only file with a typed axn-edit: the read fails. Ctrl+S in
+      the editor must not write the empty buffer over the file.
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+      <tag>regression</tag>
+      <tag>linux</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="input" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Temp state: one bash session">
+        <assert that="contains" value="state dir prepared" />
+      </step>
+      <step adapter="axn-term" action="startTestDisplay" description="Start a private X server">
+        <assert that="contains" value="test display" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch axn-term on the test display">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="editorReadFail" description="Open an unreadable file, press Ctrl+S, check the file">
+        <assert that="contains" value="kept its contents" />
+      </step>
+      <step adapter="axn-term" action="closeAndStopDisplay" description="Close axn-term and the X server">
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term - Git Inspect restore treats bracket paths literally">
+    <description>
+      In a repo with app/[id]/page.tsx deleted and app/d/page.tsx edited,
+      "Restore deleted file" on the first must bring it back and leave the
+      edit in the second alone (as a glob pathspec, [id] also matched d).
+      Right-click and menu click at fixed spots of the default 800x600 window.
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+      <tag>regression</tag>
+      <tag>linux</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="git-restore" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Temp state: a shell session in a repo with one deleted and one edited file">
+        <assert that="contains" value="state dir prepared" />
+      </step>
+      <step adapter="axn-term" action="startTestDisplay" description="Start a private X server">
+        <assert that="contains" value="test display" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch axn-term on the test display">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="openGitInspect" description="Open Git Inspect with axn-git">
+        <assert that="contains" value="git inspect open" />
+      </step>
+      <step adapter="axn-term" action="gitRestoreDeleted" description="Restore app/[id]/page.tsx from its context menu">
+        <assert that="contains" value="kept its edit" />
+      </step>
+      <step adapter="axn-term" action="closeAndStopDisplay" description="Close axn-term and the X server">
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+</flows>

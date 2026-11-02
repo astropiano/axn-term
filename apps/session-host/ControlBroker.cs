@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace Astropiano.AxnTerm.SessionHost;
+namespace AxnTerm.SessionHost;
 
 /// <summary>
 /// `axn-term session …` from a program inside one of our terminals — the web
@@ -121,11 +121,12 @@ public sealed record ControlReply(bool Ok, string? Message = null, string? Error
 {
     public static ControlReply Failure(string error) => new(false, null, error);
 
+    /// <summary>Wrongly typed fields read as absent — a client reply must never throw.</summary>
     public static ControlReply FromJson(JsonNode? node) =>
         node is JsonObject o
             ? new ControlReply(
-                o["ok"]?.GetValue<bool>() == true,
-                o["message"]?.GetValue<string>(),
-                o["error"]?.GetValue<string>())
+                o["ok"] is JsonValue ok && ok.TryGetValue<bool>(out var b) && b,
+                o["message"] is JsonValue m && m.TryGetValue<string>(out var message) ? message : null,
+                o["error"] is JsonValue e && e.TryGetValue<string>(out var error) ? error : null)
             : Failure("malformed reply");
 }

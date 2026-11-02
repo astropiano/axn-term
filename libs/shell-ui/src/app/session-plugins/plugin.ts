@@ -136,11 +136,13 @@ export interface PluginApi {
   /**
    * Open a new session rooted at `cwd` (default: the app's shell default).
    * `name` overrides the session's display name; `workspaceId` targets a
-   * workspace other than this session's own. The PTY spawns when the
-   * session's terminal mounts, so `writeToSession` into it only works once
-   * `onSessionOpen` has fired for the new session.
+   * workspace other than this session's own; `background` spawns it without
+   * selecting it or dismissing a covering plugin view (the
+   * `axn-session --background` behaviour — the user's focus stays put).
+   * The PTY spawns when the session's terminal mounts, so `writeToSession`
+   * into it only works once `onSessionOpen` has fired for the new session.
    */
-  openSession: (cwd?: string, name?: string, workspaceId?: string) => void;
+  openSession: (cwd?: string, name?: string, workspaceId?: string, background?: boolean) => void;
   /**
    * The workspace this session belongs to — carries `defaultFolder`, the
    * workspace's anchor directory set from its context menu.
@@ -447,6 +449,21 @@ export interface PluginSettingsViewContext {
 export interface SessionViewPlugin {
   id: string;
   title: string;
+  /**
+   * The plugin's icon — a Lucide icon name or an inline `<svg>` tag, the
+   * same value format as `sessionIcons`. Declaring it is the has-an-icon
+   * capability: only then does the Logo override field appear in Settings →
+   * Plugins (users override via `customIcons`/`pluginIcons` keyed by plugin
+   * id) and does the plugin's own chrome render `<PluginIcon>` with that
+   * override (undeclared → generic Puzzle, bag not consulted).
+   *
+   * When `processPattern` is set, the logo also supplies the session-row
+   * icon for matching foreground processes (`resolveProcessIcon`) — so for
+   * agent plugins whose id equals the process name (`devin`, `claude`), the
+   * plugin logo and the process icon are literally the same bag key and
+   * editing either side updates both.
+   */
+  logo?: string;
   /** Plugin version (`x.y.z`); shown in Settings and matched by `dependsOn`. */
   version?: string;
   /**
@@ -512,6 +529,17 @@ export interface SessionViewPlugin {
    * Receives the action's `id`.
    */
   onBannerAction?: (ctx: SessionViewContext & PluginApi, actionId: string) => void;
+  /**
+   * Called when a button declared via `setAttention({actions})` is clicked
+   * — the action id is the part after `<plugin>:` (`worktrees:mr-worktree`
+   * routes here with `mr-worktree`). `attention` is the flag's payload.
+   * `ctx` is bound to the session the flag was raised on.
+   */
+  onAttentionAction?: (
+    ctx: SessionViewContext & PluginApi,
+    actionId: string,
+    attention: SessionAttention,
+  ) => void;
   render?: (ctx: SessionViewContext & PluginApi) => ReactNode;
   /** Pinned rail items render first, above the reorderable ones, and are
    * not draggable. */
@@ -576,6 +604,11 @@ export interface SessionViewPlugin {
      * board over per-session plugin state).
      */
     sessions: ShellSession[];
+    /**
+     * The session selected in the panel — stays set while a plugin view
+     * covers it, so views can offer "in the current session" actions.
+     */
+    selectedSessionId?: string;
     /** The window's workspaces in panel order — for workspace-targeted actions. */
     workspaces: Workspace[];
     /**
@@ -752,7 +785,7 @@ export interface PluginApiDeps {
     label?: string,
     agent?: AgentCli,
   ) => string | undefined;
-  openSession: (workspaceId: string, cwd?: string, name?: string) => void;
+  openSession: (workspaceId: string, cwd?: string, name?: string, background?: boolean) => void;
   getWorkspaces?: () => Workspace[];
   pluginData: Record<string, unknown>;
   mergePluginData: (key: string, patch: Record<string, unknown>) => void;
@@ -839,8 +872,8 @@ export function createPluginApi(
     openBrowser,
     openTab,
     openSubShell,
-    openSession: (cwd, name, workspaceId) =>
-      deps.openSession(workspaceId ?? session.workspaceId, cwd, name),
+    openSession: (cwd, name, workspaceId, background) =>
+      deps.openSession(workspaceId ?? session.workspaceId, cwd, name, background),
     getWorkspace: () =>
       deps.getWorkspaces?.().find((w) => w.id === session.workspaceId),
     getWorkspaces: () => deps.getWorkspaces?.() ?? [],

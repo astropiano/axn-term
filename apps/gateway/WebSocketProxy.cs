@@ -1,6 +1,6 @@
 using System.Net.WebSockets;
 
-namespace Astropiano.AxnTerm.Gateway;
+namespace AxnTerm.Gateway;
 
 public static class WebSocketProxy
 {

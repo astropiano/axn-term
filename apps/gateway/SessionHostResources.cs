@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Astropiano.AxnTerm.Gateway;
+namespace AxnTerm.Gateway;
 
 /// <summary>
 /// Per-container resource limits and the isolation policy for session

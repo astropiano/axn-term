@@ -1,6 +1,6 @@
-using Astropiano.AxnTerm.SessionHost;
+using AxnTerm.SessionHost;
 
-namespace Astropiano.AxnTerm.SessionHost.Tests;
+namespace AxnTerm.SessionHost.Tests;
 
 public class SessionHostAuthTests
 {

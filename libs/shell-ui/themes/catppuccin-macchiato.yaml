@@ -1,0 +1,52 @@
+# Catppuccin Macchiato (catppuccin.com), between Frappé and Mocha. ANSI
+# colours are Catppuccin's official terminal mapping (palette ansiColors);
+# bright black (surface2) is lifted to 3.5:1. UI from mantle, base and surface
+# layers; accent mauve.
+# Palette: Catppuccin <https://github.com/catppuccin/palette>, MIT. Copyright (c) 2021 Catppuccin.
+# Adjusted for legibility (hue kept, lightness moved):
+#   brightBlack: #5B6078 -> #757B96
+id: catppuccin-macchiato
+name: Catppuccin Macchiato
+mode: dark
+
+colors:
+  background: '#24273A'
+  foreground: '#CAD3F5'
+  cursor: '#F4DBD6'
+  cursorAccent: '#24273A'
+  selectionBackground: '#494D64'
+  selectionForeground: '#CAD3F5'
+
+  black: '#494D64'
+  red: '#ED8796'
+  green: '#A6DA95'
+  yellow: '#EED49F'
+  blue: '#8AADF4'
+  magenta: '#F5BDE6'
+  cyan: '#8BD5CA'
+  white: '#A5ADCB'
+
+  brightBlack: '#757B96'
+  brightRed: '#EC7486'
+  brightGreen: '#8CCF7F'
+  brightYellow: '#E1C682'
+  brightBlue: '#78A1F6'
+  brightMagenta: '#F2A9DD'
+  brightCyan: '#63CBC0'
+  brightWhite: '#B8C0E0'
+
+  orange: '#F5A97F'
+  violet: '#C6A0F6'
+
+ui:
+  bg: '#1E2030'
+  bgSecondary: '#24273A'
+  surface: '#24273A'
+  surfaceHover: '#363A4F'
+  text: '#CAD3F5'
+  textSecondary: '#A5ADCB'
+  textInverted: '#24273A'
+  border: '#494D64'
+  accent: '#C6A0F6'
+  accentHover: '#B7BDF8'
+  cursor: '#F4DBD6'

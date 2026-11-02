@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OSC color-report regression. A program querying terminal colors and
+  exiting fast must not leak xterm's reply into the shell prompt
+  (`11;rgb:…` visible text that also poisons the next typed command and
+  used to desync hidden-command tracking into `command not found`).
+-->
+<flows>
+  <flow name="axn-term - OSC color query never leaks into the shell">
+    <description>
+      A fake devin emitting OSC 10/11/12 color queries and exiting
+      immediately, plus a direct query at a bare prompt: both replies must
+      be dropped (no rgb text in the output), and axn-session must still
+      intercept afterwards.
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+      <tag>regression</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="shell" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Temp state: one shell session, fake devin on PATH">
+        <assert that="contains" value="state dir prepared" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch axn-term">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="oscCheck" description="devin --osc-exit + a bare-prompt query: replies dropped, axn-session still intercepted">
+        <assert that="contains" value="no OSC leak" />
+      </step>
+      <step adapter="axn-term" action="close" description="Close axn-term">
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+</flows>

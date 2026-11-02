@@ -35,6 +35,8 @@ export interface FilePreviewContext {
 export interface FilePreviewPlugin {
   id: string;
   title: string;
+  /** Same as `SessionViewPlugin.logo` — declares the has-an-icon capability. */
+  logo?: string;
   /** Plugin version (`x.y.z`); shown in Settings. */
   version?: string;
   settingsKey?: string;

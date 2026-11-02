@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Porta.Pty;
 
-namespace Astropiano.AxnTerm.SessionHost;
+namespace AxnTerm.SessionHost;
 
 /// <summary>
 /// Bridges shell PTYs to /ws WebSockets: each connection spawns a PTY via
@@ -21,6 +21,12 @@ public sealed class SessionHostService : BackgroundService
 {
     private const int BufferSize = 8192;
     private static readonly TimeSpan TaskSendTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>Close code the client interprets as "the shell exited" —
+    /// every other close is a dropped connection, not a session exit.</summary>
+    public const WebSocketCloseStatus PtyExitedStatus = (WebSocketCloseStatus)4001;
+    public const string PtyExitedDescription = "pty-exited";
+    /// <summary>How long the peer may take to answer our close frame.</summary>
+    private static readonly TimeSpan CloseHandshakeTimeout = TimeSpan.FromSeconds(5);
 
     private readonly PtyHost _host;
     private readonly ILogger<SessionHostService> _logger;
@@ -65,15 +71,39 @@ public sealed class SessionHostService : BackgroundService
                 new JsonObject { ["type"] = "control-command", ["requestId"] = requestId, ["line"] = line },
                 cancellationToken));
 
-        using (pty)
+        // The PTY is disposed by _host.Remove below.
         using (var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
             var requests = new SessionRequests();
-            var ptyToWs = PumpPtyToSocketAsync(pty, sender, sessionCts.Token);
+            var ptyToWs = PumpPtyToSocket(session, sender, out var outputSubscription, sessionCts.Token);
+            using var subscription = outputSubscription;
             var wsToPty = PumpSocketToPtyAsync(socket, sender, pty, requests, sessionCts.Token);
 
-            await Task.WhenAny(ptyToWs, wsToPty);
+            var first = await Task.WhenAny(ptyToWs, wsToPty);
+            if (first == ptyToWs)
+            {
+                if (await ptyToWs)
+                {
+                    // The shell exited: close with 4001 "pty-exited" so the
+                    // client tells a shell exit from a dropped connection.
+                    // The receive pump ends once the client answers the close.
+                    await sender.CloseOutputAsync(PtyExitedStatus, PtyExitedDescription, CancellationToken.None);
+                    await Task.WhenAny(wsToPty, Task.Delay(CloseHandshakeTimeout, cancellationToken));
+                }
+            }
+            else
+            {
+                // The client went away: stop the shell and let the output
+                // pump run into EOF instead of cancelling it mid-send (a
+                // cancelled send aborts the socket before the close echo).
+                _host.Kill(session);
+                await Task.WhenAny(ptyToWs, Task.Delay(CloseHandshakeTimeout, cancellationToken));
+            }
 
+            // Stops whatever is still running — a pump stuck on an
+            // unresponsive peer, in-flight control requests (exec process
+            // trees are killed).
+            sessionCts.Cancel();
             _host.Kill(session);
             await Task.WhenAll(
                 ptyToWs.ContinueWith(_ => { }),
@@ -114,14 +144,13 @@ public sealed class SessionHostService : BackgroundService
                 }
 
                 if (!WsControlRouter.TryParseJson(message, out var msg)
-                    || !msg.TryGetProperty("type", out var typeProp)
-                    || typeProp.GetString() != "subscribe"
-                    || !msg.TryGetProperty("sessionId", out var idProp))
+                    || msg.ValueKind != JsonValueKind.Object
+                    || WsControlRouter.StringProperty(msg, "type") != "subscribe")
                 {
                     continue;
                 }
 
-                var sessionId = idProp.GetString();
+                var sessionId = WsControlRouter.StringProperty(msg, "sessionId");
                 if (string.IsNullOrEmpty(sessionId))
                 {
                     continue;
@@ -145,44 +174,37 @@ public sealed class SessionHostService : BackgroundService
     }
 
     /// <summary>
-    /// PTY → socket pump. Returns true when the PTY stream ended (the shell
-    /// exited) so the caller can report a clean close.
+    /// PTY → socket as binary frames. Output must never ride text frames:
+    /// JSON control messages share that channel, so program output that
+    /// happens to be JSON would be sniffed as a control message by the
+    /// client (or could inject one). The PTY's single output pump feeds this
+    /// socket (a Ramphastos session may watch the same PTY). The task ends
+    /// true when the shell exited, false when the socket can no longer send.
     /// </summary>
-    private static async Task<bool> PumpPtyToSocketAsync(IPtyConnection pty, SocketSender sender, CancellationToken cancellationToken)
+    private static Task<bool> PumpPtyToSocket(
+        PtySession session, SocketSender sender, out IDisposable subscription, CancellationToken cancellationToken)
     {
-        var reader = pty.ReaderStream;
-        var byteBuffer = new byte[BufferSize];
-        var decoder = Encoding.UTF8.GetDecoder();
-        var charBuffer = new char[BufferSize];
-
-        try
-        {
-            while (sender.CanSend)
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        subscription = session.SubscribeOutput(
+            async data =>
             {
-                var read = await reader.ReadAsync(byteBuffer.AsMemory(0, byteBuffer.Length), cancellationToken);
-                if (read <= 0)
+                try
                 {
-                    return true;
+                    if (!sender.CanSend)
+                    {
+                        throw new WebSocketException(WebSocketError.InvalidState);
+                    }
+                    await sender.SendAsync(data, WebSocketMessageType.Binary, cancellationToken);
                 }
-
-                // Decode incrementally so multi-byte UTF8 sequences split across
-                // reads stay intact, then send a text frame like the node server.
-                var chars = decoder.GetChars(byteBuffer, 0, read, charBuffer, 0, false);
-                if (chars == 0)
+                catch (Exception)
                 {
-                    continue;
+                    // Send side failed: the client is gone (the pump drops us).
+                    done.TrySetResult(false);
+                    throw;
                 }
-
-                var payload = Encoding.UTF8.GetBytes(charBuffer, 0, chars);
-                await sender.SendAsync(payload, WebSocketMessageType.Text, cancellationToken);
-            }
-        }
-        catch (IOException) { }
-        catch (WebSocketException) { }
-        catch (ObjectDisposedException) { }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-
-        return false;
+            },
+            _ => done.TrySetResult(true));
+        return done.Task;
     }
 
     private async Task PumpSocketToPtyAsync(WebSocket socket, SocketSender sender, IPtyConnection pty, SessionRequests requests, CancellationToken cancellationToken)
@@ -224,10 +246,28 @@ public sealed class SessionHostService : BackgroundService
 
                 var text = Encoding.UTF8.GetString(data.Span);
                 if (WsControlRouter.TryParseJson(text, out var msg) && msg.ValueKind == JsonValueKind.Object &&
-                    msg.TryGetProperty("type", out var typeProp) &&
-                    _router.Handle(sender, pty, requests, msg, typeProp.GetString(), cancellationToken))
+                    msg.TryGetProperty("type", out var typeProp))
                 {
-                    continue;
+                    // A malformed control frame is dropped; it must never end
+                    // the session (and kill the shell with it).
+                    if (typeProp.ValueKind != JsonValueKind.String)
+                    {
+                        continue;
+                    }
+                    bool handled;
+                    try
+                    {
+                        handled = _router.Handle(sender, pty, requests, msg, typeProp.GetString(), cancellationToken);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex, "Dropped a malformed control message");
+                        continue;
+                    }
+                    if (handled)
+                    {
+                        continue;
+                    }
                 }
 
                 var bytes = Encoding.UTF8.GetBytes(text);

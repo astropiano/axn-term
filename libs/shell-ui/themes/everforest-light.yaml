@@ -1,0 +1,65 @@
+# Everforest Light, medium (github.com/sainnhe/everforest). Same mapping as
+# Everforest Dark: bg layers for chrome, grey2 for bright black. Its accents and
+# foreground are pastel on paper (fg 5.2:1) and are darkened within their hue
+# to read as text.
+# Palette: Everforest <https://github.com/sainnhe/everforest>, MIT. Copyright (c) 2019 sainnhe.
+# Adjusted for legibility (hue kept, lightness moved):
+#   foreground: #5C6A72 -> #4A555B
+#   red: #F85552 -> #E20D09
+#   green: #8DA101 -> #697801
+#   yellow: #DFA000 -> #926900
+#   blue: #3A94C5 -> #2F78A0
+#   magenta: #DF69BA -> #C92B97
+#   cyan: #35A77C -> #287E5E
+#   brightBlack: #829181 -> #778776
+#   brightGreen: #8DA101 -> #849701
+#   brightYellow: #DFA000 -> #B98500
+#   brightMagenta: #DF69BA -> #DD61B6
+#   brightCyan: #35A77C -> #339F76
+#   ui.textSecondary: #829181 -> #637062
+#   ui.accent: #8DA101 -> #657301
+id: everforest-light
+name: Everforest Light
+mode: light
+
+colors:
+  background: '#FDF6E3'
+  foreground: '#4A555B'
+  cursor: '#5C6A72'
+  cursorAccent: '#FDF6E3'
+  selectionBackground: '#E6E2CC'
+  selectionForeground: '#4A555B'
+
+  black: '#5C6A72'
+  red: '#E20D09'
+  green: '#697801'
+  yellow: '#926900'
+  blue: '#2F78A0'
+  magenta: '#C92B97'
+  cyan: '#287E5E'
+  white: '#939F91'
+
+  brightBlack: '#778776'
+  brightRed: '#F85552'
+  brightGreen: '#849701'
+  brightYellow: '#B98500'
+  brightBlue: '#3A94C5'
+  brightMagenta: '#DD61B6'
+  brightCyan: '#339F76'
+  brightWhite: '#BDC3AF'
+
+  orange: '#F57D26'
+  violet: '#DF69BA'
+
+ui:
+  bg: '#F4F0D9'
+  bgSecondary: '#FDF6E3'
+  surface: '#FDF6E3'
+  surfaceHover: '#EFEBD4'
+  text: '#4A555B'
+  textSecondary: '#637062'
+  textInverted: '#FDF6E3'
+  border: '#E0DCC7'
+  accent: '#657301'
+  accentHover: '#35A77C'
+  cursor: '#5C6A72'

@@ -25,7 +25,8 @@ fn shell_commands_are_available_to_all_app_windows_only() {
         "plugin:window|close",
     ] {
         let permissions = resolved.allowed_commands.get(command).expect(command);
-        for label in ["main", "w-0", "w-19", "w-restored"] {
+        // `settings`: the macOS Preferences window (lib.rs menu handler).
+        for label in ["main", "w-0", "w-19", "w-restored", "settings"] {
             assert!(
                 permissions
                     .iter()

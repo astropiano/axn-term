@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { marked } from 'marked';
-import { sanitizePreviewHtml } from './html';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { previewContainStyle, sanitizePreviewHtml } from './html';
 
 describe('sanitizePreviewHtml', () => {
   it('drops <style> sheets but keeps inline style attributes', () => {
@@ -45,6 +47,48 @@ describe('sanitizePreviewHtml', () => {
       '<svg viewBox="0 0 10 10"><rect width="10" height="10" style="fill:#f00"></rect></svg>',
     );
     expect(clean).toContain('<rect');
-    expect(clean).toContain('style="fill:#f00"');
+    // re-serialized by the CSS parser
+    expect(clean).toMatch(/style="fill: ?(#f00|rgb\(255, 0, 0\));?"/);
+  });
+});
+
+describe('preview markup cannot cover the app', () => {
+  const overlay =
+    '<div style="position:fixed;inset:0;z-index:2147483647;background:#fff">fake</div>';
+
+  it('strips position:fixed and sticky from inline styles', () => {
+    for (const html of [
+      overlay,
+      '<div style="POSITION: Fixed !important; top:0">x</div>',
+      '<div style="position:/**/fixed">x</div>',
+      '<p style="position:sticky;top:0;color:red">x</p>',
+      '<svg><rect style="position:fixed" width="1" height="1"></rect></svg>',
+    ]) {
+      const clean = sanitizePreviewHtml(html);
+      const el = new DOMParser().parseFromString(`<body>${clean}</body>`, 'text/html').body
+        .firstElementChild as HTMLElement;
+      const inner = (el.querySelector('rect') ?? el) as HTMLElement;
+      expect(inner.style?.getPropertyValue('position') ?? '', clean).not.toMatch(/fixed|sticky/i);
+      expect(clean).not.toMatch(/fixed|sticky/i);
+    }
+    // other declarations survive
+    expect(sanitizePreviewHtml('<p style="position:sticky;top:0;color:red">x</p>')).toContain('color: red');
+    expect(sanitizePreviewHtml('<div style="position:relative">x</div>')).toContain('position: relative');
+  });
+
+  it('hosts the markup in a clipped, isolated container', () => {
+    expect(previewContainStyle).toMatchObject({
+      position: 'relative',
+      contain: 'paint',
+      isolation: 'isolate',
+    });
+  });
+
+  it('keeps the .axn-prose stylesheet rule contained', () => {
+    const css = readFileSync(join(__dirname, '../../styles.css'), 'utf8');
+    const rule = /\.axn-prose \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/contain:\s*paint/);
+    expect(rule).toMatch(/isolation:\s*isolate/);
+    expect(rule).toMatch(/position:\s*relative/);
   });
 });

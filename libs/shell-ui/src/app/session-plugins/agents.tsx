@@ -6,7 +6,7 @@ import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin'
 import { axnLog } from '../log';
 import { pickFromList } from '../pickerHost';
 import { SessionIconGlyph } from '../SessionPanel';
-import { useSettings } from '../../SettingsProvider';
+import { useIconBag, resolveProcessIcon } from '../iconModel';
 import { agentLaunchLine } from './devWorkflow';
 import {
   listPersonas,
@@ -107,12 +107,12 @@ function sessionsFor(persona: AgentPersona, sessions: ShellSession[]): ShellSess
 // ---------------------------------------------------------------------------
 
 /**
- * The CLI's configured `sessionIcons` glyph (the icon its sessions show in
+ * The CLI's configured process icon (the icon its sessions show in
  * the panel — e.g. a claude persona gets claude's icon), Bot otherwise.
  */
 function AgentIcon({ cli, className }: { cli?: string; className: string }) {
-  const { settings } = useSettings();
-  const value = (cli && settings.sessionIcons?.[cli.toLowerCase()]) || 'Bot';
+  const bag = useIconBag();
+  const value = resolveProcessIcon(cli, bag, 'Bot');
   return <SessionIconGlyph value={value} className={`${className} text-[var(--accent)]`} />;
 }
 

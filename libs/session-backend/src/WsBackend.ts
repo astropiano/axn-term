@@ -6,7 +6,6 @@ import type {
   PathStat,
   PtySpawnOptions,
   SessionBackend,
-  ShellServices,
   SubshellSpawnOptions,
   Unsubscribe,
 } from './types';
@@ -44,10 +43,12 @@ export interface WsBackendOptions {
 }
 
 /**
- * SessionBackend over the session-host WebSocket protocol: raw binary/text
- * frames carry PTY IO, JSON frames carry control messages (`session`,
- * `resize`, `fs-read`/`fs-write`/`fs-stat`/`cwd` and their `*-result`s).
- * One WS connection == one PTY session.
+ * SessionBackend over the session-host WebSocket protocol: binary frames
+ * carry PTY output (client input is sent binary as well), JSON text frames
+ * carry control messages (`session`, `resize`, `fs-read`/`fs-write`/
+ * `fs-stat`/`cwd` and their `*-result`s). Text frames are *only* control —
+ * that separation keeps terminal output that happens to be JSON from being
+ * sniffed as protocol. One WS connection == one PTY session.
  */
 export class WsBackend implements SessionBackend {
   private conns = new Map<string, WsConn>();
@@ -118,6 +119,8 @@ export class WsBackend implements SessionBackend {
     if (qs) url += `${url.includes('?') ? '&' : '?'}${qs}`;
 
     const ws = new WebSocket(url);
+    // PTY output arrives as binary — deliver bytes, never Blob objects.
+    ws.binaryType = 'arraybuffer';
     const conn: WsConn = {
       ws,
       pending: new Map(),
@@ -354,6 +357,15 @@ export class WsBackend implements SessionBackend {
   }
 
   private handleMessage(clientId: string, conn: WsConn, event: MessageEvent): void {
+    // Binary frame = PTY output. It bypasses JSON sniffing entirely, so a
+    // program printing {"type":"control-command",…} just shows up as text —
+    // output can neither be swallowed as protocol nor inject a command.
+    if (event.data instanceof ArrayBuffer) {
+      const bytes = new Uint8Array(event.data);
+      for (const cb of this.outputListeners.get(clientId) ?? []) cb(bytes);
+      for (const cb of this.anyOutputCbs) cb(clientId, bytes);
+      return;
+    }
     if (typeof event.data !== 'string') return;
     try {
       const msg = JSON.parse(event.data);
@@ -384,32 +396,12 @@ export class WsBackend implements SessionBackend {
     } catch {
       // not JSON — PTY output below
     }
+    // Unmatched text: treated as output for backward compatibility with
+    // session hosts that still send PTY output as text frames.
     const bytes = this.encoder.encode(event.data);
     for (const cb of this.outputListeners.get(clientId) ?? []) cb(bytes);
     for (const cb of this.anyOutputCbs) cb(clientId, bytes);
   }
 }
 
-export const browserServices: ShellServices = {
-  copyText: (text) => navigator.clipboard?.writeText(text),
-  pasteText: () => navigator.clipboard?.readText().catch(() => undefined),
-  openExternal: (url) => window.open(url, '_blank', 'noopener'),
-  storage: {
-    get: (key) => Promise.resolve(localStorage.getItem(`axn-kv:${key}`)),
-    set: (key, value) => {
-      if (value === null) localStorage.removeItem(`axn-kv:${key}`);
-      else localStorage.setItem(`axn-kv:${key}`, value);
-      return Promise.resolve();
-    },
-  },
-  notify: (title, body) => {
-    if (typeof Notification === 'undefined') return;
-    const post = () => new Notification(title, { body });
-    if (Notification.permission === 'granted') post();
-    else if (Notification.permission !== 'denied') {
-      void Notification.requestPermission().then((p) => {
-        if (p === 'granted') post();
-      });
-    }
-  },
-};
+

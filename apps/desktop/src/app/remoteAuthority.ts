@@ -50,6 +50,8 @@ export function createRemoteAuthority(opts?: {
   token?: string;
   getToken?: () => Promise<string | undefined> | string | undefined;
   webSocketOnly?: boolean;
+  /** Client shared-state writes (e.g. `app:icons`) land here — applied into config. */
+  onSharedState?: (key: string, data: string | undefined) => void;
 }): RemoteAuthority | undefined {
   const url = (opts?.url ?? authorityUrl)?.trim();
   if (!url) return undefined;
@@ -66,6 +68,7 @@ export function createRemoteAuthority(opts?: {
     getScrollback: (ptyId) => serializeTerminal(ptyId),
       getPtySize: (ptyId) => terminalSize(ptyId),
     meta: { kind: 'desktop', window: desktopPlatform.window?.id ?? 'main' },
+    onSharedState: opts?.onSharedState,
   });
   authorityStatus.set('connecting');
   authority
@@ -112,6 +115,7 @@ export function withAuthorityReflect(
     ...platform,
     remoteAuthorityStatus: authorityStatus,
     remoteConsole: authority.remoteConsole,
+    publishSharedState: (key, data) => authority.setSharedState(key, data),
     stateStore: {
       ...inner,
       save: async (windowId, state) => {

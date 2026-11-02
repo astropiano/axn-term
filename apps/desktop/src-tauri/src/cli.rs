@@ -89,6 +89,8 @@ Usage:
   axn-term session summary [text]     Set this terminal's session summary (no text clears it)
   axn-term session rename [name]      Rename this terminal's session (no name resets it)
   axn-term session focus [tab]        Bring a view of this session to the front
+  axn-term session set <flags…>       Update this session (--summary, --name/--title)
+  axn-term session create [path]      Open a new session (same flags as `axn-session create`)
   axn-term session command <axn-…>    Run any axn-* or plugin command for this session
   axn-term --help                     Show this help
   axn-term --version                  Print the version
@@ -128,9 +130,22 @@ pub fn run_cli(args: &[String]) -> Option<i32> {
             println!("axn-term {}", env!("CARGO_PKG_VERSION"));
             Some(0)
         }
-        // Unknown arguments (e.g. a desktop launcher passing %u) start the app.
+        // Options and paths/URLs (a launcher passing %u, macOS -psn_…) start
+        // the app; a bare word is a mistyped subcommand, not a second GUI.
+        word if looks_like_command(word) => {
+            eprintln!("axn-term: unknown command '{word}'\n");
+            eprint!("{HELP}");
+            Some(2)
+        }
         _ => None,
     }
+}
+
+fn looks_like_command(arg: &str) -> bool {
+    !arg.is_empty()
+        && !arg.starts_with('-')
+        && !arg.contains(['/', '\\', ':', '.', '%'])
+        && !Path::new(arg).exists()
 }
 
 struct InstallArgs {
@@ -327,10 +342,20 @@ mod tests {
     }
 
     #[test]
-    fn gui_when_no_args_or_unknown_args() {
+    fn gui_when_no_args_options_or_paths() {
         assert_eq!(run_cli(&args(&[])), None);
         assert_eq!(run_cli(&args(&["--gtk-flag"])), None);
+        assert_eq!(run_cli(&args(&["-psn_0_12345"])), None);
         assert_eq!(run_cli(&args(&["some-file.txt"])), None);
+        assert_eq!(run_cli(&args(&["/home/me/project"])), None);
+        assert_eq!(run_cli(&args(&["axn-term://open"])), None);
+        assert_eq!(run_cli(&args(&["src"])), None, "an existing path");
+    }
+
+    #[test]
+    fn a_mistyped_subcommand_is_an_error_not_a_second_gui() {
+        assert_eq!(run_cli(&args(&["sesion", "summary"])), Some(2));
+        assert_eq!(run_cli(&args(&["instal"])), Some(2));
     }
 
     #[test]
@@ -376,11 +401,13 @@ mod tests {
 /// verbatim — the hidden commands parse the rest of the line themselves
 /// (summary/rename take it whole, matching outer quotes stripped).
 fn session_line(args: &[String]) -> Result<String, String> {
-    let (sub, rest) = args.split_first().ok_or("usage: axn-term session <summary|rename|focus|command> …")?;
+    let (sub, rest) = args.split_first().ok_or("usage: axn-term session <summary|rename|focus|set|create|command> …")?;
     let command = match sub.as_str() {
         "summary" => "axn-session-summary".to_string(),
         "rename" => "axn-rename".to_string(),
         "focus" => "axn-focus".to_string(),
+        "set" => "axn-session set".to_string(),
+        "create" => "axn-session create".to_string(),
         "command" => {
             let (cmd, rest) = rest.split_first().ok_or("usage: axn-term session command <axn-command> [args…]")?;
             if !cmd.starts_with("axn-") {
@@ -448,6 +475,8 @@ mod session_tests {
         assert_eq!(session_line(&args(&["summary", "fixing the build"])).unwrap(), "axn-session-summary fixing the build");
         assert_eq!(session_line(&args(&["summary"])).unwrap(), "axn-session-summary");
         assert_eq!(session_line(&args(&["rename", "api", "work"])).unwrap(), "axn-rename api work");
+        assert_eq!(session_line(&args(&["set", "--summary", "wip"])).unwrap(), "axn-session set --summary wip");
+        assert_eq!(session_line(&args(&["create", "src"])).unwrap(), "axn-session create src");
         assert_eq!(session_line(&args(&["command", "axn-workflow-move", "review"])).unwrap(), "axn-workflow-move review");
     }
 

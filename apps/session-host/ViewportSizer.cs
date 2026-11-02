@@ -1,6 +1,6 @@
 using Ramphastos.Core;
 
-namespace Astropiano.AxnTerm.SessionHost;
+namespace AxnTerm.SessionHost;
 
 /// <summary>
 /// Per-connection terminal geometry with smallest-wins semantics

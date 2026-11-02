@@ -90,6 +90,7 @@ function rememberAgyLast(ctx: SessionViewContext & PluginApi): void {
 export const antigravityPlugin: SessionViewPlugin = {
   id: 'antigravity',
   title: 'antigravity',
+  logo: 'Bot',
   version: '0.1.0',
   stateKey: 'antigravity',
   settingsKey: 'antigravity',

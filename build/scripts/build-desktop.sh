@@ -3,16 +3,16 @@
 
 set -euo pipefail
 
-SOURCE=/src
-BUILD=/build/source
-OUTPUT=/output
-CARGO_HOME=/cache/cargo
-CARGO_TARGET_DIR=/cache/cargo/target
-PNPM_STORE_DIR=/cache/pnpm/store
-VITE_CACHE_DIR=/cache/vite
+SOURCE="${SOURCE:-/src}"
+BUILD="${BUILD:-/build/source}"
+OUTPUT="${OUTPUT:-/output}"
+CARGO_HOME="${CARGO_HOME:-/cache/cargo}"
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/cache/cargo/target}"
+PNPM_STORE_DIR="${PNPM_STORE_DIR:-/cache/pnpm/store}"
+VITE_CACHE_DIR="${VITE_CACHE_DIR:-/cache/vite}"
 
 echo "==> Preparing build directory..."
-mkdir -p /build "$OUTPUT" "$CARGO_TARGET_DIR" "$PNPM_STORE_DIR" "$VITE_CACHE_DIR"
+mkdir -p "$(dirname "$BUILD")" "$OUTPUT" "$CARGO_TARGET_DIR" "$PNPM_STORE_DIR" "$VITE_CACHE_DIR"
 rm -rf "$BUILD"
 rsync -a \
   --exclude='.git' \
@@ -23,6 +23,12 @@ rsync -a \
   "$SOURCE/" "$BUILD/"
 
 cd "$BUILD"
+
+# Release builds (CI) stamp the tag's version into the build copy only.
+if [[ -n "${APP_VERSION:-}" ]]; then
+  echo "==> Setting app version to $APP_VERSION..."
+  "$BUILD/build/scripts/set-version.sh" "$APP_VERSION"
+fi
 
 export CARGO_HOME
 export CARGO_TARGET_DIR
@@ -50,7 +56,9 @@ cp -a "$CARGO_TARGET_DIR/release/bundle/"* "$OUTPUT/desktop/bundle/" 2>/dev/null
 echo "==> Building Arch Linux package..."
 OUTPUT_DIR="$OUTPUT/desktop" "$BUILD/build/scripts/package-arch.sh" "$CARGO_TARGET_DIR/release/axn-term"
 
-echo "==> Fixing output ownership..."
-chown -R "${HOST_UID}:${HOST_GID}" "$OUTPUT/desktop"
+if [[ -n "${HOST_UID:-}" ]]; then
+  echo "==> Fixing output ownership..."
+  chown -R "${HOST_UID}:${HOST_GID:-$HOST_UID}" "$OUTPUT/desktop"
+fi
 
 echo "==> Desktop build complete: $OUTPUT/desktop"

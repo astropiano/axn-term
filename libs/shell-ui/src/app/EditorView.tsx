@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
-import { Save } from 'lucide-react';
+import { Save, Search } from 'lucide-react';
 import { useSettings } from '../SettingsProvider';
 import { monaco, applyAxnMonacoTheme, languageForPath, AXN_MONACO_THEME } from './monacoSetup';
 import { resolvePath, type FileService } from './fileService';
 import { isMac } from '../platform';
 
 const saveTip = isMac ? 'Save (⌘S / Ctrl+S)' : 'Save (Ctrl+S)';
+const findTip = isMac ? 'Find (⌘F / Ctrl+F)' : 'Find (Ctrl+F)';
 
 export interface EditorHandle {
   isDirty(): boolean;
@@ -34,6 +35,10 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Saving is only allowed once the file was read: after a failed read the
+  // buffer is empty, and writing it would truncate the file.
+  const [loaded, setLoaded] = useState(false);
+  const loadedRef = useRef(false);
   const dirtyRef = useRef(false);
   const savingRef = useRef(false);
   const onDirtyChangeRef = useRef(onDirtyChange);
@@ -53,7 +58,7 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
 
   const save = useCallback(async () => {
     const editor = editorRef.current;
-    if (!editor || savingRef.current) return false;
+    if (!editor || savingRef.current || !loadedRef.current) return false;
     const contents = editor.getValue();
     savingRef.current = true;
     setSaving(true);
@@ -85,6 +90,8 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
   useEffect(() => {
     if (!containerRef.current) return;
     let disposed = false;
+    loadedRef.current = false;
+    setLoaded(false);
 
     applyAxnMonacoTheme(activeTheme);
     const editor = monaco.editor.create(containerRef.current, {
@@ -98,6 +105,7 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
       padding: { top: 8 },
+      readOnly: true,
     });
     editorRef.current = editor;
 
@@ -126,8 +134,13 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
         if (disposed) return;
         editor.setValue(contents);
         markDirty(false);
+        editor.updateOptions({ readOnly: false });
+        loadedRef.current = true;
+        setLoaded(true);
       })
-      .catch((e) => setError(String(e)));
+      .catch((e) => {
+        if (!disposed) setError(`${String(e)} (not loaded, saving disabled)`);
+      });
 
     return () => {
       disposed = true;
@@ -172,8 +185,26 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
         )}
         <button
           type="button"
+          // Monaco's find contribution is always bundled — this is just the
+          // discoverable/touch trigger for it (mobile has no ⌘F).
+          onClick={() => {
+            const editor = editorRef.current;
+            if (editor) {
+              editor.focus();
+              editor.getAction('actions.find')?.run();
+            }
+          }}
+          disabled={!!error}
+          data-tip={findTip}
+          aria-label={findTip}
+          className="flex h-5 w-5 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--accent)] disabled:opacity-50"
+        >
+          <Search className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
           onClick={() => void save()}
-          disabled={saving}
+          disabled={saving || !loaded}
           data-tip={saveTip}
           aria-label={saveTip}
           className="flex h-5 w-5 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--accent)] disabled:opacity-50"

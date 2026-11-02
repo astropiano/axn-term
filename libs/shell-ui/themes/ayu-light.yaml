@@ -1,6 +1,7 @@
 # Ayu Light (github.com/ayu-theme). Its yellows, cyans and blues were too pale
 # for text on white (down to 1.8:1); they keep their hue and are darkened. White
 # was pure white on a near-white background; it is a mid grey now.
+# Palette: Ayu <https://github.com/ayu-theme/ayu-colors>, MIT. Copyright (c) Konstantin Pschera <me@kons.ch>.
 # Adjusted for legibility (hue kept, lightness moved):
 #   foreground: #5C6166 -> #52575B
 #   red: #E65050 -> #E02828
