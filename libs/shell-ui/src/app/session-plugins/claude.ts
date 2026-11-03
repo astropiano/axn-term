@@ -9,6 +9,7 @@ import {
   forgetLastAgentSession,
   rememberLastAgentSession,
 } from './agentResume';
+import { agentResumePanel } from './agentResumePanel';
 import { agentCommand } from './devWorkflow';
 import { promptArg, shellWord } from '../../shellQuote';
 import { shellQuote } from '../../shellQuote';
@@ -392,6 +393,15 @@ export const claudePlugin: SessionViewPlugin = {
       type: 'boolean',
       default: false,
     },
+    {
+      key: 'resumeButton',
+      label: 'Show resume button',
+      description:
+        "Show a 'Resume claude session' button in the session panel while the " +
+        'last claude session can be resumed (the session context menu offers it regardless).',
+      type: 'boolean',
+      default: true,
+    },
   ],
   // Bound to the claude process: its rendered todo list drives
   // session.tasks/progress, so generic screen-guessed bars stay out of the way.
@@ -497,6 +507,7 @@ export const claudePlugin: SessionViewPlugin = {
   // "Resume claude session '<id>'" — the shared last-session capability;
   // offered on idle sessions once a claude conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'claude'),
+  render: (ctx) => agentResumePanel(ctx, 'claude'),
 
   // A submitted command starts new shell work — a terminal badge left by a
   // finished agent run no longer applies, and a stale needs-you flag is gone.

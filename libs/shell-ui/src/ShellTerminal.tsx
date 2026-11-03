@@ -8,7 +8,7 @@ import type { ShellSession } from './types';
 import { useSettings } from './SettingsProvider';
 import { getXtermColors, resolveShellFont } from './themes';
 import { registerTerminal, takePendingReplay, takeReloadReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, type TerminalInput } from './terminalRegistry';
-import { applyTerminalRenderer, createTerminalInput, oscReportTarget, repaintTerminal, safely } from './terminalRenderer';
+import { applyTerminalRenderer, createTerminalInput, isUserInput, oscReportTarget, repaintTerminal, safely } from './terminalRenderer';
 import { acquirePty } from './ptyLifetime';
 import { foregroundStatusPatch } from './foregroundStatus';
 import {
@@ -51,6 +51,12 @@ interface ShellTerminalProps {
    */
   onCompleteInput?: (sessionId: string, line: string) => Promise<string[]>;
   updateSession?: (sessionId: string, patch: Partial<ShellSession>) => void;
+  /**
+   * Fired on input the user produced (keys, paste, key bar, mouse reports)
+   * — never for terminal-generated query replies. Used to clear the
+   * session's attention flags once the user engages with it.
+   */
+  onUserInput?: (sessionId: string) => void;
   isVisible?: boolean;
   onSessionReady?: (session: ShellSession) => void;
 }
@@ -91,6 +97,7 @@ export function ShellTerminal({
   onSessionCommand,
   onCompleteInput,
   updateSession,
+  onUserInput,
   isVisible,
   onSessionReady,
 }: ShellTerminalProps) {
@@ -115,6 +122,8 @@ export function ShellTerminal({
   onCompleteInputRef.current = onCompleteInput;
   const onSessionReadyRef = useRef(onSessionReady);
   onSessionReadyRef.current = onSessionReady;
+  const onUserInputRef = useRef(onUserInput);
+  onUserInputRef.current = onUserInput;
   const { activeTheme, settings } = useSettings();
   const { services } = useShellServices();
   // Disposes the active GPU renderer addon when the setting hot-swaps; the
@@ -741,6 +750,7 @@ export function ShellTerminal({
             !event.metaKey;
           if (isShiftEnter) {
             if (event.type === 'keydown') {
+              onUserInputRef.current?.(sessionId);
               ptyInput.write('\x1b[200~\n\x1b[201~');
             }
             return false;
@@ -752,6 +762,7 @@ export function ShellTerminal({
         // through here so hidden-command interception and the post-Enter cwd
         // poll apply identically to injected keys.
         const sendInput = (data: string) => {
+          if (isUserInput(data)) onUserInputRef.current?.(sessionId);
           if (hiddenInput(data)) return;
 
           ptyInput.send(data);

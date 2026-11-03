@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest';
-import { applyTerminalRenderer, createTerminalInput, repaintTerminal } from './terminalRenderer';
+import { applyTerminalRenderer, createTerminalInput, isUserInput, repaintTerminal } from './terminalRenderer';
 import type { Terminal } from '@xterm/xterm';
 import type { ITerminalAddon } from '@xterm/xterm';
 
@@ -142,6 +142,38 @@ describe('repaintTerminal', () => {
     };
     expect(() => repaintTerminal(dead as never)).not.toThrow();
     return new Promise<void>((resolve) => setTimeout(resolve, 50));
+  });
+});
+
+describe('isUserInput', () => {
+  it('is true for typed input and pastes', () => {
+    expect(isUserInput('x')).toBe(true);
+    expect(isUserInput('ls -la\r')).toBe(true);
+    expect(isUserInput('\x1b[200~pasted text\x1b[201~')).toBe(true);
+  });
+
+  it('is true for user-generated escape sequences', () => {
+    expect(isUserInput('\x1b[A')).toBe(true); // arrow up
+    expect(isUserInput('\x1b[<0;10;5M')).toBe(true); // mouse click
+    expect(isUserInput('\x1b[1;5u')).toBe(true); // kitty key press
+  });
+
+  it('is false for terminal-generated query replies', () => {
+    expect(isUserInput('\x1b]10;rgb:4f4f/6060/6666\x07')).toBe(false); // OSC color
+    expect(isUserInput('\x1b]10;rgb:aaaa/bbbb/cccc\x1b\\')).toBe(false); // ST-ended
+    expect(isUserInput('\x1b[?1;2c')).toBe(false); // DA1 — devin's sentinel
+    expect(isUserInput('\x1b[1;5R')).toBe(false); // CPR
+    expect(isUserInput('\x1b[?1;2y')).toBe(false); // DECRPM
+    expect(isUserInput('\x1b[?1u')).toBe(false); // kitty keyboard flags
+    expect(isUserInput('\x1b[8;24;80t')).toBe(false); // window size reply
+    expect(isUserInput('\x1b[0n')).toBe(false); // status ok
+    expect(isUserInput('\x1bP$r q\x1b\\')).toBe(false); // DECRQSS
+  });
+
+  it('is false for a batch of only replies, true when mixed with input', () => {
+    const replies = '\x1b]10;rgb:aaaa/bbbb/cccc\x07\x1b[?1;2c';
+    expect(isUserInput(replies)).toBe(false);
+    expect(isUserInput(replies + 'x')).toBe(true);
   });
 });
 

@@ -11,14 +11,19 @@ import {
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import type { ShellSession, SessionAttention} from '../../types';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
+import { MrDescription } from './mrDescription';
 import { shellQuote } from '../../shellQuote';
 import { sessionLastSelectedAt } from '../attention';
 import { getSessionViewPlugins, isPluginEnabled } from './index';
 import { PluginIcon } from '../SessionPanel';
 import type { PluginSettings } from '../pluginSettings';
 import {
+  authCommand,
+  authStatusHint,
+  defaultHostNote,
   classifyCliError,
   forgeCliCommand,
+  forgeHost,
   forgeOfRemote,
   forgeRailMode,
   type CliFailure,
@@ -459,6 +464,8 @@ const MR_OVERVIEW_QUERY = `query {
 
 export interface MrOverview {
   status: 'idle' | 'loading' | 'ready' | 'error';
+  /** Host the last refresh queried (`hostname` setting); `undefined` = the CLI's default host. */
+  host?: string;
   error?: string;
   /** Why the last refresh failed; kept through `loading` so the rail doesn't flicker. */
   failure?: CliFailure;
@@ -578,8 +585,8 @@ export function mrListCommand(branch: string): string {
 
 /** The app-wide overview command (`--hostname` for self-hosted GitLab). */
 export function mrOverviewCommand(hostname?: unknown): string {
-  const host =
-    typeof hostname === 'string' && hostname.trim() ? ` --hostname ${shellQuote(hostname.trim())}` : '';
+  const name = forgeHost(hostname);
+  const host = name ? ` --hostname ${shellQuote(name)}` : '';
   // One line, single-quoted: no literal newlines or shell expansion inside.
   const query = MR_OVERVIEW_QUERY.replace(/\s+/g, ' ');
   return forgeCliCommand('glab', `api graphql${host} -f query=${shellQuote(query)}`);
@@ -599,7 +606,8 @@ export function refreshMrOverview(settings?: {
   hostname?: unknown;
 }): Promise<void> {
   refreshInFlight ??= (async () => {
-    setOverview({ ...overview, status: 'loading' });
+    const host = forgeHost(settings?.hostname);
+    setOverview({ ...overview, host, status: 'loading' });
     try {
       const rt = appRuntime();
       if (!rt) throw new Error('no session available for glab');
@@ -630,6 +638,7 @@ export function refreshMrOverview(settings?: {
       const review = (user.reviewRequestedMergeRequests?.nodes ?? []).map(normalizeMr);
       setOverview({
         status: 'ready',
+        host,
         username: user.username ?? '',
         mine: mergeMine(assigned, authored),
         review,
@@ -639,6 +648,7 @@ export function refreshMrOverview(settings?: {
       const error = e instanceof Error ? e.message : String(e);
       setOverview({
         ...overview,
+        host,
         status: 'error',
         error,
         failure: classifyCliError('glab', error),
@@ -800,9 +810,9 @@ function GlabMrRail({
 
   const title =
     mode === 'signed-out'
-      ? 'GitLab merge requests — not signed in.\nRun `glab auth login` in a shell to see your MRs here.'
+      ? `GitLab merge requests — not signed in.\nRun \`${authCommand('glab', 'login', data.host)}\` in a shell to see your MRs here.`
       : mode === 'error'
-      ? `merge requests unavailable\nglab: ${data.error ?? 'unknown error'}${isAuthHintRelevant(data.error) ? '\nCheck `glab auth status` in a shell.' : ''}`
+      ? `merge requests unavailable\nglab: ${data.error ?? 'unknown error'}${isAuthHintRelevant(data.error) ? `\n${authStatusHint('glab', 'GitLab', data.host)}` : ''}`
       : [
           `${mineAction}/${data.mine.length} assigned/authored MRs need action (open threads, conflicts, failing pipeline or approved)`,
           `${reviewWaiting}/${data.review.length} review requests waiting for you`,
@@ -876,14 +886,14 @@ function MrRow({ mr, badge, env }: { mr: GlabMrItem; badge?: string; env: MrRowE
   const threads = openThreads(mr);
   return (
     <div className="flex items-center gap-1">
-      <a
-        href={mr.url}
-        target="_blank"
-        rel="noreferrer"
-        className="min-w-0 flex-1 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
-        data-tip={`${mr.project}\n${mr.sourceBranch} → ${mr.targetBranch}`}
-      >
-        <span className="flex items-center gap-2">
+      <div className="min-w-0 flex-1 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]">
+        <a
+          href={mr.url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-2"
+          data-tip={`${mr.project}\n${mr.sourceBranch} → ${mr.targetBranch}`}
+        >
           <span className="shrink-0 font-semibold text-[var(--accent)]">{mr.reference}</span>
           <span className="max-w-44 shrink-0 truncate text-[var(--text-secondary)]">
             {projectShort(mr.project)}
@@ -922,13 +932,9 @@ function MrRow({ mr, badge, env }: { mr: GlabMrItem; badge?: string; env: MrRowE
               approved
             </span>
           )}
-        </span>
-        {mr.description && (
-          <span className="mt-0.5 line-clamp-3 whitespace-pre-line break-words text-[10px] text-[var(--text-secondary)]">
-            {mr.description}
-          </span>
-        )}
-      </a>
+        </a>
+        {mr.description && <MrDescription markdown={mr.description} />}
+      </div>
       <MrActions mr={mr} env={env} />
     </div>
   );
@@ -987,12 +993,21 @@ function sortReview(mrs: GlabMrItem[], me: string): GlabMrItem[] {
   );
 }
 
-function GlabMrView({ close, env }: { close: () => void; env: MrRowEnv }) {
+function GlabMrView({
+  close,
+  env,
+  settings,
+}: {
+  close: () => void;
+  env: MrRowEnv;
+  /** The plugin's settings — carries `hostname`; without it the CLI queries its default host. */
+  settings?: { hostname?: unknown };
+}) {
   const data = useMrOverview();
   const me = data.username ?? '';
 
   useEffect(() => {
-    if (data.status === 'idle') void refreshMrOverview();
+    if (data.status === 'idle') void refreshMrOverview(settings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1016,7 +1031,7 @@ function GlabMrView({ close, env }: { close: () => void; env: MrRowEnv }) {
         <div className="flex-1" />
         <button
           type="button"
-          onClick={() => void refreshMrOverview()}
+          onClick={() => void refreshMrOverview(settings)}
           data-tip="Refresh"
           aria-label="Refresh"
           className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
@@ -1043,11 +1058,11 @@ function GlabMrView({ close, env }: { close: () => void; env: MrRowEnv }) {
               {data.failure === 'missing' ? (
                 <>
                   Install <code className="text-[var(--accent)]">glab</code> (https://gitlab.com/gitlab-org/cli), then
-                  run <code className="text-[var(--accent)]">glab auth login</code>.
+                  run <code className="text-[var(--accent)]">{authCommand('glab', 'login', data.host)}</code>.
                 </>
               ) : (
                 <>
-                  Run <code className="text-[var(--accent)]">glab auth login</code> in a shell to see your
+                  Run <code className="text-[var(--accent)]">{authCommand('glab', 'login', data.host)}</code> in a shell to see your
                   merge requests here.
                 </>
               )}
@@ -1059,8 +1074,11 @@ function GlabMrView({ close, env }: { close: () => void; env: MrRowEnv }) {
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
             {isAuthHintRelevant(data.error) && (
               <div className="text-[var(--text-secondary)]">
-                Check <code className="text-[var(--accent)]">glab auth status</code> in a shell.
+                Check <code className="text-[var(--accent)]">{authCommand('glab', 'status', data.host)}</code> in a shell.
               </div>
+            )}
+            {!data.host && (
+              <div className="mt-1 text-[var(--text-secondary)]">{defaultHostNote('glab', 'GitLab')}</div>
             )}
           </div>
         ) : (
@@ -1211,9 +1229,10 @@ export const glabMrPlugin: SessionViewPlugin = {
       sessionApi={sessionApi}
     />
   ),
-  renderView: ({ close, sessions, workspaces, selectSession, sessionApi }) => (
+  renderView: ({ pluginSettings, close, sessions, workspaces, selectSession, sessionApi }) => (
     <GlabMrView
       close={close}
+      settings={pluginSettings as { hostname?: unknown } | undefined}
       env={{ sessions, workspaces, apiFor: sessionApi, selectSession }}
     />
   ),

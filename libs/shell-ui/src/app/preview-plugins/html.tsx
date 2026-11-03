@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import DOMPurify, { type DOMPurify as Purifier } from 'dompurify';
 import { shellServices } from '../../services';
 import { useSettings } from '../../SettingsProvider';
@@ -123,6 +123,21 @@ async function enhanceDom(
 }
 
 /**
+ * Click handler for sanitized markup: anchors never navigate the webview,
+ * http(s) links open externally. Shared by HtmlPreview and MrDescription.
+ */
+export function previewLinkClick(e: ReactMouseEvent<HTMLElement>) {
+  const anchor = (e.target as HTMLElement).closest('a');
+  const href = anchor?.getAttribute('href');
+  if (!href) return;
+  e.preventDefault();
+  if (/^https?:/i.test(href)) {
+    const open = shellServices()?.openExternal ?? ((u: string) => window.open(u, '_blank', 'noopener'));
+    open(href);
+  }
+}
+
+/**
  * Renders an HTML string (sanitized) as a preview body. Used by the built-in
  * markdown/asciidoc/svg plugins and by external `.mjs` plugins whose `render`
  * returns a string.
@@ -151,16 +166,7 @@ export function HtmlPreview({ html, ctx }: { html: string; ctx: FilePreviewConte
       ref={ref}
       className="axn-prose"
       style={previewContainStyle}
-      onClick={(e) => {
-        const anchor = (e.target as HTMLElement).closest('a');
-        const href = anchor?.getAttribute('href');
-        if (!href) return;
-        e.preventDefault();
-        if (/^https?:/i.test(href)) {
-          const open = shellServices()?.openExternal ?? ((u: string) => window.open(u, '_blank', 'noopener'));
-          open(href);
-        }
-      }}
+      onClick={previewLinkClick}
       dangerouslySetInnerHTML={{ __html: clean }}
     />
   );

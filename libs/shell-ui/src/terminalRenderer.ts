@@ -195,6 +195,27 @@ const OSC_COLOR_REPORT_DELAY_MS = 75;
 /** A hung alive probe must not freeze input — deliver after this (fail-open). */
 const OSC_REPORT_PROBE_TIMEOUT_MS = 1000;
 
+/**
+ * Data xterm emits on the input channel *itself*, in answer to program
+ * queries — not user actions: OSC replies (color reports, icon title),
+ * private-CSI replies (DA `\x1b[?…c`, DECRPM `\x1b[?…y`, kitty keyboard
+ * `\x1b[?…u`), CPR (`\x1b[r;cR`), window replies (`\x1b[…t`), status
+ * (`\x1b[n`) and DCS replies (DECRQSS, XTGETTCAP). User keys never produce
+ * `?`-CSI; public key sequences (arrows, F-keys, mouse `…M`/`m`) are kept.
+ */
+const TERMINAL_REPLY_RE =
+  /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[\?[0-9;]*[a-zA-Z]|\x1b\[\d+;\d+(?:;\d+)?[Rt]|\x1b\[\d+n|\x1bP[^\x1b]*\x1b\\/g;
+
+/**
+ * True when an `onData` chunk carries user-produced input — false for
+ * chunks made entirely of terminal-generated query replies. Used to tell
+ * "the user did something in this session" (clears attention flags) apart
+ * from the terminal answering probes on its own.
+ */
+export function isUserInput(data: string): boolean {
+  return data.replace(TERMINAL_REPLY_RE, '') !== '';
+}
+
 export interface TerminalInput {
   /** Terminal input (xterm `onData`, key bar): OSC color reports are gated. */
   send: (data: string) => void;

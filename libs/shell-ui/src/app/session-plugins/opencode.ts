@@ -6,6 +6,7 @@ import {
   lastAgentSession,
   rememberLastAgentSession,
 } from './agentResume';
+import { agentResumePanel } from './agentResumePanel';
 import { agentCommand } from './devWorkflow';
 import { shellQuote, shellWord } from '../../shellQuote';
 
@@ -161,6 +162,15 @@ export const opencodePlugin: SessionViewPlugin = {
       type: 'boolean',
       default: false,
     },
+    {
+      key: 'resumeButton',
+      label: 'Show resume button',
+      description:
+        "Show a 'Resume opencode session' button in the session panel while the " +
+        'last opencode session can be resumed (the session context menu offers it regardless).',
+      type: 'boolean',
+      default: true,
+    },
   ],
   // Bound to the opencode process.
   processPattern: /^opencode/i,
@@ -251,6 +261,7 @@ export const opencodePlugin: SessionViewPlugin = {
   // "Resume opencode session" — the shared last-session capability; offered
   // on idle sessions once an opencode conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'opencode'),
+  render: (ctx) => agentResumePanel(ctx, 'opencode'),
 
   // OpenCode exits with the session (no graceful-close capture): keep the
   // last record so a different shell can still pick the conversation up.

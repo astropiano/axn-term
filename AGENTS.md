@@ -20,7 +20,9 @@
   `getTty`/`getForegroundProcess`/`getDefaultShell` — `getTty` reports the
   session PTY's controlling terminal so plugins can correlate tty-keyed
   out-of-band events like agent hooks; desktop-only) plus `ShellServices`
-  (clipboard, open-external, reveal, open-directory, optional `notify` —
+  (clipboard — `copyText` + optional `copyImage` RGBA pixels → desktop:
+  `clipboard_write_image` arboard command, web: PNG `ClipboardItem` —,
+  open-external, reveal, open-directory, optional `notify` —
   desktop: `tauri-plugin-notification`, web: Web `Notification`) plus an
   optional key-value `storage`
   (get/set — desktop: `kv_get`/`kv_set` Tauri commands over
@@ -615,7 +617,9 @@ refresh, `app/browserTree.ts` flattens them into rows; double-click/Enter
 still navigates into a folder), arrow-key/Backspace navigation, and right-click context
 menus built on the shared `ContextMenu` (`libs/shell-ui`) — per entry it
 hosts `PathActionMenu` (Open, Edit, Preview, Reveal in the OS file
-manager, Copy Path, and a content preview); on empty space it offers New
+manager, Copy Path, and a content preview — plus Copy, which puts the
+image itself on the clipboard via `services.copyImage`, shown once the
+preview decoded an image); on empty space it offers New
 file/New folder (inline name input in the listing, created via
 `writeTextFile`/`mkdir`), Copy path, Reveal, and Refresh. Clicking an
 image thumbnail in the hover card opens it in a preview tab.
@@ -633,7 +637,9 @@ with DOMPurify, and injected (that's the form external plugins use).
 `resolveFilePreviewPlugin` picks the first enabled matching plugin — the
 `text` fallback is registered last so it claims anything unhandled.
 
-Built-ins: `svg`, `image` (raster), `markdown`, `asciidoc`, `mermaid`
+Built-ins: `svg`, `image` (raster — also overlays a Copy button that puts
+the image itself on the clipboard via `services.copyImage`), `markdown`,
+`asciidoc`, `mermaid`
 (.mmd/.mermaid), `text` (fallback). marked/asciidoctor/mermaid/dompurify are
 lazy-loaded via dynamic `import()`. Markup post-processing
 (`preview-plugins/html.tsx`) renders `code.language-mermaid` blocks as
@@ -879,13 +885,27 @@ contribution — `Resume <agent> session '<name>'` — offered only while no
 process runs in the session (neither `session.process` nor
 `session.agentInput` set) and only by the agent owning the global last,
 so a menu shows at most one resume row; the click dispatches the stored
-line like a typed command so `onCommand` bookkeeping sees it. A restore's
+line like a typed command so `onCommand` bookkeeping sees it. Each record
+also carries a `title` — the conversation's display name captured at exit
+from the session's `autoName` (the agent's OSC title, e.g. a `/rename`
+name, with its own `<cli>: ` prefix stripped via `stripAgentTitlePrefix`)
+or the custom session name — and UI labels prefer it over the raw
+name/id. `agentResumePanel` (`agentResumePanel.tsx`) is the same offer as
+a `render`-hook button in the selected session's panel card, behind each
+agent plugin's `resume-button` setting (default on; the menu row shows
+regardless). Both go through the shared `resumableAgentLast` gate and
+`resumeAgentSession` dispatch. A restore's
 'gone' outcome clears a matching record (`forgetLastAgentSession`). Flags
 surface as a pulsing disc underlaying the session's process icon; `critical`
 (the default) is red, `warning` orange. `renderRail` plugins get a
 `setAppAttention(attention | null)` for app-level flags (e.g. the RAM plugin
 flagging memory pressure); app-level flags live in the in-memory store in
 `app/attention.ts` and aggregate with session flags into the rail's dot.
+Selecting a session clears its flags (`clearSessionAttention`, plugin flags
+and sub-shell `tab.hookAttention` alike — the latter also clears on user
+input into any of the session's terminals: `onUserInput` fires from
+`sendInput`/`Shift+Enter` on chunks `isUserInput` proves aren't
+terminal-generated query replies).
 The rail slot under the hamburger is a permanent `active/total` session
 counter (running processes / open sessions) — when flags are raised the
 pulsing dot + level icon render inside the same fixed-height slot (click
@@ -975,8 +995,9 @@ completes subcommand names and `run`/`rm` targets); paths resolve via `stat_path
 (`~` expands, nonexistent paths are flagged "not found" in the view). A
 filter row above the list matches label and path/command; Enter activates
 the top match. Right-clicking a path entry opens a context menu built on
-the shared `PathActionMenu` (Open/Edit/Preview/Reveal/Copy Path, or
-Open/Copy URL for links) with `extraItems` for bookmark-specific
+the shared `PathActionMenu` (Open/Edit/Preview/Reveal/Copy Path + Copy for
+decodable image previews, or Open/Copy URL for links) with `extraItems` for
+bookmark-specific
 Edit/Remove rows; command entries get a plain menu with Run/Type/Edit/Remove.
 
 The `glab-mr` plugin (`session-plugins/glabMr.tsx`) tracks GitLab merge
@@ -1199,7 +1220,9 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
   `getTty`/`getForegroundProcess`/`getDefaultShell` — `getTty` reports the
   session PTY's controlling terminal so plugins can correlate tty-keyed
   out-of-band events like agent hooks; desktop-only) plus `ShellServices`
-  (clipboard, open-external, reveal, open-directory, optional `notify` —
+  (clipboard — `copyText` + optional `copyImage` RGBA pixels → desktop:
+  `clipboard_write_image` arboard command, web: PNG `ClipboardItem` —,
+  open-external, reveal, open-directory, optional `notify` —
   desktop: `tauri-plugin-notification`, web: Web `Notification`) plus an
   optional key-value `storage`
   (get/set — desktop: `kv_get`/`kv_set` Tauri commands over
@@ -1728,7 +1751,9 @@ refresh, `app/browserTree.ts` flattens them into rows; double-click/Enter
 still navigates into a folder), arrow-key/Backspace navigation, and right-click context
 menus built on the shared `ContextMenu` (`libs/shell-ui`) — per entry it
 hosts `PathActionMenu` (Open, Edit, Preview, Reveal in the OS file
-manager, Copy Path, and a content preview); on empty space it offers New
+manager, Copy Path, and a content preview — plus Copy, which puts the
+image itself on the clipboard via `services.copyImage`, shown once the
+preview decoded an image); on empty space it offers New
 file/New folder (inline name input in the listing, created via
 `writeTextFile`/`mkdir`), Copy path, Reveal, and Refresh. Clicking an
 image thumbnail in the hover card opens it in a preview tab.
@@ -1746,7 +1771,9 @@ with DOMPurify, and injected (that's the form external plugins use).
 `resolveFilePreviewPlugin` picks the first enabled matching plugin — the
 `text` fallback is registered last so it claims anything unhandled.
 
-Built-ins: `svg`, `image` (raster), `markdown`, `asciidoc`, `mermaid`
+Built-ins: `svg`, `image` (raster — also overlays a Copy button that puts
+the image itself on the clipboard via `services.copyImage`), `markdown`,
+`asciidoc`, `mermaid`
 (.mmd/.mermaid), `text` (fallback). marked/asciidoctor/mermaid/dompurify are
 lazy-loaded via dynamic `import()`. Markup post-processing
 (`preview-plugins/html.tsx`) renders `code.language-mermaid` blocks as
@@ -1992,13 +2019,27 @@ contribution — `Resume <agent> session '<name>'` — offered only while no
 process runs in the session (neither `session.process` nor
 `session.agentInput` set) and only by the agent owning the global last,
 so a menu shows at most one resume row; the click dispatches the stored
-line like a typed command so `onCommand` bookkeeping sees it. A restore's
+line like a typed command so `onCommand` bookkeeping sees it. Each record
+also carries a `title` — the conversation's display name captured at exit
+from the session's `autoName` (the agent's OSC title, e.g. a `/rename`
+name, with its own `<cli>: ` prefix stripped via `stripAgentTitlePrefix`)
+or the custom session name — and UI labels prefer it over the raw
+name/id. `agentResumePanel` (`agentResumePanel.tsx`) is the same offer as
+a `render`-hook button in the selected session's panel card, behind each
+agent plugin's `resume-button` setting (default on; the menu row shows
+regardless). Both go through the shared `resumableAgentLast` gate and
+`resumeAgentSession` dispatch. A restore's
 'gone' outcome clears a matching record (`forgetLastAgentSession`). Flags
 surface as a pulsing disc underlaying the session's process icon; `critical`
 (the default) is red, `warning` orange. `renderRail` plugins get a
 `setAppAttention(attention | null)` for app-level flags (e.g. the RAM plugin
 flagging memory pressure); app-level flags live in the in-memory store in
 `app/attention.ts` and aggregate with session flags into the rail's dot.
+Selecting a session clears its flags (`clearSessionAttention`, plugin flags
+and sub-shell `tab.hookAttention` alike — the latter also clears on user
+input into any of the session's terminals: `onUserInput` fires from
+`sendInput`/`Shift+Enter` on chunks `isUserInput` proves aren't
+terminal-generated query replies).
 The rail slot under the hamburger is a permanent `active/total` session
 counter (running processes / open sessions) — when flags are raised the
 pulsing dot + level icon render inside the same fixed-height slot (click
@@ -2088,8 +2129,9 @@ completes subcommand names and `run`/`rm` targets); paths resolve via `stat_path
 (`~` expands, nonexistent paths are flagged "not found" in the view). A
 filter row above the list matches label and path/command; Enter activates
 the top match. Right-clicking a path entry opens a context menu built on
-the shared `PathActionMenu` (Open/Edit/Preview/Reveal/Copy Path, or
-Open/Copy URL for links) with `extraItems` for bookmark-specific
+the shared `PathActionMenu` (Open/Edit/Preview/Reveal/Copy Path + Copy for
+decodable image previews, or Open/Copy URL for links) with `extraItems` for
+bookmark-specific
 Edit/Remove rows; command entries get a plain menu with Run/Type/Edit/Remove.
 
 The `glab-mr` plugin (`session-plugins/glabMr.tsx`) tracks GitLab merge

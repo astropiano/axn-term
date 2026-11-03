@@ -1653,8 +1653,16 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           attention: null,
         });
       }
+      // Sub-shell tab flags live on the editor objects, not in pluginState.
+      if ((session.editors ?? []).some((t) => t.hookAttention)) {
+        updateSession(sessionId, {
+          editors: (session.editors ?? []).map((t) =>
+            t.hookAttention ? { ...t, hookAttention: null } : t,
+          ),
+        });
+      }
     },
-    [mergePluginState],
+    [mergePluginState, updateSession],
   );
 
   // Covers keyboard navigation and programmatic selection changes; clicks on
@@ -2373,6 +2381,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                     onSessionCommand={handleSessionCommand}
                     onCompleteInput={handleCompleteInput}
                     updateSession={updateSession}
+                    onUserInput={clearSessionAttention}
                     isVisible={isVisible && activeTab === 'shell'}
                     onSessionReady={handleSessionReady}
                   />
@@ -2426,6 +2435,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         onPreviewRequest={openPreview}
                         onSessionCommand={handleSessionCommand}
                         onCompleteInput={handleCompleteInput}
+                        onUserInput={clearSessionAttention}
                       />
                     ) : ed.kind === 'git' ? (
                       <GitInspectView

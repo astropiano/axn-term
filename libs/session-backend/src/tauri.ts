@@ -276,6 +276,13 @@ export const tauriServices: ShellServices = {
     invoke<void>('clipboard_write_text', { text }).catch((e: unknown) =>
       console.warn('[clipboard] write failed:', e),
     ),
+  copyImage: (image) =>
+    // Raw IPC body (no JSON/base64 copy of the pixels); size in headers.
+    invoke<void>(
+      'clipboard_write_image',
+      new Uint8Array(image.rgba.buffer, image.rgba.byteOffset, image.rgba.byteLength),
+      { headers: { 'x-width': String(image.width), 'x-height': String(image.height) } },
+    ).catch((e: unknown) => console.warn('[clipboard] image write failed:', e)),
   pasteText: () => invoke<string | null>('clipboard_read_text').then((t) => t ?? undefined),
   openExternal: (url) => openUrl(url).catch(() => {}),
   openDirectory: (path) => invoke('open_directory', { path }).catch(() => {}),

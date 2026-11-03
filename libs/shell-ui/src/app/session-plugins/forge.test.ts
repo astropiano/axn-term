@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import {
+  authCommand,
+  authStatusHint,
   classifyCliError,
   cliMissingMarker,
   forgeCliCommand,
+  forgeHost,
   forgeOfRemote,
   forgeRailMode,
   parseRemote,
@@ -122,5 +125,29 @@ describe('forgeRailMode', () => {
     expect(forgeRailMode({ failure: 'signed-out' })).toBe('signed-out');
     expect(forgeRailMode({ failure: 'error', fetchedAt: 1 })).toBe('error');
     expect(forgeRailMode({ fetchedAt: 1 })).toBe('counts');
+  });
+});
+
+describe('auth hints name the queried host', () => {
+  it('normalizes the hostname setting', () => {
+    expect(forgeHost('  gitlab.acme.io ')).toBe('gitlab.acme.io');
+    expect(forgeHost('   ')).toBeUndefined();
+    expect(forgeHost(undefined)).toBeUndefined();
+    expect(forgeHost(42)).toBeUndefined();
+  });
+
+  it('adds --hostname when a host was queried', () => {
+    expect(authCommand('glab', 'status', 'gitlab.acme.io')).toBe('glab auth status --hostname gitlab.acme.io');
+    expect(authCommand('gh', 'login')).toBe('gh auth login');
+  });
+
+  it('says the default host was queried when no hostname is set', () => {
+    expect(authStatusHint('glab', 'GitLab', 'gitlab.acme.io')).toBe(
+      'Check `glab auth status --hostname gitlab.acme.io` in a shell.',
+    );
+    const hint = authStatusHint('glab', 'GitLab');
+    expect(hint).toContain('Check `glab auth status` in a shell.');
+    expect(hint).toContain('default host');
+    expect(hint).toContain('GitLab hostname');
   });
 });

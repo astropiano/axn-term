@@ -73,7 +73,7 @@ msgstr "Renderer a celle per i terminali. Auto usa la GPU (WebGL) con fallback a
 msgid "Clients: {0}"
 msgstr "Client: {0}"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2395
+#: libs/shell-ui/src/app/ShellApp.tsx:2405
 msgid "Close tab"
 msgstr "Chiudi scheda"
 
@@ -107,9 +107,16 @@ msgstr "Connessione persa"
 #: libs/shell-ui/src/app/AppContextMenu.tsx:82
 #: libs/shell-ui/src/app/AppContextMenu.tsx:104
 #: libs/shell-ui/src/app/AppContextMenu.tsx:118
+#: libs/shell-ui/src/app/preview-plugins/image.tsx:65
 #: libs/shell-ui/src/PathActionMenu.tsx:215
+#: libs/shell-ui/src/PathActionMenu.tsx:304
 msgid "Copy"
 msgstr "Copia"
+
+#: libs/shell-ui/src/app/preview-plugins/image.tsx:61
+#: libs/shell-ui/src/PathActionMenu.tsx:300
+msgid "Copy image to clipboard"
+msgstr "Copia l'immagine negli appunti"
 
 #: libs/shell-ui/src/PathActionMenu.tsx:284
 #: libs/shell-ui/src/PathActionMenu.tsx:288
@@ -582,8 +589,9 @@ msgstr "Ripristina il nome del processo"
 #~ msgid "Resume {0} session{1}"
 #~ msgstr "Riprendi sessione {0}{1}"
 
-#. placeholder {0}: last.name ? ` '${last.name}'` : ''
-#: libs/shell-ui/src/app/session-plugins/agentResume.ts:149
+#. placeholder {0}: name ? ` '${name}'` : ''
+#: libs/shell-ui/src/app/session-plugins/agentResume.ts:240
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:38
 msgid "Resume {agent} session{0}"
 msgstr "Riprendi sessione {agent}{0}"
 
@@ -676,11 +684,11 @@ msgstr "Imposta cartella predefinita…"
 msgid "Settings"
 msgstr "Impostazioni"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:49
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:48
 msgid "shell"
 msgstr "shell"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:41
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:42
 msgid "Shell"
 msgstr "Shell"
 

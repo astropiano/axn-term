@@ -3,6 +3,7 @@ import { axnLog } from '../log';
 import { codexHookSpec } from './codexHooks';
 import { registerAgentLauncher } from './agentRegistry';
 import { agentResumeMenuItem, rememberLastAgentSession } from './agentResume';
+import { agentResumePanel } from './agentResumePanel';
 import { agentCommand } from './devWorkflow';
 import { shellQuote, shellWord } from '../../shellQuote';
 
@@ -75,6 +76,15 @@ export const codexPlugin: SessionViewPlugin = {
       type: 'boolean',
       default: false,
     },
+    {
+      key: 'resumeButton',
+      label: 'Show resume button',
+      description:
+        "Show a 'Resume codex session' button in the session panel while the " +
+        'last codex session can be resumed (the session context menu offers it regardless).',
+      type: 'boolean',
+      default: true,
+    },
   ],
   // Bound to the codex process.
   processPattern: /^codex/i,
@@ -117,6 +127,7 @@ export const codexPlugin: SessionViewPlugin = {
   // "Resume codex session" — the shared last-session capability; offered on
   // idle sessions once a codex conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'codex'),
+  render: (ctx) => agentResumePanel(ctx, 'codex'),
 
   // A submitted command starts new shell work — a terminal badge left by a
   // finished agent run no longer applies, and a stale needs-you flag is gone.

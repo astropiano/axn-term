@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseDockerDisk, parseDockerLive, parseDockerSize } from './docker';
-import { parsePs } from './dockerView';
+import { containerMatches, parsePs } from './dockerView';
 
 describe('parseDockerSize', () => {
   it('parses plain and unit-suffixed sizes', () => {
@@ -188,5 +188,22 @@ overlay 1000000 1000 999000 1% /var/lib/docker`);
 
   it('returns null when the markers are absent', () => {
     expect(parseDockerDisk('some unrelated output')).toBeNull();
+  });
+});
+
+describe('containerMatches', () => {
+  const [web, lonely] = parsePs(PS_SAMPLE);
+
+  it('matches everything on an empty query', () => {
+    expect(containerMatches(web, '')).toBe(true);
+    expect(containerMatches(web, '   ')).toBe(true);
+  });
+
+  it('matches name, image, service and project substrings', () => {
+    expect(containerMatches(web, 'proj-web')).toBe(true);
+    expect(containerMatches(web, 'axn-term')).toBe(true);
+    expect(containerMatches(web, 'WEB')).toBe(true);
+    expect(containerMatches(lonely, 'redis')).toBe(true);
+    expect(containerMatches(lonely, 'axn-term')).toBe(false);
   });
 });

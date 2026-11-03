@@ -521,13 +521,15 @@ export const dockerPlugin: SessionViewPlugin = {
       />
     </div>
   ),
-  renderView: ({ close, sessions, pluginSettings, selectSession, sessionApi }) => (
+  renderView: ({ close, sessions, pluginSettings, selectSession, sessionApi, appState, updateAppState }) => (
     <DockerView
       close={close}
       sessions={sessions}
       pluginSettings={pluginSettings}
       selectSession={selectSession}
       sessionApi={sessionApi}
+      appState={appState}
+      updateAppState={updateAppState}
     />
   ),
 };
