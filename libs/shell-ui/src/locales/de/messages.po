@@ -73,7 +73,7 @@ msgstr "Cell-Renderer für Terminals. Auto nutzt die GPU (WebGL) und fällt auto
 msgid "Clients: {0}"
 msgstr "Clients: {0}"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2395
+#: libs/shell-ui/src/app/ShellApp.tsx:2405
 msgid "Close tab"
 msgstr "Tab schließen"
 
@@ -107,9 +107,16 @@ msgstr "Verbindung verloren"
 #: libs/shell-ui/src/app/AppContextMenu.tsx:82
 #: libs/shell-ui/src/app/AppContextMenu.tsx:104
 #: libs/shell-ui/src/app/AppContextMenu.tsx:118
+#: libs/shell-ui/src/app/preview-plugins/image.tsx:65
 #: libs/shell-ui/src/PathActionMenu.tsx:215
+#: libs/shell-ui/src/PathActionMenu.tsx:304
 msgid "Copy"
 msgstr "Kopieren"
+
+#: libs/shell-ui/src/app/preview-plugins/image.tsx:61
+#: libs/shell-ui/src/PathActionMenu.tsx:300
+msgid "Copy image to clipboard"
+msgstr "Bild in die Zwischenablage kopieren"
 
 #: libs/shell-ui/src/PathActionMenu.tsx:284
 #: libs/shell-ui/src/PathActionMenu.tsx:288
@@ -582,8 +589,9 @@ msgstr "Auf Prozessname zurücksetzen"
 #~ msgid "Resume {0} session{1}"
 #~ msgstr "{0}-Session{1} fortsetzen"
 
-#. placeholder {0}: last.name ? ` '${last.name}'` : ''
-#: libs/shell-ui/src/app/session-plugins/agentResume.ts:149
+#. placeholder {0}: name ? ` '${name}'` : ''
+#: libs/shell-ui/src/app/session-plugins/agentResume.ts:240
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:38
 msgid "Resume {agent} session{0}"
 msgstr "{agent}-Sitzung fortsetzen{0}"
 
@@ -676,11 +684,11 @@ msgstr "Standardordner festlegen…"
 msgid "Settings"
 msgstr "Einstellungen"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:49
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:48
 msgid "shell"
 msgstr "Shell"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:41
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:42
 msgid "Shell"
 msgstr "Shell"
 

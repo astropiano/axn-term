@@ -13,7 +13,10 @@ import {
   forgetLastAgentSession,
   lastAgentSession,
   rememberLastAgentSession,
+  stripAgentTitlePrefix,
 } from './agentResume';
+import { agentResumePanel } from './agentResumePanel';
+import type { ReactElement } from 'react';
 import { devinPlugin } from './devinTasks';
 import { claudePlugin } from './claude';
 import { codexPlugin } from './codex';
@@ -46,6 +49,7 @@ function makeCtx(
   opts: {
     pluginState?: Record<string, unknown>;
     appData?: Record<string, unknown>;
+    pluginSettings?: Record<string, unknown>;
     runCommand?: (line: string) => string | false | undefined | Promise<string | false | undefined>;
   } = {},
 ): Harness {
@@ -81,7 +85,7 @@ function makeCtx(
     get pluginState() {
       return pluginStateStore[stateKey];
     },
-    pluginSettings: {},
+    pluginSettings: opts.pluginSettings ?? {},
     getSession: () => session,
     getSessionCount: () => 1,
     exec: async () => '',
@@ -464,5 +468,124 @@ describe('vibe plugin', () => {
     const h = makeCtx('vibe', { output: 'no hint' });
     vibePlugin.onProcessEnd?.(h.ctx);
     expect(lastOf(h)).toBeUndefined();
+  });
+});
+
+describe('stripAgentTitlePrefix', () => {
+  it('strips the agent id and its aliases before a separator', () => {
+    expect(stripAgentTitlePrefix('devin: grey-party', 'devin')).toBe('grey-party');
+    expect(stripAgentTitlePrefix('Claude — research the codebase', 'claude')).toBe(
+      'research the codebase',
+    );
+    expect(stripAgentTitlePrefix('agy - fix bug', 'antigravity')).toBe('fix bug');
+  });
+
+  it('leaves unrelated titles alone', () => {
+    expect(stripAgentTitlePrefix('My feature', 'claude')).toBe('My feature');
+    expect(stripAgentTitlePrefix('notadev: x', 'devin')).toBe('notadev: x');
+  });
+});
+
+describe('session title capture', () => {
+  it('records the process-reported title with the agent prefix stripped', () => {
+    const h = makeCtx('devin', { autoName: 'devin: grey-party' });
+    rememberLastAgentSession(h.ctx, 'devin', {
+      name: 'grey-party',
+      command: 'devin -r grey-party',
+    });
+    expect(lastOf(h)).toMatchObject({ title: 'grey-party' });
+  });
+
+  it('falls back to the custom session name', () => {
+    const h = makeCtx('claude', { name: 'My feature', customName: 'My feature' });
+    rememberLastAgentSession(h.ctx, 'claude', {
+      name: 'abc-1',
+      command: 'claude --resume abc-1',
+    });
+    expect(lastOf(h)).toMatchObject({ title: 'My feature' });
+  });
+
+  it('keeps an explicit caller-provided title', () => {
+    const h = makeCtx('devin', { autoName: 'devin: other' });
+    rememberLastAgentSession(h.ctx, 'devin', { command: 'devin -c', title: 'kept' });
+    expect(lastOf(h)).toMatchObject({ title: 'kept' });
+  });
+
+  it('does not persist the generic default session name', () => {
+    const h = makeCtx('devin', { name: 'session' });
+    rememberLastAgentSession(h.ctx, 'devin', { command: 'devin -c' });
+    expect((lastOf(h) as { title?: string }).title).toBeUndefined();
+  });
+
+  it('a changed title re-stamps the record', () => {
+    const h = makeCtx('claude', { autoName: 'first title' }, {
+      appData: { last: { name: 'abc', command: 'claude --resume abc', at: 5 } },
+    });
+    rememberLastAgentSession(h.ctx, 'claude', { name: 'abc', command: 'claude --resume abc' });
+    expect(lastOf(h)).toMatchObject({ title: 'first title', at: expect.any(Number) });
+    expect((lastOf(h) as { at: number }).at).toBeGreaterThan(5);
+  });
+});
+
+describe('agentResumeMenuItem labels', () => {
+  it('prefers the display title over the raw session id', () => {
+    const h = makeCtx('claude', {}, {
+      appData: {
+        last: {
+          name: 'abc-123',
+          title: 'Research the codebase',
+          command: 'claude --resume abc-123',
+          at: 1,
+        },
+      },
+    });
+    expect(agentResumeMenuItem(h.ctx, 'claude')[0].label).toBe(
+      "Resume claude session 'Research the codebase'",
+    );
+  });
+});
+
+describe('agentResumePanel', () => {
+  const last = {
+    name: 'grey-party',
+    title: 'Grey Party',
+    command: `cd '/repo' && devin -r grey-party`,
+    at: 1,
+  };
+
+  it('renders a resume button on an idle session', () => {
+    const h = makeCtx('devin', {}, { appData: { last } });
+    const el = agentResumePanel(h.ctx, 'devin') as ReactElement | null;
+    expect(el).not.toBeNull();
+  });
+
+  it('is hidden while a process runs in the session', () => {
+    const h = makeCtx('devin', { process: 'zsh' }, { appData: { last } });
+    expect(agentResumePanel(h.ctx, 'devin')).toBeNull();
+  });
+
+  it('is hidden when the resume-button setting is off', () => {
+    const h = makeCtx('devin', {}, {
+      appData: { last },
+      pluginSettings: { resumeButton: false },
+    });
+    expect(agentResumePanel(h.ctx, 'devin')).toBeNull();
+    // The context-menu row is offered regardless.
+    expect(agentResumeMenuItem(h.ctx, 'devin')).toHaveLength(1);
+  });
+
+  it('is hidden when another agent owns the global last', () => {
+    const h = makeCtx('devin', {}, { appData: { last } });
+    const claude = makeCtx('claude');
+    rememberLastAgentSession(claude.ctx, 'claude', { command: 'claude -c' });
+    expect(agentResumePanel(h.ctx, 'devin')).toBeNull();
+  });
+
+  it('clicking the button writes the stored command into the PTY', async () => {
+    const h = makeCtx('devin', {}, { appData: { last } });
+    const el = agentResumePanel(h.ctx, 'devin') as ReactElement;
+    const button = el.props.children as ReactElement<{ onClick: () => void }>;
+    button.props.onClick();
+    await vi.waitFor(() => expect(h.writes).toEqual([`${last.command}\r`]));
   });
 });

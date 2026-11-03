@@ -16,10 +16,15 @@ import { getSessionViewPlugins, isPluginEnabled } from './index';
 import { PluginIcon } from '../SessionPanel';
 import type { PluginSettings } from '../pluginSettings';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
+import { MrDescription } from './mrDescription';
 import { shellQuote } from '../../shellQuote';
 import {
+  authCommand,
+  authStatusHint,
+  defaultHostNote,
   classifyCliError,
   forgeCliCommand,
+  forgeHost,
   forgeOfRemote,
   forgeRailMode,
   remoteOwner,
@@ -495,6 +500,8 @@ const PR_OVERVIEW_QUERY = `query {
 
 export interface PrOverview {
   status: 'idle' | 'loading' | 'ready' | 'error';
+  /** Host the last refresh queried (`hostname` setting); `undefined` = the CLI's default host. */
+  host?: string;
   error?: string;
   /** Why the last refresh failed; kept through `loading` so the rail doesn't flicker. */
   failure?: CliFailure;
@@ -595,8 +602,8 @@ let refreshInFlight: Promise<void> | null = null;
 
 /** The app-wide overview command (`--hostname` for GHES). */
 export function overviewCommand(hostname?: unknown): string {
-  const host =
-    typeof hostname === 'string' && hostname.trim() ? ` --hostname ${shellQuote(hostname.trim())}` : '';
+  const name = forgeHost(hostname);
+  const host = name ? ` --hostname ${shellQuote(name)}` : '';
   // One line, single-quoted: no literal newlines or shell expansion inside.
   const query = PR_OVERVIEW_QUERY.replace(/\s+/g, ' ');
   return forgeCliCommand('gh', `api graphql${host} -f query=${shellQuote(query)}`);
@@ -616,7 +623,8 @@ export function refreshPrOverview(settings?: {
   hostname?: unknown;
 }): Promise<void> {
   refreshInFlight ??= (async () => {
-    setOverview({ ...overview, status: 'loading' });
+    const host = forgeHost(settings?.hostname);
+    setOverview({ ...overview, host, status: 'loading' });
     try {
       const rt = appRuntime();
       if (!rt) throw new Error('no session available for gh');
@@ -639,6 +647,7 @@ export function refreshPrOverview(settings?: {
         (c?.nodes ?? []).filter((n): n is RawGqlPr => !!n).map(normalizePr);
       setOverview({
         status: 'ready',
+        host,
         username: user.login ?? '',
         mine: mergeMine(nodes(parsed.data?.assigned), nodes(parsed.data?.authored)),
         review: nodes(parsed.data?.review),
@@ -648,6 +657,7 @@ export function refreshPrOverview(settings?: {
       const error = e instanceof Error ? e.message : String(e);
       setOverview({
         ...overview,
+        host,
         status: 'error',
         error,
         failure: classifyCliError('gh', error),
@@ -818,9 +828,9 @@ function GhPrRail({
 
   const title =
     mode === 'signed-out'
-      ? 'GitHub pull requests — not signed in.\nRun `gh auth login` in a shell to see your PRs here.'
+      ? `GitHub pull requests — not signed in.\nRun \`${authCommand('gh', 'login', data.host)}\` in a shell to see your PRs here.`
       : mode === 'error'
-      ? `pull requests unavailable\ngh: ${data.error ?? 'unknown error'}\nCheck \`gh auth status\` in a shell.`
+      ? `pull requests unavailable\ngh: ${data.error ?? 'unknown error'}\n${authStatusHint('gh', 'GitHub', data.host)}`
       : [
           `${mineAction}/${data.mine.length} assigned/authored PRs need action (open threads, conflicts, failing checks, changes requested or approved)`,
           `${reviewWaiting}/${data.review.length} review requests waiting for you`,
@@ -894,14 +904,14 @@ function PrRow({ pr, badge, env }: { pr: GhPrItem; badge?: string; env: MrRowEnv
   const threads = openThreads(pr);
   return (
     <div className="flex items-center gap-1">
-      <a
-        href={pr.url}
-        target="_blank"
-        rel="noreferrer"
-        className="min-w-0 flex-1 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
-        data-tip={`${pr.project}\n${pr.sourceBranch} → ${pr.targetBranch}`}
-      >
-        <span className="flex items-center gap-2">
+      <div className="min-w-0 flex-1 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]">
+        <a
+          href={pr.url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-2"
+          data-tip={`${pr.project}\n${pr.sourceBranch} → ${pr.targetBranch}`}
+        >
           <span className="shrink-0 font-semibold text-[var(--accent)]">{pr.reference}</span>
           <span className="max-w-44 shrink-0 truncate text-[var(--text-secondary)]">
             {projectShort(pr.project)}
@@ -946,13 +956,9 @@ function PrRow({ pr, badge, env }: { pr: GhPrItem; badge?: string; env: MrRowEnv
               approved
             </span>
           )}
-        </span>
-        {pr.description && (
-          <span className="mt-0.5 line-clamp-3 whitespace-pre-line break-words text-[10px] text-[var(--text-secondary)]">
-            {pr.description}
-          </span>
-        )}
-      </a>
+        </a>
+        {pr.description && <MrDescription markdown={pr.description} />}
+      </div>
       <PrActions pr={pr} env={env} />
     </div>
   );
@@ -1011,12 +1017,21 @@ function sortReview(prs: GhPrItem[], me: string): GhPrItem[] {
   );
 }
 
-function GhPrView({ close, env }: { close: () => void; env: MrRowEnv }) {
+function GhPrView({
+  close,
+  env,
+  settings,
+}: {
+  close: () => void;
+  env: MrRowEnv;
+  /** The plugin's settings — carries `hostname`; without it the CLI queries its default host. */
+  settings?: { hostname?: unknown };
+}) {
   const data = usePrOverview();
   const me = data.username ?? '';
 
   useEffect(() => {
-    if (data.status === 'idle') void refreshPrOverview();
+    if (data.status === 'idle') void refreshPrOverview(settings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1040,7 +1055,7 @@ function GhPrView({ close, env }: { close: () => void; env: MrRowEnv }) {
         <div className="flex-1" />
         <button
           type="button"
-          onClick={() => void refreshPrOverview()}
+          onClick={() => void refreshPrOverview(settings)}
           data-tip="Refresh"
           aria-label="Refresh"
           className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
@@ -1067,11 +1082,11 @@ function GhPrView({ close, env }: { close: () => void; env: MrRowEnv }) {
               {data.failure === 'missing' ? (
                 <>
                   Install <code className="text-[var(--accent)]">gh</code> (https://cli.github.com), then
-                  run <code className="text-[var(--accent)]">gh auth login</code>.
+                  run <code className="text-[var(--accent)]">{authCommand('gh', 'login', data.host)}</code>.
                 </>
               ) : (
                 <>
-                  Run <code className="text-[var(--accent)]">gh auth login</code> in a shell to see your
+                  Run <code className="text-[var(--accent)]">{authCommand('gh', 'login', data.host)}</code> in a shell to see your
                   pull requests here.
                 </>
               )}
@@ -1082,8 +1097,11 @@ function GhPrView({ close, env }: { close: () => void; env: MrRowEnv }) {
             <div className="mb-1 font-semibold text-[var(--red)]">failed to load pull requests</div>
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
             <div className="text-[var(--text-secondary)]">
-              Check <code className="text-[var(--accent)]">gh auth status</code> in a shell.
+              Check <code className="text-[var(--accent)]">{authCommand('gh', 'status', data.host)}</code> in a shell.
             </div>
+            {!data.host && (
+              <div className="mt-1 text-[var(--text-secondary)]">{defaultHostNote('gh', 'GitHub')}</div>
+            )}
           </div>
         ) : (
           <>
@@ -1233,9 +1251,10 @@ export const ghPrPlugin: SessionViewPlugin = {
       sessionApi={sessionApi}
     />
   ),
-  renderView: ({ close, sessions, workspaces, selectSession, sessionApi }) => (
+  renderView: ({ pluginSettings, close, sessions, workspaces, selectSession, sessionApi }) => (
     <GhPrView
       close={close}
+      settings={pluginSettings as { hostname?: unknown } | undefined}
       env={{ sessions, workspaces, apiFor: sessionApi, selectSession }}
     />
   ),

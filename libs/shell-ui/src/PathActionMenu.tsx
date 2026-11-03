@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { Copy, ExternalLink, Eye, FolderOpen, FolderSearch, Pencil } from 'lucide-react';
-import { imageMimeFor } from './imageMime';
+import { Copy, ExternalLink, Eye, FolderOpen, FolderSearch, Image as ImageIcon, Pencil } from 'lucide-react';
+import { decodeImageRgba, imageMimeFor } from './imageMime';
 import { revealLabel as defaultRevealLabel } from './platform';
 import { useShellServices } from './services';
 import { menuItemClass, menuDividerClass } from './ContextMenu';
@@ -181,7 +181,7 @@ export function PathActionMenu({
   extraItems?: ReactNode;
 }) {
   const { t } = useLingui();
-  const { services } = useShellServices();
+  const { services, fileReader } = useShellServices();
   const [fileKind, setFileKind] = useState<HoverFileKind | null>(null);
   const isMenu = variant === 'menu';
   const itemClass = isMenu ? menuItemClass : actionButtonClass;
@@ -287,6 +287,23 @@ export function PathActionMenu({
         <Copy className={iconClass} />
         {isUrl ? t`Copy URL` : t`Copy Path`}
       </button>
+      {fileKind === 'image' && services.copyImage && (
+        <button
+          type="button"
+          onClick={() => {
+            void fileReader(sessionId)
+              ?.readBytes?.(resolvedPath)
+              .then((bytes) => decodeImageRgba(bytes, imageMimeFor(resolvedPath)))
+              .then((img) => services.copyImage?.(img))
+              .catch(() => {});
+          }}
+          data-tip={t`Copy image to clipboard`}
+          className={itemClass}
+        >
+          <ImageIcon className={iconClass} />
+          <Trans>Copy</Trans>
+        </button>
+      )}
       {extraItems}
     </>
   );

@@ -220,8 +220,20 @@ export interface SessionBackend {
  * navigator.clipboard/window.open; desktop builds to Tauri plugins.
  * Optional members hide their corresponding UI affordance when absent.
  */
+/** Decoded image pixels for `ShellServices.copyImage` (RGBA8888, row-major). */
+export interface ClipboardImage {
+  rgba: Uint8ClampedArray;
+  width: number;
+  height: number;
+}
+
 export interface ShellServices {
   copyText(text: string): Promise<void> | void;
+  /**
+   * Copy decoded image pixels to the clipboard (Copy on image previews).
+   * Absent where the platform cannot write images.
+   */
+  copyImage?(image: ClipboardImage): Promise<void> | void;
   /** Read clipboard text; browsers without permission may omit it. */
   pasteText?(): Promise<string | undefined>;
   /** Open an external URL in the system browser / a new tab. */

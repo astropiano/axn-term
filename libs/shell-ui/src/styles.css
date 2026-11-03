@@ -282,6 +282,83 @@ button {
   margin: 0.8em 0;
 }
 
+/* Compact variant: MR/PR description previews inside plugin list rows. */
+.axn-prose-compact {
+  padding: 0;
+  max-width: none;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* Descriptions often open with a `# title` — headings become bold lead-ins
+   at body size instead of page-style headings. */
+.axn-prose-compact h1,
+.axn-prose-compact h2,
+.axn-prose-compact h3,
+.axn-prose-compact h4,
+.axn-prose-compact h5,
+.axn-prose-compact h6 {
+  margin: 0.4em 0 0.15em;
+  border: none;
+  padding: 0;
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.axn-prose-compact > :first-child {
+  margin-top: 0;
+}
+
+.axn-prose-compact p,
+.axn-prose-compact .paragraph {
+  margin: 0.3em 0;
+}
+
+.axn-prose-compact ul,
+.axn-prose-compact ol {
+  margin: 0.3em 0;
+  padding-left: 1.4em;
+}
+
+.axn-prose-compact li {
+  margin: 0.1em 0;
+}
+
+.axn-prose-compact .task-list-item {
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.axn-prose-compact pre {
+  margin: 0.3em 0;
+  padding: 0.4em 0.6em;
+}
+
+.axn-prose-compact blockquote,
+.axn-prose-compact .quoteblock {
+  margin: 0.3em 0;
+}
+
+.axn-prose-compact table {
+  margin: 0.3em 0;
+}
+
+.axn-prose-compact th,
+.axn-prose-compact td {
+  padding: 0.15em 0.5em;
+}
+
+.axn-prose-compact img {
+  max-height: 8em;
+}
+
+.axn-prose-compact hr {
+  margin: 0.5em 0;
+}
+
 .axn-mermaid svg,
 .axn-mermaid-standalone svg {
   max-width: 100%;

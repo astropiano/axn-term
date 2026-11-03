@@ -288,6 +288,16 @@ describe('refreshMrOverview failures', () => {
     expect(currentMrOverview()).toMatchObject({ status: 'error', failure });
   });
 
+  it('records the host it queried, so hints can name it', async () => {
+    runtime(async () => {
+      throw new Error('glab: 502 Bad Gateway');
+    });
+    await refreshMrOverview({ hostname: ' gitlab.acme.io ' });
+    expect(currentMrOverview()).toMatchObject({ status: 'error', host: 'gitlab.acme.io' });
+    await refreshMrOverview();
+    expect(currentMrOverview().host).toBeUndefined();
+  });
+
   it('treats an anonymous answer (currentUser null) as signed out', async () => {
     runtime(async () => JSON.stringify({ data: { currentUser: null } }));
     await refreshMrOverview();

@@ -326,6 +326,7 @@ pub fn run() {
             files::open_directory,
             files::reveal_path,
             files::clipboard_write_text,
+            files::clipboard_write_image,
             files::clipboard_read_text,
             git::get_git_repo,
             exec::git_exec,

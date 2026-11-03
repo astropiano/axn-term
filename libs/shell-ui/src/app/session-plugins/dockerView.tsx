@@ -15,7 +15,7 @@ import type { PluginApi, SessionViewContext } from './plugin';
 import type { ShellSession } from '../../types';
 import { ptyIdOf } from '../../types';
 import { useSessionBackend } from '../../services';
-import { PluginIcon } from '../SessionPanel';
+import { PanelSearch, PluginIcon } from '../SessionPanel';
 import { dockerPlugin } from './docker';
 
 /** `docker ps -a` + `docker stats --no-stream`, one probe — same shell-script style as the rail's. */
@@ -63,6 +63,15 @@ export function parsePs(output: string): DockerContainer[] {
     } catch { /* skip */ }
   }
   return out;
+}
+
+/** Filter predicate shared by the list filter — name/image/service/project substring. */
+export function containerMatches(c: DockerContainer, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [c.name, c.image, c.service ?? '', c.project ?? ''].some((v) =>
+    v.toLowerCase().includes(q),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,16 +181,21 @@ const iconBtn =
   'rounded p-0.5 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40';
 
 export function DockerView({
-  sessions, pluginSettings, close, selectSession, sessionApi,
+  sessions, pluginSettings, close, selectSession, sessionApi, appState, updateAppState,
 }: {
   sessions: ShellSession[];
   pluginSettings: unknown;
   close: () => void;
   selectSession: (sessionId: string) => void;
   sessionApi: (id: string) => (SessionViewContext & PluginApi) | undefined;
+  appState: unknown;
+  updateAppState: (patch: Record<string, unknown>) => void;
 }) {
   const backend = useSessionBackend();
   const data = useDockerOverview();
+  const state = (appState ?? {}) as { runningOnly?: boolean; query?: string };
+  const runningOnly = state.runningOnly === true;
+  const query = state.query ?? '';
   const intervalSec =
     (pluginSettings as { refreshIntervalSeconds?: number } | undefined)
       ?.refreshIntervalSeconds ?? 15;
@@ -211,15 +225,18 @@ export function DockerView({
   const groups = useMemo(() => {
     const projects = new Map<string, DockerContainer[]>();
     const standalone: DockerContainer[] = [];
-    for (const c of data.containers) {
+    const visible = data.containers.filter(
+      (c) => (!runningOnly || c.state === 'running') && containerMatches(c, query),
+    );
+    for (const c of visible) {
       if (c.project) {
         const g = projects.get(c.project) ?? [];
         g.push(c);
         projects.set(c.project, g);
       } else standalone.push(c);
     }
-    return { projects: [...projects.entries()].sort((a, b) => a[0].localeCompare(b[0])), standalone };
-  }, [data.containers]);
+    return { projects: [...projects.entries()].sort((a, b) => a[0].localeCompare(b[0])), standalone, visible };
+  }, [data.containers, runningOnly, query]);
 
   function openLogs(c: DockerContainer) {
     const sid = sessions[0]?.id;
@@ -300,7 +317,25 @@ export function DockerView({
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-3">
         <PluginIcon plugin={dockerPlugin} className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
         <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-primary)]">docker</span>
-        <span className="flex-1" />
+        <div className="min-w-0 flex-1">
+          <PanelSearch
+            value={query}
+            onChange={(v) => updateAppState({ query: v })}
+            placeholder="Filter containers…"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => updateAppState({ runningOnly: !runningOnly })}
+          data-tip="Only list running containers"
+          className={`flex h-6 items-center rounded px-2 text-[10px] transition ${
+            runningOnly
+              ? 'bg-[var(--surface)] text-[var(--accent)]'
+              : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+          }`}
+        >
+          running only
+        </button>
         <span
           className={`text-[10px] ${running > 0 ? 'font-semibold text-[var(--green)]' : 'text-[var(--text-secondary)]'}`}
           data-tip="running / total containers"
@@ -334,6 +369,10 @@ export function DockerView({
         ) : data.containers.length === 0 ? (
           <div className="p-4 text-[11px] text-[var(--text-secondary)]">
             {data.status === 'loading' ? 'loading…' : 'No containers.'}
+          </div>
+        ) : groups.visible.length === 0 ? (
+          <div className="p-4 text-[11px] italic text-[var(--text-secondary)]">
+            {query ? 'no matches' : 'no running containers'}
           </div>
         ) : (
           <>
@@ -392,7 +431,11 @@ function ProjectGroup({
           {running}/{members.length}
         </span>
       </button>
-      {!isCollapsed && members.map((c) => <Row key={c.id} c={c} />)}
+      {!isCollapsed && (
+        <div className="border-l border-[var(--border)]" style={{ marginLeft: '14px' }}>
+          {members.map((c) => <Row key={c.id} c={c} />)}
+        </div>
+      )}
     </div>
   );
 }

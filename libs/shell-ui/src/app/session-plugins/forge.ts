@@ -69,6 +69,30 @@ export function forgeOfRemote(
   return undefined;
 }
 
+/** The plugin's `hostname` setting, trimmed; `undefined` = the CLI's default host. */
+export function forgeHost(hostname: unknown): string | undefined {
+  return typeof hostname === 'string' && hostname.trim() ? hostname.trim() : undefined;
+}
+
+/**
+ * The `<cli> auth login|status` line to suggest to the user, naming the host
+ * the plugin actually queried — a bare hint checks the CLI's default host,
+ * which says nothing about a self-hosted instance (display text, not executed).
+ */
+export function authCommand(cli: ForgeCli, verb: 'login' | 'status', host?: string): string {
+  return host ? `${cli} auth ${verb} --hostname ${host}` : `${cli} auth ${verb}`;
+}
+
+/** Shown when no `hostname` is set: the CLI fell back to its default host. */
+export const defaultHostNote = (cli: ForgeCli, forgeName: string) =>
+  `No hostname is configured, so ${cli} queried its default host — set the ${forgeName} hostname in Settings → Plugins for a self-hosted instance.`;
+
+/** The plain-text "check your auth" hint for tooltips, naming the queried host. */
+export function authStatusHint(cli: ForgeCli, forgeName: string, host?: string): string {
+  const check = `Check \`${authCommand(cli, 'status', host)}\` in a shell.`;
+  return host ? check : `${check}\n${defaultHostNote(cli, forgeName)}`;
+}
+
 /** Stderr line the guard in `forgeCliCommand` prints when the CLI is absent. */
 export const cliMissingMarker = (cli: ForgeCli) => `axn-term: ${cli} is not installed`;
 

@@ -3,6 +3,7 @@ import { axnLog } from '../log';
 import { antigravityHookSpec } from './antigravityHooks';
 import { registerAgentLauncher } from './agentRegistry';
 import { agentResumeMenuItem, rememberLastAgentSession } from './agentResume';
+import { agentResumePanel } from './agentResumePanel';
 import { promptArg, shellQuote, shellWord } from '../../shellQuote';
 
 interface AntigravityPluginState {
@@ -117,6 +118,15 @@ export const antigravityPlugin: SessionViewPlugin = {
       type: 'boolean',
       default: false,
     },
+    {
+      key: 'resumeButton',
+      label: 'Show resume button',
+      description:
+        "Show a 'Resume antigravity session' button in the session panel while the " +
+        'last agy session can be resumed (the session context menu offers it regardless).',
+      type: 'boolean',
+      default: true,
+    },
   ],
   // Bound to the agy process.
   processPattern: /^(agy|antigravity)/i,
@@ -168,6 +178,7 @@ export const antigravityPlugin: SessionViewPlugin = {
   // "Resume antigravity session" — the shared last-session capability;
   // offered on idle sessions once an agy conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'antigravity'),
+  render: (ctx) => agentResumePanel(ctx, 'antigravity'),
 
   // A submitted command starts new shell work — a terminal badge left by a
   // finished agent run no longer applies, and a stale needs-you flag is gone.

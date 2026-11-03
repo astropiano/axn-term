@@ -22,7 +22,7 @@ import { tabTaskPatch } from './subShellTasks';
 import { agentInputPluginFor } from './session-plugins/agentHookBridge';
 import { createHiddenCommandInput } from './hiddenCommands';
 import { createOsc8LeakGuard, OSC8_CLOSE } from '../terminalLinks';
-import { applyTerminalRenderer, createTerminalInput, oscReportTarget, repaintTerminal, safely } from '../terminalRenderer';
+import { applyTerminalRenderer, createTerminalInput, isUserInput, oscReportTarget, repaintTerminal, safely } from '../terminalRenderer';
 import { acquirePty } from '../ptyLifetime';
 import {
   agentOfProcess,
@@ -54,6 +54,7 @@ export function SubShellView({
   onPreviewRequest,
   onSessionCommand,
   onCompleteInput,
+  onUserInput,
 }: {
   session: ShellSession;
   tab: EditorTab;
@@ -72,6 +73,12 @@ export function SubShellView({
     ptyId?: string,
   ) => string | false | undefined | Promise<string | false | undefined>;
   onCompleteInput?: (sessionId: string, line: string, ptyId?: string) => Promise<string[]>;
+  /**
+   * Fired on input the user produced (keys, paste, key bar, mouse reports)
+   * — never for terminal-generated query replies. Used to clear the
+   * session's attention flags once the user engages with it.
+   */
+  onUserInput?: (sessionId: string) => void;
 }) {
   const backend = useSessionBackend();
   const terminalRef = useRef<HTMLDivElement | null>(null);
@@ -101,6 +108,7 @@ export function SubShellView({
   const onPreviewRequestRef = useRef(onPreviewRequest);
   const onSessionCommandRef = useRef(onSessionCommand);
   const onCompleteInputRef = useRef(onCompleteInput);
+  const onUserInputRef = useRef(onUserInput);
   isVisibleRef.current = isVisible;
   onCloseRef.current = onClose;
   onRenameRef.current = onRename;
@@ -112,6 +120,7 @@ export function SubShellView({
   onPreviewRequestRef.current = onPreviewRequest;
   onSessionCommandRef.current = onSessionCommand;
   onCompleteInputRef.current = onCompleteInput;
+  onUserInputRef.current = onUserInput;
   const { activeTheme, settings } = useSettings();
   const { services } = useShellServices();
   const notifyRef = useRef(services.notify);
@@ -273,6 +282,7 @@ export function SubShellView({
     // hidden commands, exit-state re-run (Enter) and Esc-to-close all behave
     // exactly like typed input.
     const sendInput = (data: string) => {
+      if (isUserInput(data)) onUserInputRef.current?.(sessionRef.current.id);
       if (!exitedRef.current) {
         if (hiddenInput(data)) return;
         ptyInput.send(data);

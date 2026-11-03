@@ -9,6 +9,7 @@ import {
   forgetLastAgentSession,
   rememberLastAgentSession,
 } from './agentResume';
+import { agentResumePanel } from './agentResumePanel';
 import { shellQuote } from '../../shellQuote';
 
 // Anchored: session.process is the argv-derived basename, so 'vibe' and
@@ -535,6 +536,15 @@ export const vibePlugin: SessionViewPlugin = {
       type: 'number',
       default: 45,
     },
+    {
+      key: 'resumeButton',
+      label: 'Show resume button',
+      description:
+        "Show a 'Resume vibe session' button in the session panel while the " +
+        'last vibe session can be resumed (the session context menu offers it regardless).',
+      type: 'boolean',
+      default: true,
+    },
   ],
   commands: [
     {
@@ -558,7 +568,12 @@ export const vibePlugin: SessionViewPlugin = {
   // "Resume vibe session '<name>'" — the shared last-session capability;
   // offered on idle sessions once a vibe conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'vibe'),
-  render: (ctx) => <VibeTasks ctx={ctx} />,
+  render: (ctx) => (
+    <>
+      {agentResumePanel(ctx, 'vibe')}
+      <VibeTasks ctx={ctx} />
+    </>
+  ),
   renderRow: (ctx) => <VibeRow ctx={ctx} />,
   rowTip: (ctx) =>
     sessionNameRequiresAttention(ctx.getSession().name)

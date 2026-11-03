@@ -73,7 +73,7 @@ msgstr "터미널의 셀 렌더러입니다. 자동은 GPU(WebGL)를 사용하�
 msgid "Clients: {0}"
 msgstr "클라이언트: {0}"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2395
+#: libs/shell-ui/src/app/ShellApp.tsx:2405
 msgid "Close tab"
 msgstr "탭 닫기"
 
@@ -107,9 +107,16 @@ msgstr "연결 끊김"
 #: libs/shell-ui/src/app/AppContextMenu.tsx:82
 #: libs/shell-ui/src/app/AppContextMenu.tsx:104
 #: libs/shell-ui/src/app/AppContextMenu.tsx:118
+#: libs/shell-ui/src/app/preview-plugins/image.tsx:65
 #: libs/shell-ui/src/PathActionMenu.tsx:215
+#: libs/shell-ui/src/PathActionMenu.tsx:304
 msgid "Copy"
 msgstr "복사"
+
+#: libs/shell-ui/src/app/preview-plugins/image.tsx:61
+#: libs/shell-ui/src/PathActionMenu.tsx:300
+msgid "Copy image to clipboard"
+msgstr "클립보드에 이미지 복사"
 
 #: libs/shell-ui/src/PathActionMenu.tsx:284
 #: libs/shell-ui/src/PathActionMenu.tsx:288
@@ -584,8 +591,9 @@ msgstr "프로세스 이름으로 재설정"
 #~ msgid "Resume {0} session{1}"
 #~ msgstr "{0} 세션{1} 재개"
 
-#. placeholder {0}: last.name ? ` '${last.name}'` : ''
-#: libs/shell-ui/src/app/session-plugins/agentResume.ts:149
+#. placeholder {0}: name ? ` '${name}'` : ''
+#: libs/shell-ui/src/app/session-plugins/agentResume.ts:240
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:38
 msgid "Resume {agent} session{0}"
 msgstr "{agent} 세션 재개{0}"
 
@@ -678,11 +686,11 @@ msgstr "기본 폴더 설정…"
 msgid "Settings"
 msgstr "설정"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:49
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:48
 msgid "shell"
 msgstr "shell"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:41
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:42
 msgid "Shell"
 msgstr "셸"
 

@@ -9,6 +9,7 @@ import {
   forgetLastAgentSession,
   rememberLastAgentSession,
 } from './agentResume';
+import { agentResumePanel } from './agentResumePanel';
 import { agentCommand } from './devWorkflow';
 import { shellQuote } from '../../shellQuote';
 
@@ -730,6 +731,15 @@ export const devinPlugin: SessionViewPlugin = {
       type: 'number',
       default: 45,
     },
+    {
+      key: 'resumeButton',
+      label: 'Show resume button',
+      description:
+        "Show a 'Resume devin session' button in the session panel while the " +
+        'last devin session can be resumed (the session context menu offers it regardless).',
+      type: 'boolean',
+      default: true,
+    },
   ],
   commands: [
     {
@@ -755,7 +765,12 @@ export const devinPlugin: SessionViewPlugin = {
   // "Resume devin session '<name>'" — the shared last-session capability;
   // offered on idle sessions once a devin conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'devin'),
-  render: (ctx) => <DevinTasks ctx={ctx} />,
+  render: (ctx) => (
+    <>
+      {agentResumePanel(ctx, 'devin')}
+      <DevinTasks ctx={ctx} />
+    </>
+  ),
 
   // Declared before onSessionOpen injects the resume command: the app covers
   // the terminal with a "restoring" overlay so input cannot race the

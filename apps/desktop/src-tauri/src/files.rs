@@ -124,6 +124,43 @@ pub(crate) async fn clipboard_write_text(app: tauri::AppHandle, text: String) ->
     on_main_clipboard(app, move |clipboard| clipboard.set_text(text)).await
 }
 
+/// Copy an image to the clipboard. Raw IPC body = RGBA8888 pixel bytes,
+/// `x-width`/`x-height` headers = the pixel size. The webview rasterizes to
+/// RGBA itself (canvas `getImageData`), so no image-decode crate is needed
+/// and every format the webview can draw (png/jpg/gif/webp/svg…) works.
+#[tauri::command]
+pub(crate) async fn clipboard_write_image(
+    app: tauri::AppHandle,
+    request: tauri::ipc::Request<'_>,
+) -> Result<(), String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("expected RGBA pixels as the raw body".into());
+    };
+    let header = |name: &str| {
+        request
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|v| *v > 0)
+            .ok_or_else(|| format!("missing/invalid {name} header"))
+    };
+    let (width, height) = (header("x-width")?, header("x-height")?);
+    if width
+        .checked_mul(height)
+        .and_then(|px| px.checked_mul(4))
+        != Some(bytes.len())
+    {
+        return Err("RGBA byte length does not match width × height".into());
+    }
+    let image = arboard::ImageData {
+        width,
+        height,
+        bytes: std::borrow::Cow::Owned(bytes.clone()),
+    };
+    on_main_clipboard(app, move |clipboard| clipboard.set_image(image)).await
+}
+
 /// Clipboard text, or `None` when the clipboard holds no text.
 #[tauri::command]
 pub(crate) async fn clipboard_read_text(app: tauri::AppHandle) -> Result<Option<String>, String> {
