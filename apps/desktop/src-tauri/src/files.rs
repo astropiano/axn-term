@@ -96,21 +96,42 @@ pub(crate) fn path_to_file_uri(path: &str) -> String {
     out
 }
 
-/// Run a clipboard operation on the main thread with a fresh `arboard`
-/// handle. tauri-plugin-clipboard-manager keeps one `arboard::Clipboard` for
-/// the app's lifetime and drives it from tokio workers; on macOS that reuse of
-/// an NSPasteboard handle off the main thread crashed in
-/// `_NSPasteboardDeclareTypes` (EXC_BAD_ACCESS) after hours of OSC 52 copies.
+/// macOS: a fresh `arboard` handle per call. tauri-plugin-clipboard-manager
+/// keeps one `arboard::Clipboard` for the app's lifetime and drives it from
+/// tokio workers; that reuse of an NSPasteboard handle off the main thread
+/// crashed in `_NSPasteboardDeclareTypes` (EXC_BAD_ACCESS) after hours of
+/// OSC 52 copies.
+#[cfg(target_os = "macos")]
+fn with_clipboard<T>(
+    f: impl FnOnce(&mut arboard::Clipboard) -> Result<T, arboard::Error>,
+) -> Result<T, arboard::Error> {
+    arboard::Clipboard::new().and_then(|mut cb| f(&mut cb))
+}
+
+/// Other platforms: one `arboard` handle for the process. On X11 copied data
+/// lives only in the selection owner, which arboard destroys when the last
+/// `Clipboard` drops — desktops without a clipboard manager (the common
+/// case) would lose every copy the moment the call returned.
+#[cfg(not(target_os = "macos"))]
+fn with_clipboard<T>(
+    f: impl FnOnce(&mut arboard::Clipboard) -> Result<T, arboard::Error>,
+) -> Result<T, arboard::Error> {
+    static CLIPBOARD: std::sync::Mutex<Option<arboard::Clipboard>> = std::sync::Mutex::new(None);
+    let mut guard = CLIPBOARD.lock().unwrap_or_else(|e| e.into_inner());
+    if guard.is_none() {
+        *guard = Some(arboard::Clipboard::new()?);
+    }
+    f(guard.as_mut().unwrap())
+}
+
+/// Run a clipboard operation on the main thread.
 pub(crate) async fn on_main_clipboard<T: Send + 'static>(
     app: tauri::AppHandle,
     f: impl FnOnce(&mut arboard::Clipboard) -> Result<T, arboard::Error> + Send + 'static,
 ) -> Result<T, String> {
     let (tx, rx) = std::sync::mpsc::channel();
     app.run_on_main_thread(move || {
-        let result = arboard::Clipboard::new()
-            .and_then(|mut clipboard| f(&mut clipboard))
-            .map_err(|e| e.to_string());
-        let _ = tx.send(result);
+        let _ = tx.send(with_clipboard(f).map_err(|e| e.to_string()));
     })
     .map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || rx.recv())

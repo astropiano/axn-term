@@ -47,6 +47,9 @@ export const desktopPlatform: ShellPlatform = {
       .then((dir) => invoke('open_directory', { path: dir }))
       .catch(() => {});
   },
+  setTitlebarColor: (color) => {
+    void invoke('set_titlebar_color', { color }).catch(() => {});
+  },
   stateStore: {
     load: (windowId) => invoke<unknown>('load_window_state', { windowId }),
     save: (windowId, state) =>
@@ -78,6 +81,13 @@ export const desktopPlatform: ShellPlatform = {
     },
   },
   workspaceSetStorage: desktopWorkspaceSetStorage,
+  // "New session in folder…" — the native directory picker. Web has no OS
+  // dialog and drives the embedded FilePickerModal over backend fs ops.
+  pickDirectory: async () => {
+    const selected = await open({ directory: true, multiple: false });
+    if (!selected) return null;
+    return Array.isArray(selected) ? selected[0] : selected;
+  },
   configStore: {
     load: () => invoke<string | null>('read_config'),
     save: async (yaml) => {

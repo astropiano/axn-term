@@ -561,6 +561,31 @@ function GeneralTab() {
         </label>
       </div>
 
+      <div className="mb-4" hidden={!matchSetting(query, 'new session button placement workspace header list both')}>
+        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+          <Trans>New session button</Trans>
+        </label>
+        <select
+          value={settings.newSessionButton ?? 'both'}
+          onChange={(e) =>
+            updateSettings({
+              newSessionButton: e.currentTarget.value as AppSettings['newSessionButton'],
+            })
+          }
+          className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+        >
+          <option value="both">{t`Both`}</option>
+          <option value="list">{t`End of session list`}</option>
+          <option value="header">{t`Workspace header`}</option>
+        </select>
+        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+          <Trans>
+            Where the "+" for a new session appears: a ghost row at the end of
+            each workspace's session list, the workspace header, or both.
+          </Trans>
+        </p>
+      </div>
+
       <div className="mb-4" hidden={!matchSetting(query, 'terminal renderer webgl canvas dom auto')}>
         <label className="mb-1 block text-xs text-[var(--text-secondary)]">
           <Trans>Terminal renderer</Trans>

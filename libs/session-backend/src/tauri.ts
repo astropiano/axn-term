@@ -123,8 +123,8 @@ export class TauriBackend implements SessionBackend {
     invoke('write_session', { sessionId, data }).catch(() => {});
   }
 
-  writeWhenRaw(sessionId: string, data: string): void {
-    invoke('write_when_raw', { sessionId, data }).catch(() => {});
+  writeWhenRaw(sessionId: string, data: string, timeoutMs?: number): Promise<boolean> {
+    return invoke<boolean>('write_when_raw', { sessionId, data, timeoutMs });
   }
 
   resize(sessionId: string, cols: number, rows: number): void {

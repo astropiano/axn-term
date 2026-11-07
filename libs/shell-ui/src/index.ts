@@ -17,6 +17,7 @@ export * from './ShellTerminal';
 // SessionBackend/ShellServices/ShellPlatform, no direct Tauri imports.
 export * from './app/ShellApp';
 export * from './app/fileService';
+export * from './app/scrollResync';
 export * from './app/gitClient';
 export * from './app/PluginSettingsProvider';
 export { SettingsModal } from './app/SettingsModal';

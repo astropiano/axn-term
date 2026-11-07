@@ -16,6 +16,7 @@ import { resolvePersona, agentLauncherFor } from './agentRegistry';
 import type { AgentLaunchTools } from './agentRegistry';
 import { registerMrActions, type MrActionProps, type MrRef, type MrRowEnv } from './mrActions';
 import { normalizeReviewAgent } from '../gitReview';
+import { checkoutsOf } from '../repoDirectory';
 import {
   normPath,
   worktreeBranchFor,
@@ -1927,16 +1928,41 @@ export async function startMrReview(
       )
     : env.sessions.find((s) => s.repo?.root);
   const api = sess ? env.apiFor(sess.id) : undefined;
-  if (!sess?.repo?.root || !api) {
-    const msg = `review ${mr.reference} — no session inside ${project ?? 'the MR project'}'s repo`;
+  let root = sess?.repo?.root;
+  let remote = sess?.repo?.remote;
+  let host = root ? api : undefined;
+  if (!root && project && env.checkouts) {
+    // No session inside the repo: a local clone known to repo discovery
+    // (repo-dir providers such as axn-dev + the forge plugin's repo-roots).
+    // The git work runs through any session — every command names the repo
+    // explicitly with `git -C`.
+    const clone = checkoutsOf(await env.checkouts().catch(() => []), project)[0];
+    host = env.sessions.map((s) => env.apiFor(s.id)).find(Boolean);
+    if (clone && host) {
+      root = clone.path;
+      remote = clone.remote ?? undefined;
+    }
+  }
+  if (!root || !host) {
+    const msg = env.checkouts && project
+      ? `review ${mr.reference} — no local clone of ${project}: no open session in it, and none under the plugin's repo roots or from repo providers such as axn-dev`
+      : `review ${mr.reference} — no session inside ${project ?? 'the MR project'}'s repo`;
     env.sessions
       .map((s) => env.apiFor(s.id))
       .find(Boolean)
       ?.setAttention({ level: 'warning', message: msg });
-    axnLog('warn', 'dev-workflow', `MR review: no repo session for ${project ?? mr.url}`);
+    axnLog('warn', 'dev-workflow', `MR review: no repo checkout for ${project ?? mr.url}`);
     return msg;
   }
-  return reviewMr(api, sess.repo.root, mr, def, workspaceId);
+  // Already reviewing this MR: its worktree has a session — go there
+  // instead of opening a second one.
+  const dir = normPath(worktreeDirFor(root, `mr-${mr.iid}`));
+  const open = env.sessions.find((s) => normPath(s.repo?.root ?? s.cwd) === dir);
+  if (open) {
+    env.selectSession(open.id);
+    return undefined;
+  }
+  return reviewMr(host, root, mr, def, workspaceId, remote);
 }
 
 /**
@@ -1953,12 +1979,13 @@ async function reviewMr(
   mr: MrRef,
   def: WorkflowDef,
   workspaceId?: string,
+  remote: string | undefined = api.session?.repo?.remote,
 ): Promise<string | undefined> {
   const ref = parseMrRef(mr.url);
   const slug = `mr-${mr.iid}`;
   const dir = worktreeDirFor(root, slug);
   const branch = worktreeBranchFor(slug);
-  const fetchRef = reviewFetchRef(ref, mr.iid, api.session?.repo?.remote);
+  const fetchRef = reviewFetchRef(ref, mr.iid, remote);
   try {
     // Fetch the target branch first and best-effort: `origin/<target>` is
     // only the compare base for the worktree's git tab (`axn-git

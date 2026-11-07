@@ -476,7 +476,7 @@ function buildInitialState(stateDir, cwd, variant, devinSessionName) {
 }
 
 async function prepare(env) {
-  if (env.AXN_TERM_USE_REAL_DEVIN === "true" && !env.AXN_TERM_DEVIN_SESSION
+  if (env.AXN_TERM_USE_REAL_DEVIN === "true" && !env.AXN_TERM_DEVIN_SESSION && !env.AXN_TERM_DEVIN_SESSIONS
       && (env.AXN_TERM_TEST_VARIANT ?? "single") !== "shell") {
     throw new Error("Set AXN_TERM_DEVIN_SESSION to an available real Devin session before running this flow");
   }
@@ -840,6 +840,34 @@ dev-workflow:
 
   const devinSessionName = env.AXN_TERM_DEVIN_SESSION ?? "green-aurora";
   const state = buildInitialState(stateDir, sessionCwd, variant, devinSessionName);
+  if (variant === "devin-storm") {
+    // Many devin-active sessions restored at once — the concurrent
+    // spawn/probe load is what can stretch a gated OSC report's
+    // alive-probe past its fail-open, so the reply lands after the
+    // asker's DA1 sentinel as typed `10;rgb:…` inside devin. A single
+    // restored devin never reproduces this.
+    const names = (env.AXN_TERM_DEVIN_SESSIONS ?? devinSessionName)
+      .split(",").map((n) => n.trim()).filter(Boolean);
+    const count = Number(env.AXN_TERM_DEVIN_STORM_COUNT ?? 10);
+    const w = state.windows[0];
+    const wsId = w.workspaces[0].id;
+    w.sessions = Array.from({ length: count }, (_, i) => ({
+      id: randomUUID(),
+      workspaceId: wsId,
+      name: `devin-${i + 1}`,
+      topic: `devin-${i + 1}`,
+      output: "",
+      cwd: sessionCwd,
+      pluginState: {
+        devin: {
+          devinSessionName: names[i % names.length],
+          devinSessionCwd: sessionCwd,
+          devinActive: true,
+        },
+      },
+    }));
+    w.selectedSessionId = w.sessions[0].id;
+  }
   writeFileSync(join(stateDir, "state.json"), JSON.stringify(state, null, 2));
   const [ws1, ws2] = state.windows[0].workspaces;
   env.AXN_TERM_WORKSPACE_1 = ws1?.id ?? "";
@@ -938,11 +966,21 @@ function testDisplayEnv(env) {
   return { ...process.env, DISPLAY: env.AXN_TERM_TEST_DISPLAY, WAYLAND_DISPLAY: "", GDK_BACKEND: "x11", NO_AT_BRIDGE: "1" };
 }
 
-function x11drive(env, args) {
+function x11drive(env, args, timeout) {
   return execFileSync("python3", [join(__dirname, "x11drive.py"), ...args], {
     env: testDisplayEnv(env),
     encoding: "utf8",
+    ...(timeout ? { timeout } : {}),
   });
+}
+
+/** Read the test display's CLIPBOARD as a pasting app would see it. */
+function clipboardRead(env, timeoutMs = 15000) {
+  try {
+    return x11drive(env, ["get"], timeoutMs);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Geometry of the mapped top-level window titled `name`. */
@@ -993,25 +1031,28 @@ async function startTestDisplay(env) {
     await sleep(100);
   }
 
-  // A file-manager stand-in offering the image as text/uri-list.
-  const image = join(env.AXN_TERM_STATE_DIR, "drop", DROP_IMAGE_NAME);
-  mkdirSync(dirname(image), { recursive: true });
-  writeFileSync(image, DROP_PNG);
-  const sourceLog = openSync(join(env.AXN_TERM_STATE_DIR, "drag-source.log"), "a");
-  const source = spawn("python3", [join(__dirname, "x11drive.py"), "source", image, "1150", "50"], {
-    env: testDisplayEnv(env),
-    stdio: ["ignore", sourceLog, sourceLog],
-    detached: true,
-  });
-  source.unref();
-  env.AXN_TERM_DRAG_SOURCE_PID = String(source.pid);
-  env.AXN_TERM_DROP_IMAGE = image;
-  await waitForX11Window(env, "drag-source");
+  // A file-manager stand-in offering the image as text/uri-list — only
+  // flows with drop steps need it.
+  if (env.AXN_TERM_DRAG_SOURCE !== "off") {
+    const image = join(env.AXN_TERM_STATE_DIR, "drop", DROP_IMAGE_NAME);
+    mkdirSync(dirname(image), { recursive: true });
+    writeFileSync(image, DROP_PNG);
+    const sourceLog = openSync(join(env.AXN_TERM_STATE_DIR, "drag-source.log"), "a");
+    const source = spawn("python3", [join(__dirname, "x11drive.py"), "source", image, "1150", "50"], {
+      env: testDisplayEnv(env),
+      stdio: ["ignore", sourceLog, sourceLog],
+      detached: true,
+    });
+    source.unref();
+    env.AXN_TERM_DRAG_SOURCE_PID = String(source.pid);
+    env.AXN_TERM_DROP_IMAGE = image;
+    await waitForX11Window(env, "drag-source");
+  }
   return `test display ${display} (${server[0]})`;
 }
 
 function stopTestDisplay(env) {
-  for (const key of ["AXN_TERM_DRAG_SOURCE_PID", "AXN_TERM_TEST_DISPLAY_PID"]) {
+  for (const key of ["AXN_TERM_DRAG_SOURCE_PID", "AXN_TERM_CLIP_OWNER_PID", "AXN_TERM_TEST_DISPLAY_PID"]) {
     const pid = Number(env[key]);
     if (pid) {
       try {
@@ -1158,6 +1199,111 @@ async function closeWithWindowButton(env) {
   throw new Error("the window did not close after its close button was pressed");
 }
 
+// ---- Context-menu clipboard (real right-click on the test display) -------
+// Copy/Paste in AppContextMenu must reach the real system clipboard: Copy
+// goes through the Tauri clipboard_write_text command, Paste reads it back.
+// The private X server deliberately runs no clipboard manager, so on X11
+// copied text that the app stops serving is simply gone — the failure this
+// flow catches. The menu is DOM, so its rows are clicked at their offsets:
+// w-48 (192px), p-1, ~28px rows — Copy, Paste, Select all — and placeMenu
+// opens it at the click point when it fits.
+const MENU_DX = 40;
+const MENU_ROW = { copy: 18, paste: 46, selectAll: 74 };
+
+async function rightClickInTerminal(env) {
+  const app = await waitForX11Window(env, "axn-term");
+  // Well inside the terminal area: clear of the session panel, and the menu
+  // fits below-right of the point.
+  const x = Math.round(app.x + app.w * 0.7);
+  const y = Math.round(app.y + app.h * 0.45);
+  x11drive(env, ["click", String(x), String(y), "3"]);
+  return { x, y };
+}
+
+/**
+ * Print a marker in the shell, select the buffer via the menu's "Select
+ * all", then copy it with a second right-click → "Copy". The X11 CLIPBOARD
+ * must then contain the marker.
+ */
+async function copyViaContextMenu(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  const mark = `clip-copy-${randomBytes(4).toString("hex")}`;
+  // printf: the typed line itself never contains the mark.
+  await writeToSession(env, id, `clear; printf '%s-%s\\n' clip-copy ${mark.slice("clip-copy-".length)}\r`);
+  await waitForOutput(env, id, (out) => out.includes(mark));
+  await sleep(800); // let the paint settle before clicking
+
+  const { x, y } = await rightClickInTerminal(env);
+  await sleep(400);
+  x11drive(env, ["click", String(x + MENU_DX), String(y + MENU_ROW.selectAll)]);
+  await sleep(500);
+  await rightClickInTerminal(env);
+  await sleep(400);
+  x11drive(env, ["click", String(x + MENU_DX), String(y + MENU_ROW.copy)]);
+  await sleep(600);
+
+  const clip = clipboardRead(env);
+  if (!clip?.includes(mark)) {
+    throw new Error(
+      `context-menu Copy never reached the X11 clipboard (wanted ${JSON.stringify(mark)}; ` +
+        `CLIPBOARD is ${clip === undefined ? "unserved" : JSON.stringify(clip.slice(0, 200))})`,
+    );
+  }
+  return "context menu Copy put the selection on the X11 clipboard";
+}
+
+/**
+ * Own the X11 clipboard with an `echo` line like another app would, then
+ * right-click → "Paste" in the terminal: the line lands at the prompt and
+ * runs, proving clipboard_read_text + term.paste work end to end.
+ */
+async function pasteViaContextMenu(env) {
+  const id = env.AXN_TERM_SESSION_ID;
+  const mark = `clip-paste-${randomBytes(4).toString("hex")}`;
+  const line = `echo ${mark}-$((40 + 2))`; // prints mark-42
+  // A GTK process owning CLIPBOARD+PRIMARY with the line — no clipboard
+  // manager on the test display, so it must serve requests itself.
+  const owner = spawn("python3", [join(__dirname, "x11drive.py"), "clipboard", line], {
+    env: testDisplayEnv(env),
+    stdio: "ignore",
+    detached: true,
+  });
+  owner.unref();
+  env.AXN_TERM_CLIP_OWNER_PID = String(owner.pid);
+  const after = await outputAfterMark(env, id);
+  try {
+    const start = Date.now();
+    while (clipboardRead(env) !== line) {
+      if (Date.now() - start > 10000) throw new Error("the test clipboard owner never served its text");
+      await sleep(200);
+    }
+
+    const { x, y } = await rightClickInTerminal(env);
+    await sleep(400);
+    x11drive(env, ["click", String(x + MENU_DX), String(y + MENU_ROW.paste)]);
+
+    const pastedAt = Date.now();
+    while (!(await after()).includes(line)) {
+      if (Date.now() - pastedAt > 10000) {
+        throw new Error(`the clipboard line never reached the prompt: ${JSON.stringify((await after())?.slice(-200))}`);
+      }
+      await sleep(250);
+    }
+    x11drive(env, ["key", "Return"]);
+    const ranAt = Date.now();
+    while (!(await after()).includes(`${mark}-42`)) {
+      if (Date.now() - ranAt > 10000) throw new Error("the pasted line never ran");
+      await sleep(250);
+    }
+    return "context menu Paste pasted the X11 clipboard at the prompt";
+  } finally {
+    if (env.AXN_TERM_CLIP_OWNER_PID) {
+      try { process.kill(Number(env.AXN_TERM_CLIP_OWNER_PID)); } catch { /* already gone */ }
+      delete env.AXN_TERM_CLIP_OWNER_PID;
+    }
+  }
+}
+
 // ---- Regression checks (flows/axn-term-regressions.xml) ---------------------
 
 /** The frontend answers a /command line (only a mounted app does) and no crash was logged. */
@@ -1235,6 +1381,45 @@ async function oscRestoreDevin(env) {
     throw new Error(`OSC report leaked on devin restore: ${JSON.stringify(out.slice(Math.max(0, leak.index - 120), leak.index + 80))}`);
   }
   return "restored devin: no OSC leak";
+}
+
+/**
+ * OSC leak check on the STORM restore path: many devin-active sessions are
+ * injected at once, so PTY spawn and the alive-probe IPC compete — the load
+ * that lets a gated report outlive the asker's deadline and land as typed
+ * `10;rgb:…` inside devin. Every restored session is checked, not just the
+ * selected one.
+ */
+async function oscDevinStorm(env) {
+  const state = JSON.parse(readFileSync(join(env.AXN_TERM_STATE_DIR, "state.json"), "utf8"));
+  const ids = state.windows
+    .flatMap((w) => w.sessions ?? [])
+    .filter((s) => s.pluginState?.devin?.devinActive)
+    .map((s) => s.id);
+  if (ids.length === 0) throw new Error("no devin-active sessions in the seeded state");
+  await Promise.all(ids.map((id) =>
+    waitForState(env, (st) => {
+      const s = (st.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id);
+      return s && s.process === "devin";
+    }, 90000).catch(async () => {
+      const tail = (await getSessionOutput(env, id)).slice(-300);
+      throw new Error(`restored devin ${id.slice(0, 8)} never became foreground; tail: ${JSON.stringify(tail)}`);
+    }),
+  ));
+  await Promise.all(ids.map((id) => devinTrustIfPrompted(env, id)));
+  await sleep(10000);
+  const leaks = [];
+  for (const id of ids) {
+    const out = stripCaretEcho(await getSessionOutput(env, id));
+    const leak = /\d+;rgb:|;rgb:/.exec(out);
+    if (leak) {
+      leaks.push(`${id.slice(0, 8)}: ${JSON.stringify(out.slice(Math.max(0, leak.index - 100), leak.index + 80))}`);
+    }
+  }
+  if (leaks.length) {
+    throw new Error(`OSC report leaked in ${leaks.length}/${ids.length} restored devin sessions — ${leaks.join(" | ")}`);
+  }
+  return `devin storm (${ids.length} restored sessions): no OSC leak`;
 }
 
 async function oscRealDevin(env) {
@@ -1320,13 +1505,15 @@ async function oscCheck(env) {
   // Alive raw reader with devin's DA1 sentinel: the color replies must
   // reach it before the DA1 answer — one arriving after it is typed text.
   await writeToSession(env, id, "devin --osc\r");
-  await waitForOutput(env, id, (o) => o.includes("devin interactive"), 15000);
+  // Wait for the probe's own marker — "devin interactive" also appears in
+  // the earlier --osc-exit leg's output.
+  await waitForOutput(env, id, (o) => o.includes("devin colors:"), 20000);
   const live = stripCaretEcho(await getSessionOutput(env, id));
   if (/\d+;rgb:|;rgb:/.test(live)) {
     throw new Error("OSC report arrived after the DA1 sentinel — typed into a still-running devin's input");
   }
   if (!live.includes("devin colors: answered")) {
-    throw new Error("devin's color query got no reply before its DA1 sentinel");
+    throw new Error(`devin's color query got no reply before its DA1 sentinel; tail: ${JSON.stringify(live.slice(-400))}`);
   }
   await writeToSession(env, id, "/exit\r");
   return "no OSC leak, input clean, axn-session dispatched";
@@ -1545,6 +1732,53 @@ export async function run(step, env) {
   switch (action) {
     case "prepare":
       return await prepare(env);
+
+    case "prepareHmr": {
+      const result = await prepare(env);
+      // axn-term-hmr reads its checkout from <state>/dev-hmr.json and spawns
+      // vite in <repo>/apps/desktop at launch — seed it with this repo.
+      const repo = env.AXN_HMR_REPO ?? resolve(__dirname, "../..");
+      if (!existsSync(join(repo, "node_modules"))) {
+        throw new Error(`${repo} has no node_modules — run 'pnpm install' there first`);
+      }
+      writeFileSync(join(env.AXN_TERM_STATE_DIR, "dev-hmr.json"), JSON.stringify({ repo }));
+      // Dev mode ignores state.json (in-memory shell state) — the seeded
+      // devin session id never appears in /sessions. Reset it to one empty
+      // window so expected-window-count is satisfied and no target id is
+      // waited on; the vite frontend's fresh session is the real assertion.
+      writeFileSync(
+        join(env.AXN_TERM_STATE_DIR, "state.json"),
+        JSON.stringify({ windows: [{ id: "w-0", sessions: [] }] }),
+      );
+      return `${result}; dev-hmr.json → ${repo}`;
+    }
+
+    case "verifyHmr": {
+      // The frontend runs on http://localhost:<port>. A session in /sessions
+      // means create_session reached the PTY layer — i.e. the vite origin is
+      // treated as local and the whole IPC surface works.
+      const viteUrl = `http://localhost:${env.AXN_HMR_PORT ?? "5914"}`;
+      const deadline = Date.now() + 120000;
+      let viteUp = false;
+      while (Date.now() < deadline) {
+        try {
+          const res = await fetch(viteUrl, { signal: AbortSignal.timeout(1500) });
+          if (res.ok) { viteUp = true; break; }
+        } catch {}
+        await sleep(500);
+      }
+      if (!viteUp) throw new Error(`vite never came up at ${viteUrl}; ${logTail(env)}`);
+      const sessions = await getSessions(env);
+      if (!sessions.length) {
+        throw new Error(`vite up but no session — IPC still denied on the vite origin; ${logTail(env)}`);
+      }
+      // Full round-trip: write_to_pty must pass the same gate.
+      const id = env.AXN_TERM_SESSION_ID ?? sessions[0];
+      await writeToSession(env, id, "echo HMR_OK_$((6*7))\n");
+      await waitForOutput(env, id, (s) => s.includes("HMR_OK_42"), 30000);
+      assertNoErrorBoundary(env, "verifyHmr");
+      return `hmr verified: vite at ${viteUrl}, ${sessions.length} session(s), pty write ok`;
+    }
 
     case "start": {
       const id = await startApp(env);
@@ -1813,8 +2047,10 @@ export async function run(step, env) {
     case "dropBesideTerminal":
     case "dropOnTerminal":
     case "dragSessionToWorkspace":
+    case "copyViaContextMenu":
+    case "pasteViaContextMenu":
     case "closeWithWindowButton": {
-      const steps = { dropBesideTerminal, dropOnTerminal, dragSessionToWorkspace, closeWithWindowButton };
+      const steps = { dropBesideTerminal, dropOnTerminal, dragSessionToWorkspace, copyViaContextMenu, pasteViaContextMenu, closeWithWindowButton };
       try {
         return await steps[action](env);
       } catch (error) {
@@ -1833,6 +2069,7 @@ export async function run(step, env) {
 
     case "checkAlive":
     case "oscRestoreDevin":
+    case "oscDevinStorm":
     case "oscRealDevin":
     case "oscCheck":
     case "floodBaseline":
@@ -1842,7 +2079,7 @@ export async function run(step, env) {
     case "openGitInspect":
     case "gitRestoreDeleted": {
       const steps = {
-        checkAlive, oscRestoreDevin, oscRealDevin, oscCheck, floodBaseline, floodAfterClose, pasteLine, editorReadFail, openGitInspect, gitRestoreDeleted,
+        checkAlive, oscRestoreDevin, oscDevinStorm, oscRealDevin, oscCheck, floodBaseline, floodAfterClose, pasteLine, editorReadFail, openGitInspect, gitRestoreDeleted,
       };
       try {
         return await steps[action](env);
@@ -2136,7 +2373,7 @@ if (process.env.AXN_STEP) {
     const env = { ...process.env };
     // 'prepare' starts a fresh run — never pick up env values persisted by a
     // previous flow (a stale AXN_TERM_STATE_DIR would point at old state).
-    const isPrepare = (step.args?.action ?? "") === "prepare";
+    const isPrepare = (step.args?.action ?? "").startsWith("prepare");
     if (!isPrepare && existsSync(envFile)) {
       try {
         Object.assign(env, JSON.parse(readFileSync(envFile, "utf8")));

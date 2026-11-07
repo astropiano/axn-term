@@ -5,6 +5,10 @@
  * installed or not signed in.
  */
 
+import { appRuntime } from '../appRuntime';
+import { localCheckouts, parseRepoRoots, REPO_SCAN_DEPTH, type RepoCheckout } from '../repoDirectory';
+import type { PluginSettingField } from './plugin';
+
 export type Forge = 'github' | 'gitlab';
 export type ForgeCli = 'gh' | 'glab';
 
@@ -93,6 +97,32 @@ export function authStatusHint(cli: ForgeCli, forgeName: string, host?: string):
   return host ? check : `${check}\n${defaultHostNote(cli, forgeName)}`;
 }
 
+/** Lead of the message `compactCliError` makes from a GraphQL timeout dump. */
+export const GRAPHQL_TIMEOUT_SUMMARY = 'the server timed out answering the query';
+
+const MAX_ERROR_CHARS = 600;
+
+/**
+ * Make a CLI error readable. GitLab answers a GraphQL request that runs
+ * past its server-side limit with one "Timeout on <Type.field>" per
+ * unresolved field — hundreds of them — so those collapse into a count per
+ * field; anything else still over `MAX_ERROR_CHARS` is cut.
+ */
+export function compactCliError(message: string): string {
+  const timeouts = message.match(/Timeout on [\w.]+/g);
+  if (timeouts && timeouts.length > 1) {
+    const counts = new Map<string, number>();
+    for (const t of timeouts) {
+      const field = t.slice('Timeout on '.length);
+      counts.set(field, (counts.get(field) ?? 0) + 1);
+    }
+    const fields = [...counts].map(([f, n]) => (n > 1 ? `${f} ×${n}` : f)).join(', ');
+    const lead = message.slice(0, message.indexOf('Timeout on')).trim();
+    return `${lead ? `${lead} ` : ''}${GRAPHQL_TIMEOUT_SUMMARY} (${timeouts.length} fields: ${fields})`;
+  }
+  return message.length > MAX_ERROR_CHARS ? `${message.slice(0, MAX_ERROR_CHARS)}…` : message;
+}
+
 /** Stderr line the guard in `forgeCliCommand` prints when the CLI is absent. */
 export const cliMissingMarker = (cli: ForgeCli) => `axn-term: ${cli} is not installed`;
 
@@ -147,4 +177,28 @@ export function classifyCliError(cli: ForgeCli, message: string): CliFailure {
   }
   if (SIGNED_OUT[cli].test(message)) return 'signed-out';
   return 'error';
+}
+
+/**
+ * The `repo-roots` setting each forge plugin declares separately: folders
+ * searched for local clones of the forge's projects (MR/PR review without
+ * an open session in the repo). It adds to the repos enabled plugins report
+ * (e.g. axn-dev), so users with axn-dev configured need not set it at all.
+ */
+export function repoRootsSetting(forge: 'GitLab' | 'GitHub'): PluginSettingField {
+  return {
+    key: 'repoRoots',
+    label: 'Repo roots',
+    description:
+      `Folders searched (${REPO_SCAN_DEPTH} levels deep) for local clones of ${forge} projects, comma separated — ` +
+      'e.g. ~/src, /Volumes/dev/git. Adds to the repos plugins such as axn-dev report.',
+    type: 'string',
+  };
+}
+
+/** Local checkouts for a forge plugin: providers + its own repo roots. */
+export function forgeCheckouts(settings: { repoRoots?: unknown } | undefined): Promise<RepoCheckout[]> {
+  const rt = appRuntime();
+  if (!rt) return Promise.resolve([]);
+  return localCheckouts(rt.exec, parseRepoRoots(settings?.repoRoots));
 }

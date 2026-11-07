@@ -3,7 +3,21 @@
 ## Apps and shared libraries
 
 - `apps/desktop` — Tauri desktop app; binds the shared UI to `tauriBackend` /
-  `tauriServices` from `@axn-term/session-backend/tauri`.
+  `tauriServices` from `@axn-term/session-backend/tauri`. A dev variant,
+  **axn-term-hmr** (`pnpm build:hmr` → `tauri build -c
+  src-tauri/tauri.term-hmr.conf.json`, product/binary `axn-term-hmr`, or
+  `AXN_TERM_HMR=1` for the same code path under `tauri dev`), spawns
+  `pnpm exec vite` inside a user-picked checkout/worktree and loads its
+  session windows from that server (`WebviewUrl::External`, capabilities
+  `remote.urls` `http://localhost:*`/`127.0.0.1:*`, navigation allowlist in
+  `window.rs::is_dev_hmr_navigation`) — frontend edits hot-reload in the
+  real app while the PTY/Rust side stays whatever the dev binary was built
+  with. `devhmr.rs` owns the spawn/state/commands and the `#axn-dev`
+  settings window (`apps/desktop/src/app/DevHmr.tsx`): repo picker, vite
+  status/log, start/stop/install. In dev mode `state_dir()` is
+  `~/.axn-term-hmr` and `save/load/delete_window_state` go through the
+  in-memory `AppState.mem_shell_state` — no `state.json` is ever written,
+  but a page reload still finds its state.
 - `apps/web` — browser/online app; binds the same shared UI to `WsBackend`
   (gateway `/ws` protocol: raw PTY frames + JSON `resize`, `fs-read`,
   `fs-write`, `fs-stat`, `fs-list`, `fs-mkdir`, `cwd`, `exec`, `fg-process`,
@@ -79,16 +93,19 @@
   writer `createTerminalInput` (`terminalRenderer.ts`, shared by
   `ShellTerminal` and `SubShellView`; *every* write to that PTY — keys,
   hidden-command writes, Shift+Enter — goes through it): a fresh
-  `getForegroundProcess` probe decides — a real program foreground = live
-  asker → the reply is written as soon as the probe returns
-  (real terminals never delay; devin's startup probe and p10k-style
-  readers poll stdin with a deadline, and a late reply lands as typed
-  `11;rgb:…` inside their input — never gate live answers on raw mode),
-  a shell comm or dead foreground = dead letter → dropped (beats every
-  real terminal, which echoes the reply at the prompt), a hung probe
-  delivers after 1 s, and when no probe exists the backend's
-  `writeWhenRaw`/`write_when_raw` termios gate or a ~75 ms delay is the
-  fallback. Input after a pending report queues behind it: devin sends
+  `getForegroundProcess` probe decides — a shell comm or dead foreground
+  = dead letter → dropped (beats every real terminal, which echoes the
+  reply at the prompt) — then the write itself goes through the backend's
+  `writeWhenRaw`/`write_when_raw` termios gate *inside* the queue: the
+  command resolves only after the bytes land (or drop still-cooked at
+  `OSC_REPORT_RAW_WAIT_MS` = 2 s), so the reply is written at the
+  cooked→raw flip — the first thing devin's raw reader sees inside its
+  probe window. Writing straight into a still-cooked tty echoes the
+  reply and canonical-buffers it into the asker's input as typed
+  `10;rgb:…` at the next mode flip — the devin-restore leak. A hung probe
+  (>1 s) falls through to the raw gate rather than delivering blind;
+  with no gate or no probe the fallbacks are the raw gate alone or a
+  ~75 ms delay. Input after a pending report queues behind it: devin sends
   `ESC]10;? ESC]11;? ESC[c` and treats the DA1 answer as its sentinel,
   so a DA1 reply overtaking a report still in its async probe made
   devin type `10;rgb:…11;rgb:…` into its input on every launch — the
@@ -784,6 +801,21 @@ axn-dev start -s axn-term-storybook   # http://localhost:8098
 or `src` change); `lib.rs` swaps the default menu's macOS "About axn-term"
 item for one showing "Version <x.y.z> (built <date>)".
 
+Native menu bar (`app_menu` in `lib.rs`): macOS keeps Tauri's default menu
+set (About shows version + build date, Preferences…, added View submenu).
+Linux/Windows get a small custom menu — &File (Preferences…, Quit),
+&View (Zoom In/Out/Actual Size — emit `menu-zoom` → `uiZoom` setting — and
+Reload — `menu-reload` → the state-saving window reload), &Help (About).
+The stock `Menu::default` is avoided there because only its About works
+and its Edit accelerators (Ctrl+C/X/V/A/Z/Y/M) would be swallowed before
+the PTY sees them; Quit is a custom `axn-quit` item for the same reason
+(the predefined one binds Ctrl+Q, needed for XON). The bar starts hidden
+per window (`hide_menu` in `create_window_with`); the frontend toggles it
+on a solo Alt tap via `toggle_menu` (Thunderbird-style, Alt-as-modifier
+does not toggle), accelerators stay live while hidden, and `on_menu_event`
+re-hides it after any item is picked (which also covers a just-opened
+settings window).
+
 Built macOS artifacts:
 
 - `target/release/bundle/macos/axn-term.app`
@@ -796,6 +828,16 @@ single `hdiutil create -srcfolder ... -format UDZO` step (app +
 tauri-bundler's create-dmg fork: its read-write image + Finder-prettifying
 AppleScript regularly fails on unmount ("resource busy") and leaves stale
 `rw.*` volumes mounted.
+
+App icons: `src-tauri/icons/icon.icns` is **not** generated by `tauri icon`
+— it comes from `src-tauri/icons/icon-macos.svg`, a plated variant
+(axn-dark `#141110` squircle plate, Apple 824/1024 grid) of the transparent
+axn-term glyph the PNGs/.ico use, rebuilt by
+`build/scripts/make-macos-icon.sh` (rsvg-convert + iconutil). macOS
+composites Dock icons over the translucent Dock, so the transparent
+interior shows through as white/gray there. Regenerating the shared icon
+set with `tauri icon` would restore the transparent `.icns` — re-run
+`make-macos-icon.sh` afterwards.
 
 ## Internationalization (Lingui)
 
@@ -963,6 +1005,8 @@ read and shallow-merge the plugin's persisted app-level data — window state
 `pluginData.<settingsKey>` in `state.json`, the view counterpart of
 per-session `pluginState`.
 
+Plugins declaring `repoDirs(ctx)` report local repos (`RepoDir { path, name?, remote?, worktrees? }`, `ctx.exec` runs `sh -c`). ShellApp publishes the enabled providers to `app/repoDirectory.ts`; `localCheckouts(exec, roots)` combines them with a search of the caller's roots and expands every repo into its checkouts (main + linked worktrees, branch, `origin`), deduplicated by path — sources add, never replace. The root search reads git's metadata files instead of running git (`repoProbeScript`: `.git` file → `gitdir:` → `commondir`, `worktrees/*/gitdir`, `HEAD`, `config`), prunes `node_modules`/`target`/… and is cached per root set for 5 minutes; `remoteMatchesProject` matches a forge project path exactly.
+
 Plugins declaring `hostsTabs` get a tab strip inside their view: `renderView`
 is pinned leftmost as `view`, hosted sub-view tabs (browser/editor/preview —
 never sub-shells, their PTYs stay bound to the owning session) follow and are
@@ -1010,9 +1054,14 @@ requests via the `glab` CLI. Per session it runs `glab mr list -s <branch>
 signature changes or the cached list is >5 min stale; results live in
 pluginState `glab-mr.mrs`. The session-panel block shows `N open threads`;
 the renderView rows show the GraphQL `description` clamped to 3 lines.
-App-wide it polls `glab api graphql` (single query over
+App-wide it polls `glab api graphql` (one list query over
 `currentUser.assignedMergeRequests` ∪ `authoredMergeRequests` without
-assignee → "mine", and `reviewRequestedMergeRequests` → "review") on a
+assignee → "mine", and `reviewRequestedMergeRequests` → "review", carrying
+GitLab's `userNotesCount`/`resolvable`/`resolvedDiscussionsCount` counters
+instead of discussions — GitLab cuts a request off at ~30 s and resolving
+every note author timed out; review MRs' discussions follow in aliased
+batches of 8, only for MRs whose counters changed since the last poll, so
+a quiet poll is one call) on a
 `glab-mr.refresh-interval-seconds` cadence (default 120) — the rail teaser
 shows `action/total` for mine and `waiting/total` for review, and toggles
 the plugin's renderView listing both sets. `glab-mr.hostname` overrides the
@@ -1061,6 +1110,16 @@ Both forge plugins are on by default and stay quiet where they don't apply
   so the rail doesn't flicker between polls.
 - All arguments reach `sh -c` single-quoted via `shellQuote` — git allows
   branch names like `$(…)`, and the GraphQL queries carry `$variables`.
+- Each forge plugin has its own `repo-roots` setting (`glab-mr.repo-roots`,
+  `gh-pr.repo-roots`; comma separated, `~` expands): folders searched for
+  local clones. They add to the repos enabled `repoDirs` providers report
+  (e.g. axn-dev), deduplicated by checkout path, and reach MR row actions as
+  `MrRowEnv.checkouts`. The views warm the cached search when they open.
+  The dev-workflow review button uses them when no open session sits in the
+  MR's project: the main checkout whose `origin` matches the project path
+  exactly hosts the fetch + `git worktree add` (run through any session,
+  every command `git -C <repo>`). A session already open in the MR's review
+  worktree is selected instead of opening a second one.
 
 The `git-inspect` plugin (`session-plugins/gitInspect.tsx`) is layered on
 `git-status` (titled `git` in Settings): `dependsOn: [{ id: 'git-status',
@@ -1142,7 +1201,7 @@ Example: `plugins/axn-demo-note/`.
 - The built-in `agents` plugin (`session-plugins/agents.tsx`, on by default — `agents.enabled: false` disables only the UI) owns **agent personas**: reusable `agents.personas.<name>` bundles in plugins.yaml (`cli` — defaults to the persona name, `model`, `args`, `prompt`/`prompt-file` — the first-message kickoff, `instructions`/`instructions-file` — the persistent identity, `description`; a bare string value is `cli` shorthand). On every ctx touch it mirrors the parsed list into the shared `agentRegistry.ts` module (the `mrActions.ts` contribution pattern — always in the bundle, so the schema stays available even when the plugin is disabled). Consumers: dev-workflow's `agent: <name>`/`{profile: <name>, …overrides}` step references (unresolved names degrade to `cli: <name>`). Launch lines are built by each CLI's registered **launcher** — `registerAgentLauncher` in `agentRegistry.ts`, built-in agent plugins register at module scope, `devWorkflow.agentLaunchLine` consults the registry: claude sends instructions via `--append-system-prompt(-file)`, codex via `-c developer_instructions=…`, devin and unregistered CLIs fold them into the seed prompt, and agy — which only accepts prompts via `-p`/`-i`/stdin — sends the seed through `-i` with instructions folded in (registered under both `agy` and `antigravity`). A launcher's refusal surfaces as session attention. Launch surfaces: `axn-agent <persona>` types the launch line in the current shell (`completeArg` offers persona names), the session and workspace context menus' single "New session with agent…" row opens a searchable persona picker (`pickFromList`, see below) and spawns a persona-named session seeded with the launch line (pending map → `onSessionOpen`, like worktrees; workspace rows use `defaultFolder` as cwd), and the rail bot icon opens a full-area view of persona cards (cli/model/prompt badges, live-session count, Launch button + a "running" session list grouped by workspace in panel order — a non-collapsible tree, so every agent shows where it lives). A launched/typed persona stamps `pluginState.agents.persona`, which drives the `renderRow` bot badge — the persona survives as the session's identity beyond process detection.
 - `session.process` is the foreground process identity: the process-group leader's argv resolved by `process_identity` (`src-tauri/src/lib.rs`) — exact argv tokens from `/proc/<pid>/cmdline` on Linux and `sysctl(KERN_PROCARGS2)` on macOS (comm via `proc_name` when another user's process refuses it), so paths with spaces stay one token; the cwd poll reads `/proc/<pid>/cwd` / `proc_pidinfo(PROC_PIDVNODEPATHINFO)` — the 1 s per-terminal polls never spawn `ps`/`lsof` — argv0 basename, except interpreter launches unwrap to the script (`python3.13 /x/bin/vibe` → `vibe`, `node cli.js` → `cli`, `python -m pkg` → the module). `sessionIcons` keys match this name (lowercased), so script-based tools (uv/pipx CLIs, npm shims) get icons and `processPattern` matches too.
 - The `docker` plugin (`session-plugins/docker.tsx`) is a rail-only indicator: the Docker whale SVG icon, running/stopped container counts, and one rounded `BarStrip` triple bar — CPU / MEM / disk strips stacked under a single border, each strip filled with `pressureColor` and its percentage written into the bar (the label renders twice, once in track color and once in `--text-inverted` clipped to the fill, so glyphs flip color where the fill passes under them; per-strip `data-tip` carries the details). CPU and MEM strips show real **VM** pressure when possible — the probe `docker exec`s a read-only /proc snapshot inside the first running container (proc is not cgroup-namespaced, so cpuinfo/meminfo/stat report the VM kernel's numbers on colima/Desktop/podman-machine, host numbers on native Linux; CPU% is the /proc/stat jiffie delta between polls, MEM is MemAvailable-based); container `docker stats` sums are the fallback and stay in the tooltips. Disk likewise prefers `docker exec <cid> df -k /` (the VM's root fs — `df` of the host's `/` reported the macOS disk before). Two `sh -c` probes run via `backend.exec` on separate cadences: the fast per-poll `DOCKER_STATS_CMD` (`docker info` gate, `docker ps -a --format '{{.State}}'` counts, `docker stats --no-stream --format '{{.CPUPerc}}|{{.MemUsage}}'` container sums, `docker info --format '{{json .}}'` limits — docker `NCPU`/`MemTotal`, podman `host.cpus`/`host.memTotal` — and the `==vm==` container exec; each failed section prints `unavailable` and degrades to fallbacks) parsed by `parseDockerLive`, and the slow `DOCKER_DISK_CMD` (`docker system df --format '{{.Size}}'` + the df above, `DockerRootDir`/`Store.GraphRoot` host-side fallback) parsed by `parseDockerDisk` — `system df` walks every layer and takes seconds, so it runs only every `DISK_POLL_EVERY` (4) polls (~1 min at the default cadence) and keeps its last values on failure. The rail is session-less: desktop `plugin_exec` ignores the session id, web execs through the first session's host — the plugin hides when docker or exec is unavailable. `docker.refresh-interval-seconds` (default 15, min 5) sets the fast poll cadence; neither probe ever overlaps itself. ≥80/≥90 % disk or memory use raises a warning/critical app attention flag.
-- The `axn-dev` plugin (`session-plugins/axnDev.tsx`, Boxes rail icon) is a read-only mirror of `axn-dev list`: a shared `useSyncExternalStore` overview polls `axn-dev list` via `appRuntime().exec` on a `axn-dev.refresh-interval-seconds` cadence (default 30, min 10), parsed by the pure `parseAxnDevList` (global section at indent 2, project sections under `  <repo>:` headers at indent 4, endpoint lines and wrapped descriptions one level deeper — told apart by a URL-ish second token). The rail shows `running/found` (warning triangle when the CLI fails); clicking toggles the plugin view, which lists sections like `axn-dev list` — status dot, name, worktree badge, description, and clickable endpoint links for running scenarios — plus a persisted "running only" filter (`pluginData['axn-dev'].runningOnly`). No start/stop actions; `axn-dev serve` remains the full dashboard. The older external `plugins/axn-dev-scenarios.mjs` (opt-in, per-session row) is unaffected — different plugin id.
+- The `axn-dev` plugin (`session-plugins/axnDev.tsx`, Boxes rail icon) is a read-only mirror of `axn-dev list`: a shared `useSyncExternalStore` overview polls `axn-dev list` via `appRuntime().exec` on a `axn-dev.refresh-interval-seconds` cadence (default 30, min 10), parsed by the pure `parseAxnDevList` (global section at indent 2, project sections under `  <repo>:` headers at indent 4, endpoint lines and wrapped descriptions one level deeper — told apart by a URL-ish second token). The rail shows `running/found` (warning triangle when the CLI fails); clicking toggles the plugin view, which lists sections like `axn-dev list` — status dot, name, worktree badge, description, and clickable endpoint links for running scenarios — plus a persisted "running only" filter (`pluginData['axn-dev'].runningOnly`). No start/stop actions; `axn-dev serve` remains the full dashboard. It is also a repo-dir provider (`repoDirs`, below): `axn-dev git repos --json` (axn-dev ≥ the `git repos` command; older CLIs contribute nothing). The older external `plugins/axn-dev-scenarios.mjs` (opt-in, per-session row) is unaffected — different plugin id.
 - The built-in `worktrees` plugin (`session-plugins/worktrees.tsx`, opt-in `worktrees.enabled: true`) offers agent worktree isolation without any `axn-dev` dependency — plain `git` argv via `ctx.exec`. `git worktree add <dir> -b wt/<slug>` creates `<repo-parent>/worktrees/<repo>-wt-<slug>` (the axn-dev sibling-worktrees convention, so the CLI discovers them via `git worktree list`; `worktrees.worktree-root` overrides the parent), then `ctx.openSession(dir, slug)` spawns the session there — worktree-first, never a moved running shell. Entry points: session context menu ("New worktree session" / "New worktree with <agent>"), workspace context menu (when `defaultFolder` resolves to a repo), and `axn-worktree [name]`. The new session's `pluginState.worktree = { repoRoot, path, branch }` (stamped on `onSessionOpen` from a pending map, or detected once when a session opens inside a foreign-created linked worktree — e.g. dev-workflow's MR review) drives a `⎇` row badge, "Review worktree changes" (git tab at the path) and "Remove worktree" — `git worktree remove` refuses dirty trees, so failure re-raises the banner with a "Force remove" action, and success offers "Delete branch". The isolation nudge: when `session.process` matches `worktrees.agents` (default `claude, devin, codex, agy, vibe`) in a main checkout (`git-dir == git-common-dir`, probed once per session), a warning banner offers "New worktree session" (seeds the agent's resume command — `claude -c`, `devin -c`, `codex resume --last`, `agy -c`, `vibe -r`), with once-per-session re-raise and a persistent "Don't ask again" (`worktrees.suggest-isolation` gates it). `worktrees.default-agent` picks the seeded agent.
 - The built-in `scratchpad` plugin (`session-plugins/scratchpad.tsx`, opt-in — `scratchpad.enabled: true` plus the `scratchpad.patterns` setting, which has no default: `;`- or newline-separated `<repo-regex>: <dir>, <dir>` entries, e.g. `*: .local-drafts, drafts; axn-term: .ai, notes`; an entry without a repo part applies to all repos). The regex matches case-insensitively against the checkout dir basename AND the remote repo name, so one entry covers a repo and all its worktrees (`axn-term` also matches `axn-term-feat-foo`). Matching dirs union in order; the first *existing* dir is `primary` (else the first configured). Its in-panel surface is the session context menu only: one `Open <dir>/` row per configured folder (read from `pluginState.dirs` — sessionMenuItems is synchronous, so `onSessionOpen` and a debounced onOutput refresh resolve+store the dirs — falling back to a single "Open drafts" row before the first resolution), plus "New or open draft…" (`pickOrCreate`), "Copy agent hint" and "Tell agent about scratchpad". Drafts are plain files — agents read/write them with their own tools (filesystem-as-context), the plugin only has to say where they are: `axn-scratch ls|dir` echoes real paths into the scrollback, `axn-scratch hint` prints a paste-able AGENTS.md/CLAUDE.md hint, "Copy agent hint" puts it on the clipboard and "Tell agent about scratchpad" (offered when `agentInput` or an agent-ish process is foreground) types it into the session input *without* a newline. Creating a draft (`axn-scratch new <name>` or a bare name) mkdirs the primary dir, seeds a `*` `.gitignore` (self-ignoring folder — `scratchpad.gitignore-drafts` gates it) and opens the file in an editor tab; `axn-scratch open <name|n>` and bare names open existing drafts, `browse` opens the folder. Beyond the menu there is a `NotebookPen` rail icon opening the `hostsTabs` full-area view: drafts grouped by repo across all sessions, per-repo "copy hint" buttons, editor/browser hosted tabs (listings go through `PluginApi.listDir`, which resolves `null` where the backend lacks `listDir`).
 - The built-in `progress` plugin (`session-plugins/progress.ts`) scans the session's live screen (`ctx.getScreenLines()`, backed by the xterm registry in `terminalRegistry.ts`) for progress indicators (`45%`, `[###---]`, `3/10`) instead of guessing from the output stream. When several bars are on screen the bottom-most one is reported; an indicator must persist ~500 ms before it is shown, and `session.progress` is withdrawn once no bar remains on screen. Only allowlisted programs are tracked: `progress.include-processes` in `plugins.yaml` (exact, case-insensitive process names; `'*'` tracks every program) — unset, it defaults to `DEFAULT_INCLUDED_PROCESSES` (curl/wget/rsync/pv/dd, pacman/apt/dnf/pip/uv/cargo/npm/pnpm/yarn/bun, git, ffmpeg), so percent-like noise from anything else (brew, build logs) never becomes a bar. Exclude programs on top via `progress.exclude-processes: [docker]` (case-insensitive substring match on the foreground process). A built-in list (`BUILTIN_EXCLUDED_PROCESSES`) already covers full-screen monitors/pagers/editors (`top`, `htop`, `vim`, `less`, …) and matches the comm basename exactly.
@@ -1203,7 +1262,21 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
 ## Apps and shared libraries
 
 - `apps/desktop` — Tauri desktop app; binds the shared UI to `tauriBackend` /
-  `tauriServices` from `@axn-term/session-backend/tauri`.
+  `tauriServices` from `@axn-term/session-backend/tauri`. A dev variant,
+  **axn-term-hmr** (`pnpm build:hmr` → `tauri build -c
+  src-tauri/tauri.term-hmr.conf.json`, product/binary `axn-term-hmr`, or
+  `AXN_TERM_HMR=1` for the same code path under `tauri dev`), spawns
+  `pnpm exec vite` inside a user-picked checkout/worktree and loads its
+  session windows from that server (`WebviewUrl::External`, capabilities
+  `remote.urls` `http://localhost:*`/`127.0.0.1:*`, navigation allowlist in
+  `window.rs::is_dev_hmr_navigation`) — frontend edits hot-reload in the
+  real app while the PTY/Rust side stays whatever the dev binary was built
+  with. `devhmr.rs` owns the spawn/state/commands and the `#axn-dev`
+  settings window (`apps/desktop/src/app/DevHmr.tsx`): repo picker, vite
+  status/log, start/stop/install. In dev mode `state_dir()` is
+  `~/.axn-term-hmr` and `save/load/delete_window_state` go through the
+  in-memory `AppState.mem_shell_state` — no `state.json` is ever written,
+  but a page reload still finds its state.
 - `apps/web` — browser/online app; binds the same shared UI to `WsBackend`
   (gateway `/ws` protocol: raw PTY frames + JSON `resize`, `fs-read`,
   `fs-write`, `fs-stat`, `fs-list`, `fs-mkdir`, `cwd`, `exec`, `fg-process`,
@@ -1918,6 +1991,21 @@ axn-dev start -s axn-term-storybook   # http://localhost:8098
 or `src` change); `lib.rs` swaps the default menu's macOS "About axn-term"
 item for one showing "Version <x.y.z> (built <date>)".
 
+Native menu bar (`app_menu` in `lib.rs`): macOS keeps Tauri's default menu
+set (About shows version + build date, Preferences…, added View submenu).
+Linux/Windows get a small custom menu — &File (Preferences…, Quit),
+&View (Zoom In/Out/Actual Size — emit `menu-zoom` → `uiZoom` setting — and
+Reload — `menu-reload` → the state-saving window reload), &Help (About).
+The stock `Menu::default` is avoided there because only its About works
+and its Edit accelerators (Ctrl+C/X/V/A/Z/Y/M) would be swallowed before
+the PTY sees them; Quit is a custom `axn-quit` item for the same reason
+(the predefined one binds Ctrl+Q, needed for XON). The bar starts hidden
+per window (`hide_menu` in `create_window_with`); the frontend toggles it
+on a solo Alt tap via `toggle_menu` (Thunderbird-style, Alt-as-modifier
+does not toggle), accelerators stay live while hidden, and `on_menu_event`
+re-hides it after any item is picked (which also covers a just-opened
+settings window).
+
 Built macOS artifacts:
 
 - `target/release/bundle/macos/axn-term.app`
@@ -1930,6 +2018,16 @@ single `hdiutil create -srcfolder ... -format UDZO` step (app +
 tauri-bundler's create-dmg fork: its read-write image + Finder-prettifying
 AppleScript regularly fails on unmount ("resource busy") and leaves stale
 `rw.*` volumes mounted.
+
+App icons: `src-tauri/icons/icon.icns` is **not** generated by `tauri icon`
+— it comes from `src-tauri/icons/icon-macos.svg`, a plated variant
+(axn-dark `#141110` squircle plate, Apple 824/1024 grid) of the transparent
+axn-term glyph the PNGs/.ico use, rebuilt by
+`build/scripts/make-macos-icon.sh` (rsvg-convert + iconutil). macOS
+composites Dock icons over the translucent Dock, so the transparent
+interior shows through as white/gray there. Regenerating the shared icon
+set with `tauri icon` would restore the transparent `.icns` — re-run
+`make-macos-icon.sh` afterwards.
 
 ## Internationalization (Lingui)
 
@@ -2097,6 +2195,8 @@ read and shallow-merge the plugin's persisted app-level data — window state
 `pluginData.<settingsKey>` in `state.json`, the view counterpart of
 per-session `pluginState`.
 
+Plugins declaring `repoDirs(ctx)` report local repos (`RepoDir { path, name?, remote?, worktrees? }`, `ctx.exec` runs `sh -c`). ShellApp publishes the enabled providers to `app/repoDirectory.ts`; `localCheckouts(exec, roots)` combines them with a search of the caller's roots and expands every repo into its checkouts (main + linked worktrees, branch, `origin`), deduplicated by path — sources add, never replace. The root search reads git's metadata files instead of running git (`repoProbeScript`: `.git` file → `gitdir:` → `commondir`, `worktrees/*/gitdir`, `HEAD`, `config`), prunes `node_modules`/`target`/… and is cached per root set for 5 minutes; `remoteMatchesProject` matches a forge project path exactly.
+
 Plugins declaring `hostsTabs` get a tab strip inside their view: `renderView`
 is pinned leftmost as `view`, hosted sub-view tabs (browser/editor/preview —
 never sub-shells, their PTYs stay bound to the owning session) follow and are
@@ -2144,9 +2244,14 @@ requests via the `glab` CLI. Per session it runs `glab mr list -s <branch>
 signature changes or the cached list is >5 min stale; results live in
 pluginState `glab-mr.mrs`. The session-panel block shows `N open threads`;
 the renderView rows show the GraphQL `description` clamped to 3 lines.
-App-wide it polls `glab api graphql` (single query over
+App-wide it polls `glab api graphql` (one list query over
 `currentUser.assignedMergeRequests` ∪ `authoredMergeRequests` without
-assignee → "mine", and `reviewRequestedMergeRequests` → "review") on a
+assignee → "mine", and `reviewRequestedMergeRequests` → "review", carrying
+GitLab's `userNotesCount`/`resolvable`/`resolvedDiscussionsCount` counters
+instead of discussions — GitLab cuts a request off at ~30 s and resolving
+every note author timed out; review MRs' discussions follow in aliased
+batches of 8, only for MRs whose counters changed since the last poll, so
+a quiet poll is one call) on a
 `glab-mr.refresh-interval-seconds` cadence (default 120) — the rail teaser
 shows `action/total` for mine and `waiting/total` for review, and toggles
 the plugin's renderView listing both sets. `glab-mr.hostname` overrides the
@@ -2195,6 +2300,16 @@ Both forge plugins are on by default and stay quiet where they don't apply
   so the rail doesn't flicker between polls.
 - All arguments reach `sh -c` single-quoted via `shellQuote` — git allows
   branch names like `$(…)`, and the GraphQL queries carry `$variables`.
+- Each forge plugin has its own `repo-roots` setting (`glab-mr.repo-roots`,
+  `gh-pr.repo-roots`; comma separated, `~` expands): folders searched for
+  local clones. They add to the repos enabled `repoDirs` providers report
+  (e.g. axn-dev), deduplicated by checkout path, and reach MR row actions as
+  `MrRowEnv.checkouts`. The views warm the cached search when they open.
+  The dev-workflow review button uses them when no open session sits in the
+  MR's project: the main checkout whose `origin` matches the project path
+  exactly hosts the fetch + `git worktree add` (run through any session,
+  every command `git -C <repo>`). A session already open in the MR's review
+  worktree is selected instead of opening a second one.
 
 The `git-inspect` plugin (`session-plugins/gitInspect.tsx`) is layered on
 `git-status` (titled `git` in Settings): `dependsOn: [{ id: 'git-status',
@@ -2276,7 +2391,7 @@ Example: `plugins/axn-demo-note/`.
 - The built-in `agents` plugin (`session-plugins/agents.tsx`, on by default — `agents.enabled: false` disables only the UI) owns **agent personas**: reusable `agents.personas.<name>` bundles in plugins.yaml (`cli` — defaults to the persona name, `model`, `args`, `prompt`/`prompt-file` — the first-message kickoff, `instructions`/`instructions-file` — the persistent identity, `description`; a bare string value is `cli` shorthand). On every ctx touch it mirrors the parsed list into the shared `agentRegistry.ts` module (the `mrActions.ts` contribution pattern — always in the bundle, so the schema stays available even when the plugin is disabled). Consumers: dev-workflow's `agent: <name>`/`{profile: <name>, …overrides}` step references (unresolved names degrade to `cli: <name>`). Launch lines are built by each CLI's registered **launcher** — `registerAgentLauncher` in `agentRegistry.ts`, built-in agent plugins register at module scope, `devWorkflow.agentLaunchLine` consults the registry: claude sends instructions via `--append-system-prompt(-file)`, codex via `-c developer_instructions=…`, devin and unregistered CLIs fold them into the seed prompt, and agy — which only accepts prompts via `-p`/`-i`/stdin — sends the seed through `-i` with instructions folded in (registered under both `agy` and `antigravity`). A launcher's refusal surfaces as session attention. Launch surfaces: `axn-agent <persona>` types the launch line in the current shell (`completeArg` offers persona names), the session and workspace context menus' single "New session with agent…" row opens a searchable persona picker (`pickFromList`, see below) and spawns a persona-named session seeded with the launch line (pending map → `onSessionOpen`, like worktrees; workspace rows use `defaultFolder` as cwd), and the rail bot icon opens a full-area view of persona cards (cli/model/prompt badges, live-session count, Launch button + a "running" session list grouped by workspace in panel order — a non-collapsible tree, so every agent shows where it lives). A launched/typed persona stamps `pluginState.agents.persona`, which drives the `renderRow` bot badge — the persona survives as the session's identity beyond process detection.
 - `session.process` is the foreground process identity: the process-group leader's argv resolved by `process_identity` (`src-tauri/src/lib.rs`) — exact argv tokens from `/proc/<pid>/cmdline` on Linux and `sysctl(KERN_PROCARGS2)` on macOS (comm via `proc_name` when another user's process refuses it), so paths with spaces stay one token; the cwd poll reads `/proc/<pid>/cwd` / `proc_pidinfo(PROC_PIDVNODEPATHINFO)` — the 1 s per-terminal polls never spawn `ps`/`lsof` — argv0 basename, except interpreter launches unwrap to the script (`python3.13 /x/bin/vibe` → `vibe`, `node cli.js` → `cli`, `python -m pkg` → the module). `sessionIcons` keys match this name (lowercased), so script-based tools (uv/pipx CLIs, npm shims) get icons and `processPattern` matches too.
 - The `docker` plugin (`session-plugins/docker.tsx`) is a rail-only indicator: the Docker whale SVG icon, running/stopped container counts, and one rounded `BarStrip` triple bar — CPU / MEM / disk strips stacked under a single border, each strip filled with `pressureColor` and its percentage written into the bar (the label renders twice, once in track color and once in `--text-inverted` clipped to the fill, so glyphs flip color where the fill passes under them; per-strip `data-tip` carries the details). CPU and MEM strips show real **VM** pressure when possible — the probe `docker exec`s a read-only /proc snapshot inside the first running container (proc is not cgroup-namespaced, so cpuinfo/meminfo/stat report the VM kernel's numbers on colima/Desktop/podman-machine, host numbers on native Linux; CPU% is the /proc/stat jiffie delta between polls, MEM is MemAvailable-based); container `docker stats` sums are the fallback and stay in the tooltips. Disk likewise prefers `docker exec <cid> df -k /` (the VM's root fs — `df` of the host's `/` reported the macOS disk before). Two `sh -c` probes run via `backend.exec` on separate cadences: the fast per-poll `DOCKER_STATS_CMD` (`docker info` gate, `docker ps -a --format '{{.State}}'` counts, `docker stats --no-stream --format '{{.CPUPerc}}|{{.MemUsage}}'` container sums, `docker info --format '{{json .}}'` limits — docker `NCPU`/`MemTotal`, podman `host.cpus`/`host.memTotal` — and the `==vm==` container exec; each failed section prints `unavailable` and degrades to fallbacks) parsed by `parseDockerLive`, and the slow `DOCKER_DISK_CMD` (`docker system df --format '{{.Size}}'` + the df above, `DockerRootDir`/`Store.GraphRoot` host-side fallback) parsed by `parseDockerDisk` — `system df` walks every layer and takes seconds, so it runs only every `DISK_POLL_EVERY` (4) polls (~1 min at the default cadence) and keeps its last values on failure. The rail is session-less: desktop `plugin_exec` ignores the session id, web execs through the first session's host — the plugin hides when docker or exec is unavailable. `docker.refresh-interval-seconds` (default 15, min 5) sets the fast poll cadence; neither probe ever overlaps itself. ≥80/≥90 % disk or memory use raises a warning/critical app attention flag.
-- The `axn-dev` plugin (`session-plugins/axnDev.tsx`, Boxes rail icon) is a read-only mirror of `axn-dev list`: a shared `useSyncExternalStore` overview polls `axn-dev list` via `appRuntime().exec` on a `axn-dev.refresh-interval-seconds` cadence (default 30, min 10), parsed by the pure `parseAxnDevList` (global section at indent 2, project sections under `  <repo>:` headers at indent 4, endpoint lines and wrapped descriptions one level deeper — told apart by a URL-ish second token). The rail shows `running/found` (warning triangle when the CLI fails); clicking toggles the plugin view, which lists sections like `axn-dev list` — status dot, name, worktree badge, description, and clickable endpoint links for running scenarios — plus a persisted "running only" filter (`pluginData['axn-dev'].runningOnly`). No start/stop actions; `axn-dev serve` remains the full dashboard. The older external `plugins/axn-dev-scenarios.mjs` (opt-in, per-session row) is unaffected — different plugin id.
+- The `axn-dev` plugin (`session-plugins/axnDev.tsx`, Boxes rail icon) is a read-only mirror of `axn-dev list`: a shared `useSyncExternalStore` overview polls `axn-dev list` via `appRuntime().exec` on a `axn-dev.refresh-interval-seconds` cadence (default 30, min 10), parsed by the pure `parseAxnDevList` (global section at indent 2, project sections under `  <repo>:` headers at indent 4, endpoint lines and wrapped descriptions one level deeper — told apart by a URL-ish second token). The rail shows `running/found` (warning triangle when the CLI fails); clicking toggles the plugin view, which lists sections like `axn-dev list` — status dot, name, worktree badge, description, and clickable endpoint links for running scenarios — plus a persisted "running only" filter (`pluginData['axn-dev'].runningOnly`). No start/stop actions; `axn-dev serve` remains the full dashboard. It is also a repo-dir provider (`repoDirs`, below): `axn-dev git repos --json` (axn-dev ≥ the `git repos` command; older CLIs contribute nothing). The older external `plugins/axn-dev-scenarios.mjs` (opt-in, per-session row) is unaffected — different plugin id.
 - The built-in `worktrees` plugin (`session-plugins/worktrees.tsx`, opt-in `worktrees.enabled: true`) offers agent worktree isolation without any `axn-dev` dependency — plain `git` argv via `ctx.exec`. `git worktree add <dir> -b wt/<slug>` creates `<repo-parent>/worktrees/<repo>-wt-<slug>` (the axn-dev sibling-worktrees convention, so the CLI discovers them via `git worktree list`; `worktrees.worktree-root` overrides the parent), then `ctx.openSession(dir, slug)` spawns the session there — worktree-first, never a moved running shell. Entry points: session context menu ("New worktree session" / "New worktree with <agent>"), workspace context menu (when `defaultFolder` resolves to a repo), and `axn-worktree [name]`. The new session's `pluginState.worktree = { repoRoot, path, branch }` (stamped on `onSessionOpen` from a pending map, or detected once when a session opens inside a foreign-created linked worktree — e.g. dev-workflow's MR review) drives a `⎇` row badge, "Review worktree changes" (git tab at the path) and "Remove worktree" — `git worktree remove` refuses dirty trees, so failure re-raises the banner with a "Force remove" action, and success offers "Delete branch". The isolation nudge: when `session.process` matches `worktrees.agents` (default `claude, devin, codex, agy, vibe`) in a main checkout (`git-dir == git-common-dir`, probed once per session), a warning banner offers "New worktree session" (seeds the agent's resume command — `claude -c`, `devin -c`, `codex resume --last`, `agy -c`, `vibe -r`), with once-per-session re-raise and a persistent "Don't ask again" (`worktrees.suggest-isolation` gates it). `worktrees.default-agent` picks the seeded agent.
 - The built-in `scratchpad` plugin (`session-plugins/scratchpad.tsx`, opt-in — `scratchpad.enabled: true` plus the `scratchpad.patterns` setting, which has no default: `;`- or newline-separated `<repo-regex>: <dir>, <dir>` entries, e.g. `*: .local-drafts, drafts; axn-term: .ai, notes`; an entry without a repo part applies to all repos). The regex matches case-insensitively against the checkout dir basename AND the remote repo name, so one entry covers a repo and all its worktrees (`axn-term` also matches `axn-term-feat-foo`). Matching dirs union in order; the first *existing* dir is `primary` (else the first configured). Its in-panel surface is the session context menu only: one `Open <dir>/` row per configured folder (read from `pluginState.dirs` — sessionMenuItems is synchronous, so `onSessionOpen` and a debounced onOutput refresh resolve+store the dirs — falling back to a single "Open drafts" row before the first resolution), plus "New or open draft…" (`pickOrCreate`), "Copy agent hint" and "Tell agent about scratchpad". Drafts are plain files — agents read/write them with their own tools (filesystem-as-context), the plugin only has to say where they are: `axn-scratch ls|dir` echoes real paths into the scrollback, `axn-scratch hint` prints a paste-able AGENTS.md/CLAUDE.md hint, "Copy agent hint" puts it on the clipboard and "Tell agent about scratchpad" (offered when `agentInput` or an agent-ish process is foreground) types it into the session input *without* a newline. Creating a draft (`axn-scratch new <name>` or a bare name) mkdirs the primary dir, seeds a `*` `.gitignore` (self-ignoring folder — `scratchpad.gitignore-drafts` gates it) and opens the file in an editor tab; `axn-scratch open <name|n>` and bare names open existing drafts, `browse` opens the folder. Beyond the menu there is a `NotebookPen` rail icon opening the `hostsTabs` full-area view: drafts grouped by repo across all sessions, per-repo "copy hint" buttons, editor/browser hosted tabs (listings go through `PluginApi.listDir`, which resolves `null` where the backend lacks `listDir`).
 - The built-in `progress` plugin (`session-plugins/progress.ts`) scans the session's live screen (`ctx.getScreenLines()`, backed by the xterm registry in `terminalRegistry.ts`) for progress indicators (`45%`, `[###---]`, `3/10`) instead of guessing from the output stream. When several bars are on screen the bottom-most one is reported; an indicator must persist ~500 ms before it is shown, and `session.progress` is withdrawn once no bar remains on screen. Only allowlisted programs are tracked: `progress.include-processes` in `plugins.yaml` (exact, case-insensitive process names; `'*'` tracks every program) — unset, it defaults to `DEFAULT_INCLUDED_PROCESSES` (curl/wget/rsync/pv/dd, pacman/apt/dnf/pip/uv/cargo/npm/pnpm/yarn/bun, git, ffmpeg), so percent-like noise from anything else (brew, build logs) never becomes a bar. Exclude programs on top via `progress.exclude-processes: [docker]` (case-insensitive substring match on the foreground process). A built-in list (`BUILTIN_EXCLUDED_PROCESSES`) already covers full-screen monitors/pagers/editors (`top`, `htop`, `vim`, `less`, …) and matches the comm basename exactly.

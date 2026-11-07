@@ -804,29 +804,34 @@ pub(crate) fn write_session(state: State<AppState>, session_id: String, data: St
 /// Write once the slave tty has entered raw mode (ECHO or ICANON cleared).
 /// Emulator replies to queries — OSC 10/11/12 color reports, DA/CPR answers —
 /// must not land while the tty is still cooked+echo or the kernel echoes
-/// them as visible text at the prompt. Waiting on termios is deterministic;
+/// them as visible text and the canonical line buffer flushes them into the
+/// asker's input at the next mode flip. Waiting on termios is deterministic;
 /// a timer is not (a TUI still loading past the delay leaks the reply).
-/// Unknown/unreadable termios or a 4 s cap → write anyway: a swallowed
-/// answer is worse than a possibly-echoed one.
+/// Resolves only once the write happened (or was dropped at the cap) so the
+/// caller's ordered input queue can hold later replies — devin's DA1
+/// sentinel — behind it. `timeout_ms` bounds the wait (default 4 s).
 #[cfg(unix)]
 #[tauri::command]
-pub(crate) fn write_when_raw(
-    state: State<AppState>,
+pub(crate) async fn write_when_raw(
+    state: State<'_, AppState>,
     session_id: String,
     data: String,
-) -> Result<(), String> {
+    timeout_ms: Option<u64>,
+) -> Result<bool, String> {
     let (fd, input) = {
         let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
         let session = sessions.get(&session_id).ok_or("session not found")?;
         let fd = session.master.lock().map_err(|e| e.to_string())?.as_raw_fd();
         (fd, session.input.clone())
     };
-    std::thread::spawn(move || {
-        write_when_slave_raw(fd, std::time::Duration::from_secs(4), move || {
+    let timeout = std::time::Duration::from_millis(timeout_ms.unwrap_or(4_000));
+    tauri::async_runtime::spawn_blocking(move || {
+        write_when_slave_raw(fd, timeout, move || {
             let _ = input.send(data.into_bytes());
-        });
-    });
-    Ok(())
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Poll the slave's termios until it leaves cooked+echo mode (ECHO or ICANON
@@ -837,12 +842,14 @@ pub(crate) fn write_when_raw(
 /// cooked program's input). Unreadable termios (fd gone / not a tty) still
 /// writes — there is no cooked line to corrupt. Split out of
 /// `write_when_raw` so the gate can be exercised against a real PTY in tests.
+/// Returns whether `write` ran — false when the slave was still cooked at the
+/// deadline and the report was dropped.
 #[cfg(unix)]
 fn write_when_slave_raw(
     raw_fd: Option<std::os::fd::RawFd>,
     timeout: std::time::Duration,
     write: impl FnOnce(),
-) {
+) -> bool {
     use nix::sys::termios::{LocalFlags, tcgetattr};
     use std::os::fd::BorrowedFd;
 
@@ -859,10 +866,11 @@ fn write_when_slave_raw(
             }
         }
         if cooked {
-            return; // still cooked at the deadline — drop the report
+            return false; // still cooked at the deadline — drop the report
         }
     }
     write();
+    true
 }
 
 #[tauri::command]

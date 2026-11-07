@@ -1,17 +1,20 @@
 import { lazy, Suspense, type ComponentProps } from 'react';
 import type { EditorView as EditorViewImpl } from './EditorView';
 import type { GitInspectView as GitInspectViewImpl } from './GitInspectView';
+import type { IdeView as IdeViewImpl } from './IdeView';
 
 // Monaco is ~3.8 MB of JS — keep it out of the startup bundle. Both views
 // pull it in through ./monacoSetup, so they load on first use (or on idle,
 // via preloadMonacoViews) instead of before the first terminal renders.
 const loadEditor = () => import('./EditorView');
 const loadGitInspect = () => import('./GitInspectView');
+const loadIde = () => import('./IdeView');
 
 const LazyEditorView = lazy(() => loadEditor().then((m) => ({ default: m.EditorView })));
 const LazyGitInspectView = lazy(() =>
   loadGitInspect().then((m) => ({ default: m.GitInspectView })),
 );
+const LazyIdeView = lazy(() => loadIde().then((m) => ({ default: m.IdeView })));
 
 export function EditorView(props: ComponentProps<typeof EditorViewImpl>) {
   return (
@@ -29,8 +32,17 @@ export function GitInspectView(props: ComponentProps<typeof GitInspectViewImpl>)
   );
 }
 
+export function IdeView(props: ComponentProps<typeof IdeViewImpl>) {
+  return (
+    <Suspense fallback={null}>
+      <LazyIdeView {...props} />
+    </Suspense>
+  );
+}
+
 /** Warm the Monaco chunks once the app is idle, so the first editor opens fast. */
 export function preloadMonacoViews(): void {
   void loadEditor().catch(() => {});
   void loadGitInspect().catch(() => {});
+  void loadIde().catch(() => {});
 }

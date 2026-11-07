@@ -129,7 +129,8 @@ function makeCtx(
   return { ctx, session, pluginStateStore, appData, appStateCalls, writes, runCommandCalls };
 }
 
-const lastOf = (h: Harness) => h.appData.last;
+const lastOf = (h: Harness) =>
+  ((h.ctx.pluginState as { last?: unknown } | undefined)?.last ?? h.appData.last) as unknown;
 
 beforeEach(() => clearAgentLasts());
 
@@ -141,14 +142,14 @@ describe('lastAgentSession', () => {
 
   it('rejects malformed records', () => {
     for (const last of ['x', 5, [], { name: 'n' }, { command: '' }]) {
-      const h = makeCtx('devin', {}, { appData: { last } });
+      const h = makeCtx('devin', {}, { pluginState: { last } });
       expect(lastAgentSession(h.ctx)).toBeUndefined();
     }
   });
 
   it('normalizes a valid record', () => {
     const h = makeCtx('devin', {}, {
-      appData: { last: { name: 'grey-party', cwd: '/repo', command: 'devin -r grey-party', at: 7 } },
+      pluginState: { last: { name: 'grey-party', cwd: '/repo', command: 'devin -r grey-party', at: 7 } },
     });
     expect(lastAgentSession(h.ctx)).toEqual({
       name: 'grey-party',
@@ -168,16 +169,28 @@ describe('rememberLastAgentSession / forgetLastAgentSession', () => {
 
   it('skips an unchanged record and keeps its stamp', () => {
     const h = makeCtx('devin', {}, {
-      appData: { last: { name: 'n-1', command: 'devin -r n-1', at: 42 } },
+      pluginState: { last: { name: 'n-1', command: 'devin -r n-1', at: 42 } },
     });
     rememberLastAgentSession(h.ctx, 'devin', { name: 'n-1', command: 'devin -r n-1' });
     expect(h.appStateCalls).toHaveLength(0);
     expect((lastOf(h) as { at: number }).at).toBe(42);
   });
 
+  it('never reads a legacy app-level record and retires it on capture', () => {
+    const h = makeCtx('devin', {}, {
+      appData: { last: { name: 'n-1', cwd: '/repo', command: 'devin -r n-1', at: 42 } },
+    });
+    // The legacy record is invisible — no resume row, not the current record.
+    expect(lastAgentSession(h.ctx)).toBeUndefined();
+    expect(agentResumeMenuItem(h.ctx, 'devin')).toEqual([]);
+    rememberLastAgentSession(h.ctx, 'devin', { name: 'n-2', command: 'devin -r n-2' });
+    expect(lastOf(h)).toEqual({ name: 'n-2', command: 'devin -r n-2', at: expect.any(Number) });
+    expect(h.appData.last).toBeUndefined();
+  });
+
   it('clears only a matching name', () => {
     const h = makeCtx('devin', {}, {
-      appData: { last: { name: 'n-1', command: 'devin -r n-1', at: 1 } },
+      pluginState: { last: { name: 'n-1', command: 'devin -r n-1', at: 1 } },
     });
     forgetLastAgentSession(h.ctx, 'devin', 'other');
     expect(lastOf(h)).toBeTruthy();
@@ -187,15 +200,15 @@ describe('rememberLastAgentSession / forgetLastAgentSession', () => {
 });
 
 describe('agentResumeMenuItem', () => {
-  const last = { name: 'grey-party', command: `cd '/repo' && devin -r grey-party`, at: 1 };
+  const last = { name: 'grey-party', cwd: '/repo', command: `cd '/repo' && devin -r grey-party`, at: 1 };
 
   it('is hidden while a process runs in the session', () => {
-    const h = makeCtx('devin', { process: 'devin' }, { appData: { last } });
+    const h = makeCtx('devin', { process: 'devin' }, { pluginState: { last } });
     expect(agentResumeMenuItem(h.ctx, 'devin')).toEqual([]);
   });
 
   it('is hidden while an agent is marked via terminal title', () => {
-    const h = makeCtx('devin', { agentInput: 'devin' }, { appData: { last } });
+    const h = makeCtx('devin', { agentInput: 'devin' }, { pluginState: { last } });
     expect(agentResumeMenuItem(h.ctx, 'devin')).toEqual([]);
   });
 
@@ -205,7 +218,7 @@ describe('agentResumeMenuItem', () => {
   });
 
   it('offers "Resume <agent> session \'<name>\'" on an idle session', () => {
-    const h = makeCtx('devin', {}, { appData: { last } });
+    const h = makeCtx('devin', {}, { pluginState: { last } });
     const items = agentResumeMenuItem(h.ctx, 'devin');
     expect(items).toHaveLength(1);
     expect(items[0].label).toBe("Resume devin session 'grey-party'");
@@ -213,42 +226,59 @@ describe('agentResumeMenuItem', () => {
 
   it('drops the name for nameless records', () => {
     const h = makeCtx('codex', {}, {
-      appData: { last: { command: 'codex resume --last', at: 1 } },
+      pluginState: { last: { cwd: '/repo', command: 'codex resume --last', at: 1 } },
     });
     expect(agentResumeMenuItem(h.ctx, 'codex')[0].label).toBe('Resume codex session');
   });
 
-  it('shows only the globally newest record — one resume row per menu', () => {
-    // Simulate persisted records: devin exited earlier, claude last.
-    const devin = makeCtx('devin', {}, { appData: { last: { ...last, at: 10 } } });
-    const claude = makeCtx('claude', {}, {
-      appData: { last: { name: 'abc', command: 'claude --resume abc', at: 20 } },
+  it('is scoped per session — another session\'s newest record does not leak', () => {
+    // Two sessions: devin's record in s1, claude's in s2 — each shows its own.
+    const devin = makeCtx('devin', { id: 's1' }, { pluginState: { last: { ...last, at: 10 } } });
+    const claude = makeCtx('claude', { id: 's2' }, {
+      pluginState: { last: { name: 'abc', cwd: '/repo', command: 'claude --resume abc', at: 20 } },
     });
-    // devin's row is built before claude registers its newer record — still
-    // hidden once claude's newer one has been seen (second pass mirrors the
-    // steady state; within one menu build registration precedes comparison).
+    agentResumeMenuItem(claude.ctx, 'claude');
+    expect(agentResumeMenuItem(devin.ctx, 'devin')).toHaveLength(1);
+    expect(agentResumeMenuItem(claude.ctx, 'claude')).toHaveLength(1);
+  });
+
+  it('shows only the session\'s newest record — one resume row per menu', () => {
+    // Same session ran devin then claude — only the newest (claude) shows.
+    const devin = makeCtx('devin', { id: 's1' }, { pluginState: { last: { ...last, at: 10 } } });
+    const claude = makeCtx('claude', { id: 's1' }, {
+      pluginState: { last: { name: 'abc', cwd: '/repo', command: 'claude --resume abc', at: 20 } },
+    });
     agentResumeMenuItem(claude.ctx, 'claude');
     expect(agentResumeMenuItem(devin.ctx, 'devin')).toEqual([]);
     expect(agentResumeMenuItem(claude.ctx, 'claude')).toHaveLength(1);
   });
 
-  it('a fresh record wins over an older one from another agent', () => {
-    const devin = makeCtx('devin', {}, { appData: { last: { ...last, at: 10 } } });
-    const claude = makeCtx('claude');
-    rememberLastAgentSession(claude.ctx, 'claude', { command: 'claude -c' });
-    agentResumeMenuItem(claude.ctx, 'claude');
-    expect(agentResumeMenuItem(devin.ctx, 'devin')).toEqual([]);
+  it('is hidden when the session sits in a different folder', () => {
+    const h = makeCtx('devin', { cwd: '/elsewhere' }, { pluginState: { last } });
+    expect(agentResumeMenuItem(h.ctx, 'devin')).toEqual([]);
+  });
+
+  it('is hidden when the record has no cwd to verify', () => {
+    const h = makeCtx('devin', {}, {
+      pluginState: { last: { name: 'grey-party', command: 'devin -r grey-party', at: 1 } },
+    });
+    expect(agentResumeMenuItem(h.ctx, 'devin')).toEqual([]);
+  });
+
+  it('matches the folder ignoring a trailing slash', () => {
+    const h = makeCtx('devin', { cwd: '/repo/' }, { pluginState: { last } });
+    expect(agentResumeMenuItem(h.ctx, 'devin')).toHaveLength(1);
   });
 
   it('writes the stored command into the PTY', async () => {
-    const h = makeCtx('devin', {}, { appData: { last } });
+    const h = makeCtx('devin', {}, { pluginState: { last } });
     agentResumeMenuItem(h.ctx, 'devin')[0].onClick();
     await vi.waitFor(() => expect(h.writes).toEqual([`${last.command}\r`]));
   });
 
   it('dispatches the line through runCommand like a typed command', async () => {
     const runCommand = vi.fn(() => undefined as string | false | undefined);
-    const h = makeCtx('devin', {}, { appData: { last }, runCommand });
+    const h = makeCtx('devin', {}, { pluginState: { last }, runCommand });
     agentResumeMenuItem(h.ctx, 'devin')[0].onClick();
     await vi.waitFor(() => expect(h.writes).toEqual([`${last.command}\r`]));
     expect(runCommand).toHaveBeenCalledWith(last.command);
@@ -256,7 +286,7 @@ describe('agentResumeMenuItem', () => {
 
   it('writes a replacement line when dispatch resolves one', async () => {
     const h = makeCtx('devin', {}, {
-      appData: { last },
+      pluginState: { last },
       runCommand: () => 'devin -r resolved',
     });
     agentResumeMenuItem(h.ctx, 'devin')[0].onClick();
@@ -264,7 +294,7 @@ describe('agentResumeMenuItem', () => {
   });
 
   it('writes nothing when dispatch swallows the line', async () => {
-    const h = makeCtx('devin', {}, { appData: { last }, runCommand: () => false });
+    const h = makeCtx('devin', {}, { pluginState: { last }, runCommand: () => false });
     agentResumeMenuItem(h.ctx, 'devin')[0].onClick();
     await new Promise((r) => setTimeout(r, 10));
     expect(h.writes).toEqual([]);
@@ -310,7 +340,7 @@ describe('devin plugin', () => {
 
   it('contributes the resume row to the session menu on an idle session', () => {
     const h = makeCtx('devin', {}, {
-      appData: { last: { name: 'grey-party', command: 'devin -r grey-party', at: 1 } },
+      pluginState: { last: { name: 'grey-party', cwd: '/repo', command: 'devin -r grey-party', at: 1 } },
     });
     const items = devinPlugin.sessionMenuItems?.(h.ctx) ?? [];
     expect(items.map((i) => i.label)).toEqual(["Resume devin session 'grey-party'"]);
@@ -519,7 +549,7 @@ describe('session title capture', () => {
 
   it('a changed title re-stamps the record', () => {
     const h = makeCtx('claude', { autoName: 'first title' }, {
-      appData: { last: { name: 'abc', command: 'claude --resume abc', at: 5 } },
+      pluginState: { last: { name: 'abc', command: 'claude --resume abc', at: 5 } },
     });
     rememberLastAgentSession(h.ctx, 'claude', { name: 'abc', command: 'claude --resume abc' });
     expect(lastOf(h)).toMatchObject({ title: 'first title', at: expect.any(Number) });
@@ -530,10 +560,11 @@ describe('session title capture', () => {
 describe('agentResumeMenuItem labels', () => {
   it('prefers the display title over the raw session id', () => {
     const h = makeCtx('claude', {}, {
-      appData: {
+      pluginState: {
         last: {
           name: 'abc-123',
           title: 'Research the codebase',
+          cwd: '/repo',
           command: 'claude --resume abc-123',
           at: 1,
         },
@@ -549,24 +580,25 @@ describe('agentResumePanel', () => {
   const last = {
     name: 'grey-party',
     title: 'Grey Party',
+    cwd: '/repo',
     command: `cd '/repo' && devin -r grey-party`,
     at: 1,
   };
 
   it('renders a resume button on an idle session', () => {
-    const h = makeCtx('devin', {}, { appData: { last } });
+    const h = makeCtx('devin', {}, { pluginState: { last } });
     const el = agentResumePanel(h.ctx, 'devin') as ReactElement | null;
     expect(el).not.toBeNull();
   });
 
   it('is hidden while a process runs in the session', () => {
-    const h = makeCtx('devin', { process: 'zsh' }, { appData: { last } });
+    const h = makeCtx('devin', { process: 'zsh' }, { pluginState: { last } });
     expect(agentResumePanel(h.ctx, 'devin')).toBeNull();
   });
 
   it('is hidden when the resume-button setting is off', () => {
     const h = makeCtx('devin', {}, {
-      appData: { last },
+      pluginState: { last },
       pluginSettings: { resumeButton: false },
     });
     expect(agentResumePanel(h.ctx, 'devin')).toBeNull();
@@ -574,15 +606,22 @@ describe('agentResumePanel', () => {
     expect(agentResumeMenuItem(h.ctx, 'devin')).toHaveLength(1);
   });
 
-  it('is hidden when another agent owns the global last', () => {
-    const h = makeCtx('devin', {}, { appData: { last } });
-    const claude = makeCtx('claude');
+  it('is hidden when another agent owns the session\'s newest record', () => {
+    const h = makeCtx('devin', { id: 's1' }, { pluginState: { last } });
+    const claude = makeCtx('claude', { id: 's1' });
     rememberLastAgentSession(claude.ctx, 'claude', { command: 'claude -c' });
     expect(agentResumePanel(h.ctx, 'devin')).toBeNull();
   });
 
+  it('still renders when another session has a newer record', () => {
+    const h = makeCtx('devin', { id: 's1' }, { pluginState: { last } });
+    const claude = makeCtx('claude', { id: 's2' });
+    rememberLastAgentSession(claude.ctx, 'claude', { command: 'claude -c' });
+    expect(agentResumePanel(h.ctx, 'devin')).not.toBeNull();
+  });
+
   it('clicking the button writes the stored command into the PTY', async () => {
-    const h = makeCtx('devin', {}, { appData: { last } });
+    const h = makeCtx('devin', {}, { pluginState: { last } });
     const el = agentResumePanel(h.ctx, 'devin') as ReactElement;
     const button = el.props.children as ReactElement<{ onClick: () => void }>;
     button.props.onClick();

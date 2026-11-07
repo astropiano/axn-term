@@ -157,6 +157,12 @@ export interface ShellPlatform {
   stateStore: ShellStateStore;
   pluginSettingsStore: PluginSettingsStore;
   workspaceSetStorage: WorkspaceSetStorage;
+  /**
+   * Native directory picker — resolves the picked absolute path, null on
+   * cancel. Desktop only (Tauri dialog); absent elsewhere, where callers
+   * fall back to the embedded FilePickerModal over the backend's fs ops.
+   */
+  pickDirectory?(): Promise<string | null>;
   /** Installed font family names for settings suggestions; absent → no hints. */
   listFonts?(): Promise<string[]>;
   /** Import/export of the app config — settings modal "Import"/"Export". */
@@ -169,6 +175,11 @@ export interface ShellPlatform {
    */
   configStore?: AppConfigStore;
   window?: ShellWindow;
+  /**
+   * Tint the native window titlebar to the given #rrggbb — desktop/macOS
+   * only; called from applyTheme with the resolved --bg-secondary.
+   */
+  setTitlebarColor?(color: string): void;
   /**
    * Live remote-authority (publish) status — desktop only, present once
    * Remote control is configured. `state` is 'idle' while not publishing.

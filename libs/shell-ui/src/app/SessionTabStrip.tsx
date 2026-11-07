@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLingui } from '@lingui/react/macro';
-import { Eye, FileText, Folder, GitBranch, SquareTerminal, Terminal, X } from 'lucide-react';
+import { Eye, FileText, Folder, GitBranch, SquareTerminal, Terminal, X , PanelLeft} from 'lucide-react';
 import type { EditorTab } from '../types';
 import { defaultTabLabel } from './subshellPromote';
 import { useSettings } from '../SettingsProvider';
@@ -33,8 +33,9 @@ export function SessionTabStrip({
   const { settings } = useSettings();
   return (
     <div
-      className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1"
+      className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto bg-[var(--bg-secondary)] px-1 shadow-[inset_0_-1px_0_var(--border)]"
       style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
+      data-tauri-drag-region
     >
       <button
         type="button"
@@ -82,7 +83,7 @@ export function SessionTabStrip({
             activeTab === ed.id,
           )}${tabDragId === ed.id ? ' opacity-40' : ''}${
             tabDropId === ed.id && tabDragId !== ed.id
-              ? ' shadow-[inset_2px_0_0_var(--accent)]'
+              ? " before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-[var(--accent)] before:content-['']"
               : ''
           }`}
         >
@@ -98,6 +99,8 @@ export function SessionTabStrip({
           >
             {ed.kind === 'browser' ? (
               <Folder className="h-3.5 w-3.5" />
+            ) : ed.kind === 'ide' ? (
+              <PanelLeft className="h-3.5 w-3.5" />
             ) : ed.kind === 'shell' ? (
               <Terminal className="h-3.5 w-3.5" />
             ) : ed.kind === 'preview' ? (

@@ -1,9 +1,12 @@
+import { useEffect, useState } from 'react';
 import type { Terminal } from '@xterm/xterm';
 import { Trans } from '@lingui/react/macro';
-import { ClipboardPaste, Copy, RotateCw, Scissors, TextSelect } from 'lucide-react';
+import { ClipboardPaste, Copy, ExternalLink, FolderOpen, FolderSearch, RotateCw, Scissors, TextSelect } from 'lucide-react';
 import type { ShellServices } from '@axn-term/session-backend';
 import { ContextMenu, menuDividerClass, menuItemClass } from '../ContextMenu';
-import { terminalSelection } from '../terminalRegistry';
+import { selectionResolver, terminalSelection, type SelectionResolver } from '../terminalRegistry';
+import { wrappedSelectionCandidates } from '../terminalLinks';
+import { revealLabel as defaultRevealLabel } from '../platform';
 
 /** What the right-click landed on. */
 export type AppMenuTarget =
@@ -26,6 +29,43 @@ export function appMenuTarget(
     return { kind: 'editable', el: target };
   }
   return { kind: 'other', selection: window.getSelection()?.toString() ?? '' };
+}
+
+export interface SelectionTarget {
+  path: string;
+  isUrl: boolean;
+  isDir: boolean;
+}
+
+/**
+ * Aggressive path/URL check for a manual selection — the buffer's link
+ * tokens miss plenty (agent TUIs draw text lookalikes and hard-wrap long
+ * paths), so every plausible candidate is tried: the whole selection, each
+ * whitespace token and line, the rows rejoined, and the soft-wrap rejoins
+ * the link scanner itself uses.
+ */
+export async function resolveSelectionTarget(
+  resolve: SelectionResolver,
+  selection: string,
+): Promise<SelectionTarget | null> {
+  const candidates = new Set<string>();
+  const add = (t: string) => {
+    const s = t
+      .trim()
+      .replace(/^[.,;:'"()[\]{}<>*]+/, '')
+      .replace(/[.,;:'"()[\]{}<>*@|=]+$/, '');
+    if (s.length > 1) candidates.add(s);
+  };
+  add(selection);
+  for (const tok of selection.split(/\s+/)) add(tok);
+  for (const line of selection.split('\n')) add(line);
+  add(selection.split('\n').map((l) => l.trim()).join(''));
+  for (const c of wrappedSelectionCandidates(selection)) add(c);
+  for (const c of candidates) {
+    const hit = await resolve(c);
+    if (hit) return { path: hit.stat.path, isUrl: hit.isUrl, isDir: hit.stat.isDir };
+  }
+  return null;
 }
 
 /**
@@ -55,6 +95,24 @@ export function AppContextMenu({
     void action();
   };
   const paste = services.pasteText;
+
+  // A manual selection may be a path/URL the token scan never linked —
+  // resolve it and add the same Open/Reveal actions the hover card offers.
+  const termTarget = target.kind === 'terminal' ? target : null;
+  const [selTarget, setSelTarget] = useState<SelectionTarget | null>(null);
+  useEffect(() => {
+    setSelTarget(null);
+    const resolve = termTarget ? selectionResolver(termTarget.term) : undefined;
+    const sel = termTarget?.selection.trim() ?? '';
+    if (!resolve || sel.length < 2) return;
+    let live = true;
+    void resolveSelectionTarget(resolve, sel).then((hit) => {
+      if (live) setSelTarget(hit);
+    });
+    return () => {
+      live = false;
+    };
+  }, [termTarget?.term, termTarget?.selection]);
   const row = (
     key: string,
     icon: React.ReactNode,
@@ -78,7 +136,29 @@ export function AppContextMenu({
   let rows: React.ReactNode[] = [];
   if (target.kind === 'terminal') {
     const { term, selection } = target;
+    const revealText = services.revealLabel ?? defaultRevealLabel;
+    const targetRows = selTarget
+      ? [
+          selTarget.isUrl
+            ? row('open-link', <ExternalLink className={icon} />, <Trans>Open link</Trans>, () =>
+                services.openExternal(selTarget.path),
+              )
+            : null,
+          !selTarget.isUrl && selTarget.isDir && services.openDirectory
+            ? row('open-dir', <FolderOpen className={icon} />, <Trans>Open</Trans>, () =>
+                services.openDirectory?.(selTarget.path),
+              )
+            : null,
+          !selTarget.isUrl && services.revealPath
+            ? row('reveal', <FolderSearch className={icon} />, revealText, () =>
+                services.revealPath?.(selTarget.path),
+              )
+            : null,
+          <div key="sel-sep" className={menuDividerClass} />,
+        ].filter(Boolean)
+      : [];
     rows = [
+      ...targetRows,
       row('copy', <Copy className={icon} />, <Trans>Copy</Trans>, () => services.copyText(selection), !selection),
       paste &&
         row('paste', <ClipboardPaste className={icon} />, <Trans>Paste</Trans>, async () => {

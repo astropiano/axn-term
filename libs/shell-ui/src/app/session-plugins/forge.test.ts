@@ -4,6 +4,7 @@ import {
   authCommand,
   authStatusHint,
   classifyCliError,
+  compactCliError,
   cliMissingMarker,
   forgeCliCommand,
   forgeHost,
@@ -149,5 +150,28 @@ describe('auth hints name the queried host', () => {
     expect(hint).toContain('Check `glab auth status` in a shell.');
     expect(hint).toContain('default host');
     expect(hint).toContain('GitLab hostname');
+  });
+});
+
+describe('compactCliError', () => {
+  it('collapses a GraphQL timeout dump into counts per field', () => {
+    const dump = 'glab: ' + 'Timeout on ResolvableInterface.resolvable '.repeat(54) +
+      'Timeout on MergeRequest.iid '.repeat(12) + 'Timeout on BaseNoteInterface.author'.concat(' ').repeat(400);
+    const out = compactCliError(dump.trim());
+    expect(out).toBe(
+      'glab: the server timed out answering the query (466 fields: ' +
+        'ResolvableInterface.resolvable ×54, MergeRequest.iid ×12, BaseNoteInterface.author ×400)',
+    );
+  });
+
+  it('keeps a single timeout and short messages as they are', () => {
+    expect(compactCliError('glab: Timeout on MergeRequest.iid')).toBe('glab: Timeout on MergeRequest.iid');
+    expect(compactCliError('glab: 502 Bad Gateway')).toBe('glab: 502 Bad Gateway');
+  });
+
+  it('cuts other long messages', () => {
+    const out = compactCliError('x'.repeat(1000));
+    expect(out).toHaveLength(601);
+    expect(out.endsWith('…')).toBe(true);
   });
 });

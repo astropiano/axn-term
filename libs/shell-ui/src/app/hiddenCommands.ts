@@ -40,6 +40,7 @@ export interface HiddenCommandInputDeps {
   onEditorRequest?: (path: string) => void;
   onBrowserRequest?: (path: string) => void;
   onPreviewRequest?: (path: string) => void;
+  onIdeRequest?: (path: string) => void;
   /**
    * Session-level command dispatch (axn-session*, axn-workspace-*, axn-sh,
    * axn-install, plugin commands, /exit in agent mode). `undefined` passes
@@ -373,6 +374,14 @@ export function createHiddenCommandInput(
           return claimed(() => {
             deps.write('\x15');
             deps.onPreviewRequest?.(previewMatch[1]);
+          });
+        }
+        // Optional dir arg: bare `axn-ide` opens the IDE at the live cwd.
+        const ideMatch = /^\s*axn-ide(?:\s+(.+?))?\s*$/.exec(line);
+        if (ideMatch) {
+          return claimed(() => {
+            deps.write('\x15');
+            deps.onIdeRequest?.(ideMatch[1] ?? '.');
           });
         }
         const command = deps.onSessionCommand?.(line);

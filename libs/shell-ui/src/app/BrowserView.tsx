@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DirEntry } from '@axn-term/session-backend';
-import { FileText, Folder, FolderOpen, ChevronDown, ChevronLeft, ChevronRight, ArrowUp, RefreshCw, FilePlus, FolderPlus, Copy, FolderSearch } from 'lucide-react';
+import { FileText, Folder, FolderOpen, ChevronDown, ChevronLeft, ChevronRight, ArrowUp, RefreshCw, FilePlus, FolderPlus, Copy, FolderSearch, PanelLeft } from 'lucide-react';
 import { resolvePath } from './fileService';
 import { flattenTree, sortEntries, type ChildListing, type TreeRow } from './browserTree';
 import { appRuntime } from './appRuntime';
@@ -18,6 +18,12 @@ interface BrowserViewProps {
   isVisible?: boolean;
   onOpenFile: (path: string) => void;
   onPreviewFile?: (path: string) => void;
+  /** "Open as IDE" on the background menu; absent hides the item (e.g. inside an IDE tab itself). */
+  onIdeRequest?: (dirPath: string) => void;
+  /** Always list dotfiles and hide the toggle row (IDE view shows everything). */
+  alwaysShowHidden?: boolean;
+  /** Single click on a file row opens it (IDE tree); directories still only select. */
+  openOnSelect?: boolean;
   /** Owning session's id; plugin-hosted tabs resolve any live session. */
   sessionId?: string;
 }
@@ -44,6 +50,9 @@ export function BrowserView({
   isVisible,
   onOpenFile,
   onPreviewFile,
+  onIdeRequest,
+  alwaysShowHidden,
+  openOnSelect,
   sessionId: sessionIdProp,
 }: BrowserViewProps) {
   const [currentPath, setCurrentPath] = useState<string>(() => resolvePath(cwd, path));
@@ -69,7 +78,8 @@ export function BrowserView({
   const [pathDraft, setPathDraft] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggestIndex, setSuggestIndex] = useState(-1);
-  const [showHidden, setShowHidden] = useState(false);
+  const [showHiddenPref, setShowHidden] = useState(false);
+  const showHidden = alwaysShowHidden || showHiddenPref;
   // Back/forward navigation — in-memory only, capped at HISTORY_LIMIT steps.
   const [history, setHistory] = useState<{ stack: string[]; index: number }>(() => ({
     stack: [resolvePath(cwd, path)],
@@ -449,17 +459,19 @@ export function BrowserView({
           <RefreshCw className={`h-3.5 w-3.5${loading ? ' animate-spin' : ''}`} />
         </button>
       </div>
-      <div className="flex h-5 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
-        <label className="flex cursor-pointer select-none items-center gap-1.5 text-[10px] text-[var(--text-secondary)]">
-          <input
-            type="checkbox"
-            checked={showHidden}
-            onChange={(e) => setShowHidden(e.target.checked)}
-            className="h-3 w-3 accent-[var(--accent)]"
-          />
-          show hidden files
-        </label>
-      </div>
+      {!alwaysShowHidden && (
+        <div className="flex h-5 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
+          <label className="flex cursor-pointer select-none items-center gap-1.5 text-[10px] text-[var(--text-secondary)]">
+            <input
+              type="checkbox"
+              checked={showHidden}
+              onChange={(e) => setShowHidden(e.target.checked)}
+              className="h-3 w-3 accent-[var(--accent)]"
+            />
+            show hidden files
+          </label>
+        </div>
+      )}
       <div
         ref={listRef}
         tabIndex={0}
@@ -531,7 +543,12 @@ export function BrowserView({
                   type="button"
                   onClick={() => {
                     setSelected(row.path);
-                    if (coarsePointer && selected === row.path) openEntry(row.entry, row.path);
+                    if (
+                      openOnSelect
+                        ? !row.entry.isDirectory
+                        : coarsePointer && selected === row.path
+                    )
+                      openEntry(row.entry, row.path);
                   }}
                   onDoubleClick={() => openEntry(row.entry, row.path)}
                   onContextMenu={(e) => {
@@ -618,6 +635,22 @@ export function BrowserView({
             </div>
             <div className={menuDividerClass} />
             <div className="flex flex-col">
+              {onIdeRequest && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onIdeRequest(currentPath);
+                      setMenu(null);
+                    }}
+                    className={menuItemClass}
+                  >
+                    <PanelLeft className="h-3.5 w-3.5 shrink-0" />
+                    Open as IDE
+                  </button>
+                  <div className={menuDividerClass} />
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => startCreate('file')}

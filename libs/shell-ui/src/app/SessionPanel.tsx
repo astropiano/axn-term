@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fragment, type CSSProperties } from 'react';
 import { useIconBag, resolveIcon, resolveProcessIcon, type IconBag } from './iconModel';
-import { ContextMenu } from '../ContextMenu';
-import { Plus, Save, FolderOpen, FolderCog, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText } from 'lucide-react';
+import { ContextMenu, menuItemClass } from '../ContextMenu';
+import { Plus, Save, FolderOpen, FolderCog, FolderPlus, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText, PanelLeft } from 'lucide-react';
 import { Trans, useLingui } from '@lingui/react/macro';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
@@ -23,6 +23,8 @@ import type { TaskStateSnapshot } from './useAgentTasks';
 import { SetDefaultFolderModal } from './SetDefaultFolderModal';
 import { EditSessionSummaryModal } from './EditSessionSummaryModal';
 import { InvalidDefaultFolderModal } from './InvalidDefaultFolderModal';
+import { DeleteWorkspaceModal } from './DeleteWorkspaceModal';
+import { FilePickerModal } from './FilePickerModal';
 import {
   createDragExitTracker,
   dragEndedOutside,
@@ -57,6 +59,7 @@ interface SessionPanelProps {
   mergePluginState: (sessionId: string, stateKey: string, patch: Record<string, unknown>) => void;
   plugins: readonly SessionViewPlugin[];
   onOpenBrowser: (sessionId: string, path: string) => void;
+  onOpenIde: (sessionId: string, path: string) => void;
   onOpenTab: (
     sessionId: string,
     tab: { path: string; kind: 'editor' | 'browser' | 'preview' | 'git' },
@@ -425,6 +428,7 @@ function WorkspaceHeader({
   onDragEnd: (e: React.DragEvent) => void;
 }) {
   const { t } = useLingui();
+  const { settings } = useSettings();
   const { editing, input, startEdit } = useEditableName(workspace.name, onRename);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition>({ x: 0, y: 0 });
@@ -495,6 +499,7 @@ function WorkspaceHeader({
         </span>
       )}
 
+      {(settings.newSessionButton ?? 'both') !== 'list' && (
       <button
         type="button"
         onClick={(e) => {
@@ -503,10 +508,11 @@ function WorkspaceHeader({
         }}
         data-tip={t`New session in workspace`}
         aria-label="New session in workspace"
-        className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] opacity-0 transition hover:bg-[var(--surface)] hover:text-[var(--accent)] group-hover:opacity-100 pointer-coarse:opacity-100"
+        className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] opacity-50 transition hover:bg-[var(--surface)] hover:text-[var(--accent)] group-hover:opacity-100 pointer-coarse:opacity-100"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
+      )}
       {canDelete && (
         <button
           type="button"
@@ -516,7 +522,7 @@ function WorkspaceHeader({
           }}
           data-tip={t`Delete workspace`}
           aria-label="Delete workspace"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] opacity-0 transition hover:bg-[var(--surface)] hover:text-[var(--red)] group-hover:opacity-100 pointer-coarse:opacity-100"
+          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] opacity-50 transition hover:bg-[var(--surface)] hover:text-[var(--red)] group-hover:opacity-100 pointer-coarse:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -559,6 +565,7 @@ interface SessionContextMenuProps {
   onMoveToNewWindow?: () => void;
   onSubShell: () => void;
   onBrowse: () => void;
+  onIde: () => void;
   /** Copies the shell's live working directory; absent where it can't be read. */
   onCopyPath?: () => void;
   onCloseSession: () => void;
@@ -578,6 +585,7 @@ function SessionContextMenu({
   onMoveToNewWindow,
   onSubShell,
   onBrowse,
+  onIde,
   onCopyPath,
   onCloseSession,
   onTurnIntoWorkspace,
@@ -755,6 +763,17 @@ function SessionContextMenu({
       >
         <FolderOpen className="h-3.5 w-3.5 shrink-0" />
         Browse folder
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onIde();
+          onClose();
+        }}
+        className={itemClass}
+      >
+        <PanelLeft className="h-3.5 w-3.5 shrink-0" />
+        IDE view
       </button>
       {onCopyPath && (
         <button
@@ -973,6 +992,7 @@ export function SessionItem({
   mergePluginState,
   plugins,
   onOpenBrowser,
+  onOpenIde,
   onOpenTab,
   onAddSession,
   pluginData,
@@ -1012,6 +1032,7 @@ export function SessionItem({
   mergePluginState: (sessionId: string, stateKey: string, patch: Record<string, unknown>) => void;
   plugins: readonly SessionViewPlugin[];
   onOpenBrowser: (sessionId: string, path: string) => void;
+  onOpenIde: (sessionId: string, path: string) => void;
   onOpenTab: (
     sessionId: string,
     tab: { path: string; kind: 'editor' | 'browser' | 'preview' | 'git' },
@@ -1302,6 +1323,15 @@ export function SessionItem({
               onOpenBrowser(session.id, cwd);
             })();
           }}
+          onIde={() => {
+            void (async () => {
+              const cwd =
+                (await backend.getCwd?.(ptyIdOf(session)).catch(() => null)) ??
+                session.cwd ??
+                (await platform.homeDir().catch(() => '/'));
+              onOpenIde(session.id, cwd);
+            })();
+          }}
         />
       )}
       {summaryEdit && (
@@ -1345,6 +1375,7 @@ export function SessionPanel({
   mergePluginState,
   plugins,
   onOpenBrowser,
+  onOpenIde,
   onOpenTab,
   onOpenSubShell,
   onTurnIntoWorkspace,
@@ -1373,8 +1404,18 @@ export function SessionPanel({
   // Workspace whose defaultFolder failed the spawn-time check.
   const [folderError, setFolderError] = useState<Workspace | null>(null);
   const backend = useSessionBackend();
+  const platform = useShellPlatform();
   const { pluginSettings } = usePluginSettings();
   const q = query.trim().toLowerCase();
+
+  // The open button's dropdown — the bare FolderOpen icon reads as "open a
+  // folder", so the click opens labeled rows instead of a file dialog.
+  const [openMenu, setOpenMenu] = useState<{ x: number; y: number } | null>(null);
+  // Web folder pick for "New session in folder…" (desktop uses the native
+  // platform.pickDirectory dialog).
+  const [folderPickOpen, setFolderPickOpen] = useState(false);
+  // Workspace awaiting delete confirmation — deleting kills its sessions.
+  const [deleteConfirm, setDeleteConfirm] = useState<Workspace | null>(null);
 
   // The session a workspace-scoped action binds to: the selected session when
   // it lives in that workspace, otherwise the workspace's first session.
@@ -1570,18 +1611,44 @@ export function SessionPanel({
       )
     : workspaces;
 
+  // The session backend fs calls (listDir/statPath) are routed through:
+  // the selected session, else the first — needed by the web folder picker.
+  const pickSession =
+    sessions.find((s) => s.id === selectedSessionId) ?? sessions[0];
+  const canPickFolder = Boolean(platform.pickDirectory ?? (backend.listDir && pickSession));
+
+  const handleNewSessionInFolder = () => {
+    setOpenMenu(null);
+    if (platform.pickDirectory) {
+      void platform
+        .pickDirectory()
+        .then((dir) => {
+          if (dir) onAddSession(undefined, dir);
+        })
+        .catch(() => {});
+    } else {
+      setFolderPickOpen(true);
+    }
+  };
+
   return (
     <div
-      className="flex h-full w-full flex-col border-r border-[var(--border)] bg-[var(--bg)]"
+      className="flex h-full w-full select-none flex-col border-r border-[var(--border)] bg-[var(--bg)] [&_input]:select-text [&_textarea]:select-text"
       style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
     >
-      <div className="flex h-8 shrink-0 items-center justify-between gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1">
+      <div
+        className="flex h-8 shrink-0 items-center justify-between gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1"
+        data-tauri-drag-region
+      >
         <div className="flex items-center gap-1">
           <AddWorkspaceButton onClick={onAddWorkspace} />
           <IconButton title={t`Save workspace set`} onClick={onSaveWorkspaceSet}>
             <Save className="h-3.5 w-3.5" />
           </IconButton>
-          <IconButton title={t`Load workspace set`} onClick={onLoadWorkspaceSet}>
+          <IconButton
+            title={t`Open…`}
+            onClick={(e) => setOpenMenu({ x: e.clientX, y: e.clientY })}
+          >
             <FolderOpen className="h-3.5 w-3.5" />
           </IconButton>
         </div>
@@ -1654,7 +1721,7 @@ export function SessionPanel({
                   onAddSession={() => handleAddSession(workspace)}
                   onRename={(name) => onRenameWorkspace(workspace.id, name)}
                   onMove={(delta) => onMoveWorkspace(workspace.id, delta)}
-                  onDelete={() => onDeleteWorkspace(workspace.id)}
+                  onDelete={() => setDeleteConfirm(workspace)}
                   onEditDefaultFolder={() => setFolderEdit(workspace)}
                   onSetDefaultFolder={() => handleSetDefaultFolder(workspace)}
                   onClearDefaultFolder={() =>
@@ -1697,6 +1764,7 @@ export function SessionPanel({
                         mergePluginState={mergePluginState}
                         plugins={plugins}
                         onOpenBrowser={onOpenBrowser}
+                        onOpenIde={onOpenIde}
                         onOpenTab={onOpenTab}
                         onOpenSubShell={onOpenSubShell}
                         onAddSession={onAddSession}
@@ -1718,10 +1786,26 @@ export function SessionPanel({
                       />
                     );
                   })}
-                  {workspaceSessions.length === 0 && (
+                  {workspaceSessions.length === 0 && q && (
                     <div className="px-2 py-1 text-xs italic text-[var(--text-secondary)]">
-                      {q ? 'no matching sessions' : 'no sessions'}
+                      no matching sessions
                     </div>
+                  )}
+                  {/* Ghost append row — the "add at the end" affordance
+                      lives where the new session lands. Always faintly
+                      visible: a hover-revealed button stays undiscovered.
+                      Hidden while filtering, inside collapsed blocks, and
+                      when newSessionButton moves the affordance to the
+                      workspace header. */}
+                  {!q && (settings.newSessionButton ?? 'both') !== 'header' && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddSession(workspace)}
+                      className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs text-[var(--text-secondary)] opacity-60 transition hover:bg-[var(--surface)] hover:text-[var(--accent)] hover:opacity-100"
+                    >
+                      <Plus className="h-3 w-3 shrink-0" />
+                      <Trans>New session</Trans>
+                    </button>
                   )}
                 </div>
               )}
@@ -1759,6 +1843,66 @@ export function SessionPanel({
             onAddSession(folderError.id);
             setFolderError(null);
           }}
+        />
+      )}
+      {openMenu && (
+        <ContextMenu
+          x={openMenu.x}
+          y={openMenu.y}
+          onClose={() => setOpenMenu(null)}
+          // Fit-to-content width (still floored/capped) — the default w-56
+          // truncates "Open workspace set from file…".
+          widthClass="w-fit min-w-56 max-w-80"
+        >
+          <button
+            type="button"
+            className={menuItemClass}
+            data-tip={t`Open a saved workspace set file`}
+            onClick={() => {
+              setOpenMenu(null);
+              void onLoadWorkspaceSet();
+            }}
+          >
+            <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 truncate">
+              <Trans>Open workspace set from file…</Trans>
+            </span>
+          </button>
+          {canPickFolder && (
+            <button
+              type="button"
+              className={menuItemClass}
+              data-tip={t`Pick a folder — the new session starts in it`}
+              onClick={handleNewSessionInFolder}
+            >
+              <FolderPlus className="h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 truncate">
+                <Trans>New session in folder…</Trans>
+              </span>
+            </button>
+          )}
+        </ContextMenu>
+      )}
+      {deleteConfirm && (
+        <DeleteWorkspaceModal
+          workspace={deleteConfirm}
+          sessions={sessions.filter((s) => s.workspaceId === deleteConfirm.id)}
+          onCancel={() => setDeleteConfirm(null)}
+          onConfirm={() => {
+            onDeleteWorkspace(deleteConfirm.id);
+            setDeleteConfirm(null);
+          }}
+        />
+      )}
+      {folderPickOpen && pickSession && (
+        <FilePickerModal
+          mode="dir"
+          sessionId={ptyIdOf(pickSession)}
+          onPick={(dir) => {
+            onAddSession(undefined, dir);
+            setFolderPickOpen(false);
+          }}
+          onCancel={() => setFolderPickOpen(false)}
         />
       )}
     </div>

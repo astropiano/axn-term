@@ -21,6 +21,10 @@ pub(crate) fn state_dir() -> Result<PathBuf, String> {
         return Ok(path);
     }
     let home = dirs::home_dir().ok_or("could not determine home directory".to_string())?;
+    // axn-term-hmr gets its own config/plugins/kv dir — never the real app's.
+    if crate::devhmr::enabled() {
+        return Ok(home.join(".axn-term-hmr"));
+    }
     Ok(home.join(".axn-term"))
 }
 
@@ -247,6 +251,18 @@ pub(crate) fn load_window_state_blocking(
     window_id: String,
 ) -> Result<Option<JsonValue>, String> {
     let _guard = state.state_file_lock.lock().map_err(|e| e.to_string())?;
+    // axn-term-hmr never touches disk — the window state lives in memory for
+    // the process lifetime (a page reload still finds it), nothing survives
+    // an app restart.
+    if crate::devhmr::enabled() {
+        let mem = state.mem_shell_state.lock().map_err(|e| e.to_string())?;
+        let target = JsonValue::String(window_id);
+        return Ok(mem
+            .windows
+            .iter()
+            .find(|w| w.get("id") == Some(&target))
+            .cloned());
+    }
     let loaded = read_shell_state().map_err(|e| {
         eprintln!("load_window_state read error: {}", e);
         e
@@ -298,6 +314,17 @@ pub(crate) fn save_window_state_blocking(
 
     if let Some(obj) = window_state.as_object_mut() {
         obj.insert("id".to_string(), JsonValue::String(window_id.clone()));
+    }
+    if crate::devhmr::enabled() {
+        let mut mem = state.mem_shell_state.lock().map_err(|e| e.to_string())?;
+        let target = JsonValue::String(window_id);
+        mem.windows.retain(|w| w.get("id") != Some(&target));
+        mem.windows.push(window_state);
+        return Ok(());
+    }
+
+    if let Some(obj) = window_state.as_object_mut() {
+        obj.insert("id".to_string(), JsonValue::String(window_id.clone()));
         // Backup-restore markers are load-time diagnostics, never persisted.
         obj.remove("restoredFromBackup");
         obj.remove("failedStateFile");
@@ -327,6 +354,12 @@ pub(crate) fn save_window_state_blocking(
 
 pub(crate) fn delete_window_state_sync(state: &AppState, window_id: &str) -> Result<(), String> {
     let _guard = state.state_file_lock.lock().map_err(|e| e.to_string())?;
+    if crate::devhmr::enabled() {
+        let mut mem = state.mem_shell_state.lock().map_err(|e| e.to_string())?;
+        let target = JsonValue::String(window_id.to_string());
+        mem.windows.retain(|w| w.get("id") != Some(&target));
+        return Ok(());
+    }
     let dir = state_dir().map_err(|e| {
         eprintln!("delete_window_state state_dir error: {}", e);
         e

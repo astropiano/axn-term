@@ -474,6 +474,7 @@ export function useSessionCommands(input: SessionCommandDeps) {
         word === 'axn-browse' ||
         word === 'axn-edit' ||
         word === 'axn-preview' ||
+        word === 'axn-ide' ||
         word === 'axn-sh'
       ) {
         // Complete against the originating PTY's live cwd (a sub-shell's cwd

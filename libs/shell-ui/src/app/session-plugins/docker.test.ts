@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDockerDisk, parseDockerLive, parseDockerSize } from './docker';
+import { parseDockerAvailability, parseDockerDisk, parseDockerLive, parseDockerSize } from './docker';
 import { containerMatches, parsePs } from './dockerView';
 
 describe('parseDockerSize', () => {
@@ -124,6 +124,22 @@ unavailable`);
   });
 });
 
+describe('parseDockerAvailability', () => {
+  it('reports ok when the stats sections are present', () => {
+    expect(parseDockerAvailability(SAMPLE)).toBe('ok');
+  });
+
+  it('reads the daemon-down and no-cli markers', () => {
+    expect(parseDockerAvailability('==unavailable==\ndaemon-down')).toBe('daemon-down');
+    expect(parseDockerAvailability('==unavailable==\nno-cli')).toBe('no-cli');
+  });
+
+  it('reports unknown for unrelated output', () => {
+    expect(parseDockerAvailability('some unrelated output')).toBe('unknown');
+    expect(parseDockerAvailability('')).toBe('unknown');
+  });
+});
+
 const PS_SAMPLE = `${JSON.stringify({
   ID: 'abc123',
   Names: 'proj-web-1',
@@ -152,6 +168,10 @@ describe('parsePs', () => {
     expect(lonely.project).toBeUndefined();
     expect(lonely.service).toBeUndefined();
     expect(lonely.cpu).toBeUndefined();
+  });
+
+  it('returns an empty list for the daemon-down probe output', () => {
+    expect(parsePs('==unavailable==\ndaemon-down')).toEqual([]);
   });
 });
 

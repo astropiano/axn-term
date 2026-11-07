@@ -32,7 +32,7 @@ function Strips() {
             <IconButton title="Save workspace set" onClick={() => {}}>
               <Save className="h-3.5 w-3.5" />
             </IconButton>
-            <IconButton title="Open workspace set" onClick={() => {}}>
+            <IconButton title="Open…" onClick={() => {}}>
               <FolderOpen className="h-3.5 w-3.5" />
             </IconButton>
           </div>

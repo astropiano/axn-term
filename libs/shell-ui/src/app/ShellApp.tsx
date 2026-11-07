@@ -23,7 +23,7 @@ import {
 } from './restoring';
 import { SessionPanel } from './SessionPanel';
 import { SettingsModal } from './SettingsModal';
-import { EditorView, GitInspectView, preloadMonacoViews } from './lazyViews';
+import { EditorView, GitInspectView, IdeView, preloadMonacoViews } from './lazyViews';
 import { useEditorClose } from './useEditorClose';
 import { BrowserView } from './BrowserView';
 import { SubShellView } from './SubShellView';
@@ -79,6 +79,7 @@ import { normalizePluginSettings, pluginSettingsToYaml } from './pluginSettings'
 import { axnLog } from './log';
 import { IconBagContext, collectIconBag, ICONS_PLUGIN_DATA_KEY, ICONS_SHARED_KEY, type IconBag } from './iconModel';
 import { bindAppRuntime } from './appRuntime';
+import { setRepoDirProviders } from './repoDirectory';
 import { bindGitBackend } from './gitClient';
 import { AttentionDot } from './AttentionDot';
 import { AttentionModal } from './AttentionModal';
@@ -94,7 +95,7 @@ import { TabContextMenu } from './TabContextMenu';
 import { useSessionCommands } from './useSessionCommands';
 import { SessionTabStrip } from './SessionTabStrip';
 import { tabStripTabClasses } from './tabStyles';
-import { browserTabPatch, resolveSessionPath } from './shellCommandSupport';
+import { browserTabPatch, ideTabPatch, resolveSessionPath } from './shellCommandSupport';
 import { installDropGuard } from './dropGuard';
 import type { AgentCli, EditorTab, SessionAttention, ShellSession, WindowState } from '../types';
 import type { AppSettings } from '../themes';
@@ -108,6 +109,7 @@ import {
   releaseHookSpec,
 } from './session-plugins/agentHookBridge';
 import { terminalInput } from '../terminalRegistry';
+import { IconButton } from './IconButton';
 import { MobileKeyBar } from './MobileKeyBar';
 import { LONG_PRESS_MS } from '../useContextMenuTrigger';
 import { useCoarsePointer, useVisualViewportSize } from '../useMediaQuery';
@@ -648,6 +650,14 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       }),
     [updateSession, mergePluginState, mergePluginData, openSessionTab, openSubShell, openSession, notifyAttention, liveSessionWithPending],
   );
+
+  // Enabled plugins declaring `repoDirs` feed local repo discovery
+  // (repoDirectory.ts) — the forge plugins add them to their repo-roots scan.
+  useEffect(() => {
+    setRepoDirProviders(
+      enabledPlugins.flatMap((p) => (p.repoDirs ? [{ id: p.id, repoDirs: p.repoDirs }] : [])),
+    );
+  }, [enabledPlugins]);
 
   const previousHookPluginsRef = useRef<SessionViewPlugin[]>([]);
   useEffect(() => {
@@ -1869,6 +1879,18 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     [updateSessionWith]
   );
 
+  const openIde = useCallback(
+    (sessionId: string, path: string, ptyId?: string) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return;
+      void resolveSessionPath(backend, () => platform.homeDir(), session, path, ptyId).then((resolved) => {
+        const latest = sessionsRef.current.find((s) => s.id === sessionId);
+        if (latest) updateSession(sessionId, ideTabPatch(latest, resolved));
+      });
+    },
+    [updateSession]
+  );
+
   const { registerEditor, requestClose: requestEditorClose, dialog: editorCloseDialog } = useEditorClose();
   const closeTab = useCallback(
     (session: ShellSession, tabId: string) => {
@@ -2088,7 +2110,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     <ShellServicesProvider services={mergedServices} fileReader={fileReader}>
     <MemoryStatsProvider active={enabledPlugins.some((p) => p.needsMemoryStats)}>
     <div
-      className="relative flex h-screen w-full overflow-hidden bg-[var(--bg)]"
+      className="relative flex h-screen w-full overflow-hidden border-t border-[var(--border)] bg-[var(--bg)]"
       style={{
         // On touch devices track the visual viewport so the on-screen
         // keyboard shrinks/translates the app instead of covering it
@@ -2104,18 +2126,17 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     >
       {/* Slim left rail — always visible, holds the hamburger + settings. */}
       <div
-        className="flex w-10 shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--bg-secondary)] py-2"
+        className="flex w-10 shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--bg-secondary)] pt-1 pb-2"
         style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
+        data-tauri-drag-region
       >
-        <button
-          type="button"
+        <IconButton
+          title={sidebarOpen ? 'Hide sessions' : 'Show sessions'}
           onClick={() => setSidebarOpen((v) => !v)}
-          data-tip={sidebarOpen ? 'Hide sessions' : 'Show sessions'}
-          aria-label={sidebarOpen ? 'Hide sessions' : 'Show sessions'}
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
+          size="md"
         >
-          <Menu className="h-4 w-4" />
-        </button>
+          <Menu className="h-3.5 w-3.5" />
+        </IconButton>
         {/* Active/total session counter — a permanent rail slot so plugin
             views below never shift when an attention flag appears. With
             flags raised it doubles as the attention button (pulsing dot +
@@ -2229,15 +2250,13 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
               : ''
           }`}
         />
-        <button
-          type="button"
+        <IconButton
+          title="Settings"
           onClick={() => setSettingsOpen((v) => !v)}
-          data-tip="Settings"
-          aria-label="Settings"
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
+          size="md"
         >
-          <Settings className="h-4 w-4" />
-        </button>
+          <Settings className="h-3.5 w-3.5" />
+        </IconButton>
       </div>
 
       {/* Session panel: overlay drawer on small screens, inline column on sm+ */}
@@ -2279,6 +2298,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 mergePluginState={mergePluginState}
                 plugins={enabledPlugins}
                 onOpenBrowser={openBrowser}
+                onOpenIde={openIde}
                 onOpenTab={openSessionTab}
                 pluginData={pluginData}
                 mergePluginData={mergePluginData}
@@ -2378,6 +2398,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                     onEditorRequest={openEditor}
                     onBrowserRequest={openBrowser}
                     onPreviewRequest={openPreview}
+                    onIdeRequest={openIde}
                     onSessionCommand={handleSessionCommand}
                     onCompleteInput={handleCompleteInput}
                     updateSession={updateSession}
@@ -2414,6 +2435,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         isVisible={isVisible && activeTab === ed.id}
                         onOpenFile={(path) => openEditor(session.id, path)}
                         onPreviewFile={(path) => openPreview(session.id, path)}
+                        onIdeRequest={(dirPath) => openIde(session.id, dirPath)}
                       />
                     ) : ed.kind === 'preview' ? (
                       <PreviewView
@@ -2433,9 +2455,20 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         onEditorRequest={openEditor}
                         onBrowserRequest={openBrowser}
                         onPreviewRequest={openPreview}
+                        onIdeRequest={openIde}
                         onSessionCommand={handleSessionCommand}
                         onCompleteInput={handleCompleteInput}
                         onUserInput={clearSessionAttention}
+                      />
+                    ) : ed.kind === 'ide' ? (
+                      <IdeView
+                        ref={(handle) => registerEditor(ed.id, handle)}
+                        path={ed.path}
+                        cwd={session.cwd}
+                        sessionId={session.id}
+                        isVisible={isVisible && activeTab === ed.id}
+                        fileService={backendFileService(backend, session.id)}
+                        onDirtyChange={(dirty) => setEditorDirty(session.id, ed.id, dirty)}
                       />
                     ) : ed.kind === 'git' ? (
                       <GitInspectView
@@ -2477,7 +2510,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
               {tabSet && (
                 <div
-                  className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2"
+                  className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto bg-[var(--bg-secondary)] px-2 shadow-[inset_0_-1px_0_var(--border)]"
+                  data-tauri-drag-region
                   onTouchStart={handleTabStripTouchStart}
                   onTouchMove={handleTabStripTouchMove}
                   onTouchEnd={handleTabStripTouchEnd}

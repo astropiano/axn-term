@@ -111,10 +111,13 @@ export interface SessionBackend {
   /**
    * Write once the slave tty is in raw mode (ECHO/ICANON cleared) — for
    * emulator query replies (OSC 10/11/12 color reports) that a cooked+echo
-   * tty would echo back as visible text. Desktop only; absent → caller
-   * falls back to a delay.
+   * tty would echo back as visible text and canonical-buffer into the
+   * asker's input at the next mode flip. Resolves after the write landed
+   * (true) or the reply was dropped still-cooked at `timeoutMs` (default
+   * 4 s), so callers can hold later input behind it. Desktop only; absent
+   * → caller falls back to a delay.
    */
-  writeWhenRaw?(sessionId: string, data: string): void;
+  writeWhenRaw?(sessionId: string, data: string, timeoutMs?: number): Promise<boolean>;
   close(sessionId: string): void;
   /** Raw PTY output. Must be subscribed before createSession to avoid losing early output. */
   onOutput(sessionId: string, cb: (data: Uint8Array) => void): Unsubscribe;

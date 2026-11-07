@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - context menu copy/paste reaches the system clipboard" adapter="axn-term">
+    <description>
+      Right-click the terminal and use the app context menu for real: "Select
+      all" then "Copy" must put the selection on the X11 CLIPBOARD, and
+      "Paste" must read a foreign-owned CLIPBOARD into the prompt. Runs on a
+      private X server (Xvfb, else rootful Xwayland) with no clipboard
+      manager — the X11 case where copied data dies unless the app keeps
+      serving the selection (the Linux clipboard_write_text regression on
+      desktops without a clipboard manager: works on macOS, silently empty
+      on Linux). The desktop never sees the input.
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+      <tag>linux</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="shell" />
+        <var name="AXN_TERM_DRAG_SOURCE" value="off" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Create temp state: one window, one plain shell session" />
+      <step adapter="axn-term" action="startTestDisplay" description="Start a private X server with no clipboard manager" />
+      <step adapter="axn-term" action="start" description="Launch axn-term on the test display" />
+      <step adapter="axn-term" action="copyViaContextMenu" description="Print a mark, right-click → Select all, right-click → Copy: the mark must reach CLIPBOARD" />
+      <step adapter="axn-term" action="pasteViaContextMenu" description="Own CLIPBOARD with an echo line, right-click → Paste, Enter: the shell runs it" />
+      <step adapter="axn-term" action="closeAndStopDisplay" description="Close the app and stop the test display" />
+      <assertions description="Both clipboard directions ran">
+        <assert that="contains" value="Copy put the selection on the X11 clipboard" />
+        <assert that="contains" value="Paste pasted the X11 clipboard at the prompt" />
+      </assertions>
+    </steps>
+  </flow>
+</flows>

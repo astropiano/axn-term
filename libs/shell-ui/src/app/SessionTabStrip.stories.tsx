@@ -172,11 +172,10 @@ export const IndicatorColors: Story = {
             --{name}
           </div>
           <div className="flex h-8 items-end border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1">
-            <div className="relative flex h-7 flex-1 items-center justify-center gap-1.5 self-end -mb-px rounded-t-md border border-b-0 border-[var(--border)] bg-[var(--bg)] px-2 text-[11px] text-[var(--text-primary)]">
-              <span
-                className="absolute inset-x-0 top-0 h-0.5 rounded-t-md"
-                style={{ background: `var(--${name})` }}
-              />
+            <div
+              className="relative flex h-7 flex-1 items-center justify-center gap-1.5 self-end -mb-px rounded-t-md border border-b-0 border-t-0 border-[var(--border)] bg-[var(--bg)] px-2 pt-px text-[11px] text-[var(--text-primary)]"
+              style={{ boxShadow: `inset 0 3px 0 var(--${name})` }}
+            >
               <SquareTerminal className="h-3.5 w-3.5" />
               tab
             </div>

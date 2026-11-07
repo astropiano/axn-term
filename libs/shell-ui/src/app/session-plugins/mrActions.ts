@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { ShellSession, Workspace } from '../../types';
 import type { PluginApi, SessionViewContext } from './plugin';
+import type { RepoCheckout } from '../repoDirectory';
 
 /**
  * Cross-plugin contribution point for merge-request actions.
@@ -40,6 +41,12 @@ export interface MrRowEnv {
   /** Session-bound api for a known session id, when the view can provide it. */
   apiFor: (sessionId: string) => (SessionViewContext & PluginApi) | undefined;
   selectSession: (sessionId: string) => void;
+  /**
+   * Local checkouts the host plugin knows (repo-dir providers + its own
+   * `repo-roots`), so a provider can find the MR's repo without an open
+   * session in it. Absent where the host offers no discovery.
+   */
+  checkouts?: () => Promise<RepoCheckout[]>;
 }
 
 export interface MrActionProps {

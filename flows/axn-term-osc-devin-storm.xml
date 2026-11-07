@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OSC color-report regression on the devin RESTORE path under load: the
+  seeded state marks MANY devin sessions active (AXN_TERM_DEVIN_SESSIONS /
+  AXN_TERM_DEVIN_STORM_COUNT), so the app relaunches `devin -r <name>` in
+  all of them at once. The concurrent spawn/probe load is what stretches a
+  gated report's alive-probe past its fail-open — the reply then lands
+  after devin's DA1 sentinel as typed `10;rgb:…`. A single restored devin
+  never reproduces this.
+-->
+<flows>
+  <flow name="axn-term - devin restore storm never leaks OSC replies">
+    <tags><tag>axn-term</tag><tag>regression</tag></tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="devin-storm" />
+        <var name="AXN_TERM_USE_REAL_DEVIN" value="true" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Seeded state: many devin sessions marked active">
+        <assert that="contains" value="state dir prepared" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch axn-term — every devin session restores at once">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="oscDevinStorm" description="All restored devins foreground; no rgb echo in any session">
+        <assert that="contains" value="no OSC leak" />
+      </step>
+      <step adapter="axn-term" action="close" description="Close axn-term">
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+</flows>

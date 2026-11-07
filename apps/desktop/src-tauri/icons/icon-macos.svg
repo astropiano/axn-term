@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  macOS app icon — the axn-term glyph (branding assets
+  design25/icons/apps/axn-term/axn-term.svg, lucide square-terminal +
+  Raleway Bold "A") plated on the axn-dark theme background (#141110).
+
+  macOS composites Dock icons directly over the translucent Dock, so the
+  transparent-interior glyph lets the Dock's gray blur show through and the
+  icon reads as white/grayish. Linux keeps the transparent PNG set — this
+  plated variant feeds only icon.icns (see build/scripts/make-macos-icon.sh).
+
+  macOS 26+ applies its own rounded-rect (squircle) mask to app icons and
+  auto-scales artwork that arrives with margins baked in — a plated icon
+  with transparent margins gets double-margined and renders small next to
+  full-bleed neighbors. So this is a full-bleed square; the system supplies
+  corners and shadow. Glyph stays centered inside the ~824 safe area the
+  mask inscribes. (Pre-Tahoe macOS would show it as a hard square.)
+-->
+<svg
+   width="1024"
+   height="1024"
+   viewBox="0 0 1024 1024"
+   fill="none"
+   version="1.1"
+   xmlns="http://www.w3.org/2000/svg">
+  <rect
+     width="1024"
+     height="1024"
+     fill="#141110" />
+  <svg
+     x="87"
+     y="87"
+     width="850"
+     height="850"
+     viewBox="0 0 24 24">
+    <path
+       d="m7 11 2-2-2-2"
+       fill="none"
+       stroke="#1e6f9a"
+       stroke-width="2"
+       stroke-linecap="round"
+       stroke-linejoin="round" />
+    <rect
+       width="18"
+       height="18"
+       x="3"
+       y="3"
+       rx="2"
+       ry="2"
+       fill="none"
+       stroke="#1e6f9a"
+       stroke-width="2"
+       stroke-linecap="round"
+       stroke-linejoin="round" />
+    <text
+       xml:space="preserve"
+       style="font-size:15.2806px;line-height:1.25;font-family:sans-serif;stroke-width:0.764029;fill:#f45b69;fill-opacity:1"
+       x="8.7655182"
+       y="19.040384"><tspan
+         x="8.7655182"
+         y="19.040384"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Raleway;-inkscape-font-specification:'Raleway Bold';fill:#f45b69;fill-opacity:1;stroke:none;stroke-width:0.764029">A</tspan></text>
+  </svg>
+</svg>

@@ -4,6 +4,7 @@ import {
   GitPullRequest,
   MessageSquare,
   RefreshCw,
+  Text,
   X,
   AlertTriangle,
   Check,
@@ -23,11 +24,14 @@ import {
   authStatusHint,
   defaultHostNote,
   classifyCliError,
+  compactCliError,
+  forgeCheckouts,
   forgeCliCommand,
   forgeHost,
   forgeOfRemote,
   forgeRailMode,
   remoteOwner,
+  repoRootsSetting,
   type CliFailure,
 } from './forge';
 import {
@@ -654,13 +658,14 @@ export function refreshPrOverview(settings?: {
         fetchedAt: Date.now(),
       });
     } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
+      const raw = e instanceof Error ? e.message : String(e);
+      const error = compactCliError(raw);
       setOverview({
         ...overview,
         host,
         status: 'error',
         error,
-        failure: classifyCliError('gh', error),
+        failure: classifyCliError('gh', raw),
       });
     }
   })().finally(() => {
@@ -892,7 +897,7 @@ function PrActions({ pr, env }: { pr: MrRef; env: MrRowEnv }) {
   const providers = mrActionProviders();
   if (providers.length === 0) return null;
   return (
-    <span className="flex shrink-0 items-center gap-0.5 pr-1">
+    <span className="flex shrink-0 items-center gap-0.5 pr-1 pt-1.5">
       {providers.map((Provider, i) => (
         <Provider key={i} mr={pr} env={env} />
       ))}
@@ -900,10 +905,10 @@ function PrActions({ pr, env }: { pr: MrRef; env: MrRowEnv }) {
   );
 }
 
-function PrRow({ pr, badge, env }: { pr: GhPrItem; badge?: string; env: MrRowEnv }) {
+function PrRow({ pr, badge, env, showDescription = true }: { showDescription?: boolean; pr: GhPrItem; badge?: string; env: MrRowEnv }) {
   const threads = openThreads(pr);
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-start gap-1">
       <div className="min-w-0 flex-1 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]">
         <a
           href={pr.url}
@@ -957,7 +962,7 @@ function PrRow({ pr, badge, env }: { pr: GhPrItem; badge?: string; env: MrRowEnv
             </span>
           )}
         </a>
-        {pr.description && <MrDescription markdown={pr.description} />}
+        {showDescription && pr.description && <MrDescription markdown={pr.description} />}
       </div>
       <PrActions pr={pr} env={env} />
     </div>
@@ -971,7 +976,9 @@ function PrSection({
   total,
   marker,
   env,
+  showDescriptions,
 }: {
+  showDescriptions: boolean;
   title: string;
   prs: GhPrItem[];
   count: number;
@@ -993,7 +1000,7 @@ function PrSection({
       ) : (
         <div className="flex flex-col gap-0.5">
           {prs.map((pr) => (
-            <PrRow key={pr.key} pr={pr} badge={marker?.(pr) ?? undefined} env={env} />
+            <PrRow key={pr.key} pr={pr} badge={marker?.(pr) ?? undefined} env={env} showDescription={showDescriptions} />
           ))}
         </div>
       )}
@@ -1021,7 +1028,11 @@ function GhPrView({
   close,
   env,
   settings,
+  showDescriptions = true,
+  onToggleDescriptions,
 }: {
+  showDescriptions?: boolean;
+  onToggleDescriptions?: () => void;
   close: () => void;
   env: MrRowEnv;
   /** The plugin's settings — carries `hostname`; without it the CLI queries its default host. */
@@ -1032,6 +1043,8 @@ function GhPrView({
 
   useEffect(() => {
     if (data.status === 'idle') void refreshPrOverview(settings);
+    // Warm local repo discovery so a review click finds the clone at once.
+    void env.checkouts?.().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1053,6 +1066,20 @@ function GhPrView({
           </span>
         )}
         <div className="flex-1" />
+        {onToggleDescriptions && (
+          <button
+            type="button"
+            onClick={onToggleDescriptions}
+            data-tip={showDescriptions ? 'Hide descriptions' : 'Show descriptions'}
+            aria-label={showDescriptions ? 'Hide descriptions' : 'Show descriptions'}
+            aria-pressed={showDescriptions}
+            className={`flex h-6 w-6 items-center justify-center rounded transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)] ${
+              showDescriptions ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] opacity-60'
+            }`}
+          >
+            <Text className="h-3.5 w-3.5" />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void refreshPrOverview(settings)}
@@ -1112,6 +1139,7 @@ function GhPrView({
               total={mine.length}
               marker={(m) => (prNeedsAction(m) ? 'action' : null)}
               env={env}
+              showDescriptions={showDescriptions}
             />
             <PrSection
               title="review requested"
@@ -1120,6 +1148,7 @@ function GhPrView({
               total={review.length}
               marker={(m) => (mrWaitingForMe(m, me) ? 'waiting' : null)}
               env={env}
+              showDescriptions={showDescriptions}
             />
             {data.status === 'loading' && (
               <div className="px-2 text-[10px] italic text-[var(--text-secondary)]">
@@ -1178,6 +1207,7 @@ export const ghPrPlugin: SessionViewPlugin = {
       description: 'Overrides the gh api --hostname default.',
       type: 'string',
     },
+    repoRootsSetting('GitHub'),
   ],
   onSessionOpen: (ctx) => {
     scheduleSessionRefresh(ctx, true);
@@ -1251,11 +1281,23 @@ export const ghPrPlugin: SessionViewPlugin = {
       sessionApi={sessionApi}
     />
   ),
-  renderView: ({ pluginSettings, close, sessions, workspaces, selectSession, sessionApi }) => (
+  renderView: ({ pluginSettings, close, sessions, workspaces, selectSession, sessionApi, appState, updateAppState }) => (
     <GhPrView
       close={close}
+      showDescriptions={(appState as { showDescriptions?: boolean } | undefined)?.showDescriptions !== false}
+      onToggleDescriptions={() =>
+        updateAppState({
+          showDescriptions: (appState as { showDescriptions?: boolean } | undefined)?.showDescriptions === false,
+        })
+      }
       settings={pluginSettings as { hostname?: unknown } | undefined}
-      env={{ sessions, workspaces, apiFor: sessionApi, selectSession }}
+      env={{
+        sessions,
+        workspaces,
+        apiFor: sessionApi,
+        selectSession,
+        checkouts: () => forgeCheckouts(pluginSettings as { repoRoots?: unknown } | undefined),
+      }}
     />
   ),
 };

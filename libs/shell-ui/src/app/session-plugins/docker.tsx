@@ -66,8 +66,11 @@ export interface DockerDiskStats {
 
 /**
  * The fast per-poll `sh -c` probe producing the sections `parseDockerLive`
- * consumes. Exits non-zero (→ exec rejects → rail hides) when docker is
- * absent or the daemon unreachable. `docker stats` only lists running
+ * consumes. When the docker CLI is absent or the daemon unreachable it
+ * prints an `==unavailable==` section (`no-cli` / `daemon-down`) and exits
+ * zero — the rail parses that into a "daemon down" indicator instead of
+ * silently hiding; a non-zero exit (→ exec rejects) now only means the
+ * probe could not run at all. `docker stats` only lists running
  * containers — an empty ==stats== section means zero usage; a failed call
  * prints `unavailable` so the parser falls back gracefully. `==vm==` execs
  * a read-only /proc snapshot inside the first running container: proc is
@@ -79,8 +82,16 @@ export interface DockerDiskStats {
  * `host.cpus`/`host.memTotal`).
  */
 const DOCKER_STATS_CMD = `
-command -v docker >/dev/null 2>&1 || exit 1
-docker info >/dev/null 2>&1 || exit 1
+if ! command -v docker >/dev/null 2>&1; then
+  echo '==unavailable=='
+  echo 'no-cli'
+  exit 0
+fi
+if ! docker info >/dev/null 2>&1; then
+  echo '==unavailable=='
+  echo 'daemon-down'
+  exit 0
+fi
 echo '==states=='
 docker ps -a --format '{{.State}}' 2>/dev/null
 echo '==limits=='
@@ -247,6 +258,23 @@ export function parseDockerLive(output: string): DockerLiveStats | null {
   };
 }
 
+/**
+ * Why docker can't be managed on the probed host:
+ * - `ok` — daemon answered, stats are live
+ * - `daemon-down` — CLI present, daemon unreachable (colima/Desktop stopped)
+ * - `no-cli` — no docker/podman CLI on the host at all
+ * - `unknown` — output carried neither stats nor an `==unavailable==` marker
+ *   (e.g. the probe never ran)
+ */
+export type DockerAvailability = 'ok' | 'daemon-down' | 'no-cli' | 'unknown';
+
+/** Parse the probe's `==unavailable==`/`==states==` markers into an availability. */
+export function parseDockerAvailability(output: string): DockerAvailability {
+  const reason = sectionLines(output, 'unavailable')[0];
+  if (reason === 'daemon-down' || reason === 'no-cli') return reason;
+  return /^==states==$/m.test(output) ? 'ok' : 'unknown';
+}
+
 /** Parse the `DOCKER_DISK_CMD` output; `null` when the markers are absent. */
 export function parseDockerDisk(output: string): DockerDiskStats | null {
   if (!/^==sizes==$/m.test(output)) return null;
@@ -315,6 +343,7 @@ function DockerRail({
   const backend = useSessionBackend();
   const [live, setLive] = useState<DockerLiveStats | null>(null);
   const [disk, setDisk] = useState<DockerDiskStats | null>(null);
+  const [avail, setAvail] = useState<DockerAvailability>('unknown');
   // Previous /proc/stat sample — VM CPU% is the delta between polls.
   const prevCpuStat = useRef<DockerLiveStats['cpuStat']>(null);
   const intervalSec =
@@ -339,6 +368,7 @@ function DockerRail({
       try {
         const out = await exec(target, DOCKER_STATS_CMD);
         if (!cancelled) {
+          setAvail(parseDockerAvailability(out));
           const parsed = parseDockerLive(out);
           if (parsed?.cpuStat) {
             const prev = prevCpuStat.current;
@@ -353,8 +383,11 @@ function DockerRail({
           setLive(parsed);
         }
       } catch {
-        // Docker absent/daemon down or no connected session → hide.
-        if (!cancelled) setLive(null);
+        // The probe itself could not run (no session/backend) → hide.
+        if (!cancelled) {
+          setLive(null);
+          setAvail('unknown');
+        }
       } finally {
         liveInFlight = false;
       }
@@ -422,7 +455,28 @@ function DockerRail({
     setAppAttention(flags.find((a) => a.level === 'critical') ?? flags[0] ?? null);
   }, [setAppAttention, disk, usedPct, memPct]);
 
-  if (!live) return null;
+  if (!live) {
+    // CLI present but the daemon is unreachable — say so instead of
+    // vanishing, so a stopped colima/Desktop doesn't look like "no docker".
+    if (avail !== 'daemon-down') return null;
+    return (
+      <div
+        data-tip="docker daemon is not running — start colima or Docker Desktop"
+        className="flex flex-col items-center gap-0.5"
+      >
+        <PluginIcon
+          plugin={dockerPlugin}
+          className="h-3.5 w-3.5 text-[var(--text-secondary)]"
+        />
+        <span
+          className="select-none text-[8px] font-bold leading-none text-[var(--yellow)]"
+          data-tip="docker daemon unreachable"
+        >
+          down
+        </span>
+      </div>
+    );
+  }
   const containerCores = live.cpuPercent != null ? (live.cpuPercent / 100).toFixed(1) : null;
   const cpuTip =
     live.vmCpuPct != null

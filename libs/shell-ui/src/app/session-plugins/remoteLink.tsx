@@ -4,7 +4,8 @@ import { shellPlatform } from '../../platform';
 import { useShellPlatform } from '../../services';
 import { useSettings } from '../../SettingsProvider';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ChevronsLeftRightEllipsis, GlobeCode } from 'lucide-react';
+import { ChevronsLeftRightEllipsis } from 'lucide-react';
+import { RemoteIcon } from './remoteIcon';
 import type { RemoteConsoleSnapshot } from '@axn-term/session-backend';
 import type { SessionViewPlugin } from './plugin';
 
@@ -256,6 +257,13 @@ function RemoteRailItem({
     (snap.retrying ||
       snap.state === 'connecting' ||
       snap.state === 'reconnecting');
+  const iconState = snap.state === 'failed'
+    ? 'error'
+    : live
+      ? 'connected'
+      : connecting
+        ? 'connecting'
+        : 'idle';
   return (
     <>
       <RemoteConnectionOverlay snap={snap} retryNow={console_?.retryNow} signOut={shellPlatform()?.signOut} />
@@ -273,7 +281,7 @@ function RemoteRailItem({
             : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
       }`}
     >
-      <GlobeCode className="h-4 w-4" />
+      <RemoteIcon state={iconState} className="h-4 w-4" />
       <span
         className={`absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full ${
           live

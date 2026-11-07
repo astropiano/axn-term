@@ -59,8 +59,12 @@ export function applyTerminalRenderer(
     active = null;
   };
   const noop = () => disposeActive();
+  const finish = (applied: TerminalRendererApplied) => {
+    axnLog('debug', 'terminal-renderer', `mode=${m} applied=${applied}`);
+    return { applied, dispose: noop };
+  };
 
-  if (m === 'dom') return { applied: 'dom', dispose: noop };
+  if (m === 'dom') return finish('dom');
 
   const createCanvas = factories.canvas ?? (() => new CanvasAddon());
   const tryCanvas = (): TerminalRendererApplied => {
@@ -72,9 +76,9 @@ export function applyTerminalRenderer(
     }
   };
 
-  if (m === 'canvas') return { applied: tryCanvas(), dispose: noop };
+  if (m === 'canvas') return finish(tryCanvas());
   if (m === 'auto' && liveWebglContexts >= MAX_WEBGL_CONTEXTS) {
-    return { applied: tryCanvas(), dispose: noop };
+    return finish(tryCanvas());
   }
 
   const webgl = (factories.webgl ?? (() => new WebglAddon()))();
@@ -89,12 +93,16 @@ export function applyTerminalRenderer(
     // The browser already killed this context — hand the slot back.
     release();
     disposeActive();
-    if (m === 'auto') tryCanvas();
+    if (m === 'auto') {
+      const next = tryCanvas();
+      axnLog('warn', 'terminal-renderer', `webgl context lost — fell back to ${next}`);
+    }
   });
   try {
     load(webgl);
     liveWebglContexts++;
     counted = true;
+    axnLog('debug', 'terminal-renderer', `mode=${m} applied=webgl`);
     const stopGlyphRefresh = refreshGlyphsOnFontLoad(term);
     return {
       applied: 'webgl',
@@ -105,7 +113,7 @@ export function applyTerminalRenderer(
       },
     };
   } catch {
-    return { applied: m === 'auto' ? tryCanvas() : 'dom', dispose: noop };
+    return finish(m === 'auto' ? tryCanvas() : 'dom');
   }
 }
 
@@ -192,8 +200,16 @@ export function safely(scope: string, fn: () => void): void {
 export const OSC_COLOR_REPORT_RE = /^(\x1b\]1[012];[^\x07\x1b]+(?:\x07|\x1b\\))+$/;
 const OSC_COLOR_REPORT_DELAY_MS = 75;
 
-/** A hung alive probe must not freeze input — deliver after this (fail-open). */
+/** A hung alive probe must not freeze input — fall back to the raw gate after this. */
 const OSC_REPORT_PROBE_TIMEOUT_MS = 1000;
+
+/**
+ * How long `writeWhenRaw` may hold a report inside the input queue waiting
+ * for the cooked→raw flip. The real transition takes tens of ms; anything
+ * past this means the asker died or reads cooked input — the reply is
+ * dropped rather than echoed or typed.
+ */
+export const OSC_REPORT_RAW_WAIT_MS = 2000;
 
 /**
  * Data xterm emits on the input channel *itself*, in answer to program
@@ -238,12 +254,13 @@ export interface TerminalInput {
  * after their OSC queries as a sentinel — once its answer arrives they stop
  * waiting for color replies, so a DA1 reply overtaking a report still in
  * its async probe leaves the report to be read as typed `10;rgb:…11;rgb:…`
- * (devin, every launch). `writeWhenRaw` holds reports backend-side and
- * cannot keep this order.
+ * (devin, every launch). `writeWhenRaw` resolves only after the backend
+ * actually wrote (or dropped) the report, so the queue still holds later
+ * input — including the DA1 — behind it.
  */
 export function createTerminalInput(
   write: (data: string) => void,
-  writeWhenRaw?: (data: string) => void,
+  writeWhenRaw?: (data: string) => Promise<boolean>,
   reportTarget?: () => Promise<boolean>,
 ): TerminalInput {
   const queue: (string | Promise<string | null>)[] = [];
@@ -274,22 +291,34 @@ export function createTerminalInput(
     // rendered as typed input (`11;rgb:…` in the agent's text field).
     const report = data.replace(/\x1b\\/g, '\x07');
     if (reportTarget) {
-      // A live asker gets the answer NOW — the program holds its tty
-      // quiet only briefly (devin's startup probe, p10k instant prompt);
-      // every delay (raw-mode polling, timers) lands the reply after the
-      // window and it echoes as typed `11;rgb:…`. Real terminals answer
-      // immediately; a shell-comm/no foreground = dead letter, dropped.
+      // A live asker gets the answer through the backend's termios gate:
+      // the write lands at the cooked→raw flip (the first bytes the raw
+      // reader sees, inside devin's probe window) — writing straight into
+      // a still-cooked tty echoes the reply and canonical-buffers it into
+      // the asker's input as typed `10;rgb:…` once it goes raw. Dead
+      // letters (shell comm/no foreground) drop at the probe; a probe that
+      // hangs falls through to the raw gate rather than delivering blind.
       enqueue(
-        new Promise<string | null>((resolve) => {
-          const timer = setTimeout(() => resolve(report), OSC_REPORT_PROBE_TIMEOUT_MS);
-          reportTarget().then(
-            (alive) => resolve(alive ? report : null),
-            () => resolve(report),
-          ).finally(() => clearTimeout(timer));
-        }),
+        (async (): Promise<string | null> => {
+          const alive = await new Promise<boolean | undefined>((resolve) => {
+            const timer = setTimeout(() => resolve(undefined), OSC_REPORT_PROBE_TIMEOUT_MS);
+            reportTarget().then(
+              (a) => resolve(a),
+              () => resolve(true), // a failed read is treated as alive — fail-open
+            ).finally(() => clearTimeout(timer));
+          });
+          if (alive === false) return null;
+          if (writeWhenRaw) {
+            await writeWhenRaw(report).catch(() => false);
+            return null; // the backend wrote it at the raw flip — or dropped it still-cooked
+          }
+          return report;
+        })(),
       );
     } else if (writeWhenRaw) {
-      writeWhenRaw(report);
+      // No alive probe: the termios gate alone decides, but the write must
+      // still hold the queue so a DA1 reply cannot overtake it.
+      enqueue(writeWhenRaw(report).then(() => null, () => null));
     } else {
       enqueue(new Promise((resolve) => setTimeout(() => resolve(report), OSC_COLOR_REPORT_DELAY_MS)));
     }

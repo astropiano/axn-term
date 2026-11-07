@@ -4,6 +4,7 @@ import type { AgentHookSpec } from '@axn-term/plugin-sdk';
 import { ptyIdOf } from '../../types';
 import type { AgentCli, RepoInfo, SessionAttention, SessionBanner, ShellSession, Task, Workspace } from '../../types';
 import type { PluginSettings } from '../pluginSettings';
+import type { RepoDir, RepoDirsContext } from '../repoDirectory';
 import { backendFileService, resolvePath } from '../fileService';
 import { getScreenLines } from '../../terminalRegistry';
 import { setSessionRestoring } from '../restoring';
@@ -634,6 +635,13 @@ export interface SessionViewPlugin {
    * tabs to send them back to a session.
    */
   hostsTabs?: boolean;
+  /**
+   * Local repos this plugin knows about (e.g. axn-dev's configured repos).
+   * Results from every enabled provider are added to the forge plugins'
+   * `repo-roots` search and deduplicated by checkout path — see
+   * `repoDirectory.ts`. Entries without `worktrees` are expanded by the host.
+   */
+  repoDirs?: (ctx: RepoDirsContext) => Promise<RepoDir[]>;
   /**
    * Render a compact element inside the session row in the left panel —
    * shown for every session, whether selected or not. Keep it tiny (single
