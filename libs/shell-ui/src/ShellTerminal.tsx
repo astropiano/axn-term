@@ -7,8 +7,8 @@ import { placeHoverCard } from './hoverCardPlacement';
 import type { ShellSession } from './types';
 import { useSettings } from './SettingsProvider';
 import { getXtermColors, resolveShellFont } from './themes';
-import { registerTerminal, takePendingReplay, takeReloadReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, type TerminalInput } from './terminalRegistry';
-import { applyTerminalRenderer, createTerminalInput, isUserInput, oscReportTarget, repaintTerminal, safely } from './terminalRenderer';
+import { registerTerminal, takePendingReplay, takeReloadReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, registerSelectionResolver, unregisterSelectionResolver, type SelectionResolver, type TerminalInput } from './terminalRegistry';
+import { applyTerminalRenderer, createTerminalInput, isUserInput, OSC_REPORT_RAW_WAIT_MS, oscReportTarget, repaintTerminal, safely } from './terminalRenderer';
 import { acquirePty } from './ptyLifetime';
 import { foregroundStatusPatch } from './foregroundStatus';
 import {
@@ -40,6 +40,7 @@ interface ShellTerminalProps {
   onEditorRequest?: (sessionId: string, path: string) => void;
   onBrowserRequest?: (sessionId: string, path: string) => void;
   onPreviewRequest?: (sessionId: string, path: string) => void;
+  onIdeRequest?: (sessionId: string, path: string) => void;
   onSessionCommand?: (
     sessionId: string,
     line: string,
@@ -94,6 +95,7 @@ export function ShellTerminal({
   onEditorRequest,
   onBrowserRequest,
   onPreviewRequest,
+  onIdeRequest,
   onSessionCommand,
   onCompleteInput,
   updateSession,
@@ -116,6 +118,8 @@ export function ShellTerminal({
   onBrowserRequestRef.current = onBrowserRequest;
   const onPreviewRequestRef = useRef(onPreviewRequest);
   onPreviewRequestRef.current = onPreviewRequest;
+  const onIdeRequestRef = useRef(onIdeRequest);
+  onIdeRequestRef.current = onIdeRequest;
   const onSessionCommandRef = useRef(onSessionCommand);
   onSessionCommandRef.current = onSessionCommand;
   const onCompleteInputRef = useRef(onCompleteInput);
@@ -399,6 +403,8 @@ export function ShellTerminal({
     let inputHandle: TerminalInput | null = null;
     let linkProviderDisposable: { dispose: () => void } | null = null;
     let onSelectionMouseUp: ((event: MouseEvent) => void) | null = null;
+    let hideOnContextMenu: (() => void) | null = null;
+    let selectionResolve: SelectionResolver | null = null;
     let unlisten: Unsubscribe | null = null;
     let processInterval: ReturnType<typeof setInterval> | null = null;
     let cwdInterval: ReturnType<typeof setInterval> | null = null;
@@ -698,12 +704,22 @@ export function ShellTerminal({
           })();
         };
         termEl?.addEventListener('mouseup', onSelectionMouseUp);
+        // The app context menu reuses the token resolution for manual
+        // selections — and a right-click must show ONLY the menu, never the
+        // hover card at the same time.
+        selectionResolve = resolveToken;
+        registerSelectionResolver(term, selectionResolve);
+        hideOnContextMenu = () => {
+          clearHoverTimers();
+          setHoverCard(null);
+        };
+        termEl?.addEventListener('contextmenu', hideOnContextMenu);
 
         // One ordered writer per PTY: input after an OSC report waits until
         // the report's alive probe settles (DA1 must never overtake it).
         const ptyInput = createTerminalInput(
           (d) => backend.write(ptyId, d),
-          backend.writeWhenRaw ? (d) => backend.writeWhenRaw!(ptyId, d) : undefined,
+          backend.writeWhenRaw ? (d) => backend.writeWhenRaw!(ptyId, d, OSC_REPORT_RAW_WAIT_MS) : undefined,
           oscReportTarget(
             backend.getForegroundProcess
               ? (id) => backend.getForegroundProcess!(id)
@@ -724,6 +740,7 @@ export function ShellTerminal({
           onEditorRequest: (path) => onEditorRequestRef.current?.(sessionId, path),
           onBrowserRequest: (path) => onBrowserRequestRef.current?.(sessionId, path),
           onPreviewRequest: (path) => onPreviewRequestRef.current?.(sessionId, path),
+          onIdeRequest: (path) => onIdeRequestRef.current?.(sessionId, path),
           writeDisplay: (d) => term.write(d),
           writeReport: ptyInput.send,
           onSessionCommand: (line) => onSessionCommandRef.current?.(sessionId, line),
@@ -851,6 +868,8 @@ export function ShellTerminal({
       termEl?.removeEventListener('copy', onCopy, true);
       termEl?.removeEventListener('paste', onPaste, true);
       if (onSelectionMouseUp) termEl?.removeEventListener('mouseup', onSelectionMouseUp);
+      if (selectionResolve) unregisterSelectionResolver(term, selectionResolve);
+      if (hideOnContextMenu) termEl?.removeEventListener('contextmenu', hideOnContextMenu);
       window.removeEventListener('resize', fitWindow);
       resizeObserver?.disconnect();
       safely('resize listener', () => onResize?.dispose());

@@ -207,9 +207,91 @@ describe('createTerminalInput', () => {
   it('hands OSC-only chunks to writeWhenRaw when the backend supports it', () => {
     const writes: string[] = [];
     const raw: string[] = [];
-    createTerminalInput((d) => writes.push(d), (d) => raw.push(d)).send(OSC10);
+    createTerminalInput(
+      (d) => writes.push(d),
+      (d) => {
+        raw.push(d);
+        return Promise.resolve(true);
+      },
+    ).send(OSC10);
     expect(raw).toEqual([OSC10]);
     expect(writes).toEqual([]);
+  });
+
+  it('holds a DA1 reply behind a writeWhenRaw report that is still waiting', async () => {
+    const writes: string[] = [];
+    const raws: ((wrote: boolean) => void)[] = [];
+    const input = createTerminalInput(
+      (d) => writes.push(d),
+      () => new Promise<boolean>((r) => raws.push(r)),
+    );
+    input.send(OSC10);
+    input.send(DA1);
+    input.write('typed');
+    expect(writes).toEqual([]);
+    raws.forEach((resolve) => resolve(true));
+    await vi.waitFor(() => expect(writes).toEqual([DA1, 'typed']));
+  });
+
+  it('routes a live-asker report through the raw gate, never the direct write', async () => {
+    const writes: string[] = [];
+    const raw: string[] = [];
+    const probes: ((alive: boolean) => void)[] = [];
+    const input = createTerminalInput(
+      (d) => writes.push(d),
+      (d) => {
+        raw.push(d);
+        return Promise.resolve(true);
+      },
+      () => new Promise<boolean>((r) => probes.push(r)),
+    );
+    input.send(OSC10);
+    input.send(DA1);
+    expect(raw).toEqual([]);
+    probes.forEach((resolve) => resolve(true));
+    await vi.waitFor(() => expect(raw).toEqual([OSC10]));
+    // writeWhenRaw carries the report; the plain writer only sees the DA1.
+    await vi.waitFor(() => expect(writes).toEqual([DA1]));
+  });
+
+  it('drops a dead-letter report without touching the raw gate', async () => {
+    const writes: string[] = [];
+    const raw: string[] = [];
+    const input = createTerminalInput(
+      (d) => writes.push(d),
+      (d) => {
+        raw.push(d);
+        return Promise.resolve(true);
+      },
+      () => Promise.resolve(false),
+    );
+    input.send(OSC11);
+    input.send('x');
+    await vi.waitFor(() => expect(writes).toEqual(['x']));
+    expect(raw).toEqual([]);
+  });
+
+  it('a hung probe falls through to the raw gate instead of delivering blind', async () => {
+    vi.useFakeTimers();
+    try {
+      const writes: string[] = [];
+      const raw: string[] = [];
+      const input = createTerminalInput(
+        (d) => writes.push(d),
+        (d) => {
+          raw.push(d);
+          return Promise.resolve(true);
+        },
+        () => new Promise<boolean>(() => {}),
+      );
+      input.send(OSC11);
+      input.send(DA1);
+      await vi.advanceTimersByTimeAsync(1100);
+      expect(raw).toEqual([OSC11]);
+      expect(writes).toEqual([DA1]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not defer a report mixed with user input', () => {

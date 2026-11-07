@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term-hmr - session IPC works on the vite origin"
+        description="Launch axn-term-hmr against a temp state dir with this repo as the dev checkout, wait for the spawned vite server, and verify the frontend on http://localhost:5914 can create a session and write to its PTY — i.e. the whole IPC surface passes the ACL on the vite origin.">
+    <tags>
+      <tag>axn-term</tag>
+    </tags>
+    <setup>
+      <env>
+        <!-- The bundled .app binary: a bare target/release binary cannot host
+             WKWebView on macOS. -->
+        <var name="AXN_TERM_BINARY" value="target/release/bundle/macos/axn-term-hmr.app/Contents/MacOS/axn-term-hmr" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepareHmr" description="Temp state dir + dev-hmr.json pointing at this checkout" >
+        <assert that="contains" value="dev-hmr.json" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch axn-term-hmr; a session appearing proves the vite origin passes the IPC ACL" >
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="verifyHmr" description="vite responds and a PTY write round-trips" >
+        <assert that="contains" value="hmr verified" />
+      </step>
+      <step adapter="axn-term" action="close" description="Shut the app down" >
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+</flows>

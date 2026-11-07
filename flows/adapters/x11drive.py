@@ -9,6 +9,7 @@ server — the adapter runs a private one). Standard library + GTK 3 only.
   x11drive.py key KEYS           XTEST key press + release (e.g. Return, Shift_L+Insert)
   x11drive.py type TEXT          XTEST key presses for each character of TEXT
   x11drive.py clipboard TEXT     GTK process owning CLIPBOARD and PRIMARY with TEXT
+  x11drive.py get [primary]      print the CLIPBOARD (or PRIMARY) contents as text
   x11drive.py find NAME          "id x y w h" per mapped top-level window named NAME, largest first
   x11drive.py close ID           WM_DELETE_WINDOW — what the title bar's close button sends
 """
@@ -47,6 +48,17 @@ if a[0] == "clipboard":
         Gtk.Clipboard.get(sel).set_text(a[1], -1)
     GLib.timeout_add(100, lambda: (print("clipboard ready", flush=True), False)[1])
     Gtk.main()
+    sys.exit(0)
+
+if a[0] == "get":
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk, Gdk
+    # Requests the selection like any pasting app would — an owner that
+    # stopped serving (or lost it on drop) answers empty.
+    sel = Gdk.SELECTION_PRIMARY if len(a) > 1 and a[1] == "primary" else Gdk.SELECTION_CLIPBOARD
+    text = Gtk.Clipboard.get(sel).wait_for_text()
+    sys.stdout.write(text or "")
     sys.exit(0)
 
 x11 = ctypes.cdll.LoadLibrary("libX11.so.6")

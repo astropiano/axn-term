@@ -226,6 +226,30 @@ export function terminalSelection(term: Terminal): string {
   return term.getSelection() || lastSelections.get(term) || '';
 }
 
+/**
+ * A raw token resolved by a terminal's path/URL detection — the same check
+ * the hover link provider runs, reused by the context menu for a manual
+ * selection (which the token scan may never have seen as a link).
+ */
+export type SelectionResolver = (
+  token: string,
+) => Promise<{ stat: { path: string; isDir: boolean }; isUrl: boolean } | null>;
+
+const selectionResolvers = new WeakMap<Terminal, SelectionResolver>();
+
+/** Set by a terminal view that knows how to resolve tokens for its buffer. */
+export function registerSelectionResolver(term: Terminal, resolve: SelectionResolver): void {
+  selectionResolvers.set(term, resolve);
+}
+
+export function unregisterSelectionResolver(term: Terminal, resolve: SelectionResolver): void {
+  if (selectionResolvers.get(term) === resolve) selectionResolvers.delete(term);
+}
+
+export function selectionResolver(term: Terminal): SelectionResolver | undefined {
+  return selectionResolvers.get(term);
+}
+
 /** The terminal whose container holds `target`, if any. */
 export function terminalAt(target: EventTarget | null): Terminal | undefined {
   for (let el = target instanceof Element ? target : null; el; el = el.parentElement) {

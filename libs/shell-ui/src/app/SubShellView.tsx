@@ -22,7 +22,7 @@ import { tabTaskPatch } from './subShellTasks';
 import { agentInputPluginFor } from './session-plugins/agentHookBridge';
 import { createHiddenCommandInput } from './hiddenCommands';
 import { createOsc8LeakGuard, OSC8_CLOSE } from '../terminalLinks';
-import { applyTerminalRenderer, createTerminalInput, isUserInput, oscReportTarget, repaintTerminal, safely } from '../terminalRenderer';
+import { applyTerminalRenderer, createTerminalInput, isUserInput, OSC_REPORT_RAW_WAIT_MS, oscReportTarget, repaintTerminal, safely } from '../terminalRenderer';
 import { acquirePty } from '../ptyLifetime';
 import {
   agentOfProcess,
@@ -52,6 +52,7 @@ export function SubShellView({
   onEditorRequest,
   onBrowserRequest,
   onPreviewRequest,
+  onIdeRequest,
   onSessionCommand,
   onCompleteInput,
   onUserInput,
@@ -67,6 +68,7 @@ export function SubShellView({
   onEditorRequest?: (sessionId: string, path: string, ptyId?: string) => void;
   onBrowserRequest?: (sessionId: string, path: string, ptyId?: string) => void;
   onPreviewRequest?: (sessionId: string, path: string, ptyId?: string) => void;
+  onIdeRequest?: (sessionId: string, path: string, ptyId?: string) => void;
   onSessionCommand?: (
     sessionId: string,
     line: string,
@@ -106,6 +108,7 @@ export function SubShellView({
   const onEditorRequestRef = useRef(onEditorRequest);
   const onBrowserRequestRef = useRef(onBrowserRequest);
   const onPreviewRequestRef = useRef(onPreviewRequest);
+  const onIdeRequestRef = useRef(onIdeRequest);
   const onSessionCommandRef = useRef(onSessionCommand);
   const onCompleteInputRef = useRef(onCompleteInput);
   const onUserInputRef = useRef(onUserInput);
@@ -118,6 +121,7 @@ export function SubShellView({
   onEditorRequestRef.current = onEditorRequest;
   onBrowserRequestRef.current = onBrowserRequest;
   onPreviewRequestRef.current = onPreviewRequest;
+  onIdeRequestRef.current = onIdeRequest;
   onSessionCommandRef.current = onSessionCommand;
   onCompleteInputRef.current = onCompleteInput;
   onUserInputRef.current = onUserInput;
@@ -230,7 +234,7 @@ export function SubShellView({
     // the report's alive probe settles (DA1 must never overtake it).
     const ptyInput = createTerminalInput(
       (d) => backend.write(tab.id, d),
-      backend.writeWhenRaw ? (d) => backend.writeWhenRaw!(tab.id, d) : undefined,
+      backend.writeWhenRaw ? (d) => backend.writeWhenRaw!(tab.id, d, OSC_REPORT_RAW_WAIT_MS) : undefined,
       oscReportTarget(
         backend.getForegroundProcess
           ? (id) => backend.getForegroundProcess!(id)
@@ -264,6 +268,8 @@ export function SubShellView({
         onBrowserRequestRef.current?.(sessionRef.current.id, path, tab.id),
       onPreviewRequest: (path) =>
         onPreviewRequestRef.current?.(sessionRef.current.id, path, tab.id),
+      onIdeRequest: (path) =>
+        onIdeRequestRef.current?.(sessionRef.current.id, path, tab.id),
       writeDisplay: (d) => term.current?.write(d),
       writeReport: ptyInput.send,
       onSessionCommand: (line) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countScenarios, parseAxnDevList } from './axnDev';
+import { countScenarios, parseAxnDevList, parseAxnDevRepos } from './axnDev';
 
 const LIST_OUTPUT = `Global scenarios:
   demo-mock                     \x1b[90m○ stopped\x1b[0m — Full-stack mock: API server + hardware EPD emulator
@@ -222,5 +222,40 @@ describe('buildTagTree', () => {
     const tree = buildTagTree([sc('x', ['a', 'b/c'])]);
     expect(tree.children.map((n) => n.segment)).toEqual(['a', 'b']);
     expect(tree.children[1].children[0].scenarios[0].key).toBe('x');
+  });
+});
+
+describe('parseAxnDevRepos', () => {
+  it('maps `axn-dev git repos --json` to repo dirs with their worktrees', () => {
+    const out = JSON.stringify([
+      {
+        name: 'ai-accelerator',
+        path: '/r/ai-1',
+        remote: 'ssh://git@h:9022/ps/extensions/ai/ai-accelerator.git',
+        worktrees: [
+          { path: '/r/ai-1', branch: 'develop', isMain: true },
+          { path: '/r/wt/x', branch: null, isMain: false },
+        ],
+      },
+      { name: 'noremote', path: '/r/n', remote: null, worktrees: [] },
+      { name: 'broken' },
+    ]);
+    expect(parseAxnDevRepos(out)).toEqual([
+      {
+        name: 'ai-accelerator',
+        path: '/r/ai-1',
+        remote: 'ssh://git@h:9022/ps/extensions/ai/ai-accelerator.git',
+        worktrees: [
+          { path: '/r/ai-1', branch: 'develop', isMain: true },
+          { path: '/r/wt/x', branch: null, isMain: false },
+        ],
+      },
+      { name: 'noremote', path: '/r/n', remote: null, worktrees: [] },
+    ]);
+  });
+
+  it('rejects output of an older CLI', () => {
+    expect(parseAxnDevRepos("Unknown git action 'repos'")).toBeNull();
+    expect(parseAxnDevRepos('{}')).toBeNull();
   });
 });

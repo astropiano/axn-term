@@ -4,6 +4,7 @@ import {
   GitMerge,
   MessageSquare,
   RefreshCw,
+  Text,
   X,
   AlertTriangle,
   Check,
@@ -22,10 +23,14 @@ import {
   authStatusHint,
   defaultHostNote,
   classifyCliError,
+  compactCliError,
+  GRAPHQL_TIMEOUT_SUMMARY,
+  forgeCheckouts,
   forgeCliCommand,
   forgeHost,
   forgeOfRemote,
   forgeRailMode,
+  repoRootsSetting,
   type CliFailure,
 } from './forge';
 
@@ -71,6 +76,10 @@ export interface GlabMrItem {
   reviewers: string[];
   updatedAt: string;
   discussions: MrDiscussion[];
+  /** Unresolved threads as counted by GitLab; wins over `discussions` when set. */
+  openThreadCount?: number;
+  /** User (non-system) notes as counted by GitLab. */
+  noteCount?: number;
 }
 
 /** Per-session MR summary stored in pluginState (`glab-mr.mrs`). */
@@ -93,8 +102,8 @@ interface SessionMr {
 // ---------------------------------------------------------------------------
 
 /** Number of unresolved resolvable discussion threads. */
-export function openThreads(mr: Pick<GlabMrItem, 'discussions'>): number {
-  return mr.discussions.filter((d) => d.resolvable && !d.resolved).length;
+export function openThreads(mr: Pick<GlabMrItem, 'discussions' | 'openThreadCount'>): number {
+  return mr.openThreadCount ?? mr.discussions.filter((d) => d.resolvable && !d.resolved).length;
 }
 
 /**
@@ -127,7 +136,7 @@ export function myThreadsAnswered(
  * failing pipeline.
  */
 export function mrNeedsAction(
-  mr: Pick<GlabMrItem, 'conflicts' | 'approved' | 'pipeline' | 'discussions'>,
+  mr: Pick<GlabMrItem, 'conflicts' | 'approved' | 'pipeline' | 'discussions' | 'openThreadCount'>,
 ): boolean {
   return (
     mr.conflicts ||
@@ -308,7 +317,7 @@ function overviewWatchEntry(mr: GlabMrItem): MrWatchEntry {
   return {
     pipeline: mr.pipeline,
     unresolved: openThreads(mr),
-    notes: mr.discussions.reduce((n, d) => n + d.notes.length, 0),
+    notes: mr.noteCount ?? mr.discussions.reduce((n, d) => n + d.notes.length, 0),
   };
 }
 
@@ -453,14 +462,39 @@ async function mrWatchTick(args: {
 // MR overview — `glab api graphql` for assigned/authored/review-requested MRs
 // ---------------------------------------------------------------------------
 
-const MR_OVERVIEW_QUERY = `query {
-  currentUser {
-    username
-    assignedMergeRequests(state: opened, first: 40) { nodes { iid reference title description webUrl draft conflicts detailedMergeStatus sourceBranch targetBranch updatedAt approved approvedBy { nodes { username } } author { username } assignees { nodes { username } } reviewers { nodes { username } } project { fullPath } headPipeline { status } discussions(first: 100) { nodes { resolvable resolved notes(first: 50) { nodes { author { username } } } } } } }
-    authoredMergeRequests(state: opened, first: 40) { nodes { iid reference title description webUrl draft conflicts detailedMergeStatus sourceBranch targetBranch updatedAt approved approvedBy { nodes { username } } author { username } assignees { nodes { username } } reviewers { nodes { username } } project { fullPath } headPipeline { status } discussions(first: 100) { nodes { resolvable resolved notes(first: 50) { nodes { author { username } } } } } } }
-    reviewRequestedMergeRequests(state: opened, first: 40) { nodes { iid reference title description webUrl draft conflicts detailedMergeStatus sourceBranch targetBranch updatedAt approved approvedBy { nodes { username } } author { username } assignees { nodes { username } } reviewers { nodes { username } } project { fullPath } headPipeline { status } discussions(first: 100) { nodes { resolvable resolved notes(first: 50) { nodes { author { username } } } } } } }
-  }
-}`;
+/**
+ * GitLab gives a GraphQL request ~30 s server-side; one query carrying every
+ * list *with* its discussions took 16–28 s against gitlab.magnolia-platform.com
+ * and timed out ("Timeout on BaseNoteInterface.author …") — resolving each
+ * note's author is the expensive part. So:
+ *
+ * 1. One query for the three lists, with GitLab's own thread/note counters
+ *    instead of discussions (2–6 s). That covers everything "mine" needs.
+ * 2. Discussions (who wrote last in my threads) only for review MRs, which
+ *    `mrWaitingForMe` reads — `DISCUSSION_BATCH` MRs per aliased query
+ *    (8 took ~7 s), and only for MRs whose counters changed since the last
+ *    refresh (`discussionCache`). A quiet poll is a single glab call.
+ *
+ * `updatedAt` is no change signal: a comment can land after it unchanged.
+ */
+const MR_OVERVIEW_FIELDS = `iid reference title description webUrl draft conflicts detailedMergeStatus sourceBranch targetBranch updatedAt approved userNotesCount resolvableDiscussionsCount resolvedDiscussionsCount approvedBy { nodes { username } } author { username } assignees { nodes { username } } reviewers { nodes { username } } project { fullPath } headPipeline { status }`;
+
+const MR_OVERVIEW_QUERY = `query { currentUser { username
+  assignedMergeRequests(state: opened, first: 40) { nodes { ${MR_OVERVIEW_FIELDS} } }
+  authoredMergeRequests(state: opened, first: 40) { nodes { ${MR_OVERVIEW_FIELDS} } }
+  reviewRequestedMergeRequests(state: opened, first: 40) { nodes { ${MR_OVERVIEW_FIELDS} } }
+} }`;
+
+// notes(last: 20): only a thread's newest notes matter — `mrWaitingForMe`
+// reads who wrote last — the same window as gh-pr's `comments(last: 20)`.
+const MR_DISCUSSIONS_FIELDS = `discussions(first: 100) { nodes { resolvable resolved notes(last: 20) { nodes { author { username } } } } }`;
+
+/** MRs per discussions query, and how many such queries run at once. */
+const DISCUSSION_BATCH = 8;
+const DISCUSSION_BATCHES_AT_ONCE = 3;
+
+/** Review MR key → its discussions and the counters they were fetched at. */
+const discussionCache = new Map<string, { stamp: string; discussions: MrDiscussion[] }>();
 
 export interface MrOverview {
   status: 'idle' | 'loading' | 'ready' | 'error';
@@ -508,6 +542,9 @@ interface RawGqlMr {
   targetBranch?: string;
   updatedAt?: string;
   approved?: boolean;
+  userNotesCount?: number;
+  resolvableDiscussionsCount?: number;
+  resolvedDiscussionsCount?: number;
   approvedBy?: { nodes?: { username?: string }[] };
   author?: { username?: string };
   assignees?: { nodes?: { username?: string }[] };
@@ -549,13 +586,29 @@ function normalizeMr(raw: RawGqlMr): GlabMrItem {
     assignees: usernames(raw.assignees),
     reviewers: usernames(raw.reviewers),
     updatedAt: raw.updatedAt ?? '',
-    discussions: (raw.discussions?.nodes ?? []).map((d) => ({
-      resolvable: d.resolvable ?? false,
-      resolved: d.resolved ?? false,
-      notes: (d.notes?.nodes ?? []).map((n) => n.author?.username ?? ''),
-    })),
+    discussions: normalizeDiscussions(raw.discussions),
+    openThreadCount:
+      raw.resolvableDiscussionsCount === undefined
+        ? undefined
+        : Math.max(0, raw.resolvableDiscussionsCount - (raw.resolvedDiscussionsCount ?? 0)),
+    noteCount: raw.userNotesCount,
   };
 }
+
+function normalizeDiscussions(raw: RawGqlMr['discussions']): MrDiscussion[] {
+  return (raw?.nodes ?? []).map((d) => ({
+    resolvable: d.resolvable ?? false,
+    resolved: d.resolved ?? false,
+    notes: (d.notes?.nodes ?? []).map((n) => n.author?.username ?? ''),
+  }));
+}
+
+/** The same key `normalizeMr` gives the item. */
+const rawKey = (raw: RawGqlMr) => `${raw.project?.fullPath ?? ''}!${Number(raw.iid ?? 0)}`;
+
+/** Changes whenever a note is added or a thread (un)resolved — the refetch trigger. */
+const discussionStamp = (raw: RawGqlMr) =>
+  `${raw.userNotesCount ?? '?'}|${raw.resolvableDiscussionsCount ?? '?'}|${raw.resolvedDiscussionsCount ?? '?'}`;
 
 /** Mine = assigned to me ∪ authored by me with no assignee (deduped). */
 export function mergeMine<T extends GlabMrItem>(
@@ -576,7 +629,7 @@ const EXEC_TRUNCATED_MARKER = '[axn-term: output truncated';
 
 /** Auth hint only fits errors glab itself raised, not output-size ones. */
 const isAuthHintRelevant = (error?: string) =>
-  !(error ?? '').startsWith('glab output too large');
+  !(error ?? '').startsWith('glab output too large') && !(error ?? '').includes(GRAPHQL_TIMEOUT_SUMMARY);
 
 /** `glab mr list` for the MRs whose source is `branch` (single-quoted: git allows `$(…)` in names). */
 export function mrListCommand(branch: string): string {
@@ -584,12 +637,69 @@ export function mrListCommand(branch: string): string {
 }
 
 /** The app-wide overview command (`--hostname` for self-hosted GitLab). */
-export function mrOverviewCommand(hostname?: unknown): string {
+function graphqlCommand(hostname: unknown, query: string, vars: Record<string, string> = {}): string {
   const name = forgeHost(hostname);
   const host = name ? ` --hostname ${shellQuote(name)}` : '';
+  // glab passes every -f field other than `query` as a GraphQL variable.
+  const args = Object.entries(vars)
+    .map(([k, v]) => ` -f ${shellQuote(`${k}=${v}`)}`)
+    .join('');
   // One line, single-quoted: no literal newlines or shell expansion inside.
-  const query = MR_OVERVIEW_QUERY.replace(/\s+/g, ' ');
-  return forgeCliCommand('glab', `api graphql${host} -f query=${shellQuote(query)}`);
+  return forgeCliCommand('glab', `api graphql${host} -f query=${shellQuote(query.replace(/\s+/g, ' '))}${args}`);
+}
+
+/** The app-wide overview command: the three MR lists, without discussions. */
+export function mrOverviewCommand(hostname?: unknown): string {
+  return graphqlCommand(hostname, MR_OVERVIEW_QUERY);
+}
+
+/**
+ * Several MRs' discussions in one query: one alias `m<i>` per MR, project
+ * and iid passed as variables so nothing user-controlled is spliced into
+ * the query text.
+ */
+export function mrDiscussionsCommand(
+  hostname: unknown,
+  mrs: { project: string; iid: number | string }[],
+): string {
+  const decl = mrs.map((_, i) => `$p${i}: ID!, $i${i}: String!`).join(', ');
+  const body = mrs
+    .map((_, i) => `m${i}: project(fullPath: $p${i}) { mergeRequest(iid: $i${i}) { ${MR_DISCUSSIONS_FIELDS} } }`)
+    .join(' ');
+  const vars: Record<string, string> = {};
+  mrs.forEach((mr, i) => {
+    vars[`p${i}`] = mr.project;
+    vars[`i${i}`] = String(mr.iid);
+  });
+  return graphqlCommand(hostname, `query(${decl}) { ${body} }`, vars);
+}
+
+/** Parse `glab api graphql` output into its `data`; throws on any failure. */
+function parseGraphql<T>(out: string): T | undefined {
+  // plugin_exec caps output and appends a marker; JSON.parse would only
+  // report "Expected '}'" — name the real cause instead.
+  if (out.includes(EXEC_TRUNCATED_MARKER)) {
+    throw new Error(`glab output too large: ${out.slice(out.lastIndexOf('[axn-term:'))}`);
+  }
+  const parsed = JSON.parse(out) as { data?: T; errors?: { message?: string }[] };
+  if (parsed.errors?.length) {
+    throw new Error(parsed.errors.map((e) => e.message ?? 'graphql error').join(' '));
+  }
+  return parsed.data;
+}
+
+/** `fn` over `items`, at most `limit` at a time; results keep the input order. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 /** The current overview snapshot (outside React). */
@@ -599,6 +709,7 @@ export function currentMrOverview(): MrOverview {
 
 /** Test seam: drop the cached overview. */
 export function resetMrOverview(): void {
+  discussionCache.clear();
   setOverview({ status: 'idle', mine: [], review: [] });
 }
 
@@ -611,31 +722,64 @@ export function refreshMrOverview(settings?: {
     try {
       const rt = appRuntime();
       if (!rt) throw new Error('no session available for glab');
-      const out = await rt.exec(mrOverviewCommand(settings?.hostname));
-      // plugin_exec caps output and appends a marker; JSON.parse would only
-      // report "Expected '}'" — name the real cause instead.
-      if (out.includes(EXEC_TRUNCATED_MARKER)) {
-        throw new Error(`glab output too large: ${out.slice(out.lastIndexOf('[axn-term:'))}`);
-      }
-      const parsed = JSON.parse(out) as {
-        data?: {
-          currentUser?: {
-            username?: string;
-            assignedMergeRequests?: { nodes?: RawGqlMr[] };
-            authoredMergeRequests?: { nodes?: RawGqlMr[] };
-            reviewRequestedMergeRequests?: { nodes?: RawGqlMr[] };
-          };
-        };
-        errors?: { message?: string }[];
-      };
-      if (parsed.errors?.length) {
-        throw new Error(parsed.errors[0].message ?? 'graphql error');
-      }
-      const user = parsed.data?.currentUser;
+      const data = parseGraphql<{
+        currentUser?: {
+          username?: string;
+          assignedMergeRequests?: { nodes?: RawGqlMr[] };
+          authoredMergeRequests?: { nodes?: RawGqlMr[] };
+          reviewRequestedMergeRequests?: { nodes?: RawGqlMr[] };
+        } | null;
+      }>(await rt.exec(mrOverviewCommand(settings?.hostname)));
+      const user = data?.currentUser;
       if (!user) throw new Error('no currentUser — run `glab auth login`');
-      const assigned = (user.assignedMergeRequests?.nodes ?? []).map(normalizeMr);
-      const authored = (user.authoredMergeRequests?.nodes ?? []).map(normalizeMr);
-      const review = (user.reviewRequestedMergeRequests?.nodes ?? []).map(normalizeMr);
+      const assignedRaw = user.assignedMergeRequests?.nodes ?? [];
+      const authoredRaw = user.authoredMergeRequests?.nodes ?? [];
+      const reviewRaw = user.reviewRequestedMergeRequests?.nodes ?? [];
+
+      // Step two: discussions for review MRs whose counters moved.
+      const reviewKeys = new Set(reviewRaw.map(rawKey));
+      for (const key of discussionCache.keys()) if (!reviewKeys.has(key)) discussionCache.delete(key);
+      const stale = new Map<string, RawGqlMr>();
+      for (const raw of reviewRaw) {
+        if (discussionCache.get(rawKey(raw))?.stamp !== discussionStamp(raw)) stale.set(rawKey(raw), raw);
+      }
+      const batches: RawGqlMr[][] = [];
+      const pending = [...stale.values()];
+      for (let i = 0; i < pending.length; i += DISCUSSION_BATCH) batches.push(pending.slice(i, i + DISCUSSION_BATCH));
+      let failed = 0;
+      let firstError: unknown;
+      await mapLimit(batches, DISCUSSION_BATCHES_AT_ONCE, async (batch) => {
+        try {
+          type Gql = { mergeRequest?: { discussions?: RawGqlMr['discussions'] } | null } | null;
+          const d = parseGraphql<Record<string, Gql>>(
+            await rt.exec(
+              mrDiscussionsCommand(
+                settings?.hostname,
+                batch.map((raw) => ({ project: raw.project?.fullPath ?? '', iid: raw.iid ?? '' })),
+              ),
+            ),
+          );
+          batch.forEach((raw, i) => {
+            discussionCache.set(rawKey(raw), {
+              stamp: discussionStamp(raw),
+              discussions: normalizeDiscussions(d?.[`m${i}`]?.mergeRequest?.discussions),
+            });
+          });
+        } catch (e) {
+          // A slow batch must not blank the list: its MRs keep their cached
+          // discussions and stay stale, so the next refresh retries them.
+          failed += 1;
+          firstError ??= e;
+        }
+      });
+      if (batches.length > 0 && failed === batches.length) throw firstError;
+      const toItem = (raw: RawGqlMr): GlabMrItem => ({
+        ...normalizeMr(raw),
+        discussions: discussionCache.get(rawKey(raw))?.discussions ?? [],
+      });
+      const assigned = assignedRaw.map(toItem);
+      const authored = authoredRaw.map(toItem);
+      const review = reviewRaw.map(toItem);
       setOverview({
         status: 'ready',
         host,
@@ -645,13 +789,14 @@ export function refreshMrOverview(settings?: {
         fetchedAt: Date.now(),
       });
     } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
+      const raw = e instanceof Error ? e.message : String(e);
+      const error = compactCliError(raw);
       setOverview({
         ...overview,
         host,
         status: 'error',
         error,
-        failure: classifyCliError('glab', error),
+        failure: classifyCliError('glab', raw),
       });
     }
   })().finally(() => {
@@ -874,7 +1019,7 @@ function MrActions({ mr, env }: { mr: MrRef; env: MrRowEnv }) {
   const providers = mrActionProviders();
   if (providers.length === 0) return null;
   return (
-    <span className="flex shrink-0 items-center gap-0.5 pr-1">
+    <span className="flex shrink-0 items-center gap-0.5 pr-1 pt-1.5">
       {providers.map((Provider, i) => (
         <Provider key={i} mr={mr} env={env} />
       ))}
@@ -882,10 +1027,10 @@ function MrActions({ mr, env }: { mr: MrRef; env: MrRowEnv }) {
   );
 }
 
-function MrRow({ mr, badge, env }: { mr: GlabMrItem; badge?: string; env: MrRowEnv }) {
+function MrRow({ mr, badge, env, showDescription = true }: { showDescription?: boolean; mr: GlabMrItem; badge?: string; env: MrRowEnv }) {
   const threads = openThreads(mr);
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-start gap-1">
       <div className="min-w-0 flex-1 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]">
         <a
           href={mr.url}
@@ -933,7 +1078,7 @@ function MrRow({ mr, badge, env }: { mr: GlabMrItem; badge?: string; env: MrRowE
             </span>
           )}
         </a>
-        {mr.description && <MrDescription markdown={mr.description} />}
+        {showDescription && mr.description && <MrDescription markdown={mr.description} />}
       </div>
       <MrActions mr={mr} env={env} />
     </div>
@@ -947,7 +1092,9 @@ function MrSection({
   total,
   marker,
   env,
+  showDescriptions,
 }: {
+  showDescriptions: boolean;
   title: string;
   mrs: GlabMrItem[];
   count: number;
@@ -969,7 +1116,7 @@ function MrSection({
       ) : (
         <div className="flex flex-col gap-0.5">
           {mrs.map((mr) => (
-            <MrRow key={mr.key} mr={mr} badge={marker?.(mr) ?? undefined} env={env} />
+            <MrRow key={mr.key} mr={mr} badge={marker?.(mr) ?? undefined} env={env} showDescription={showDescriptions} />
           ))}
         </div>
       )}
@@ -997,7 +1144,11 @@ function GlabMrView({
   close,
   env,
   settings,
+  showDescriptions = true,
+  onToggleDescriptions,
 }: {
+  showDescriptions?: boolean;
+  onToggleDescriptions?: () => void;
   close: () => void;
   env: MrRowEnv;
   /** The plugin's settings — carries `hostname`; without it the CLI queries its default host. */
@@ -1008,6 +1159,8 @@ function GlabMrView({
 
   useEffect(() => {
     if (data.status === 'idle') void refreshMrOverview(settings);
+    // Warm local repo discovery so a review click finds the clone at once.
+    void env.checkouts?.().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1029,6 +1182,20 @@ function GlabMrView({
           </span>
         )}
         <div className="flex-1" />
+        {onToggleDescriptions && (
+          <button
+            type="button"
+            onClick={onToggleDescriptions}
+            data-tip={showDescriptions ? 'Hide descriptions' : 'Show descriptions'}
+            aria-label={showDescriptions ? 'Hide descriptions' : 'Show descriptions'}
+            aria-pressed={showDescriptions}
+            className={`flex h-6 w-6 items-center justify-center rounded transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)] ${
+              showDescriptions ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] opacity-60'
+            }`}
+          >
+            <Text className="h-3.5 w-3.5" />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void refreshMrOverview(settings)}
@@ -1090,6 +1257,7 @@ function GlabMrView({
               total={mine.length}
               marker={(m) => (mrNeedsAction(m) ? 'action' : null)}
               env={env}
+              showDescriptions={showDescriptions}
             />
             <MrSection
               title="review requested"
@@ -1098,6 +1266,7 @@ function GlabMrView({
               total={review.length}
               marker={(m) => (mrWaitingForMe(m, me) ? 'waiting' : null)}
               env={env}
+              showDescriptions={showDescriptions}
             />
             {data.status === 'loading' && (
               <div className="px-2 text-[10px] italic text-[var(--text-secondary)]">
@@ -1156,6 +1325,7 @@ export const glabMrPlugin: SessionViewPlugin = {
       description: 'Overrides the glab api --hostname default.',
       type: 'string',
     },
+    repoRootsSetting('GitLab'),
   ],
   onSessionOpen: (ctx) => {
     scheduleSessionRefresh(ctx, true);
@@ -1229,11 +1399,23 @@ export const glabMrPlugin: SessionViewPlugin = {
       sessionApi={sessionApi}
     />
   ),
-  renderView: ({ pluginSettings, close, sessions, workspaces, selectSession, sessionApi }) => (
+  renderView: ({ pluginSettings, close, sessions, workspaces, selectSession, sessionApi, appState, updateAppState }) => (
     <GlabMrView
       close={close}
+      showDescriptions={(appState as { showDescriptions?: boolean } | undefined)?.showDescriptions !== false}
+      onToggleDescriptions={() =>
+        updateAppState({
+          showDescriptions: (appState as { showDescriptions?: boolean } | undefined)?.showDescriptions === false,
+        })
+      }
       settings={pluginSettings as { hostname?: unknown } | undefined}
-      env={{ sessions, workspaces, apiFor: sessionApi, selectSession }}
+      env={{
+        sessions,
+        workspaces,
+        apiFor: sessionApi,
+        selectSession,
+        checkouts: () => forgeCheckouts(pluginSettings as { repoRoots?: unknown } | undefined),
+      }}
     />
   ),
 };

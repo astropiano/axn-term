@@ -7,6 +7,7 @@
   "scripts": {
     "dev:desktop": "pnpm --filter @axn-term/desktop tauri dev",
     "build:desktop": "pnpm --filter @axn-term/desktop tauri build --bundles app && ./build/scripts/make-dmg.sh",
+    "build:hmr": "pnpm --filter @axn-term/desktop tauri build -c src-tauri/tauri.term-hmr.conf.json --bundles app && ./build/scripts/make-dmg.sh axn-term-hmr apps/desktop/src-tauri/tauri.term-hmr.conf.json",
     "build:desktop:docker": "./build/build-desktop.sh",
     "build:desktop:windows": "./build/build-desktop-windows.sh",
     "serve:web": "nx serve web",

@@ -89,16 +89,39 @@ pub(crate) fn create_window_with<M: Manager<Wry>>(
     };
     let (width, height) = window_size(options.width, options.height);
     let dev_url = manager.config().build.dev_url.clone();
-    let mut builder = tauri::WebviewWindowBuilder::new(manager, label, WebviewUrl::App(url.into()))
+    // axn-term-hmr: session windows load the spawned vite dev server, not the
+    // bundled frontend. Until vite is up they show its origin anyway — it
+    // will serve as soon as the server binds (webview retries on reload).
+    let target = crate::devhmr::enabled()
+        .then(|| manager.try_state::<crate::devhmr::DevHmrState>())
+        .flatten()
+        .and_then(|state| crate::devhmr::vite_origin(&state))
+        .map(|mut origin| {
+            if let Some(boot) = boot_fragment(options.boot.as_deref()) {
+                origin.set_fragment(Some(boot));
+            }
+            WebviewUrl::External(origin)
+        })
+        .unwrap_or_else(|| WebviewUrl::App(url.into()));
+    let mut builder = tauri::WebviewWindowBuilder::new(manager, label, target)
         .title("axn-term")
         .inner_size(width, height)
         // Backstop to the frontend's drop guard: the webview must never leave
         // the app. A dropped file the page did not cancel would be opened in
         // place of the app (e.g. an image shown full-window), which also
         // unloads the close handler, so the window could no longer close.
-        .on_navigation(move |url| is_app_navigation(url, dev_url.as_ref()));
+        .on_navigation(move |url| {
+            is_app_navigation(url, dev_url.as_ref()) || is_dev_hmr_navigation(url)
+        });
     if let Some((x, y)) = window_position(options.x, options.y) {
         builder = builder.position(x, y);
+    }
+    // macOS: transparent titlebar — native height/buttons/title stay, but
+    // its fill becomes the window backgroundColor (the theme's header
+    // color pushed via set_titlebar_color) instead of the default gray.
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.title_bar_style(tauri::TitleBarStyle::Transparent);
     }
     builder = builder.visible(false);
     // macOS/Windows: no native file-drop target. The default wry drop handler
@@ -146,9 +169,25 @@ pub(crate) fn create_window_with<M: Manager<Wry>>(
                 gtk_window.set_titlebar(None::<&gtk::Widget>);
             }
             let _ = window2.show();
+            // Linux/Windows windows start with the menu bar hidden —
+            // tapping Alt toggles it (toggle_menu, Thunderbird-style). Must
+            // run after show(): tao's show is a queued WindowRequest that
+            // ends in gtk show_all, which would re-show a hidden menubar —
+            // idle_add lands behind that channel's priority.
+            let window3 = window2.clone();
+            gtk::glib::idle_add_local_once(move || {
+                let _ = window3.hide_menu();
+            });
         });
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
+    {
+        // Windows: same hidden-by-default menu bar (see above); macOS keeps
+        // its permanent menu.
+        window.show().map_err(|e| e.to_string())?;
+        let _ = window.hide_menu();
+    }
+    #[cfg(target_os = "macos")]
     window.show().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -170,6 +209,15 @@ pub(crate) fn is_app_navigation(url: &tauri::Url, dev_url: Option<&tauri::Url>) 
     }
 }
 
+/// axn-term-hmr loads its session windows from a spawned vite dev server —
+/// any localhost http origin navigates (the port is picked at spawn time
+/// and only known at runtime; this is a dev tool, not a shipped product).
+fn is_dev_hmr_navigation(url: &tauri::Url) -> bool {
+    crate::devhmr::enabled()
+        && url.scheme() == "http"
+        && matches!(url.host_str(), Some("localhost") | Some("127.0.0.1"))
+}
+
 #[tauri::command]
 pub(crate) fn create_window(app: AppHandle, options: Option<NewWindowOptions>) -> Result<String, String> {
     let id = next_window_id(&app.state::<AppState>().window_counter, |id| {
@@ -177,6 +225,58 @@ pub(crate) fn create_window(app: AppHandle, options: Option<NewWindowOptions>) -
     });
     create_window_with(&app, &id, &options.unwrap_or_default())?;
     Ok(id)
+}
+
+/// Tints the native titlebar to the theme's header color. On macOS the
+/// window's backgroundColor paints the titlebar area; other platforms keep
+/// their default chrome, so the call is a no-op there.
+#[tauri::command]
+pub(crate) fn set_titlebar_color(
+    window: tauri::WebviewWindow,
+    color: String,
+) -> Result<(), String> {
+    let hex = color.trim_start_matches('#');
+    if hex.len() != 6 {
+        return Err(format!("expected #rrggbb, got {color}"));
+    }
+    let channel = |s: &str| u8::from_str_radix(s, 16).map_err(|e| e.to_string());
+    let r = channel(&hex[0..2])?;
+    let g = channel(&hex[2..4])?;
+    let b = channel(&hex[4..6])?;
+    #[cfg(target_os = "macos")]
+    {
+        window
+            .set_background_color(Some(tauri::window::Color(r, g, b, 255)))
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, r, g, b);
+    }
+    Ok(())
+}
+
+/// Toggles this window's menu bar — Linux/Windows keep it hidden until the
+/// frontend reports an Alt tap (Thunderbird-style). No-op on macOS, where
+/// the menu bar is permanent.
+#[tauri::command]
+pub(crate) fn toggle_menu(window: tauri::Window) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window;
+        Ok(true)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let visible = window.is_menu_visible().unwrap_or(false);
+        if visible {
+            window.hide_menu()
+        } else {
+            window.show_menu()
+        }
+        .map(|_| !visible)
+        .map_err(|e| e.to_string())
+    }
 }
 
 #[cfg(test)]

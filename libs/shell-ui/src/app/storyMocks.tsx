@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import type { MemoryStats, SessionBackend, ShellPlatform, ShellServices } from '@axn-term/session-backend';
+import type { MemoryStats, SessionBackend, ShellServices } from '@axn-term/session-backend';
+import type { ShellPlatform } from '../platform';
 import { AlertOctagon, AlertTriangle, Menu, Settings } from 'lucide-react';
 import type { ShellSession } from '../types';
 import { SessionBackendProvider, ShellPlatformProvider, ShellServicesProvider, bindShellServices } from '../services';

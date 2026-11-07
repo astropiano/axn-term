@@ -11,12 +11,16 @@ import {
   useWindowIds,
   windowRank,
   remoteSessionName,
+  resyncScrollPositions,
+  isMac,
 } from '@axn-term/shell-ui';
 import { tauriBackend, tauriServices, tauriFileReader } from '@axn-term/session-backend/tauri';
 import type { RemoteAuthority } from '@axn-term/session-backend/remote';
 import { desktopPlatform } from './platform';
+import { DevHmrWindow } from './DevHmr';
 import { authorityStatus, createRemoteAuthority, withAuthorityReflect } from './remoteAuthority';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 // macOS Preferences… opens this app in a second native window with
 // #axn-settings — render ONLY the settings UI: no ShellApp, so no sessions,
@@ -40,6 +44,9 @@ function SettingsWindow() {
 }
 
 const isSettingsWindow = window.location.hash.includes('axn-settings');
+// axn-term-hmr's control window (#axn-dev) — the dev-settings surface, not
+// the terminal UI (that window loads the spawned vite server instead).
+const isDevWindow = window.location.hash.includes('axn-dev');
 
 export default function App() {
   // Desktop fileReader: the app shares the host filesystem, so the session
@@ -66,11 +73,52 @@ export default function App() {
     const pendingReload = listen('menu-reload', () => {
       window.dispatchEvent(new CustomEvent('axn:menu-reload'));
     });
+    // WKWebView scrolled-layer desync (see scrollResync.ts): crossing a
+    // Retina↔non-Retina screen boundary can leave hit-testing offset by
+    // scrollTop. Nudge all scrollers when the scale factor flips — once now
+    // and once shortly after, because the layer rebuild can land after the
+    // event is delivered.
+    const pendingScale = getCurrentWindow().onScaleChanged(() => {
+      resyncScrollPositions();
+      setTimeout(resyncScrollPositions, 300);
+    });
     return () => {
       void pending.then((un) => un());
       void pendingReload.then((un) => un());
+      void pendingScale.then((un) => un());
     };
   }, [updateSettings]);
+
+  // Linux/Windows keep the native menu bar hidden until Alt is tapped
+  // (Thunderbird-style). Alt used as a modifier — Alt+key, Alt+Tab —
+  // must not toggle: only a solo press-and-release of Alt does.
+  useEffect(() => {
+    if (isMac) return;
+    let altSolo = false;
+    const onKeyDown = (e: KeyboardEvent) => {
+      altSolo =
+        e.key === 'Alt' && !e.repeat && !e.ctrlKey && !e.shiftKey && !e.metaKey;
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Alt' && altSolo && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
+        invoke('toggle_menu').catch((err) =>
+          console.error('toggle_menu failed', err),
+        );
+      }
+      if (e.key === 'Alt') altSolo = false;
+    };
+    const onBlur = () => {
+      altSolo = false;
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
   const fileAccessRoots = (settings.fileAccessRoots ?? []).join('\n');
   useEffect(() => {
     const roots = fileAccessRoots.split('\n').filter(Boolean);
@@ -212,6 +260,7 @@ export default function App() {
     [authority],
   );
 
+  if (isDevWindow) return <DevHmrWindow />;
   if (isSettingsWindow) return <SettingsWindow />;
 
   return (

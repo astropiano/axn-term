@@ -50,6 +50,15 @@ describe('createHiddenCommandInput', () => {
     expect(previewed).toEqual(['img.png']);
   });
 
+  it('intercepts axn-ide: optional dir arg defaults to cwd', () => {
+    const paths: string[] = [];
+    const { input, written } = setup({ onIdeRequest: (p) => paths.push(p) });
+    type(input, 'axn-ide src\r');
+    type(input, 'axn-ide\r');
+    expect(paths).toEqual(['src', '.']);
+    expect(written).toEqual(['\x15', '\x15']);
+  });
+
   it('intercepts axn-session via onSessionCommand', () => {
     const lines: string[] = [];
     const { input, written } = setup({

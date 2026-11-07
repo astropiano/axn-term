@@ -5,8 +5,16 @@
   "windows": [
     "main",
     "w-*",
-    "settings"
+    "settings",
+    "dev-settings"
   ],
+  "remote": {
+    "urls": [
+      "http://localhost:5914*",
+      "http://127.0.0.1:5914*",
+      "http://localhost:1420*"
+    ]
+  },
   "permissions": [
     "core:default",
     "opener:default",

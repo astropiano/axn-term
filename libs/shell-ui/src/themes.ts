@@ -1,5 +1,6 @@
 import type { ITheme } from '@xterm/xterm';
 import { load as loadYaml } from 'js-yaml';
+import { shellPlatform } from './platform';
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 export type EffectiveTheme = 'light' | 'dark';
@@ -80,6 +81,12 @@ export interface AppSettings {
   uiZoom?: number;
   /** Render `session.summary` (set via `axn-session-summary`/`axn-session set --summary`) in the panel. */
   sessionSummaries?: boolean;
+  /**
+   * Where the panel's "new session" affordance lives: a ghost row at the
+   * end of each workspace's session list (`list`), a `+` button in the
+   * workspace header (`header`), or `both` (default).
+   */
+  newSessionButton?: 'list' | 'header' | 'both';
   /**
    * Terminal cell renderer: `auto` (WebGL → canvas → DOM fallback chain,
    * including WebGL context loss), `webgl`, `canvas`, or `dom` to force.
@@ -432,6 +439,13 @@ export function applyTheme(theme: ThemeDefinition) {
     if (value) {
       root.style.setProperty(key, value);
     }
+  }
+
+  // Desktop (macOS): tint the native titlebar to the header color. Only
+  // #rrggbb values translate — anything else (rgb(), var leftovers) skips.
+  const bgSecondary = vars['--bg-secondary'];
+  if (bgSecondary && /^#[0-9a-fA-F]{6}$/.test(bgSecondary)) {
+    shellPlatform()?.setTitlebarColor?.(bgSecondary);
   }
 
   root.dataset.theme = theme.mode;

@@ -16,10 +16,26 @@ import type { ShellSession } from '../../types';
 import { ptyIdOf } from '../../types';
 import { useSessionBackend } from '../../services';
 import { PanelSearch, PluginIcon } from '../SessionPanel';
-import { dockerPlugin } from './docker';
+import { dockerPlugin, parseDockerAvailability } from './docker';
+import type { DockerAvailability } from './docker';
 
-/** `docker ps -a` + `docker stats --no-stream`, one probe — same shell-script style as the rail's. */
-const PS_CMD = `docker ps -a --format '{{json .}}' 2>/dev/null
+/**
+ * `docker ps -a` + `docker stats --no-stream`, one probe — same shell-script
+ * style as the rail's. An `==unavailable==` section (`no-cli`/`daemon-down`)
+ * replaces the container listing when the daemon can't be queried, so the
+ * view can say "docker is down" instead of showing an empty list.
+ */
+const PS_CMD = `if ! command -v docker >/dev/null 2>&1; then
+  echo '==unavailable=='
+  echo 'no-cli'
+  exit 0
+fi
+if ! docker info >/dev/null 2>&1; then
+  echo '==unavailable=='
+  echo 'daemon-down'
+  exit 0
+fi
+docker ps -a --format '{{json .}}' 2>/dev/null
 echo '==stats=='
 docker stats --no-stream --format '{{json .}}' 2>/dev/null || echo unavailable`;
 
@@ -90,12 +106,14 @@ export interface DockerOverview {
   status: 'idle' | 'loading' | 'ready' | 'error';
   error?: string;
   containers: DockerContainer[];
+  /** Result of the last probe's daemon check — `unknown` until a probe lands. */
+  availability: DockerAvailability;
   fetchedAt?: number;
   /** In-flight (or last failed) lifecycle ops, keyed by container id. */
   ops: Record<string, DockerOp>;
 }
 
-let overview: DockerOverview = { status: 'idle', containers: [], ops: {} };
+let overview: DockerOverview = { status: 'idle', containers: [], availability: 'unknown', ops: {} };
 const overviewListeners = new Set<() => void>();
 
 function setOverview(next: DockerOverview) {
@@ -122,9 +140,11 @@ export function refreshContainers(exec: DockerExec): Promise<void> {
   refreshInFlight ??= (async () => {
     setOverview({ ...overview, status: 'loading' });
     try {
-      const containers = parsePs(await exec(PS_CMD));
+      const out = await exec(PS_CMD);
       setOverview({
-        status: 'ready', containers, fetchedAt: Date.now(), ops: overview.ops,
+        status: 'ready', containers: parsePs(out),
+        availability: parseDockerAvailability(out),
+        fetchedAt: Date.now(), ops: overview.ops,
       });
     } catch (e) {
       setOverview({
@@ -365,6 +385,17 @@ export function DockerView({
             <div className="text-[var(--text-secondary)]">
               Check <code className="text-[var(--accent)]">docker ps</code> in a shell.
             </div>
+          </div>
+        ) : data.availability === 'daemon-down' ? (
+          <div className="m-3 rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
+            <div className="mb-1 font-semibold text-[var(--yellow)]">docker daemon is not running</div>
+            <div className="text-[var(--text-secondary)]">
+              Start colima or Docker Desktop, then refresh.
+            </div>
+          </div>
+        ) : data.availability === 'no-cli' ? (
+          <div className="p-4 text-[11px] text-[var(--text-secondary)]">
+            No docker CLI on this host.
           </div>
         ) : data.containers.length === 0 ? (
           <div className="p-4 text-[11px] text-[var(--text-secondary)]">

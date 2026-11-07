@@ -110,9 +110,10 @@ export interface EditorTab {
   /**
    * 'browser' is a directory tree, 'shell' a sub-shell PTY, 'preview' a
    * read-only file preview rendered by a preview plugin, 'git' the repo
-   * inspect view (`path` is the repo root); default is a file editor.
+   * inspect view (`path` is the repo root), 'ide' a tree+editor composite
+   * (`path` is the tree's root dir); default is a file editor.
    */
-  kind?: 'editor' | 'browser' | 'shell' | 'preview' | 'git';
+  kind?: 'editor' | 'browser' | 'shell' | 'preview' | 'git' | 'ide';
   /** For kind 'shell': the `sh -c` command; absent means an interactive sub-shell. */
   command?: string;
   /**

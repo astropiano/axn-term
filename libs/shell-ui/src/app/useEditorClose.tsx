@@ -16,7 +16,8 @@ export function useEditorClose() {
   const requestClose = useCallback((tab: EditorTab, close: () => void) => {
     if (busy.current) return;
     const handle = editors.current.get(tab.id);
-    if ((tab.kind ?? 'editor') !== 'editor' || !(handle?.isDirty() ?? tab.dirty)) {
+    const isEditorKind = (tab.kind ?? 'editor') === 'editor' || tab.kind === 'ide';
+    if (!isEditorKind || !(handle?.isDirty() ?? tab.dirty)) {
       close();
       return;
     }

@@ -20,20 +20,27 @@ if [[ "$(uname)" != "Darwin" ]]; then
   exit 0
 fi
 
+# Optional $1: app name (default axn-term; e.g. axn-term-hmr builds against
+# the matching tauri.$2 config, defaulting to tauri.conf.json).
+APP_NAME="${1:-axn-term}"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BUNDLE_DIR="$REPO_ROOT/target/release/bundle"
-APP_BUNDLE="$BUNDLE_DIR/macos/axn-term.app"
-TAURI_CONF="$REPO_ROOT/apps/desktop/src-tauri/tauri.conf.json"
+APP_BUNDLE="$BUNDLE_DIR/macos/${APP_NAME}.app"
+TAURI_CONF="${2:-$REPO_ROOT/apps/desktop/src-tauri/tauri.conf.json}"
 
 if [[ ! -d "$APP_BUNDLE" ]]; then
   echo "make-dmg: $APP_BUNDLE not found — run 'pnpm build:desktop' first" >&2
   exit 1
 fi
 
-VOLUME_NAME="axn-term"
+VOLUME_NAME="$APP_NAME"
+# version lives only in the base config — merged variant confs don't carry it.
 VERSION="$(sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$TAURI_CONF" | head -1)"
 if [[ -z "$VERSION" ]]; then
-  echo "make-dmg: could not read version from $TAURI_CONF" >&2
+  VERSION="$(sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$REPO_ROOT/apps/desktop/src-tauri/tauri.conf.json" | head -1)"
+fi
+if [[ -z "$VERSION" ]]; then
+  echo "make-dmg: could not read version from $TAURI_CONF or tauri.conf.json" >&2
   exit 1
 fi
 

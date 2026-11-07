@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 
 const sizeClass = {
   sm: 'h-5 w-5',
@@ -22,7 +22,7 @@ export function IconButton({
   children,
 }: {
   title: string;
-  onClick: () => void;
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
   size?: keyof typeof sizeClass;
   danger?: boolean;
   disabled?: boolean;

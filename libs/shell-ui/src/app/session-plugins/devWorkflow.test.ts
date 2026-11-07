@@ -1684,6 +1684,49 @@ describe('startMrReview', () => {
     expect(h.opened).toHaveLength(0);
   });
 
+  it('reviews in a local clone found by repo discovery when no session is in the repo', async () => {
+    // The reported failure: the MR's project had no open session, so the
+    // review refused to start although a clone was on disk.
+    const elsewhere = makeSession({ id: 'elsewhere', cwd: '/home' });
+    const h = makeCtx({ session: elsewhere, settings, execImpl: async () => '' });
+    const err = await startMrReview(MR, def(), {
+      ...envFor(h),
+      checkouts: async () => [
+        { path: '/clones/p-feat', branch: 'feat', remote: 'git@gitlab.com:g/p.git' },
+        { path: '/clones/p', branch: 'develop', remote: 'git@gitlab.com:g/p.git', isMain: true },
+        { path: '/clones/p-frontend', branch: 'x', remote: 'git@gitlab.com:g/p-frontend.git', isMain: true },
+      ],
+    });
+    expect(err).toBeUndefined();
+    const calls = h.execCalls.map((c) => c.command);
+    // the main checkout is the repo; every git call names it explicitly
+    expect(calls.some((c) => c.includes("git -C '/clones/p' fetch origin 'merge-requests/114/head'"))).toBe(true);
+    expect(h.opened).toEqual([{ cwd: '/clones/worktrees/p-mr-114', name: '!114 opt-in worktree sessions' }]);
+  });
+
+  it('names the missing clone when discovery finds none', async () => {
+    const h = makeCtx({ session: makeSession({ id: 'x' }), settings, execImpl: async () => '' });
+    const err = await startMrReview(MR, def(), { ...envFor(h), checkouts: async () => [] });
+    expect(err).toContain('no local clone of g/p');
+    expect(h.execCalls).toHaveLength(0);
+    expect(h.opened).toHaveLength(0);
+  });
+
+  it('goes to the session already open in the review worktree', async () => {
+    const h = makeCtx({ session: repoSession(), settings, execImpl: async () => '' });
+    const reviewing = makeSession({ id: 'rev', cwd: '/worktrees/repo-mr-114' });
+    const selected: string[] = [];
+    const err = await startMrReview(MR, def(), {
+      ...envFor(h),
+      sessions: [h.ctx.session, reviewing],
+      selectSession: (id) => selected.push(id),
+    });
+    expect(err).toBeUndefined();
+    expect(selected).toEqual(['rev']);
+    expect(h.execCalls).toHaveLength(0);
+    expect(h.opened).toHaveLength(0);
+  });
+
   it('still opens the review when the target-branch fetch fails', async () => {
     // e.g. origin is a fork or the target was renamed — the compare base is
     // nice-to-have, only the MR head is required.

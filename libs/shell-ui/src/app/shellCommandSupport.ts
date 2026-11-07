@@ -8,6 +8,7 @@ export const AXN_BUILTIN_COMMANDS = [
   'axn-edit',
   'axn-browse',
   'axn-preview',
+  'axn-ide',
   'axn-sh',
   'axn-rename',
   'axn-install',
@@ -28,6 +29,7 @@ export const AXN_ARG_COMMANDS = new Set([
   'axn-edit',
   'axn-browse',
   'axn-preview',
+  'axn-ide',
   'axn-sh',
   'axn-rename',
   'axn-install',
@@ -211,6 +213,17 @@ export function browserTabPatch(session: ShellSession, path: string): Partial<Sh
   const id = existing?.id ?? `br-${crypto.randomUUID()}`;
   return {
     editors: existing ? editors : [...editors, { id, path, kind: 'browser' }],
+    activeTab: id,
+  };
+}
+
+/** Same dedupe-by-path pattern as browserTabPatch for the IDE composite tab. */
+export function ideTabPatch(session: ShellSession, path: string): Partial<ShellSession> {
+  const editors = session.editors ?? [];
+  const existing = editors.find((e) => e.path === path && e.kind === 'ide');
+  const id = existing?.id ?? `ide-${crypto.randomUUID()}`;
+  return {
+    editors: existing ? editors : [...editors, { id, path, kind: 'ide' }],
     activeTab: id,
   };
 }

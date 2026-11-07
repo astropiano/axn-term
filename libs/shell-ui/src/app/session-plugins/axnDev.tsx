@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { appRuntime } from '../appRuntime';
+import type { RepoDir, RepoDirsContext } from '../repoDirectory';
 import { PanelSearch } from '../SessionPanel';
 import type { SessionViewPlugin } from './plugin';
 
@@ -856,10 +857,55 @@ function AxnDevView({
 // Plugin definition
 // ---------------------------------------------------------------------------
 
+/**
+ * Parse `axn-dev git repos --json` into repo dirs. Null when the output is
+ * not that JSON (an older CLI without `git repos`).
+ */
+export function parseAxnDevRepos(out: string): RepoDir[] | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(out);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(raw)) return null;
+  const dirs: RepoDir[] = [];
+  for (const r of raw as Array<Record<string, unknown>>) {
+    if (typeof r?.path !== 'string' || !r.path) continue;
+    const worktrees = Array.isArray(r.worktrees)
+      ? (r.worktrees as Array<Record<string, unknown>>).flatMap((w) =>
+          typeof w?.path === 'string' && w.path
+            ? [
+                {
+                  path: w.path,
+                  branch: typeof w.branch === 'string' ? w.branch : null,
+                  ...(typeof w.isMain === 'boolean' ? { isMain: w.isMain } : {}),
+                },
+              ]
+            : [],
+        )
+      : undefined;
+    dirs.push({
+      path: r.path,
+      name: typeof r.name === 'string' ? r.name : undefined,
+      remote: typeof r.remote === 'string' ? r.remote : null,
+      worktrees,
+    });
+  }
+  return dirs;
+}
+
+/** The repos configured in axn-dev; empty when the CLI is absent or too old. */
+async function axnDevRepoDirs(ctx: RepoDirsContext): Promise<RepoDir[]> {
+  const out = await ctx.exec('axn-dev git repos --json').catch(() => '');
+  return parseAxnDevRepos(out) ?? [];
+}
+
 export const axnDevPlugin: SessionViewPlugin = {
   id: 'axn-dev',
   title: 'axn-dev scenarios',
   version: '0.1.0',
+  repoDirs: axnDevRepoDirs,
   settings: [
     {
       key: 'refreshIntervalSeconds',
