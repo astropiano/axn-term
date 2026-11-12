@@ -251,7 +251,15 @@ pub(crate) async fn get_foreground_process(
                 let master = session.master.lock().map_err(|e| e.to_string())?;
                 master.process_group_leader().ok_or("no process group leader")?
             };
+            // The shell itself in the foreground means an idle prompt — the
+            // comm name comparison lives in the frontend but wrappers
+            // (login shims, `exec` chains) make it unreliable, so answer
+            // the identity question here where the shell pid is known.
+            let shell_pid = session.shell_pid as i32;
             drop(sessions);
+            if pid == shell_pid {
+                return Ok(None);
+            }
             Ok(process_name(pid as u32))
         }
         #[cfg(not(unix))]

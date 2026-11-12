@@ -22,6 +22,12 @@ export const AXN_BUILTIN_COMMANDS = [
   'axn-workspace-up',
   'axn-workspace-down',
   'axn-focus',
+  'axn-broadcast',
+  'axn-broadcast-add',
+  'axn-broadcast-rm',
+  'axn-broadcast-clear',
+  'axn-broadcasts',
+  'axn-broadcast-deck',
 ];
 
 /** Hidden commands that take an argument (get a trailing space on complete). */
@@ -37,10 +43,13 @@ export const AXN_ARG_COMMANDS = new Set([
   'axn-session-mv',
   'axn-session-summary',
   'axn-focus',
+  'axn-broadcast',
+  'axn-broadcast-add',
+  'axn-broadcast-rm',
 ]);
 
 export const AXN_BUILTIN_RE =
-  /^\s*(axn-session(?:-mv|-up|-down|-window)?|axn-workspaces|axn-workspace-up|axn-workspace-down|axn-focus)(?:\s+(.*?))?\s*$/;
+  /^\s*(axn-session(?:-mv|-up|-down|-window)?|axn-workspaces|axn-workspace-up|axn-workspace-down|axn-focus|axn-broadcast(?:-(?:add|rm|clear|deck)|s)?)(?:\s+(.*?))?\s*$/;
 
 /** Shell-ish tokenizer for command args — honours single/double quotes. */
 export function shellTokens(arg: string): string[] {

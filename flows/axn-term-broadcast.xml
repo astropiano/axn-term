@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Broadcast fan-out flow. Two bare shell sessions are marked via
+  axn-broadcast-add; axn-broadcasts must list the second session; then
+  `axn-broadcast ls` must deliver the line+Enter to BOTH PTYs (a marker
+  file in the shared cwd appears in both outputs); finally axn-focus
+  navigates the window selection to the second session.
+-->
+<flows>
+  <flow name="axn-term - broadcast ls reaches every marked session">
+    <description>
+      Two seeded shells ('one', 'two') in one workspace. axn-broadcast-add
+      marks both, axn-broadcasts lists them, `axn-broadcast ls` writes the
+      line to each marked PTY (a unique marker file shows up in both
+      outputs), and axn-focus two switches the selected session.
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+      <tag>broadcast</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="broadcast" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Temp state: two shell sessions, marker file in shared cwd">
+        <assert that="contains" value="state dir prepared" />
+      </step>
+      <step adapter="axn-term" action="start" description="Launch axn-term">
+        <assert that="contains" value="app started" />
+      </step>
+      <step adapter="axn-term" action="broadcastCheck" description="mark both, axn-broadcasts, axn-broadcast ls to both PTYs, axn-focus two">
+        <assert that="contains" value="broadcast ok" />
+      </step>
+      <step adapter="axn-term" action="close" description="Close axn-term">
+        <assert that="contains" value="app closed" />
+      </step>
+    </steps>
+  </flow>
+</flows>

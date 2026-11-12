@@ -1,4 +1,4 @@
-import type { Terminal } from '@xterm/xterm';
+import { Terminal } from '@xterm/xterm';
 import { SerializeAddon } from '@xterm/addon-serialize';
 
 /**
@@ -26,13 +26,39 @@ export function takePtyKeepAlive(ptyId: string): boolean {
 }
 
 /**
+ * Headless xterm buffers for sessions with no mounted view — sessions mount
+ * plugin-style (only the selected one), but plugins must still read a live
+ * screen (progress bars, agent task lists) and a remount repaints from the
+ * freshest buffer, not a stale stash. Fed from the session-level output
+ * subscription in ShellApp; dropped when the session goes away.
+ */
+const screenBuffers = new Map<string, Terminal>();
+
+export function trackSessionBuffer(id: string): Terminal {
+  let term = screenBuffers.get(id);
+  if (!term) screenBuffers.set(id, (term = new Terminal({ allowProposedApi: true })));
+  return term;
+}
+
+export function dropSessionBuffer(id: string): void {
+  screenBuffers.get(id)?.dispose();
+  screenBuffers.delete(id);
+}
+
+/** Ids currently holding a headless buffer — for reconciliation. */
+export function sessionBufferIds(): string[] {
+  return [...screenBuffers.keys()];
+}
+
+/**
  * The terminal's scrollback and screen as one ANSI string (colors, modes and
  * the alternate screen of a running TUI included), or undefined when the id
  * has no live terminal. Used to carry a session's history into the window it
- * moves to — the PTY itself stays put and only replays new output.
+ * moves to — the PTY itself stays put and only replays new output. Falls
+ * back to the session's headless buffer when no view is mounted.
  */
 export function serializeTerminal(id: string): string | undefined {
-  const term = terminals.get(id);
+  const term = terminals.get(id) ?? screenBuffers.get(id);
   if (!term) return undefined;
   try {
     const addon = new SerializeAddon();
@@ -84,7 +110,7 @@ function replayStorage(): Storage | null {
 export function stashTerminalReplays(storage: Storage | null = replayStorage()): void {
   if (!storage) return;
   const replays: Record<string, string> = {};
-  for (const id of terminals.keys()) {
+  for (const id of new Set([...terminals.keys(), ...screenBuffers.keys()])) {
     const data = serializeTerminal(id);
     if (data) replays[id] = data;
   }
@@ -136,7 +162,7 @@ export function terminalIdOf(term: Terminal): string | undefined {
  * no terminal.
  */
 export function getScreenLines(sessionId: string): string[] {
-  const term = terminals.get(sessionId);
+  const term = terminals.get(sessionId) ?? screenBuffers.get(sessionId);
   if (!term) return [];
   const buffer = term.buffer.active;
   const lines: string[] = [];

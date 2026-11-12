@@ -55,13 +55,13 @@ msgstr "바이너리 파일"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:577
 msgid "Both"
-msgstr ""
+msgstr "둘 다"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:77
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:116
 #: libs/shell-ui/src/app/FilePickerModal.tsx:232
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:112
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:113
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
 #: libs/shell-ui/src/app/SettingsModal.tsx:1157
 msgid "Cancel"
@@ -81,15 +81,15 @@ msgstr "터미널의 셀 렌더러입니다. 자동은 GPU(WebGL)를 사용하�
 #~ msgstr "클라이언트 ({0}{1})"
 
 #. placeholder {0}: viewers.length
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:441
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:438
 msgid "Clients: {0}"
 msgstr "클라이언트: {0}"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2428
+#: libs/shell-ui/src/app/ShellApp.tsx:2796
 msgid "Close tab"
 msgstr "탭 닫기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:480
+#: libs/shell-ui/src/app/SessionPanel.tsx:482
 msgid "Collapse"
 msgstr "접기"
 
@@ -97,7 +97,7 @@ msgstr "접기"
 msgid "Config file"
 msgstr "설정 파일"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:473
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:470
 msgid "Connected to"
 msgstr "연결 대상"
 
@@ -108,11 +108,11 @@ msgstr "연결 대상"
 #~ msgid "Connecting\\u2026"
 #~ msgstr "\\uc5f0\\uacb0 \\uc911\\u2026"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:326
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:323
 msgid "Connection"
 msgstr "연결"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:198
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:199
 msgid "Connection lost"
 msgstr "연결 끊김"
 
@@ -186,7 +186,7 @@ msgid "Delete {0}"
 msgstr "{0} 삭제"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:523
+#: libs/shell-ui/src/app/SessionPanel.tsx:525
 msgid "Delete workspace"
 msgstr "워크스페이스 삭제"
 
@@ -215,7 +215,7 @@ msgstr "편집"
 msgid "Edit icon"
 msgstr "아이콘 편집"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:719
+#: libs/shell-ui/src/app/SessionPanel.tsx:751
 msgid "Edit summary…"
 msgstr "요약 편집…"
 
@@ -238,14 +238,14 @@ msgstr "활성화됨"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:578
 msgid "End of session list"
-msgstr ""
+msgstr "세션 목록 끝"
 
 #. placeholder {0}: auth.userCode ?? ''
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:91
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:92
 msgid "Enter code {0} in the browser to finish sign-in."
 msgstr "브라우저에서 코드 {0}을(를) 입력하여 로그인을 완료하세요."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:480
+#: libs/shell-ui/src/app/SessionPanel.tsx:482
 msgid "Expand"
 msgstr "펼치기"
 
@@ -278,7 +278,7 @@ msgstr "파일 미리보기"
 msgid "Filter plugins…"
 msgstr "플러그인 필터…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:190
+#: libs/shell-ui/src/app/SessionPanel.tsx:192
 msgid "Filter sessions…"
 msgstr "세션 필터…"
 
@@ -314,7 +314,7 @@ msgstr "일반"
 #~ msgid "host — this machine"
 #~ msgstr "호스트 — 이 머신"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:330
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:327
 msgid "Hub URL"
 msgstr "\\ud5c8\\ube0c URL"
 
@@ -398,27 +398,27 @@ msgstr "실행 파일 이름이나 플러그인 ID를 Lucide 아이콘(예: Bot,
 msgid "Move “{sessionName}” to workspace"
 msgstr "“{sessionName}”을(를) 워크스페이스로 이동"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:837
+#: libs/shell-ui/src/app/SessionPanel.tsx:883
 msgid "Move to new window"
 msgstr "새 창으로 이동"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:821
+#: libs/shell-ui/src/app/SessionPanel.tsx:867
 msgid "Move to workspace…"
 msgstr "워크스페이스로 이동…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1804
+#: libs/shell-ui/src/app/SessionPanel.tsx:1931
 msgid "New session"
 msgstr "새 세션"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:566
 msgid "New session button"
-msgstr ""
+msgstr "새 세션 버튼"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1877
+#: libs/shell-ui/src/app/SessionPanel.tsx:2004
 msgid "New session in folder…"
 msgstr "폴더에서 새 세션…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:509
+#: libs/shell-ui/src/app/SessionPanel.tsx:511
 msgid "New session in workspace"
 msgstr "워크스페이스에서 새 세션"
 
@@ -432,7 +432,7 @@ msgstr "에이전트로 새 세션…"
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "“{0}”의 새 세션은 이 폴더에서 시작합니다. 비워 두면 홈 디렉터리를 사용합니다."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:210
+#: libs/shell-ui/src/app/SessionPanel.tsx:212
 msgid "New workspace"
 msgstr "새 워크스페이스"
 
@@ -448,7 +448,7 @@ msgstr "이 창에 새 워크스페이스 “{name}”"
 msgid "New worktree session"
 msgstr "새 워크트리 세션"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:463
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:460
 msgid "no clients"
 msgstr "클라이언트 없음"
 
@@ -484,19 +484,19 @@ msgstr "유효한 config.yaml이 아닙니다 — YAML 매핑이어야 합니다
 #~ msgid "Not publishing"
 #~ msgstr "\\uac8c\\uc2dc \\uc548 \\ud568"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:131
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:132
 msgid "Not signed in"
 msgstr "로그인되지 않음"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:366
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:363
 msgid "OIDC client"
 msgstr "OIDC 클라이언트"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:354
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:351
 msgid "OIDC issuer"
 msgstr "OIDC 발급자"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:463
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:460
 msgid "only this device, not viewing a session"
 msgstr "이 기기만, 세션을 보고 있지 않음"
 
@@ -507,7 +507,7 @@ msgstr "이 기기만, 세션을 보고 있지 않음"
 msgid "Open"
 msgstr "열기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1857
+#: libs/shell-ui/src/app/SessionPanel.tsx:1984
 msgid "Open a saved workspace set file"
 msgstr "저장된 워크스페이스 세트 파일 열기"
 
@@ -535,11 +535,11 @@ msgstr "로그 폴더 열기…"
 msgid "Open preview in a tab"
 msgstr "탭에서 미리보기 열기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1865
+#: libs/shell-ui/src/app/SessionPanel.tsx:1992
 msgid "Open workspace set from file…"
 msgstr "파일에서 워크스페이스 세트 열기…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1646
+#: libs/shell-ui/src/app/SessionPanel.tsx:1763
 msgid "Open…"
 msgstr "열기…"
 
@@ -561,7 +561,7 @@ msgstr "패널 글꼴"
 msgid "Paste"
 msgstr "붙여넣기"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:409
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:406
 msgid "Pause viewport"
 msgstr "뷰포트 일시 중지"
 
@@ -569,7 +569,7 @@ msgstr "뷰포트 일시 중지"
 msgid "permissions:"
 msgstr "권한:"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1872
+#: libs/shell-ui/src/app/SessionPanel.tsx:1999
 msgid "Pick a folder — the new session starts in it"
 msgstr "폴더 선택 — 새 세션이 여기서 시작됩니다"
 
@@ -618,15 +618,15 @@ msgstr "창 다시 불러오기"
 
 #. placeholder {0}: snap.role === 'authority' ? 'host' : `viewing ${snap.hostName ?? 'host'}`
 #. placeholder {1}: stateLabel(snap)
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:265
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:273
 msgid "Remote — {0} · {1} · {count} client(s)"
 msgstr "리모트 — {0} · {1} · {count} 클라이언트"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:395
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:392
 msgid "Remote — this machine is the host"
 msgstr "리모트 — 이 머신이 호스트"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:395
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:392
 msgid "Remote — viewing"
 msgstr "리모트 — 보는 중"
 
@@ -634,7 +634,7 @@ msgstr "리모트 — 보는 중"
 msgid "Remote access"
 msgstr "원격 접근"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:266
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:274
 msgid "Remote console"
 msgstr "리모트 콘솔"
 
@@ -660,7 +660,7 @@ msgstr "세션 요약 표시 (axn-session-summary로 설정)"
 msgid "requires {0}{1}"
 msgstr "{0}{1} 필요"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:694
+#: libs/shell-ui/src/app/SessionPanel.tsx:704
 msgid "Reset to process name"
 msgstr "프로세스 이름으로 재설정"
 
@@ -673,15 +673,15 @@ msgstr "프로세스 이름으로 재설정"
 msgid "Resume {agent} session{0}"
 msgstr "{agent} 세션 재개{0}"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:409
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:406
 msgid "Resume viewport"
 msgstr "뷰포트 재개"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:214
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:215
 msgid "Retry now"
 msgstr "지금 다시 시도"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:205
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:206
 msgid "Retrying…"
 msgstr "재시도 중…"
 
@@ -699,7 +699,7 @@ msgstr "샌드박스 — 권한 없음 (셸, 파일, 터미널 접근 불가)"
 msgid "Save"
 msgstr "저장"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1642
+#: libs/shell-ui/src/app/SessionPanel.tsx:1759
 msgid "Save workspace set"
 msgstr "워크스페이스 세트 저장"
 
@@ -753,12 +753,12 @@ msgid "Session summary"
 msgstr "세션 요약"
 
 #. placeholder {0}: snap.sessionId.includes('/') ? snap.sessionId.slice(snap.sessionId.indexOf('/') + 1) : snap.sessionId
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:486
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:483
 msgid "Session: {0}"
 msgstr "세션: {0}"
 
 #. placeholder {0}: snap.sessions.length
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:419
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:416
 msgid "Sessions ({0})"
 msgstr "세션 ({0})"
 
@@ -770,11 +770,11 @@ msgstr "기본 폴더 설정…"
 msgid "Settings"
 msgstr "설정"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:48
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:49
 msgid "shell"
 msgstr "shell"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:42
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:43
 msgid "Shell"
 msgstr "셸"
 
@@ -782,19 +782,19 @@ msgstr "셸"
 msgid "Shell font"
 msgstr "셸 글꼴"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:105
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:126
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:106
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:127
 msgid "Sign in…"
 msgstr "로그인…"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:82
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:223
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:496
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:83
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:224
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:493
 msgid "Sign out"
 msgstr "로그아웃"
 
 #. placeholder {0}: auth.user ?? ''
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:75
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:76
 msgid "Signed in as {0}"
 msgstr "{0}(으)로 로그인됨"
 
@@ -841,11 +841,11 @@ msgstr "터미널 렌더러"
 msgid "The default folder of “{0}” does not exist:"
 msgstr "“{0}”의 기본 폴더가 존재하지 않습니다:"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:186
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:187
 msgid "The remote host is unreachable — is it running?"
 msgstr "원격 호스트에 연결할 수 없습니다 — 실행 중인가요?"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:188
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:189
 msgid "The server is reachable, but the remote channel failed."
 msgstr "서버에는 연결되지만 원격 채널이 실패했습니다."
 
@@ -859,7 +859,7 @@ msgstr "테마"
 msgid "This closes {0} {1} inside it."
 msgstr "내부의 {0}개 {1}을(를) 닫습니다."
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:446
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:443
 msgid "This machine is the host"
 msgstr "이 머신이 호스트입니다"
 
@@ -896,7 +896,7 @@ msgstr "충족되지 않음, 플러그인 비활성화됨"
 msgid "Use system default"
 msgstr "시스템 기본값 사용"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:342
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:339
 msgid "User token"
 msgstr "\\uc0ac\\uc6a9\\uc790 \\ud1a0\\ud070"
 
@@ -905,7 +905,7 @@ msgstr "\\uc0ac\\uc6a9\\uc790 \\ud1a0\\ud070"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:582
 msgid "Where the \"+\" for a new session appears: a ghost row at the end of each workspace's session list, the workspace header, or both."
-msgstr ""
+msgstr "새 세션의 \"+\"가 표시되는 위치: 각 워크스페이스 세션 목록 끝의 고스트 행, 워크스페이스 헤더, 또는 둘 다."
 
 #. placeholder {0}: k.n
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
@@ -914,7 +914,7 @@ msgstr "창 {0}"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:579
 msgid "Workspace header"
-msgstr ""
+msgstr "워크스페이스 헤더"
 
 #. placeholder {0}: String(e)
 #: libs/shell-ui/src/app/session-plugins/worktrees.tsx:527

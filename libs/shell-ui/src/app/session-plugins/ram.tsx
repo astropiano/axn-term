@@ -4,10 +4,15 @@ import type { SessionViewPlugin } from './plugin';
 import type { SessionAttention } from '../../types';
 import { useMemoryStats } from '../useMemoryStats';
 
+function formatKbParts(kb: number): { value: string; unit: string } {
+  if (kb >= 1024 * 1024) return { value: (kb / 1024 / 1024).toFixed(1), unit: 'GB' };
+  if (kb >= 1024) return { value: `${Math.round(kb / 1024)}`, unit: 'MB' };
+  return { value: `${kb}`, unit: 'KB' };
+}
+
 function formatKb(kb: number): string {
-  if (kb >= 1024 * 1024) return `${(kb / 1024 / 1024).toFixed(1)} GB`;
-  if (kb >= 1024) return `${Math.round(kb / 1024)} MB`;
-  return `${kb} KB`;
+  const { value, unit } = formatKbParts(kb);
+  return `${value} ${unit}`;
 }
 
 /**
@@ -21,6 +26,32 @@ export function pressureColor(usedPct: number, swapUsedKb: number): string {
   if (usedPct >= 80) return 'var(--orange)';
   if (usedPct >= 65 || swapUsedKb > 512 * 1024) return 'var(--yellow)';
   return 'var(--green)';
+}
+
+/**
+ * One strip of a rail pressure gauge. The percentage is written into the
+ * bar itself: the label renders once in track color across the strip and
+ * again in inverted color clipped to the fill's width, so glyphs flip color
+ * where the fill passes under them.
+ */
+export function BarStrip({ pct, color, tip }: { pct: number; color: string; tip: string }) {
+  const text =
+    'pointer-events-none absolute inset-y-0 left-0 flex w-7 items-center justify-center text-[8px] font-bold leading-none';
+  return (
+    <div className="relative h-3 w-7 bg-[var(--surface)]" data-tip={tip}>
+      <div
+        className="absolute inset-y-0 left-0 transition-all duration-500"
+        style={{ width: `${pct}%`, background: color }}
+      />
+      <span className={`${text} text-[var(--text-secondary)]`}>{pct}%</span>
+      <div
+        className="absolute inset-y-0 left-0 overflow-hidden transition-all duration-500"
+        style={{ width: `${pct}%` }}
+      >
+        <span className={`${text} text-[var(--text-inverted)]`}>{pct}%</span>
+      </div>
+    </div>
+  );
 }
 
 /** Attention flag matching the pressure thresholds in pressureColor. */
@@ -76,18 +107,27 @@ function RamRailView({
   ]
     .filter(Boolean)
     .join('\n');
+  const free = formatKbParts(stats.availableKb);
+  const used = formatKbParts(usedKb);
   return (
     <div data-tip={title} className="flex flex-col items-center gap-0.5">
-      <MemoryStick className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-      <div className="flex h-3 w-7 items-center overflow-hidden rounded-sm border border-[var(--border)] bg-[var(--surface)]">
-        <div
-          className="h-full transition-all duration-500"
-          style={{ width: `${usedPct}%`, background: color }}
-        />
+      <div className="flex items-center gap-0.5">
+        <div className="flex flex-col items-center gap-0.5">
+          <span
+            className="select-none text-[7px] font-bold leading-none"
+            style={{ color }}
+          >
+            {free.value}
+          </span>
+          <span className="select-none text-[7px] font-bold leading-none text-[var(--text-primary)]">
+            {used.value}
+          </span>
+        </div>
+        <MemoryStick className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
       </div>
-      <span className="select-none text-[8px] font-bold leading-none text-[var(--text-secondary)]">
-        {formatKb(usedKb)}
-      </span>
+      <div className="mt-0.5 overflow-hidden rounded-sm border border-[var(--border)]">
+        <BarStrip pct={usedPct} color={color} tip={title} />
+      </div>
     </div>
   );
 }

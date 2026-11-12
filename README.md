@@ -40,8 +40,11 @@ part of what this project is trying to find out.
 - `flows/` — axn-dev flow tests (desktop restore flows, web Playwright flows).
 - `scenarios/` — axn-dev scenarios: `axn-term-online` (web + gateway + session hosts behind Caddy), `axn-term-storybook`.
 - `build/` — Docker builders and packaging scripts for the desktop app.
+- `docs/` — development guide, architecture, agent-facing docs, packaging
+  notes, test protocols.
 
-See `AGENTS.md` for the conventions in each area.
+See `AGENTS.md` for the conventions in each area and
+[docs/architecture.md](docs/architecture.md) for the component map.
 
 ## Prerequisites
 
@@ -68,10 +71,19 @@ npx nx run-many -t test
 
 - `pnpm dev:desktop` — start the Tauri desktop app.
 - `pnpm build:desktop` — build the desktop app for release.
+- `pnpm build:hmr` — build **axn-term-hmr**, the hot-reload dev variant
+  (yellow icon; see Development below).
 - `pnpm build:desktop:docker` — build the desktop app in the Docker builder.
 - `pnpm serve:web` — serve the web app (`nx serve web`).
 - `pnpm dev:gateway` — run the .NET gateway.
 - `pnpm build:dotnet` — build the gateway and session host.
+
+## Development
+
+Everything about working *on* axn-term — the `axn-dev` CLI, the `flows/`
+end-to-end tests you should run to verify changes, and the `axn-term-hmr`
+hot-reload dev build — lives in [docs/development.md](docs/development.md).
+The component map is in [docs/architecture.md](docs/architecture.md).
 
 ### Linux Wayland startup
 

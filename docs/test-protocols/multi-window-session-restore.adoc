@@ -113,17 +113,34 @@ Validate that `axn-term` restores all open windows, their workspaces, and their 
 | 4 | Reopen the application. | All three windows reopen in their previous positions with their content restored.
 |===
 
-== Test 7 — State file is updated after each window close
+== Test 7 — Closing one window offers to discard its sessions or close all
 
-*Scenario:* the tester wants to confirm that state is flushed before the window is destroyed.
+*Scenario:* the user closes one of several windows and picks how its sessions are handled.
 
 [cols="1,2,5", options="header"]
 |===
 | Step | Action | Expected result
 
 | 1 | Open the application and create a few sessions and workspaces. | Content is visible.
-| 2 | Close one window. | The application is still running or other windows remain open.
-| 3 | Inspect `{state-file}`. | The closed window's workspaces, sessions, and selected items are recorded in the file.
+| 2 | Open a second window and create a session in it. | Both windows have their own content.
+| 3 | Close the second window. | A confirmation offers "Close this window" and "Close all & save" (with a countdown).
+| 4 | Pick "Close this window". | The window closes; its session's process is terminated.
+| 5 | Inspect `{state-file}`. | The closed window's entry — workspaces and sessions — is gone; the remaining window's state is recorded.
+| 6 | Relaunch the application. | Only the remaining window reopens; the discarded sessions do not come back.
+|===
+
+== Test 8 — "Close all & save" records every window's state
+
+*Scenario:* the tester wants to confirm that state is flushed before the windows are destroyed.
+
+[cols="1,2,5", options="header"]
+|===
+| Step | Action | Expected result
+
+| 1 | Open the application and create a few sessions and workspaces; open a second window with its own session. | Content is visible in both windows.
+| 2 | Close one window and pick "Close all & save". | Both windows close and the application exits.
+| 3 | Inspect `{state-file}` while the app is stopped. | Both windows' workspaces, sessions, and selected items are recorded in the file.
+| 4 | Relaunch the application. | Both windows reopen with their sessions restored.
 |===
 
 == Notes for the tester

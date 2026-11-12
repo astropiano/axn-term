@@ -210,3 +210,50 @@ it('axn-session set without flags echoes usage', async () => {
     'echo "axn-session: usage: axn-session set [--summary <text>] [--name|--title <name>]"',
   );
 });
+
+it('axn-broadcast writes the line to every marked session', async () => {
+  const { broadcastSet } = await import('./broadcastSet');
+  broadcastSet.clear();
+  await mount([session('s-1'), session('s-2'), session('s-3')]);
+  broadcastSet.mark('s-1');
+  broadcastSet.mark('s-3');
+  await expect(dispatch('s-1', 'axn-broadcast ls -la')).resolves.toBe(
+    'echo "axn-broadcast: sent to 2 sessions"',
+  );
+  const write = deps.backend.write as ReturnType<typeof vi.fn>;
+  expect(write).toHaveBeenCalledWith('s-1', 'ls -la\r');
+  expect(write).toHaveBeenCalledWith('s-3', 'ls -la\r');
+  expect(write).not.toHaveBeenCalledWith('s-2', expect.anything());
+  broadcastSet.clear();
+});
+
+it('axn-broadcast-add/-rm/-clear manage the set, axn-broadcasts lists it', async () => {
+  const { broadcastSet } = await import('./broadcastSet');
+  broadcastSet.clear();
+  await mount([session('s-1'), session('s-2')]);
+  await expect(dispatch('s-1', 'axn-broadcast-add s-2')).resolves.toBe(
+    'echo "axn-broadcast-add: marked \'s-2\'"',
+  );
+  expect(broadcastSet.has('s-2')).toBe(true);
+  await expect(dispatch('s-1', 'axn-broadcasts')).resolves.toContain('s-2');
+  await expect(dispatch('s-1', 'axn-broadcast-rm s-2')).resolves.toBe(
+    'echo "axn-broadcast-rm: unmarked \'s-2\'"',
+  );
+  expect(broadcastSet.size()).toBe(0);
+  await expect(dispatch('s-1', 'axn-broadcast-add')).resolves.toBe(
+    'echo "axn-broadcast-add: marked \'s-1\'"',
+  );
+  await expect(dispatch('s-1', 'axn-broadcast-clear')).resolves.toBe(
+    'echo "axn-broadcast-clear: 1 session unmarked"',
+  );
+});
+
+it('axn-broadcast with an empty set explains how to mark', async () => {
+  const { broadcastSet } = await import('./broadcastSet');
+  broadcastSet.clear();
+  await mount([session('s-1')]);
+  await expect(dispatch('s-1', 'axn-broadcast hi')).resolves.toBe(
+    'echo "axn-broadcast: broadcast set is empty (axn-broadcast-add marks sessions)"',
+  );
+  expect(deps.backend.write).not.toHaveBeenCalled();
+});

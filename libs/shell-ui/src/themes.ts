@@ -134,6 +134,15 @@ export interface AppSettings {
    * Changing it takes effect on the next app start.
    */
   logDir?: string;
+  /**
+   * Extra dangerous-command regexes for the broadcast input's danger
+   * gate — appended to the built-in rules (rm -rf, git push --force,
+   * DROP TABLE, …). Each entry is matched case-insensitively against
+   * every line of the broadcast buffer; a match opens the confirm
+   * dialog before anything is sent. Invalid regexes are ignored with a
+   * console warning.
+   */
+  broadcastDangerPatterns?: string[];
 }
 
 export const defaultSettings: AppSettings = {

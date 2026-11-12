@@ -9,6 +9,13 @@
   "bundle": {
     "macOS": {
       "signingIdentity": "-"
-    }
+    },
+    "icon": [
+      "icons-hmr/32x32.png",
+      "icons-hmr/128x128.png",
+      "icons-hmr/128x128@2x.png",
+      "icons-hmr/icon.icns",
+      "icons-hmr/icon.ico"
+    ]
   }
 }

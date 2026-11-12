@@ -6,6 +6,7 @@ import type { SessionBackend } from '@axn-term/session-backend';
 import { ShellTerminal } from './ShellTerminal';
 import { SettingsProvider } from './SettingsProvider';
 import { ShellServicesProvider } from './services';
+import { serializeTerminal } from './terminalRegistry';
 import { storyBackend, storySessions } from './app/storyMocks';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -67,4 +68,35 @@ it('leaves backends without releasePty alone on show', async () => {
   resize.mockClear();
   await renderTerminal(backend, true);
   expect(resize).not.toHaveBeenCalled();
+});
+
+it('never writes retained session.output into a fresh terminal', async () => {
+  // session.output is a plain-text transcript for plugins/restore — not a
+  // replay source. A restored session after app start must come up clean,
+  // not dump its history (devin picker, OSC fragments) as literal text.
+  const session = {
+    ...storySessions[0],
+    id: 'sess-retained',
+    output: 'Resume\nSwitch to develop and pull latest changes\n7;file://host',
+  };
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+  await act(async () =>
+    root!.render(
+      <SettingsProvider>
+        <ShellServicesProvider services={services} fileReader={fileReader}>
+          <ShellTerminal session={session} backend={storyBackend} isVisible />
+        </ShellServicesProvider>
+      </SettingsProvider>,
+    ),
+  );
+  // xterm parses queued writes asynchronously — let any replay write land.
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  const screen = serializeTerminal('sess-retained') ?? '';
+  expect(screen).not.toContain('Switch to develop');
+  expect(screen).not.toContain('7;file://');
+  expect(screen).not.toContain('Resume');
 });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import type { ControlCommandHandler, SessionBackend } from '@axn-term/session-backend';
 import type { ShellPlatform } from '../platform';
-import { ptyIdOf, type ShellSession, type Workspace } from '../types';
+import { activeTabAcceptsInput, ptyIdOf, type ShellSession, type Workspace } from '../types';
 import { axnLog } from './log';
 import { parseSessionSummary, runCommandChain, SESSION_SUMMARY_MAX } from './hiddenCommands';
 import { controlReply, sessionForPty } from './controlCommands';
@@ -18,6 +18,7 @@ import {
 } from './shellCommandSupport';
 import { pluginCommands, type PluginApi, type SessionViewContext, type SessionViewPlugin } from './session-plugins';
 import { registerSessionCommandDispatch } from './session-plugins/plugin';
+import { broadcastSet } from './broadcastSet';
 
 /** What the command dispatch needs from ShellApp — read live through a ref. */
 export interface SessionCommandDeps {
@@ -42,6 +43,13 @@ export interface SessionCommandDeps {
    * resolves an error message or null. Absent where windows can't be opened.
    */
   tearOffSession?: (sessionId: string) => Promise<string | null>;
+  /** Opens a broadcast-deck tab on the session (`axn-broadcast-deck`). */
+  openBroadcastDeck?: (sessionId: string) => void;
+  /**
+   * 'go to session' (`axn-session select`): focus a session and make it the
+   * only selection — the broadcast tile button calls the same function.
+   */
+  selectSession?: (sessionId: string) => void;
 }
 
 /**
@@ -81,7 +89,29 @@ export function useSessionCommands(input: SessionCommandDeps) {
           const rest = (argRaw ?? '').trim();
           // `create`/`set` subcommands; a bare `axn-session …` line is an
           // implicit `create` (the pre-subcommand spelling stays valid).
-          const sub = /^(create|set)(?:\s|$)/.exec(rest)?.[1];
+          const sub = /^(create|set|select)(?:\s|$)/.exec(rest)?.[1];
+          if (sub === 'select') {
+            // `axn-session select <name|id>` — 'go to session': focus the
+            // target and make it the only selection (same as the tile
+            // button and a plain panel click).
+            const needle = rest.slice(6).trim().replace(/^["']+|["']+$/g, '');
+            const target = needle
+              ? deps.current.sessionsRef.current.find(
+                  (s) => s.id === needle || s.name === needle,
+                ) ??
+                deps.current.sessionsRef.current.find((s) =>
+                  s.name.toLowerCase().startsWith(needle.toLowerCase()),
+                )
+              : undefined;
+            if (!target) {
+              return `echo ${JSON.stringify(`axn-session: no such session: ${needle || '(missing)'}`)}`;
+            }
+            if (deps.current.selectSession) {
+              deps.current.selectSession(target.id);
+              return `echo ${JSON.stringify(`axn-session: selected '${target.name}'`)}`;
+            }
+            return 'echo "axn-session: session selection is not available here"';
+          }
           if (sub === 'set') {
             const opts = parseSessionSetArgs(rest.slice(3));
             if (opts.error) return `echo ${JSON.stringify(`axn-session: ${opts.error}`)}`;
@@ -220,6 +250,72 @@ export function useSessionCommands(input: SessionCommandDeps) {
           deps.current.activateSessionTab(sessionId, hit.id);
           return false;
         }
+        case 'axn-broadcast': {
+          // Fan out a finished input line to every broadcast-marked
+          // session — the receiving session treats it exactly like a typed
+          // line + Enter. Mark sessions with axn-broadcast-add.
+          const text = argRaw?.trim();
+          if (!text) {
+            return 'echo "usage: axn-broadcast <line> — send the line to every broadcast-marked session"';
+          }
+          const marked = broadcastSet
+            .list()
+            .map((id) => deps.current.sessionsRef.current.find((s) => s.id === id))
+            .filter((s): s is ShellSession => !!s);
+          if (!marked.length) {
+            return 'echo "axn-broadcast: broadcast set is empty (axn-broadcast-add marks sessions)"';
+          }
+          const blocked = marked.filter((t) => !activeTabAcceptsInput(t));
+          if (blocked.length) {
+            return `echo ${JSON.stringify(`axn-broadcast: blocked — ${blocked.map((t) => t.name).join(', ')} on a view that takes no input`)}`;
+          }
+          for (const target of marked) {
+            void deps.current.backend.write(ptyIdOf(target), `${text}\r`);
+          }
+          return `echo ${JSON.stringify(`axn-broadcast: sent to ${marked.length} session${marked.length === 1 ? '' : 's'}`)}`;
+        }
+        case 'axn-broadcast-add':
+        case 'axn-broadcast-rm': {
+          const target = arg?.trim()
+            ? deps.current.sessionsRef.current.find(
+                (s) => s.name === arg.trim() || s.id === arg.trim(),
+              ) ??
+              deps.current.sessionsRef.current.find((s) =>
+                s.name.toLowerCase().startsWith(arg.trim().toLowerCase()),
+              )
+            : session;
+          if (!target) {
+            return `echo ${JSON.stringify(`${cmd}: no such session: ${arg}`)}`;
+          }
+          if (cmd === 'axn-broadcast-add') {
+            broadcastSet.mark(target.id);
+            return `echo ${JSON.stringify(`axn-broadcast-add: marked '${target.name}'`)}`;
+          }
+          broadcastSet.unmark(target.id);
+          return `echo ${JSON.stringify(`axn-broadcast-rm: unmarked '${target.name}'`)}`;
+        }
+        case 'axn-broadcast-deck': {
+          if (!deps.current.openBroadcastDeck) return false;
+          deps.current.openBroadcastDeck(sessionId);
+          return false;
+        }
+        case 'axn-broadcast-clear': {
+          const n = broadcastSet.size();
+          broadcastSet.clear();
+          return `echo ${JSON.stringify(`axn-broadcast-clear: ${n} session${n === 1 ? '' : 's'} unmarked`)}`;
+        }
+        case 'axn-broadcasts': {
+          const names = broadcastSet
+            .list()
+            .map((id) => deps.current.sessionsRef.current.find((s) => s.id === id))
+            .filter((s): s is ShellSession => !!s)
+            .map((s) => `${s.id === sessionId ? '*' : ' '}${s.name}`);
+          return `echo ${JSON.stringify(
+            names.length
+              ? names.join('\n')
+              : 'axn-broadcasts: broadcast set is empty',
+          )}`;
+        }
       }
       return undefined;
     },
@@ -287,11 +383,7 @@ export function useSessionCommands(input: SessionCommandDeps) {
           return `${JSON.stringify(exe)} install${args ? ` ${args}` : ''}`;
         })();
       }
-      if (
-        /^\s*(axn-session(?:-mv|-up|-down|-window)?|axn-workspace-up|axn-workspace-down)(?:\s|$)/.test(
-          line,
-        )
-      ) {
+      if (AXN_BUILTIN_RE.test(line)) {
         return runBuiltinCommand(sessionId, line, ptyId);
       }
       // Plugin-declared commands (e.g. axn-devin-resume): the first word of

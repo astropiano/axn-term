@@ -3,7 +3,7 @@ import type { SessionViewPlugin } from './plugin';
 import type { SessionAttention, ShellSession } from '../../types';
 import { ptyIdOf } from '../../types';
 import { useSessionBackend } from '../../services';
-import { pressureColor } from './ram';
+import { BarStrip, pressureColor } from './ram';
 import { PluginIcon } from '../SessionPanel';
 import { DockerView } from './dockerView';
 
@@ -303,32 +303,6 @@ function pressureAttention(kind: string, usedPct: number): SessionAttention | nu
   }
   if (usedPct >= 80) return { level: 'warning', message: `docker ${kind} ${usedPct}% used` };
   return null;
-}
-
-/**
- * One strip of the rail's triple gauge. The percentage is written into the
- * bar itself: the label renders once in track color across the strip and
- * again in inverted color clipped to the fill's width, so glyphs flip color
- * where the fill passes under them.
- */
-function BarStrip({ pct, color, tip }: { pct: number; color: string; tip: string }) {
-  const text =
-    'pointer-events-none absolute inset-y-0 left-0 flex w-7 items-center justify-center text-[8px] font-bold leading-none';
-  return (
-    <div className="relative h-3 w-7 bg-[var(--surface)]" data-tip={tip}>
-      <div
-        className="absolute inset-y-0 left-0 transition-all duration-500"
-        style={{ width: `${pct}%`, background: color }}
-      />
-      <span className={`${text} text-[var(--text-secondary)]`}>{pct}%</span>
-      <div
-        className="absolute inset-y-0 left-0 overflow-hidden transition-all duration-500"
-        style={{ width: `${pct}%` }}
-      >
-        <span className={`${text} text-[var(--text-inverted)]`}>{pct}%</span>
-      </div>
-    </div>
-  );
 }
 
 function DockerRail({

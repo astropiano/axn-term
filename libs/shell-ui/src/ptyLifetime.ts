@@ -11,7 +11,19 @@ interface Lifetime {
 
 const lifetimes = new WeakMap<SessionBackend, Map<string, Lifetime>>();
 
-/** Share one PTY across effect replays. Only a genuine unmount closes it. */
+/** PTYs owned by session state outlive their views (plugin-style mounts):
+ * a view unmount never closes a live session's process. The session layer
+ * swaps this set on every session-state change; a PTY absent from it (its
+ * session is gone) is still closed on last release so nothing orphans. */
+const retainedPtys = new Set<string>();
+
+export function syncRetainedPtys(ids: Iterable<string>): void {
+  retainedPtys.clear();
+  for (const id of ids) retainedPtys.add(id);
+}
+
+/** Share one PTY across effect replays. A genuine unmount closes it only
+ * when its session is gone — session-owned (retained) PTYs survive. */
 export function acquirePty(
   backend: SessionBackend,
   id: string,
@@ -36,8 +48,11 @@ export function acquirePty(
   const resource = lifetime;
   resource.owners.add(owner);
   // A replay's first view has already disposed its xterm. Use the live
-  // view's spawn options when the deferred start actually runs.
-  resource.spawn = spawn;
+  // view's spawn options when the deferred start actually runs — but only
+  // the first owner's options may win: the session layer holds a permanent
+  // owner per live session, and its spawn options must not override a
+  // mounted view's (fitted dims).
+  if (resource.owners.size === 1) resource.spawn = spawn;
   resource.keepAlive = false;
 
   const claimSpawn = (ready: Promise<boolean>) => ready.then((spawned) => {
@@ -60,8 +75,12 @@ export function acquirePty(
       return claimSpawn(resource.ready);
     },
     release(keepAlive = false) {
-      if (!resource.owners.delete(owner) || resource.owners.size > 0) return;
-      resource.keepAlive = keepAlive;
+      if (!resource.owners.delete(owner)) return;
+      // Sticky: any owner's keep-alive release marks the resource — with a
+      // permanent session owner in play, the last release isn't the one
+      // carrying the flag.
+      resource.keepAlive ||= keepAlive;
+      if (resource.owners.size > 0) return;
       // StrictMode setup -> cleanup -> setup happens in one turn. Defer
       // disposal so the replacement view can reclaim the same PTY.
       queueMicrotask(() => {
@@ -69,7 +88,7 @@ export function acquirePty(
         const finish = () => {
           if (resource.owners.size > 0 || sessions.get(id) !== resource || resource.ready !== pending) return;
           sessions.delete(id);
-          if (resource.started && !resource.keepAlive) backend.close(id);
+          if (resource.started && !resource.keepAlive && !retainedPtys.has(id)) backend.close(id);
         };
         // A real unmount during an asynchronous spawn must close *after*
         // the spawn finishes, otherwise it can leave an orphan process.

@@ -273,7 +273,7 @@ function RemoteRailItem({
       data-tip={t`Remote — ${snap.role === 'authority' ? 'host' : `viewing ${snap.hostName ?? 'host'}`} · ${stateLabel(snap)} · ${count} client(s)`}
       aria-label={t`Remote console`}
       aria-pressed={active}
-      className={`relative flex h-8 w-7 flex-col items-center justify-center gap-px rounded border transition-colors ${
+      className={`flex h-8 w-7 flex-col items-center justify-center gap-px rounded border transition-colors ${
         active
           ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]'
           : live
@@ -282,17 +282,6 @@ function RemoteRailItem({
       }`}
     >
       <RemoteIcon state={iconState} className="h-4 w-4" />
-      <span
-        className={`absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full ${
-          live
-            ? 'bg-green-500'
-            : connecting
-              ? 'animate-pulse bg-[var(--accent)]'
-              : active
-                ? 'bg-[var(--accent)]'
-                : 'bg-[var(--text-secondary)]'
-        }`}
-      />
       <span
         className={`select-none text-[8px] font-bold leading-none ${
           active ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'

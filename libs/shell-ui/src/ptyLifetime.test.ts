@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SessionBackend } from '@axn-term/session-backend';
-import { acquirePty } from './ptyLifetime';
+import { acquirePty, syncRetainedPtys } from './ptyLifetime';
 
 function harness() {
   const live = new Set<string>();
@@ -152,6 +152,42 @@ describe('PTY view lifetime', () => {
     await flush();
     expect(await tab.restart()).toBe(false);
     expect(backend.createSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a keep-alive release sticky across other owners (session-owned PTYs)', async () => {
+    const { backend, live, acquire } = harness();
+    const view = acquire();
+    const session = acquire(); // the permanent session-level owner
+    await view.start();
+    view.release(true); // window move marks the PTY keep-alive…
+    session.release(); // …then the session owner drops — the flag must stick
+    await flush();
+    expect(live.has('main')).toBe(true);
+    expect(backend.close).not.toHaveBeenCalled();
+  });
+
+  it('a retained PTY survives a last-owner release — the session closes it explicitly', async () => {
+    const { backend, live, acquire } = harness();
+    try {
+      syncRetainedPtys(['sub']);
+      const view = acquire('sub');
+      await view.start();
+      view.release();
+      await flush();
+      expect(live.has('sub')).toBe(true);
+      expect(backend.close).not.toHaveBeenCalled();
+      // Once the session drops the retention, the same release closes it —
+      // the re-acquired resource reattaches to the still-live PTY first.
+      syncRetainedPtys([]);
+      const gone = acquire('sub');
+      expect(await gone.start()).toBe(false);
+      gone.release();
+      await flush();
+      expect(backend.close).toHaveBeenCalledExactlyOnceWith('sub');
+      expect(live.has('sub')).toBe(false);
+    } finally {
+      syncRetainedPtys([]);
+    }
   });
 
   it('keeps backend instances isolated even when PTY ids are equal', async () => {

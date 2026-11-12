@@ -52,7 +52,7 @@ export default defineConfig(async () => ({
       // the same tree at /libraries — the relative depth resolves there.
       "@ramphastos/ramphastos-client": fileURLToPath(
         new URL(
-          "../../../ramphastos/src/client/ramphastos-client",
+          "../../../../libraries/ramphastos/src/client/ramphastos-client",
           import.meta.url,
         ),
       ),

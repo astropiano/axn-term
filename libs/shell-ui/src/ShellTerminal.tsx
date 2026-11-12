@@ -7,10 +7,9 @@ import { placeHoverCard } from './hoverCardPlacement';
 import type { ShellSession } from './types';
 import { useSettings } from './SettingsProvider';
 import { getXtermColors, resolveShellFont } from './themes';
-import { registerTerminal, takePendingReplay, takeReloadReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, registerSelectionResolver, unregisterSelectionResolver, type SelectionResolver, type TerminalInput } from './terminalRegistry';
+import { registerTerminal, serializeTerminal, setPendingReplay, takePendingReplay, takeReloadReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, registerSelectionResolver, unregisterSelectionResolver, type SelectionResolver, type TerminalInput } from './terminalRegistry';
 import { applyTerminalRenderer, createTerminalInput, isUserInput, OSC_REPORT_RAW_WAIT_MS, oscReportTarget, repaintTerminal, safely } from './terminalRenderer';
 import { acquirePty } from './ptyLifetime';
-import { foregroundStatusPatch } from './foregroundStatus';
 import {
   createLookupCache,
   createOsc8LeakGuard,
@@ -36,7 +35,6 @@ interface ShellTerminalProps {
   /** Environment backend — Tauri invoke/events on desktop, gateway WS online. */
   backend: SessionBackend;
   onSessionNameChange?: (sessionId: string, name: string) => void;
-  onSessionOutput?: (sessionId: string, text: string) => void;
   onEditorRequest?: (sessionId: string, path: string) => void;
   onBrowserRequest?: (sessionId: string, path: string) => void;
   onPreviewRequest?: (sessionId: string, path: string) => void;
@@ -79,19 +77,49 @@ const FILE_URL_TOKEN = /^file:\/\/\S+$/i;
 const HOVER_DELAY_MS = 500;
 const HOVER_HIDE_MS = 250;
 
-function stripAnsi(str: string): string {
+export function stripAnsi(str: string): string {
+  // Multi-char branches must come first — `[@-Z\\-_]` would otherwise eat
+  // the `]`/`P`/`^`/`_`/`X` introducer as a one-char sequence and leave
+  // OSC payloads (`7;file://…`, `2;title`) as literal text.
   // eslint-disable-next-line no-control-regex
   return str.replace(
-    /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|][^\x07]*(?:\x07|\x1B\\)|\([A-Za-z0-9]|\)[A-Za-z0-9])/g,
+    /\x1B(?:\[[0-?]*[ -/]*[@-~]|[\]PX^_][^\x07\x1b]*(?:\x07|\x1B\\)|\([A-Za-z0-9]|\)[A-Za-z0-9]|[@-_])/g,
     '',
   );
+}
+
+/**
+ * PTY chunks split escape sequences mid-way (OSC 7 cwd / OSC 2 title land
+ * as `\x1b]7;file://…` cut before the BEL — stripping alone leaves the
+ * payload as literal text, which is how `7;file://` / `2;ls` fragments
+ * end up in retained output). Split text into [complete, tail]: the tail
+ * is a trailing ESC sequence that is still a plausible prefix of a valid
+ * sequence — hold it back and prepend it to the next chunk before
+ * stripping. Tails over 4 KiB are treated as garbage and flushed.
+ */
+const ANSI_TAIL_CAP = 4096;
+const ANSI_COMPLETE_TAIL =
+  // eslint-disable-next-line no-control-regex
+  /^\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|\([A-Za-z0-9]|\)[A-Za-z0-9])$/;
+const ANSI_PREFIX_TAIL =
+  // eslint-disable-next-line no-control-regex
+  /^\x1b$|^\x1b[\[\]()#%O*+]$|^\x1b\[[0-?]*[ -/]*$|^\x1b[()][A-Za-z0-9]?$|^\x1b\][^\x07\x1b]*$|^\x1b[PX^_][^\x1b]*$/;
+
+export function splitAnsiTail(text: string): [complete: string, tail: string] {
+  const lastEsc = text.lastIndexOf('\x1b');
+  if (lastEsc < 0) return [text, ''];
+  const tail = text.slice(lastEsc);
+  if (tail.length > ANSI_TAIL_CAP || ANSI_COMPLETE_TAIL.test(tail)) {
+    return [text, ''];
+  }
+  if (ANSI_PREFIX_TAIL.test(tail)) return [text.slice(0, lastEsc), tail];
+  return [text, ''];
 }
 
 export function ShellTerminal({
   session,
   backend,
   onSessionNameChange,
-  onSessionOutput,
   onEditorRequest,
   onBrowserRequest,
   onPreviewRequest,
@@ -107,7 +135,6 @@ export function ShellTerminal({
   const terminal = useRef<Terminal | null>(null);
   const fitAddon = useRef<FitAddon | null>(null);
   const agentInputRef = useRef(session.agentInput);
-  const shellNameRef = useRef('');
   const cwdRef = useRef(session.cwd ?? '');
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -291,10 +318,19 @@ export function ShellTerminal({
       void Promise.resolve(services.copyText(text)).catch(() => {});
     });
     registerTerminal(session.id, term);
-    // A session moved in from another window, or the page reloaded with
-    // live PTYs: show its restored screen first — the output listener
-    // attaches later, so live output follows in order.
-    const replay = takePendingReplay(session.id) ?? takeReloadReplay(session.id);
+    // A remount after the view was dropped (selection moved, broadcast
+    // deck), a session moved in from another window, or a page reload with
+    // live PTYs: show the restored screen first — the output listener
+    // attaches later, so live output follows in order. The headless
+    // session buffer is the freshest source while it lives; the unmount
+    // stash covers the rest. session.output is NOT a replay source — it
+    // is a plain-text transcript for plugins/restore, and dumping it into
+    // the terminal replays stale content (and any escape-sequence tails
+    // that survived stripping) as literal text.
+    const replay =
+      takeReloadReplay(session.id) ??
+      serializeTerminal(session.id) ??
+      takePendingReplay(session.id);
     if (replay) term.write(replay);
     // GPU renderers are demand-driven: hidden terminals keep xterm's DOM
     // renderer so a wall of mounted sessions doesn't exhaust the WebGL
@@ -406,8 +442,6 @@ export function ShellTerminal({
     let hideOnContextMenu: (() => void) | null = null;
     let selectionResolve: SelectionResolver | null = null;
     let unlisten: Unsubscribe | null = null;
-    let processInterval: ReturnType<typeof setInterval> | null = null;
-    let cwdInterval: ReturnType<typeof setInterval> | null = null;
     let enterPollTimeout: ReturnType<typeof setTimeout> | null = null;
     let active = true;
     const decoder = new TextDecoder();
@@ -462,10 +496,9 @@ export function ShellTerminal({
 
           const raw = decoder.decode(bytes, { stream: true });
           osc8Guard(raw);
-          const text = stripAnsi(raw);
-          if (text && onSessionOutput) {
-            onSessionOutput(sessionId, text);
-          }
+          // Text retention and plugin onOutput hooks are fed by a
+          // session-level subscription in ShellApp — they must not depend
+          // on any mounted view.
         });
         if (!active) return;
 
@@ -486,10 +519,6 @@ export function ShellTerminal({
         if (!active) return;
 
         if (spawned) onSessionReadyRef.current?.(sessionRef.current);
-
-        const resolvedShell = shell || (await backend.getDefaultShell?.()) || 'sh';
-        if (!active) return;
-        shellNameRef.current = resolvedShell.split(/[/\\]/).pop() ?? resolvedShell;
 
         const pollCwd = async () => {
           try {
@@ -803,46 +832,10 @@ export function ShellTerminal({
           backend.resize(ptyId, term.cols, term.rows);
         }
 
-        processInterval = setInterval(async () => {
-          try {
-            const process = (await backend.getForegroundProcess?.(ptyId)) ?? null;
-            if (!active) return;
-
-            const processName = process?.toLowerCase() ?? '';
-            const shellName = shellNameRef.current.toLowerCase();
-            const isShell = !processName || processName === shellName;
-            const agent = isShell ? undefined : agentInputPluginFor(processName)?.id;
-
-            const processDisplay = isShell ? undefined : (process ?? undefined);
-            const patch = foregroundStatusPatch(sessionRef.current, processDisplay);
-
-            if (agent !== agentInputRef.current) {
-              agentInputRef.current = agent;
-              patch.agentInput = agent;
-            }
-
-            if (Object.keys(patch).length > 0) {
-              updateSession?.(sessionId, patch);
-            }
-          } catch {
-            // ignore
-          }
-        }, 1000);
-
-        // Poll cwd for every session — a hidden session's cwd is still needed
-        // (e.g. plugins record where devin actually ran; relying on persisted
-        // cwd breaks restore for non-visible sessions). Only when the backend
-        // can answer cwd queries.
-        if (backend.getCwd) {
-          void pollCwd();
-          cwdInterval = setInterval(pollCwd, 1000);
-        }
-        // Foreground-process polling is a desktop capability; skip when the
-        // backend can't report it (e.g. the WS gateway).
-        if (!backend.getForegroundProcess && processInterval) {
-          clearInterval(processInterval);
-          processInterval = null;
-        }
+        // cwd and foreground-process polling live at session level now —
+        // sessions mount plugin-style (only the selected one has a view),
+        // so the poll can't ride the view. pollCwd still runs right after
+        // an Enter for a quick cd pick-up.
       } catch (e) {
         console.error(`[shell] session "${session.name}" (${ptyId}) failed to start`, e);
         if (!active) return;
@@ -857,8 +850,6 @@ export function ShellTerminal({
     return () => {
       active = false;
       if (rendererFrame !== null) cancelAnimationFrame(rendererFrame);
-      if (processInterval) clearInterval(processInterval);
-      if (cwdInterval) clearInterval(cwdInterval);
       if (enterPollTimeout) clearTimeout(enterPollTimeout);
       clearHoverTimers();
       setHoverCard(null);
@@ -877,6 +868,13 @@ export function ShellTerminal({
       safely('title listener', () => onTitleChange?.dispose());
       safely('output listener', () => unlisten?.());
       safely('flow control', () => flow.dispose());
+      // The session outlives this view: stash the serialized screen so the
+      // next mount repaints it (only the selected session mounts — plugin
+      // style — so switching sessions unmounts and repaints this way).
+      safely('screen stash', () => {
+        const data = serializeTerminal(sessionId);
+        if (data) setPendingReplay(sessionId, data);
+      });
       // A PTY flagged keep-alive survives this unmount — it reattaches in a
       // different view (sub-shell promoted to main, demoted main re-shown as
       // a sub-shell tab).
@@ -900,7 +898,6 @@ export function ShellTerminal({
     services,
     settings.defaultShell,
     onSessionNameChange,
-    onSessionOutput,
     updateSession,
   ]);
 
