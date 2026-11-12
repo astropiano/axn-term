@@ -13,6 +13,7 @@ import { acquirePty } from './ptyLifetime';
 import {
   createLookupCache,
   createOsc8LeakGuard,
+  createOsc8LinkHandler,
   OSC8_CLOSE,
   extractLinkTokens,
   extendWrappedUrl,
@@ -681,6 +682,22 @@ export function ShellTerminal({
           },
         };
         linkProviderDisposable = term.registerLinkProvider(linkProvider);
+
+        // OSC 8 declared links — clicks reach `linkHandler` with the URI,
+        // and xterm's default handler is confirm() + window.open, dead in
+        // a Tauri webview. Route them through the same seams as detected
+        // links: http(s)/mailto open externally, file:// resolves like any
+        // discovered path and pops the action card (set live — options are
+        // read per click via rawOptions).
+        term.options.linkHandler = createOsc8LinkHandler({
+          open: (uri) => services.openExternal(uri),
+          openFile: (event, path) => {
+            void resolveToken(path).then((resolved) => {
+              if (resolved) showHoverCard(event, resolved.stat, false, 0);
+              else services.openExternal(path);
+            });
+          },
+        });
 
         // Selected text gets the same path detection: after a mouse selection
         // ends, check whether the selection is a path/URL itself or contains

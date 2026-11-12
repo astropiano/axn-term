@@ -23,7 +23,7 @@ import {
 import { tabTaskPatch } from './subShellTasks';
 import { agentInputPluginFor } from './session-plugins/agentHookBridge';
 import { createHiddenCommandInput } from './hiddenCommands';
-import { createOsc8LeakGuard, OSC8_CLOSE } from '../terminalLinks';
+import { createOsc8LeakGuard, createOsc8LinkHandler, OSC8_CLOSE } from '../terminalLinks';
 import { applyTerminalRenderer, createTerminalInput, isUserInput, OSC_REPORT_RAW_WAIT_MS, oscReportTarget, repaintTerminal, safely } from '../terminalRenderer';
 import { acquirePty } from '../ptyLifetime';
 import {
@@ -149,6 +149,11 @@ export function SubShellView({
       // with the word under the pointer before the context menu's Copy.
       rightClickSelectsWord: false,
       theme: getXtermColors(activeTheme),
+      // OSC 8 declared links — xterm's default is confirm()+window.open,
+      // dead in a Tauri webview.
+      linkHandler: createOsc8LinkHandler({
+        open: (uri) => services.openExternal(uri),
+      }),
     });
     const fit = new FitAddon();
     t.loadAddon(fit);

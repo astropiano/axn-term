@@ -11,6 +11,8 @@
  * of a URL that starts on a line above.
  */
 
+import type { ILinkHandler } from '@xterm/xterm';
+
 /** A buffer line as seen by the link provider. */
 export interface LinkLine {
   /** Line content, right-trimmed (`IBufferLine.translateToString(true)`). */
@@ -407,6 +409,59 @@ export function findWrappedUrlThrough(
     if (!wrappedRowOk) return null;
   }
   return null;
+}
+
+// ── OSC 8 click handler ───────────────────────────────────────────
+// xterm hands declared (OSC 8) links to `linkHandler.activate` with the
+// *URI* — not the label — and falls back to confirm() + window.open when
+// none is set, which is dead inside a Tauri webview. Route activation
+// through the same services seam as detected links. `allowNonHttpProtocols`
+// must be on or xterm filters everything but http(s) before we see it —
+// schemes are gated here instead: http(s)/mailto open externally, a
+// file:// URI (ls --hyperlink, gcc) decodes to a path and takes `openFile`
+// when provided (the file-link hover card in ShellTerminal). Every other
+// scheme is dropped — OSC 8 URIs are program output, not user input.
+
+export interface Osc8LinkHandlerOptions {
+  /** Open an http(s)/mailto URI (or a raw file:// URI as fallback). */
+  open: (uri: string) => void;
+  /** Optional richer path handling for file:// links (hover card). */
+  openFile?: (event: MouseEvent, path: string) => void;
+}
+
+export function createOsc8LinkHandler(opts: Osc8LinkHandlerOptions): ILinkHandler {
+  return {
+    allowNonHttpProtocols: true,
+    activate(event, uri) {
+      // xterm activates on mouse-up of any button — a right-click opening
+      // the context menu must not navigate.
+      if (event.button !== 0) return;
+      const scheme = uri.slice(0, uri.indexOf(':')).toLowerCase();
+      if (scheme === 'file') {
+        let path = '';
+        try {
+          // Hostname in file://host/path is ignored — the link declared a
+          // path on the machine that produced it.
+          path = decodeURIComponent(new URL(uri).pathname).replace(
+            /^\/([A-Za-z]:)/,
+            '$1',
+          );
+        } catch {
+          /* malformed URI */
+        }
+        if (!path) return;
+        if (opts.openFile) {
+          opts.openFile(event, path);
+        } else {
+          opts.open(uri);
+        }
+        return;
+      }
+      if (scheme === 'http' || scheme === 'https' || scheme === 'mailto') {
+        opts.open(uri);
+      }
+    },
+  };
 }
 
 // ── OSC 8 leak guard ──────────────────────────────────────────────

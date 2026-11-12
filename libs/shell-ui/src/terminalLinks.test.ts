@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createLookupCache,
   createOsc8LeakGuard,
+  createOsc8LinkHandler,
   extractLinkTokens,
   extendWrappedUrl,
   findWrappedUrlThrough,
@@ -555,5 +556,71 @@ describe('wrappedSelectionCandidates', () => {
   it('offers nothing for a single row or prose without paths', () => {
     expect(wrappedSelectionCandidates('/one/row/only')).toEqual([]);
     expect(wrappedSelectionCandidates('two lines of\n  plain prose')).toEqual([]);
+  });
+});
+
+describe('createOsc8LinkHandler', () => {
+  const range = { start: { x: 1, y: 1 }, end: { x: 5, y: 1 } };
+  const click = (button = 0) => ({ button }) as MouseEvent;
+
+  it('opens http(s) and mailto URIs, gates everything else', () => {
+    const open = vi.fn();
+    const h = createOsc8LinkHandler({ open });
+    h.activate(click(), 'https://example.com/page', range);
+    h.activate(click(), 'http://example.com', range);
+    h.activate(click(), 'mailto:a@b.c', range);
+    h.activate(click(), 'javascript:alert(1)', range);
+    h.activate(click(), 'ssh://host', range);
+    h.activate(click(), 'ftp://x', range);
+    expect(open.mock.calls.map((c) => c[0])).toEqual([
+      'https://example.com/page',
+      'http://example.com',
+      'mailto:a@b.c',
+    ]);
+  });
+
+  it('opts into non-http protocols itself — xterm would filter them', () => {
+    expect(createOsc8LinkHandler({ open: vi.fn() }).allowNonHttpProtocols).toBe(true);
+  });
+
+  it('routes a file:// link to openFile with the decoded path', () => {
+    const open = vi.fn();
+    const openFile = vi.fn();
+    const h = createOsc8LinkHandler({ open, openFile });
+    h.activate(click(), 'file://host/home/u/my%20dir/f.txt', range);
+    expect(openFile).toHaveBeenCalledWith(expect.anything(), '/home/u/my dir/f.txt');
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('falls back to open(uri) for file:// without openFile', () => {
+    const open = vi.fn();
+    createOsc8LinkHandler({ open }).activate(click(), 'file:///tmp/x', range);
+    expect(open).toHaveBeenCalledWith('file:///tmp/x');
+  });
+
+  it('strips the leading slash on windows drive paths', () => {
+    const openFile = vi.fn();
+    createOsc8LinkHandler({ open: vi.fn(), openFile }).activate(
+      click(),
+      'file:///C:/work/a.ts',
+      range,
+    );
+    expect(openFile).toHaveBeenCalledWith(expect.anything(), 'C:/work/a.ts');
+  });
+
+  it('ignores non-left buttons — right-click opens the context menu', () => {
+    const open = vi.fn();
+    const h = createOsc8LinkHandler({ open });
+    h.activate(click(2), 'https://example.com', range);
+    h.activate(click(1), 'https://example.com', range);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('ignores malformed file URIs', () => {
+    const open = vi.fn();
+    const openFile = vi.fn();
+    createOsc8LinkHandler({ open, openFile }).activate(click(), 'file://%zz', range);
+    expect(open).not.toHaveBeenCalled();
+    expect(openFile).not.toHaveBeenCalled();
   });
 });
