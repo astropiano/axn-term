@@ -17,7 +17,11 @@
   status/log, start/stop/install. In dev mode `state_dir()` is
   `~/.axn-term-hmr` and `save/load/delete_window_state` go through the
   in-memory `AppState.mem_shell_state` — no `state.json` is ever written,
-  but a page reload still finds its state.
+  but a page reload still finds its state. The bundle carries its own
+  yellow icon set (`src-tauri/icons-hmr/`, the glyph plated on
+  `rgb(227 179 65)`, listed under `bundle.icon` in the hmr conf;
+  `build/scripts/make-macos-icon.sh hmr` regenerates it), so the dev
+  build is unmistakable next to a real axn-term.
 - `apps/web` — browser/online app; binds the same shared UI to `WsBackend`
   (gateway `/ws` protocol: raw PTY frames + JSON `resize`, `fs-read`,
   `fs-write`, `fs-stat`, `fs-list`, `fs-mkdir`, `cwd`, `exec`, `fg-process`,
@@ -435,6 +439,27 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   session and dismisses a covering plugin view — workflow `command:`
   actions use it as an on-enter "switch the view" (e.g. `axn-focus` on a
   human-gate state).
+- `axn-broadcast <line>` — write the line (with Enter) to every session in
+  the broadcast set, a per-window runtime set of session ids
+  (`app/broadcastSet.ts`): `axn-broadcast-add [name]`/`axn-broadcast-rm
+  [name]` mark/unmark (current session with no arg, else name or id —
+  prefix match), `axn-broadcast-clear` empties it, `axn-broadcasts`
+  lists it (`*` on the current session). The session context menu's
+  "Add/Remove from broadcast" toggles the same set and marked rows show
+  a radio badge (`useBroadcastMarked`). Fan-out is a plain
+  `backend.write(ptyId, line + "\r")` per target — the same bytes path
+  as typing, so agents can drive it too via
+  `"$AXN_TERM_CLI" session command "axn-broadcast <line>"`. The deck's
+  composer gates dangerous buffers through a confirm dialog
+  (`app/broadcastDanger.ts`): built-in rules (rm -rf, dd/mkfs, reboot,
+  git push --force/--delete, git reset --hard/clean -f, DROP/TRUNCATE/
+  DELETE FROM, kubectl delete/drain, systemctl stop/disable, chmod -R,
+  killall/pkill, fork bombs) plus user regexes from
+  `broadcastDangerPatterns` in config.yaml — each is matched
+  case-insensitively against every line of a multi-line buffer, invalid
+  patterns are skipped with a console warning. The gate only fronts the
+  interactive composer; the `axn-broadcast` command path writes
+  directly.
 
 The session-level dispatch behind it — built-ins, plugin-owned commands,
 `onCommand` hooks, Tab completion, and the out-of-band entry points
@@ -515,6 +540,23 @@ menu's "Close session" runs every enabled plugin's `onClose` (devin's
 graceful interrupt + resume-hint capture) before tearing the PTY down —
 an inline confirm appears first when `session.process` reports a live
 foreground process.
+
+Session views mount plugin-style: only the selected session renders a
+`ShellTerminal` — unselected sessions have no xterm view at all. PTY
+lifetime is session-owned, not view-owned: `acquirePty`
+(`ptyLifetime.ts`) holds a permanent session-level owner for each session's
+main PTY (sub-shell tab PTYs are covered by `syncRetainedPtys`), so a view
+unmount can never reach the last owner and kill the process — closes are
+explicit (`closeSessionGracefully`, `closeTab`, `killWindowSessions`). The
+session layer also owns the pieces views used to carry: a per-session
+`backend.onOutput` subscription in `ShellApp` drives output retention and
+plugin `onOutput` hooks regardless of mounts; each session's main PTY is
+spawned eagerly (background agents and devin restores keep running with no
+view — the view claims the spawn instead when it mounts first); and a
+headless xterm buffer per session (`trackSessionBuffer` in
+`terminalRegistry.ts`) keeps `getScreenLines`/`serializeTerminal` seeing a
+live screen for unmounted sessions, which is also the freshest repaint
+source on remount.
 
 The session tab strip keeps `shell` pinned leftmost; sub-view tabs (editor,
 browser, shell, preview, git) are drag-and-drop reorderable. `Ctrl/⌘+Alt+←/→`
@@ -790,6 +832,9 @@ pnpm dev:desktop
 # Release build (produces target/release/bundle/)
 pnpm build:desktop
 
+# Dev variant: axn-term-hmr.app (yellow icon, HMR frontend, own state dir)
+pnpm build:hmr
+
 # Storybook (component catalog for apps/desktop)
 pnpm --filter @axn-term/desktop storybook
 
@@ -837,7 +882,13 @@ axn-term glyph the PNGs/.ico use, rebuilt by
 composites Dock icons over the translucent Dock, so the transparent
 interior shows through as white/gray there. Regenerating the shared icon
 set with `tauri icon` would restore the transparent `.icns` — re-run
-`make-macos-icon.sh` afterwards.
+`make-macos-icon.sh` afterwards. The axn-term-hmr dev variant has its own
+set in `src-tauri/icons-hmr/`: the same plated glyph on the dev yellow
+`rgb(227 179 65)` — unlike the production set, every raster asset there
+(PNGs, `.ico`, `.icns`) is rendered from the plated
+`icons-hmr/icon-macos.svg` so the yellow identifies the dev build on all
+platforms. `tauri.term-hmr.conf.json` points `bundle.icon` at it and
+`build/scripts/make-macos-icon.sh hmr` regenerates the whole set.
 
 ## Internationalization (Lingui)
 
@@ -994,8 +1045,8 @@ Plugins with `renderView` offer a full-area plugin view: the rail ctx gains
 `viewActive`/`toggleView`, and activating it deselects all sessions in the
 panel and renders `renderView({ pluginSettings, close, appState,
 updateAppState, openTab, sessions, selectSession, sessionApi })` in place of
-the session terminals (terminals stay
-mounted, hidden). `sessions` lists live `ShellSession`s,
+the session terminals (the selected session's terminal stays
+mounted, hidden — other sessions have no view at all). `sessions` lists live `ShellSession`s,
 `selectSession(sessionId)` closes the view and focuses that session, and
 `sessionApi(sessionId)` returns a `PluginApi` bound to that session so the
 view can drive sessions other than the selected one (the dev-workflow kanban
@@ -1223,6 +1274,8 @@ Example: `plugins/axn-demo-note/`.
 - Devin name capture: an authoritative capture is armed immediately before the separate Enter submits `/exit` (or by `onClose`'s Ctrl-C×2) and consumes only subsequent output chunks. For exits the plugin did not drive (manual Ctrl-C×2, `/quit`), `onProcessEnd` instead parses the newest resume line out of a bounded 16 KB output *tail* and arms a short passive capture for chunks still in flight — a passive capture adopts a seen name but never erases a stored one. Never use a scrollback length/offset as a capture cursor: scrollback is capped at 200,000 characters.
 - Devin CLI ≥3000.11 prints the exit resume hint on two lines (` devin -r <name>` then ` resumes this session · devin -r lists recent sessions`); older versions print `Resume this session with \`devin -r <name>\`` on one line. `findDevinSessionName` matches both.
 - OS session teardown (logout/restart/shutdown → SIGTERM/SIGHUP) is flagged via `signal-hook` and emitted as `os-shutdown`; the frontend runs the normal collect-and-close path without the confirm modal. A 15 s watchdog exits anyway if the frontend never finishes, so shutdown is never stalled. App-level quit (Cmd+Q / menu Quit / `app.exit`) arrives in Rust as `RunEvent::ExitRequested` while windows still exist — it is *not* routed through per-window `CloseRequested` — so the run handler intercepts it with `prevent_exit`, emits the same `os-shutdown`, and arms the same 15 s watchdog; each window then flushes state and `destroy()`s itself, and the resulting last-window-closed `ExitRequested` (window map empty) is allowed to proceed.
+- Window-close semantics (`CloseConfirmModal` in `ShellApp`): with one window, closing saves its sessions as before. With other windows open (`otherWindowWorkspaces` non-empty — peers announcements, not a Rust query) the modal is a choice: "Close this window" runs `removeAndClose`, which kills every session PTY in the window (`backend.close` per session — sub-shell trees die with their parent; `destroy()` runs no React teardown so nothing else would release them), deletes the window's `state.json` entry, then destroys the window — the sessions end for good and are not restored. "Close all & save" broadcasts `close-now` over `peers` so every window runs its own collect+save+destroy path (the remote-control `POST /close` uses the same event) — the 10 s countdown and Enter default to it; Escape/Cancel keeps everything open. `closeNow` also kills the window's PTYs after the save (`killWindowSessions`) — saved sessions restore with fresh PTYs anyway — and the session-exit/sub-shell-exit handlers ignore exits while `closingRef` is set, so teardown kills can't mutate or re-save state.
+- No child outlives the process: `RunEvent::Exit`, the exit/shutdown watchdogs and the remote `/close` force-exit all call `pty::kill_all_sessions` — SIGHUP, SIGKILL after `CLOSE_GRACE` — because `std::process::exit` skips destructors and a webview `destroy()` never releases PTY leases. `RunEvent::Exit` also `stop_vite`s the axn-term-hmr dev server. On a hard crash (SIGKILL, segfault) the kernel closes the PTY master fds, which SIGHUPs each session's controlling-terminal group — the OS-level guarantee that needs no code in the dying parent.
 
 ## macOS Local Network permission & code signing
 
@@ -1276,7 +1329,11 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
   status/log, start/stop/install. In dev mode `state_dir()` is
   `~/.axn-term-hmr` and `save/load/delete_window_state` go through the
   in-memory `AppState.mem_shell_state` — no `state.json` is ever written,
-  but a page reload still finds its state.
+  but a page reload still finds its state. The bundle carries its own
+  yellow icon set (`src-tauri/icons-hmr/`, the glyph plated on
+  `rgb(227 179 65)`, listed under `bundle.icon` in the hmr conf;
+  `build/scripts/make-macos-icon.sh hmr` regenerates it), so the dev
+  build is unmistakable next to a real axn-term.
 - `apps/web` — browser/online app; binds the same shared UI to `WsBackend`
   (gateway `/ws` protocol: raw PTY frames + JSON `resize`, `fs-read`,
   `fs-write`, `fs-stat`, `fs-list`, `fs-mkdir`, `cwd`, `exec`, `fg-process`,
@@ -1625,6 +1682,27 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   session and dismisses a covering plugin view — workflow `command:`
   actions use it as an on-enter "switch the view" (e.g. `axn-focus` on a
   human-gate state).
+- `axn-broadcast <line>` — write the line (with Enter) to every session in
+  the broadcast set, a per-window runtime set of session ids
+  (`app/broadcastSet.ts`): `axn-broadcast-add [name]`/`axn-broadcast-rm
+  [name]` mark/unmark (current session with no arg, else name or id —
+  prefix match), `axn-broadcast-clear` empties it, `axn-broadcasts`
+  lists it (`*` on the current session). The session context menu's
+  "Add/Remove from broadcast" toggles the same set and marked rows show
+  a radio badge (`useBroadcastMarked`). Fan-out is a plain
+  `backend.write(ptyId, line + "\r")` per target — the same bytes path
+  as typing, so agents can drive it too via
+  `"$AXN_TERM_CLI" session command "axn-broadcast <line>"`. The deck's
+  composer gates dangerous buffers through a confirm dialog
+  (`app/broadcastDanger.ts`): built-in rules (rm -rf, dd/mkfs, reboot,
+  git push --force/--delete, git reset --hard/clean -f, DROP/TRUNCATE/
+  DELETE FROM, kubectl delete/drain, systemctl stop/disable, chmod -R,
+  killall/pkill, fork bombs) plus user regexes from
+  `broadcastDangerPatterns` in config.yaml — each is matched
+  case-insensitively against every line of a multi-line buffer, invalid
+  patterns are skipped with a console warning. The gate only fronts the
+  interactive composer; the `axn-broadcast` command path writes
+  directly.
 
 The session-level dispatch behind it — built-ins, plugin-owned commands,
 `onCommand` hooks, Tab completion, and the out-of-band entry points
@@ -1705,6 +1783,23 @@ menu's "Close session" runs every enabled plugin's `onClose` (devin's
 graceful interrupt + resume-hint capture) before tearing the PTY down —
 an inline confirm appears first when `session.process` reports a live
 foreground process.
+
+Session views mount plugin-style: only the selected session renders a
+`ShellTerminal` — unselected sessions have no xterm view at all. PTY
+lifetime is session-owned, not view-owned: `acquirePty`
+(`ptyLifetime.ts`) holds a permanent session-level owner for each session's
+main PTY (sub-shell tab PTYs are covered by `syncRetainedPtys`), so a view
+unmount can never reach the last owner and kill the process — closes are
+explicit (`closeSessionGracefully`, `closeTab`, `killWindowSessions`). The
+session layer also owns the pieces views used to carry: a per-session
+`backend.onOutput` subscription in `ShellApp` drives output retention and
+plugin `onOutput` hooks regardless of mounts; each session's main PTY is
+spawned eagerly (background agents and devin restores keep running with no
+view — the view claims the spawn instead when it mounts first); and a
+headless xterm buffer per session (`trackSessionBuffer` in
+`terminalRegistry.ts`) keeps `getScreenLines`/`serializeTerminal` seeing a
+live screen for unmounted sessions, which is also the freshest repaint
+source on remount.
 
 The session tab strip keeps `shell` pinned leftmost; sub-view tabs (editor,
 browser, shell, preview, git) are drag-and-drop reorderable. `Ctrl/⌘+Alt+←/→`
@@ -1980,6 +2075,9 @@ pnpm dev:desktop
 # Release build (produces target/release/bundle/)
 pnpm build:desktop
 
+# Dev variant: axn-term-hmr.app (yellow icon, HMR frontend, own state dir)
+pnpm build:hmr
+
 # Storybook (component catalog for apps/desktop)
 pnpm --filter @axn-term/desktop storybook
 
@@ -2027,7 +2125,13 @@ axn-term glyph the PNGs/.ico use, rebuilt by
 composites Dock icons over the translucent Dock, so the transparent
 interior shows through as white/gray there. Regenerating the shared icon
 set with `tauri icon` would restore the transparent `.icns` — re-run
-`make-macos-icon.sh` afterwards.
+`make-macos-icon.sh` afterwards. The axn-term-hmr dev variant has its own
+set in `src-tauri/icons-hmr/`: the same plated glyph on the dev yellow
+`rgb(227 179 65)` — unlike the production set, every raster asset there
+(PNGs, `.ico`, `.icns`) is rendered from the plated
+`icons-hmr/icon-macos.svg` so the yellow identifies the dev build on all
+platforms. `tauri.term-hmr.conf.json` points `bundle.icon` at it and
+`build/scripts/make-macos-icon.sh hmr` regenerates the whole set.
 
 ## Internationalization (Lingui)
 
@@ -2184,8 +2288,8 @@ Plugins with `renderView` offer a full-area plugin view: the rail ctx gains
 `viewActive`/`toggleView`, and activating it deselects all sessions in the
 panel and renders `renderView({ pluginSettings, close, appState,
 updateAppState, openTab, sessions, selectSession, sessionApi })` in place of
-the session terminals (terminals stay
-mounted, hidden). `sessions` lists live `ShellSession`s,
+the session terminals (the selected session's terminal stays
+mounted, hidden — other sessions have no view at all). `sessions` lists live `ShellSession`s,
 `selectSession(sessionId)` closes the view and focuses that session, and
 `sessionApi(sessionId)` returns a `PluginApi` bound to that session so the
 view can drive sessions other than the selected one (the dev-workflow kanban
@@ -2412,6 +2516,8 @@ Example: `plugins/axn-demo-note/`.
 - Devin name capture: an authoritative capture is armed immediately before the separate Enter submits `/exit` (or by `onClose`'s Ctrl-C×2) and consumes only subsequent output chunks. For exits the plugin did not drive (manual Ctrl-C×2, `/quit`), `onProcessEnd` instead parses the newest resume line out of a bounded 16 KB output *tail* and arms a short passive capture for chunks still in flight — a passive capture adopts a seen name but never erases a stored one. Never use a scrollback length/offset as a capture cursor: scrollback is capped at 200,000 characters.
 - Devin CLI ≥3000.11 prints the exit resume hint on two lines (` devin -r <name>` then ` resumes this session · devin -r lists recent sessions`); older versions print `Resume this session with \`devin -r <name>\`` on one line. `findDevinSessionName` matches both.
 - OS session teardown (logout/restart/shutdown → SIGTERM/SIGHUP) is flagged via `signal-hook` and emitted as `os-shutdown`; the frontend runs the normal collect-and-close path without the confirm modal. A 15 s watchdog exits anyway if the frontend never finishes, so shutdown is never stalled. App-level quit (Cmd+Q / menu Quit / `app.exit`) arrives in Rust as `RunEvent::ExitRequested` while windows still exist — it is *not* routed through per-window `CloseRequested` — so the run handler intercepts it with `prevent_exit`, emits the same `os-shutdown`, and arms the same 15 s watchdog; each window then flushes state and `destroy()`s itself, and the resulting last-window-closed `ExitRequested` (window map empty) is allowed to proceed.
+- Window-close semantics (`CloseConfirmModal` in `ShellApp`): with one window, closing saves its sessions as before. With other windows open (`otherWindowWorkspaces` non-empty — peers announcements, not a Rust query) the modal is a choice: "Close this window" runs `removeAndClose`, which kills every session PTY in the window (`backend.close` per session — sub-shell trees die with their parent; `destroy()` runs no React teardown so nothing else would release them), deletes the window's `state.json` entry, then destroys the window — the sessions end for good and are not restored. "Close all & save" broadcasts `close-now` over `peers` so every window runs its own collect+save+destroy path (the remote-control `POST /close` uses the same event) — the 10 s countdown and Enter default to it; Escape/Cancel keeps everything open. `closeNow` also kills the window's PTYs after the save (`killWindowSessions`) — saved sessions restore with fresh PTYs anyway — and the session-exit/sub-shell-exit handlers ignore exits while `closingRef` is set, so teardown kills can't mutate or re-save state.
+- No child outlives the process: `RunEvent::Exit`, the exit/shutdown watchdogs and the remote `/close` force-exit all call `pty::kill_all_sessions` — SIGHUP, SIGKILL after `CLOSE_GRACE` — because `std::process::exit` skips destructors and a webview `destroy()` never releases PTY leases. `RunEvent::Exit` also `stop_vite`s the axn-term-hmr dev server. On a hard crash (SIGKILL, segfault) the kernel closes the PTY master fds, which SIGHUPs each session's controlling-terminal group — the OS-level guarantee that needs no code in the dying parent.
 
 ## macOS Local Network permission & code signing
 

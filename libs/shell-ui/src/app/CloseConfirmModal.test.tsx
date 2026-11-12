@@ -74,3 +74,59 @@ describe('CloseConfirmModal auto-close countdown', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 });
+
+describe('CloseConfirmModal with other windows open', () => {
+  const renderMulti = () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    const onCloseThisWindow = vi.fn();
+    render(
+      <CloseConfirmModal
+        sessionCount={3}
+        runningCount={1}
+        otherWindowCount={2}
+        onCancel={onCancel}
+        onCloseThisWindow={onCloseThisWindow}
+        onConfirm={onConfirm}
+      />,
+    );
+    return { onConfirm, onCancel, onCloseThisWindow };
+  };
+
+  const click = (label: string) => {
+    const button = [...container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes(label),
+    );
+    expect(button).toBeTruthy();
+    act(() => button!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  };
+
+  it('offers close-this-window and close-all choices', () => {
+    renderMulti();
+    expect(container.textContent).toContain('2 other windows open');
+    expect(container.textContent).toContain('3 open sessions in this window');
+    expect(container.textContent).toContain('Close this window');
+    expect(container.textContent).toContain('Close all windows & save (10s)');
+  });
+
+  it('counts down toward closing all windows, not discarding this one', () => {
+    const { onConfirm, onCloseThisWindow } = renderMulti();
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onCloseThisWindow).not.toHaveBeenCalled();
+  });
+
+  it('closes just this window without saving when picked', () => {
+    const { onConfirm, onCloseThisWindow } = renderMulti();
+    click('Close this window');
+    expect(onCloseThisWindow).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('keeps the single-window look without other windows', () => {
+    renderModal();
+    expect(container.textContent).not.toContain('other window');
+    expect(container.textContent).not.toContain('Close this window');
+    expect(container.textContent).toContain('Close (10s)');
+  });
+});

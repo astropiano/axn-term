@@ -3,7 +3,7 @@
 
 use serde::Deserialize;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::{AppHandle, Manager, WebviewUrl, Wry};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, Wry};
 use crate::AppState;
 
 pub(crate) fn next_window_id(counter: &AtomicU64, is_used: impl Fn(&str) -> bool) -> String {
@@ -141,13 +141,19 @@ pub(crate) fn create_window_with<M: Manager<Wry>>(
     {
         // Log every window-close path — a clean app exit is the last window
         // closing, so this is where unexpected quits become diagnosable.
+        // Destroyed also announces axn:window-gone to the remaining windows:
+        // the frontend's pagehide leave never runs on destroy(), so without
+        // this a closed window would linger in the peers workspace/window
+        // directory forever.
         let label = window.label().to_string();
+        let app = window.app_handle().clone();
         window.on_window_event(move |event| match event {
             tauri::WindowEvent::CloseRequested { .. } => {
                 log::info!("window {:?} CloseRequested", label);
             }
             tauri::WindowEvent::Destroyed => {
                 log::info!("window {:?} Destroyed", label);
+                let _ = app.emit("axn:window-gone", serde_json::json!({ "windowId": label }));
             }
             _ => {}
         });

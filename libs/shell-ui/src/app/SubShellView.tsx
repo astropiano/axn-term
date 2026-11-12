@@ -10,6 +10,8 @@ import {
   getScreenLines,
   handleClipboardWrites,
   registerTerminal,
+  serializeTerminal,
+  setPendingReplay,
   takePendingReplay,
   takeReloadReplay,
   registerTerminalElement,
@@ -440,6 +442,13 @@ export function SubShellView({
       safely('sub-shell output listener', () => unlistenOut?.());
       safely('sub-shell flow control', () => flow.dispose());
       safely('sub-shell agent closer', () => unregisterCloser());
+      // The session outlives this view: stash the serialized screen so the
+      // next mount repaints it (sessions mount plugin-style — only the
+      // selected one — so a session switch drops every tab view).
+      safely('sub-shell screen stash', () => {
+        const data = serializeTerminal(tab.id);
+        if (data) setPendingReplay(tab.id, data);
+      });
       unregisterElement();
       safely('OSC 52 handler', () => clipboardWrites.dispose());
       unregisterTerminal(tab.id, t);

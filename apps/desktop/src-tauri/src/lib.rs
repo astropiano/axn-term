@@ -360,6 +360,7 @@ pub fn run() {
                     let _ = handle.emit("os-shutdown", ());
                     std::thread::sleep(Duration::from_secs(15));
                     log::warn!("shutdown watchdog: frontend never closed — exiting");
+                    pty::kill_all_sessions(&handle.state::<AppState>());
                     std::process::exit(0);
                 });
             }
@@ -449,7 +450,7 @@ pub fn run() {
             // the SIGTERM path uses; every window then flushes state and
             // destroys itself, and the resulting last-window-closed
             // ExitRequested (windows empty) is allowed to proceed.
-            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+            if let tauri::RunEvent::ExitRequested { ref api, code, .. } = event {
                 let windows = app_handle.webview_windows().len();
                 log::info!("ExitRequested (code={:?}, windows={})", code, windows);
                 if windows > 0 {
@@ -458,13 +459,25 @@ pub fn run() {
                     // Watchdog: a hung frontend must not stall the quit —
                     // same 15 s budget the SIGTERM/SIGHUP path uses.
                     let code = code.unwrap_or(0);
+                    let app = app_handle.clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(Duration::from_secs(15));
                         log::warn!("exit watchdog: windows never closed — exiting");
+                        pty::kill_all_sessions(&app.state::<AppState>());
                         std::process::exit(code);
                     });
                 } else {
                     log::info!("last window closed — exiting");
+                }
+            }
+            // The event loop is done — the process exits next. No PTY or
+            // spawned helper (the axn-term-hmr vite server) may outlive it:
+            // a webview destroyed without React teardown never released its
+            // sessions, and process::exit skips every destructor.
+            if let tauri::RunEvent::Exit = event {
+                pty::kill_all_sessions(&app_handle.state::<AppState>());
+                if let Some(state) = app_handle.try_state::<devhmr::DevHmrState>() {
+                    devhmr::stop_vite(&state);
                 }
             }
         });

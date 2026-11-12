@@ -378,6 +378,11 @@ pub(crate) fn handle_remote_control_request(
             let id = url.strip_prefix("/windows/").unwrap_or(url.as_str()).to_string();
             log::info!("remote-control: closing window {:?}", id);
             let _ = app_handle.emit("close-window", &id);
+            // Give the window's frontend a moment to run removeAndClose —
+            // its close_session invokes land here and finish in Rust even
+            // after the webview is gone. Skipping the wait orphans the
+            // window's PTYs until process exit.
+            std::thread::sleep(std::time::Duration::from_millis(300));
             let _ = delete_window_state_sync(&state, &id);
             let windows = app_handle.webview_windows();
             if let Some(w) = windows.get(&id) {
@@ -407,6 +412,7 @@ pub(crate) fn handle_remote_control_request(
                 for w in windows.values() {
                     let _ = w.destroy();
                 }
+                crate::pty::kill_all_sessions(&app.state::<crate::AppState>());
                 std::process::exit(0);
             });
             Response::from_string("ok")

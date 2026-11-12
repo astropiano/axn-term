@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLingui } from '@lingui/react/macro';
-import { Eye, FileText, Folder, GitBranch, SquareTerminal, Terminal, X , PanelLeft} from 'lucide-react';
+import { Eye, FileText, Folder, GitBranch, Radio, SquareTerminal, Terminal, X , PanelLeft} from 'lucide-react';
 import type { EditorTab } from '../types';
 import { defaultTabLabel } from './subshellPromote';
 import { useSettings } from '../SettingsProvider';
@@ -107,6 +107,8 @@ export function SessionTabStrip({
               <Eye className="h-3.5 w-3.5" />
             ) : ed.kind === 'git' ? (
               <GitBranch className="h-3.5 w-3.5" />
+            ) : ed.kind === 'broadcast' ? (
+              <Radio className="h-3.5 w-3.5" />
             ) : (
               <FileText className="h-3.5 w-3.5" />
             )}

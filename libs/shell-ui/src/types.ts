@@ -103,6 +103,27 @@ export interface Workspace {
 /** Agent CLIs whose conversations a sub-shell tab can host and resume. */
 export type AgentCli = 'devin' | 'claude' | 'agy' | 'codex' | 'opencode';
 
+/**
+ * Tab kinds that take terminal input — broadcast fan-out only targets
+ * sessions whose *active* view is one of these. Any view that renders a
+ * PTY (main shell 'shell' tab id, 'shell'-kind editor tabs) declares
+ * itself here; views without a terminal (editor, browser, preview, git,
+ * ide, broadcast) are not broadcast targets.
+ */
+export const TAB_ACCEPTS_INPUT = new Set(['shell']);
+/** Whether the session's currently-active tab accepts broadcast input. */
+export function activeTabAcceptsInput(session: {
+  activeTab?: string;
+  editors?: { id: string; kind?: string }[];
+}): boolean {
+  const active = session.activeTab ?? 'shell';
+  const kind =
+    active === 'shell'
+      ? 'shell'
+      : session.editors?.find((e) => e.id === active)?.kind;
+  return !!kind && TAB_ACCEPTS_INPUT.has(kind);
+}
+
 export interface EditorTab {
   id: string;
   path: string;
@@ -113,7 +134,7 @@ export interface EditorTab {
    * inspect view (`path` is the repo root), 'ide' a tree+editor composite
    * (`path` is the tree's root dir); default is a file editor.
    */
-  kind?: 'editor' | 'browser' | 'shell' | 'preview' | 'git' | 'ide';
+  kind?: 'editor' | 'browser' | 'shell' | 'preview' | 'git' | 'ide' | 'broadcast';
   /** For kind 'shell': the `sh -c` command; absent means an interactive sub-shell. */
   command?: string;
   /**
@@ -224,6 +245,18 @@ export interface ShellSession {
 /** The backend PTY id that currently serves as the session's main shell. */
 export function ptyIdOf(session: ShellSession): string {
   return session.mainPtyId ?? session.id;
+}
+
+/**
+ * Display name — `session.name` can be empty (no custom name, no detected
+ * process title yet); fall back to the running process, then a label, so
+ * panels/tiles/broadcast headers never render a blank row.
+ */
+export function sessionDisplayName(session: {
+  name?: string;
+  process?: string;
+}): string {
+  return session.name?.trim() || '…';
 }
 
 export interface WindowState {

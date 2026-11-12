@@ -444,6 +444,22 @@ function buildInitialState(stateDir, cwd, variant, devinSessionName) {
     selectedSessionId: sessionId,
   };
 
+  if (variant === "broadcast") {
+    // Two bare shells in one workspace — the multiselect/broadcast set.
+    devinSession.name = "one";
+    devinSession.topic = "one";
+    devinSession.pluginState = undefined;
+    devinSession.output = "";
+    mainWindow.sessions.push({
+      id: randomUUID(),
+      workspaceId: workspaceId1,
+      name: "two",
+      topic: "two",
+      output: "",
+      cwd,
+    });
+  }
+
   if (variant === "second-workspace") {
     const extraWorkspace = { id: workspaceId2, name: "extra" };
     devinSession.workspaceId = workspaceId2;
@@ -506,6 +522,10 @@ async function prepare(env) {
   const cwdDir = join(stateDir, "cwd");
   mkdirSync(binDir, { recursive: true });
   mkdirSync(cwdDir, { recursive: true });
+  // A marker file so `axn-broadcast ls` output is verifiable in both PTYs.
+  const bcastMark = `bcast-mark-${randomBytes(3).toString("hex")}.txt`;
+  writeFileSync(join(cwdDir, bcastMark), "mark\n");
+  env.AXN_TERM_BCAST_MARK = bcastMark;
 
   const useRealDevin = env.AXN_TERM_USE_REAL_DEVIN === "true";
   if (!useRealDevin) {
@@ -1726,6 +1746,146 @@ async function gitRestoreDeleted(env) {
   return "deleted file restored, app/d/page.tsx kept its edit";
 }
 
+/**
+ * Broadcast fan-out: mark both seeded shells (axn-broadcast-add), list
+ * targets (axn-broadcasts), send `axn-broadcast ls` and verify the marker
+ * file lands in BOTH PTYs, then axn-focus the second session and verify
+ * the window's selected session moved — the flow-level go-to-session.
+ */
+async function broadcastCheck(env) {
+  const st = await waitForState(env, (s) => (s.windows?.[0]?.sessions ?? []).length >= 2, 30000);
+  const [s1, s2] = st.windows[0].sessions;
+  const mark = env.AXN_TERM_BCAST_MARK;
+
+  // Both sessions must be at an idle shell for the hidden-command path.
+  for (const s of [s1, s2]) {
+    await waitForState(
+      env,
+      (cur) => cur.windows?.[0]?.sessions?.find((x) => x.id === s.id && !x.process),
+      20000,
+    ).catch(() => {
+      throw new Error(`session ${s.name} never reported an idle shell`);
+    });
+  }
+
+  // Sessions spawn lazily — plugin-style views mount only for the selected
+  // session (or a broadcast tile), so s2 has no PTY yet. 'go to session'
+  // first: `axn-session select` mounts s2's view, which spawns its PTY —
+  // and verifies the real navigation command while at it.
+  await sendCommand(env, s1.id, `axn-session select ${s2.id}`);
+  await waitForState(
+    env,
+    (cur) => cur.windows?.[0]?.selectedSessionId === s2.id,
+    15000,
+  ).catch(() => {
+    throw new Error(`axn-session select did not focus session '${s2.name}'; ${logTail(env)}`);
+  });
+
+  await sendCommand(env, s1.id, "axn-broadcast-add");
+  // Auto-naming may have already replaced the seeded name — address the
+  // second session by id, not 'two'.
+  await sendCommand(env, s1.id, `axn-broadcast-add ${s2.id}`);
+  // The 'sent to N sessions' feedback echoes into s1 — the real proof is
+  // the marker file reaching s2's PTY below.
+  await sendCommand(env, s1.id, "axn-broadcasts");
+  try {
+    await waitForOutput(env, s1.id, (o) => o.includes("sent to") || /\* |^ /m.test(o), 15000);
+  } catch {
+    throw new Error(`axn-broadcasts produced no listing; ${logTail(env)}`);
+  }
+
+  // Marking mounts each target's tile view, which spawns its PTY — probe
+  // each session's shell until it answers before broadcasting into it.
+  for (const s of [s1, s2]) {
+    const probe = `PROBE_${randomBytes(3).toString("hex")}`;
+    let live = false;
+    for (let attempt = 0; attempt < 10 && !live; attempt++) {
+      await writeToSession(env, s.id, `echo ${probe}\r`).catch(() => {});
+      try {
+        await waitForOutput(env, s.id, (o) => o.includes(probe), 8000);
+        live = true;
+      } catch {
+        // PTY not spawned yet — the tile mount races the broadcast setup.
+      }
+    }
+    if (!live) {
+      throw new Error(`session '${s.name}' (${s.id}) PTY never came up; ${logTail(env)}`);
+    }
+  }
+
+  await sendCommand(env, s1.id, "axn-broadcast ls");
+  for (const s of [s1, s2]) {
+    try {
+      await waitForOutput(env, s.id, (o) => o.includes(mark), 15000);
+    } catch {
+      const oneOut = (await getSessionOutput(env, s1.id)).slice(-400);
+      const twoOut = (await getSessionOutput(env, s2.id)).slice(-400);
+      throw new Error(
+        `broadcast ls never reached session '${s.name}' (${s.id})` +
+          `\n--- one tail ---\n${oneOut}\n--- two tail ---\n${twoOut}`,
+      );
+    }
+  }
+
+  // Real mouse click on session two's tile — 'go to session' unmarks it
+  // and focuses it, so the window selection must move to s2.
+  let app;
+  try {
+    app = findX11Window(env, "axn-term");
+  } catch {
+    app = undefined;
+  }
+  if (app) {
+    // Real XTEST click at session two's tile center — hits the (not yet
+    // hovered) 'go to session' button, which unmarks + focuses it.
+    const cx = Math.round(app.x + app.w * 0.75);
+    const cy = Math.round(app.y + app.h * 0.55);
+    x11drive(env, ["click", String(cx), String(cy)]);
+    await waitForState(
+      env,
+      (cur) => cur.windows?.[0]?.selectedSessionId === s2.id,
+      15000,
+    ).catch(() => {
+      throw new Error(`tile click did not focus session '${s2.name}'; ${logTail(env)}`);
+    });
+  } else {
+    // No test display (native macOS run): no synthetic pointer — the
+    // interactive check is the PTY write above, which already passed.
+    console.log("skipping tile click — no X11 test display");
+  }
+
+  // 'go to session' via the real command path: `axn-session select` calls
+  // the same goToSession the tile button does — focus moves to s2 AND s2
+  // becomes the only selection (s1 leaves the broadcast set).
+  const mark2 = `bcast2-${randomBytes(3).toString("hex")}`;
+  writeFileSync(join(env.AXN_TERM_STATE_DIR, "cwd", `${mark2}.txt`), "m\n");
+  await sendCommand(env, s1.id, `axn-session select ${s2.id}`);
+  await waitForState(
+    env,
+    (cur) => cur.windows?.[0]?.selectedSessionId === s2.id,
+    15000,
+  ).catch(() => {
+    throw new Error(`axn-session select did not focus session '${s2.name}'; ${logTail(env)}`);
+  });
+  // Only s2 may still be selected: a broadcast now must reach s2's PTY and
+  // must NOT reach s1's.
+  await sendCommand(env, s1.id, "axn-broadcast ls");
+  try {
+    await waitForOutput(env, s2.id, (o) => o.includes(mark2), 15000);
+  } catch {
+    throw new Error(`broadcast after select never reached session '${s2.name}'; ${logTail(env)}`);
+  }
+  const out1 = await getSessionOutput(env, s1.id);
+  if (out1.includes(mark2)) {
+    throw new Error(
+      `axn-session select left '${s1.name}' selected — it still receives broadcast lines`,
+    );
+  }
+
+  assertNoErrorBoundary(env, "broadcast flow");
+  return `broadcast ok: ls reached ${s1.name} + ${s2.name}, select ${s2.name} leaves it the only target`;
+}
+
 export async function run(step, env) {
   const action = step.args?.action ?? "help";
 
@@ -2068,6 +2228,7 @@ export async function run(step, env) {
     }
 
     case "checkAlive":
+    case "broadcastCheck":
     case "oscRestoreDevin":
     case "oscDevinStorm":
     case "oscRealDevin":
@@ -2079,7 +2240,7 @@ export async function run(step, env) {
     case "openGitInspect":
     case "gitRestoreDeleted": {
       const steps = {
-        checkAlive, oscRestoreDevin, oscDevinStorm, oscRealDevin, oscCheck, floodBaseline, floodAfterClose, pasteLine, editorReadFail, openGitInspect, gitRestoreDeleted,
+        checkAlive, broadcastCheck, oscRestoreDevin, oscDevinStorm, oscRealDevin, oscCheck, floodBaseline, floodAfterClose, pasteLine, editorReadFail, openGitInspect, gitRestoreDeleted,
       };
       try {
         return await steps[action](env);

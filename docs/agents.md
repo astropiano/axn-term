@@ -92,6 +92,11 @@ program use `axn-term session …` above:
 - `axn-install [args]` — runs `axn-term install <args>` (e.g.
   `axn-install --skills --devin`).
 - `axn-workspaces` — list workspaces; the session's own is marked `*`.
+- `axn-broadcast <line>` — write the line (with Enter) to every session in
+  the broadcast set; `axn-broadcast-add [name]`/`axn-broadcast-rm [name]`
+  mark/unmark sessions (current session when no name), `axn-broadcast-clear`
+  empties the set, `axn-broadcasts` lists it. Broadcast-marked sessions show
+  a radio badge in the panel; the session menu toggles membership.
 - `axn-session-up/down`, `axn-workspace-up/down` — reorder sessions/workspaces.
 - `axn-focus [tab]` — bring a session view to the front: bare or `shell`
   selects the main terminal; otherwise a sub-view tab matched by index,

@@ -3,7 +3,7 @@ import { Trans } from '@lingui/react/macro';
 import { ErrorBoundary } from './ErrorBoundary';
 import { dump } from 'js-yaml';
 import { Menu, X, Settings, FileText, Folder, Eye, AlertOctagon, AlertTriangle } from 'lucide-react';
-import { ShellTerminal } from '../ShellTerminal';
+import { ShellTerminal, splitAnsiTail, stripAnsi } from '../ShellTerminal';
 import {
   SessionBackendProvider,
   ShellPlatformProvider,
@@ -38,7 +38,11 @@ import {
   isPluginEnabled,
 } from './session-plugins';
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
-import { keepPtyAlive, serializeTerminal, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf } from '../terminalRegistry';
+import { dropSessionBuffer, keepPtyAlive, serializeTerminal, sessionBufferIds, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf, trackSessionBuffer } from '../terminalRegistry';
+import { acquirePty, syncRetainedPtys } from '../ptyLifetime';
+import { foregroundStatusPatch } from '../foregroundStatus';
+import { agentInputPluginFor } from './session-plugins/agentHookBridge';
+import { safely } from '../terminalRenderer';
 import { createFileDrop } from './fileDrop';
 import { MoveToWorkspaceModal } from './MoveToWorkspaceModal';
 import { runSubShellClosers } from './subShellAgents';
@@ -96,6 +100,8 @@ import { useSessionCommands } from './useSessionCommands';
 import { SessionTabStrip } from './SessionTabStrip';
 import { tabStripTabClasses } from './tabStyles';
 import { browserTabPatch, ideTabPatch, resolveSessionPath } from './shellCommandSupport';
+import { BroadcastDeck } from './BroadcastDeck';
+import { broadcastSet, useBroadcastSet } from './broadcastSet';
 import { installDropGuard } from './dropGuard';
 import type { AgentCli, EditorTab, SessionAttention, ShellSession, WindowState } from '../types';
 import type { AppSettings } from '../themes';
@@ -440,6 +446,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // collect state and close instead of asking for confirmation.
   const shutdownRequestedRef = useRef(false);
   const sessionsRef = useRef(sessions);
+  /** Resolved login-shell basenames per session for the foreground poll. */
+  const sessionShellNamesRef = useRef(new Map<string, string>());
   useEffect(() => {
     liveSessionResolver = () => sessionsRef.current[0]?.id ?? null;
     return () => {
@@ -574,7 +582,12 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   const openSession = useCallback(
     (workspaceId?: string, cwd?: string, name?: string, background?: boolean) => {
       if (!background) setActivePluginView(null);
-      return addSession(workspaceId, cwd, name, background);
+      const id = addSession(workspaceId, cwd, name, background);
+      // Opening a session navigates to it — like a panel click it becomes
+      // the only selection, otherwise a live broadcast set would leave it
+      // stranded beneath the broadcast view.
+      if (id && !background) broadcastSet.replaceAll([id]);
+      return id;
     },
     [addSession],
   );
@@ -749,6 +762,110 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       );
     }
   }, []);
+
+  // Session PTYs are owned by session state, not by mounted views —
+  // plugin-style: only the selected session mounts a view. Output
+  // retention and plugin onOutput hooks therefore subscribe here, at
+  // session level, so background sessions keep retaining output and
+  // feeding plugins; and every session + sub-shell PTY is retained for as
+  // long as its session exists, so a view unmount never kills a process.
+  const sessionPtyKey = sessions
+    .map(
+      (s) =>
+        `${s.id}=${ptyIdOf(s)}:${(s.editors ?? [])
+          .filter((t) => t.kind === 'shell')
+          .map((t) => t.id)
+          .join(',')}`,
+    )
+    .join('\u0000');
+  useEffect(() => {
+    const retained: string[] = [];
+    const offs: (() => void)[] = [];
+    const live = new Set<string>();
+    for (const pair of sessionPtyKey.split('\u0000')) {
+      if (!pair) continue;
+      const [sessionId, rest] = pair.split('=');
+      const [ptyId, tabIds = ''] = rest.split(':');
+      retained.push(ptyId, ...tabIds.split(',').filter(Boolean));
+      live.add(sessionId);
+      // The headless buffer keeps the session's screen current while no
+      // view is mounted — plugins read it via getScreenLines, a remount
+      // serializes it for the repaint.
+      const buffer = trackSessionBuffer(sessionId);
+      const decoder = new TextDecoder();
+      // PTY chunks split escape sequences mid-way — hold back a trailing
+      // incomplete sequence so stripAnsi never leaks `7;file://` /
+      // `2;ls` fragments into retained output and plugin hooks.
+      let pending = '';
+      offs.push(
+        backend.onOutput(ptyId, (bytes) => {
+          buffer.write(bytes);
+          const [complete, tail] = splitAnsiTail(
+            pending + decoder.decode(bytes, { stream: true }),
+          );
+          pending = tail;
+          const text = stripAnsi(complete);
+          if (text) handleSessionOutput(sessionId, text);
+        }),
+      );
+
+      // cwd + foreground-process polling used to ride each session's
+      // hidden view — sessions own it now (background sessions must still
+      // track agent exits and where devin actually ran for restore).
+      const timers: ReturnType<typeof setInterval>[] = [];
+      if (backend.getCwd) {
+        const pollCwd = async () => {
+          try {
+            const cwd = (await backend.getCwd!(ptyId)) ?? null;
+            const current = sessionsRef.current.find((s) => s.id === sessionId);
+            // A cwd patch is structural — updateSession saves it eagerly.
+            if (current && cwd && cwd !== current.cwd) updateSession(sessionId, { cwd });
+          } catch {
+            // ignore
+          }
+        };
+        void pollCwd();
+        timers.push(setInterval(pollCwd, 1000));
+      }
+      if (backend.getForegroundProcess) {
+        const pollProcess = async () => {
+          try {
+            const process = (await backend.getForegroundProcess!(ptyId)) ?? null;
+            const session = sessionsRef.current.find((s) => s.id === sessionId);
+            if (!session) return;
+            const processName = process?.toLowerCase() ?? '';
+            if (!sessionShellNamesRef.current.has(sessionId)) {
+              const resolved =
+                settings.defaultShell?.trim() || (await backend.getDefaultShell?.()) || 'sh';
+              sessionShellNamesRef.current.set(
+                sessionId,
+                resolved.split(/[/\\]/).pop()!.toLowerCase(),
+              );
+            }
+            const isShell =
+              !processName || processName === sessionShellNamesRef.current.get(sessionId);
+            const agent = isShell ? undefined : agentInputPluginFor(processName)?.id;
+            const processDisplay = isShell ? undefined : (process ?? undefined);
+            const patch = foregroundStatusPatch(session, processDisplay);
+            if (agent !== session.agentInput) patch.agentInput = agent;
+            if (Object.keys(patch).length > 0) updateSession(sessionId, patch);
+          } catch {
+            // ignore
+          }
+        };
+        void pollProcess();
+        timers.push(setInterval(pollProcess, 1000));
+      }
+      offs.push(() => timers.forEach((t) => clearInterval(t)));
+    }
+    for (const id of sessionBufferIds()) {
+      if (!live.has(id)) dropSessionBuffer(id);
+    }
+    syncRetainedPtys(retained);
+    return () => {
+      for (const off of offs) safely('session output listener', off);
+    };
+  }, [backend, sessionPtyKey, handleSessionOutput]);
 
   useEffect(
     () => () => {
@@ -1205,6 +1322,35 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // Built-in hidden commands (axn-session*, axn-workspace-*). Resolves
   // asynchronously; `false` swallows the line, a string replaces it (used to
   // echo errors back into the shell).
+  const broadcastIds = useBroadcastSet();
+  // 'go to session': focus a session and make it the only selection — the
+  // tile button and `axn-session select` share this.
+  const goToSession = useCallback(
+    (id: string) => {
+      broadcastSet.replaceAll([id]);
+      selectSessionRef.current?.(id);
+      activateSessionTab(id, 'shell');
+    },
+    [activateSessionTab],
+  );
+  const openBroadcastDeck = useCallback(
+    (sessionId: string) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return;
+      const existing = session.editors?.find((e) => e.kind === 'broadcast');
+      updateSessionWith(sessionId, (latest) => ({
+        editors: existing
+          ? latest.editors
+          : [
+              ...(latest.editors ?? []),
+              { id: `bc-${Date.now().toString(36)}`, path: 'broadcast', kind: 'broadcast' as const },
+            ],
+        activeTab: existing ? existing.id : `bc-${Date.now().toString(36)}`,
+      }));
+    },
+    [updateSessionWith],
+  );
+
   const { handleSessionCommand, handleCompleteInput } = useSessionCommands({
     backend,
     platform,
@@ -1222,6 +1368,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     updateSession,
     pathDeps,
     tearOffSession: canTearOff ? tearOffSession : undefined,
+    openBroadcastDeck,
+    selectSession: goToSession,
   });
 
   // Sessions whose PTY just spawned, waiting for plugin settings to load
@@ -1265,6 +1413,39 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     },
     [flushPendingSessionOpen],
   );
+
+  // Sessions spawn eagerly at session level — plugin-style views only
+  // attach to an already-running PTY, so background sessions (restored
+  // agents, devin -r) keep running with no view mounted. A mounted view's
+  // own acquire can still claim the spawn first (child effects run before
+  // this parent effect); whichever claims it fires handleSessionReady once
+  // via the notified flag.
+  useEffect(() => {
+    const handles = sessionPtyKey
+      .split('\u0000')
+      .filter(Boolean)
+      .map((pair) => {
+        const [sessionId, rest] = pair.split('=');
+        const [ptyId] = rest.split(':');
+        const session = sessionsRef.current.find((s) => s.id === sessionId);
+        if (!session) return undefined;
+        const handle = acquirePty(backend, ptyId, () =>
+          backend.createSession(ptyId, {
+            shell: settings.defaultShell?.trim() || undefined,
+            cwd: session.cwd,
+            // No view exists to fit — the backend default size; a mounted
+            // view's post-spawn resize corrects it once it attaches.
+            cols: 80,
+            rows: 24,
+          }),
+        );
+        void handle.start().then((spawned: boolean) => {
+          if (spawned) handleSessionReady(session);
+        });
+        return handle;
+      });
+    return () => handles.forEach((h) => h?.release());
+  }, [backend, sessionPtyKey, handleSessionReady, settings.defaultShell]);
 
   // Fire plugin.onProcessEnd when a session's foreground process stops matching
   // the plugin's processPattern (e.g. devin exits and the shell takes over).
@@ -1343,6 +1524,22 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     [sidebarWidth],
   );
 
+  // destroy() runs no React teardown, so nothing releases the PTY leases —
+  // a window's sessions must be killed here or they orphan in the backend
+  // and keep running until the process exits (and longer, when a
+  // settings/dev window keeps it alive). Closing a session's main PTY takes
+  // its sub-shell tree with it; explicit shell-tab closes cover a tab whose
+  // parent link moved elsewhere. Only call after any state save — the
+  // resulting session-exited events are ignored while closing.
+  const killWindowSessions = useCallback(() => {
+    for (const session of sessionsRef.current) {
+      backend.close(ptyIdOf(session));
+      for (const tab of session.editors ?? []) {
+        if (tab.kind === 'shell' && tab.id !== ptyIdOf(session)) backend.close(tab.id);
+      }
+    }
+  }, [backend]);
+
   const closeNow = useCallback(async () => {
     if (closingRef.current) return;
     closingRef.current = true;
@@ -1406,22 +1603,36 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     } catch (e) {
       console.error('Failed to flush state before close:', e);
     } finally {
+      // Saved sessions restore with fresh PTYs — the live ones die with the
+      // window regardless of whether the process exits behind it.
+      killWindowSessions();
       await win?.destroy().catch(() => {});
     }
-  }, [saveNow, updateSession, buildPluginApi, platform]);
+  }, [saveNow, updateSession, buildPluginApi, platform, killWindowSessions]);
 
   const removeAndClose = useCallback(async () => {
     if (closingRef.current) return;
     closingRef.current = true;
     axnLog('info', 'shell', 'removeAndClose');
     try {
+      killWindowSessions();
       await (platform.window?.deleteState?.() ?? platform.stateStore.delete?.(windowId));
     } catch (e) {
       console.error('failed to delete window state:', e);
     } finally {
       await platform.window?.destroy().catch(() => {});
     }
-  }, [windowId, platform]);
+  }, [windowId, platform, killWindowSessions]);
+
+  // "Close all windows & save": broadcast close-now so every window runs
+  // its own collect+save+destroy path (the emit reaches this window too),
+  // then run ours — closingRef makes the duplicate a no-op. Same path the
+  // remote-control server's POST /close drives; once the last window is
+  // gone, ExitRequested lets the process exit.
+  const closeAllWindows = useCallback(() => {
+    platform.peers?.publish('close-now', {});
+    void closeNow();
+  }, [platform, closeNow]);
 
   useEffect(() => {
     let closing = false;
@@ -1465,13 +1676,23 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           }
         }),
       );
+      // PTY lifetime is session-owned — a view unmount never kills a
+      // process, so the close is explicit here: main shell plus every
+      // sub-shell tab.
+      backend.close(ptyIdOf(session));
+      for (const tab of session.editors ?? []) {
+        if (tab.kind === 'shell' && tab.id !== ptyIdOf(session)) backend.close(tab.id);
+      }
       closeSession(sessionId, 'user close');
     },
-    [buildPluginApi, closeSession],
+    [buildPluginApi, closeSession, backend],
   );
 
   useEffect(() => {
     const unlisten = backend.onSessionExit?.((ptyId) => {
+      // Closing runs its own session kills — an exit while tearing down is
+      // expected and must not mutate state or re-trigger a save.
+      if (closingRef.current) return;
       // Plugins must see the session's last output before it closes.
       flushSessionOutputRef.current();
       // The payload is a PTY id — a promoted sub-shell PTY maps back to its
@@ -1491,6 +1712,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // `run-in: sub-shell` command actions.
   useEffect(() => {
     const unlisten = backend.onSubshellExit?.((ptyId, exitCode) => {
+      if (closingRef.current) return;
       const session = sessionsRef.current.find((s) =>
         (s.editors ?? []).some((e) => e.id === ptyId && e.kind === 'shell'),
       );
@@ -2105,6 +2327,110 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     );
   }
 
+  /** The real view component for one editor tab — shared between the main
+   * area and broadcast tiles, so a tile mounts the actual view. */
+  const renderEditorView = (session: ShellSession, ed: EditorTab, visible: boolean) => (
+                    ed.kind === 'browser' ? (
+                      <BrowserView
+                        path={ed.path}
+                        cwd={session.cwd}
+                        sessionId={session.id}
+                        isVisible={visible}
+                        onOpenFile={(path) => openEditor(session.id, path)}
+                        onPreviewFile={(path) => openPreview(session.id, path)}
+                        onIdeRequest={(dirPath) => openIde(session.id, dirPath)}
+                      />
+                    ) : ed.kind === 'preview' ? (
+                      <PreviewView
+                        path={ed.path}
+                        cwd={session.cwd}
+                        sessionId={session.id}
+                        isVisible={visible}
+                      />
+                    ) : ed.kind === 'shell' ? (
+                      <SubShellView
+                        session={session}
+                        tab={ed}
+                        isVisible={visible}
+                        onClose={() => closeTab(session, ed.id)}
+                        onRename={(label) => renameTab(session.id, ed.id, label)}
+                        onUpdateTab={(patch) => updateEditorTab(session.id, ed.id, patch)}
+                        onEditorRequest={openEditor}
+                        onBrowserRequest={openBrowser}
+                        onPreviewRequest={openPreview}
+                        onIdeRequest={openIde}
+                        onSessionCommand={handleSessionCommand}
+                        onCompleteInput={handleCompleteInput}
+                        onUserInput={clearSessionAttention}
+                      />
+                    ) : ed.kind === 'broadcast' ? (
+                      <BroadcastDeck
+                        backend={backend}
+                        sessions={sessionsRef.current}
+                        renderView={renderSessionTileView}
+                        onFocusSession={goToSession}
+                      />
+                    ) : ed.kind === 'ide' ? (
+                      <IdeView
+                        ref={(handle) => registerEditor(ed.id, handle)}
+                        path={ed.path}
+                        cwd={session.cwd}
+                        sessionId={session.id}
+                        isVisible={visible}
+                        fileService={backendFileService(backend, session.id)}
+                        onDirtyChange={(dirty) => setEditorDirty(session.id, ed.id, dirty)}
+                      />
+                    ) : ed.kind === 'git' ? (
+                      <GitInspectView
+                        session={session}
+                        tab={ed}
+                        isVisible={visible}
+                        onOpenFile={(path) => openEditor(session.id, path)}
+                        onOpenSubShell={(command, cwd, label, agent) =>
+                          openSubShell(session.id, command, cwd, label, agent)
+                        }
+                      />
+                    ) : (
+                      <EditorView
+                        ref={(handle) => registerEditor(ed.id, handle)}
+                        path={ed.path}
+                        cwd={session.cwd}
+                        isVisible={visible}
+                        fileService={backendFileService(backend, session.id)}
+                        onDirtyChange={(dirty) => setEditorDirty(session.id, ed.id, dirty)}
+                      />
+                    )
+  );
+
+  /** Broadcast tile body: the session's REAL current view — main shell or
+   * whatever editor tab is active — mounted here (the below view for a
+   * broadcast session is suppressed, so this is its single mount). */
+  const renderSessionTileView = (session: ShellSession) => {
+    const active = session.activeTab ?? 'shell';
+    if (active === 'shell') {
+      return (
+        <ShellTerminal
+          session={session}
+          backend={backend}
+          onSessionNameChange={applySessionAutoName}
+          onEditorRequest={openEditor}
+          onBrowserRequest={openBrowser}
+          onPreviewRequest={openPreview}
+          onIdeRequest={openIde}
+          onSessionCommand={handleSessionCommand}
+          onCompleteInput={handleCompleteInput}
+          updateSession={updateSession}
+          onUserInput={clearSessionAttention}
+          isVisible={true}
+          onSessionReady={handleSessionReady}
+        />
+      );
+    }
+    const ed = session.editors?.find((e) => e.id === active);
+    if (!ed) return null;
+    return renderEditorView(session, ed, true);
+  };
+
   return (
     <IconBagContext.Provider value={iconBag}>
     <ShellServicesProvider services={mergedServices} fileReader={fileReader}>
@@ -2299,6 +2625,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 plugins={enabledPlugins}
                 onOpenBrowser={openBrowser}
                 onOpenIde={openIde}
+                onOpenBroadcastDeck={openBroadcastDeck}
                 onOpenTab={openSessionTab}
                 pluginData={pluginData}
                 mergePluginData={mergePluginData}
@@ -2328,9 +2655,47 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         {moveError && (
           <Banner level="error" message={moveError} onDismiss={() => setMoveError(null)} />
         )}
+        {/* Broadcast split above the shell area — fan-out input on top,
+            the selected sessions' real views as view-only columns. When the
+            focused session is itself a target the below area would only show
+            a placeholder, so the deck fills the space instead. The session
+            area stays mounted underneath either way — hidden while the deck
+            fills, otherwise sharing the column — so non-target sessions
+            keep their live terminals instead of unmounting. */}
+        {broadcastIds.length > 1 && broadcastSet.has(selectedSessionId) && (
+          <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--border)]">
+            <BroadcastDeck
+              backend={backend}
+              sessions={sessionsRef.current}
+              renderView={renderSessionTileView}
+              onFocusSession={goToSession}
+            />
+          </div>
+        )}
+        <div
+          className={
+            broadcastIds.length > 1 && broadcastSet.has(selectedSessionId)
+              ? 'hidden'
+              : 'flex min-h-0 flex-1 flex-col'
+          }
+        >
+        {broadcastIds.length > 1 && !broadcastSet.has(selectedSessionId) && (
+          <div className="flex max-h-[50%] min-h-[160px] shrink-0 flex-col border-b border-[var(--border)]">
+            <BroadcastDeck
+              backend={backend}
+              sessions={sessionsRef.current}
+              renderView={renderSessionTileView}
+              onFocusSession={goToSession}
+            />
+          </div>
+        )}
         <div className="flex min-h-0 flex-1 overflow-hidden">
-        {sessions.map((session) => {
-          const isVisible = session.id === selectedSessionId && !viewPlugin;
+        {sessions.filter((s) => s.id === selectedSessionId).map((session) => {
+          // Plugin-style mounting: only the selected session has a view.
+          // Other sessions keep running — their PTYs are session-owned and
+          // their output retention is subscribed at session level — and
+          // repaint from a serialized screen stash on remount.
+          const isVisible = !viewPlugin;
           const editors = session.editors ?? [];
           const activeTab = session.activeTab ?? 'shell';
           return (
@@ -2338,6 +2703,12 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
               key={session.id}
               className={isVisible ? 'flex h-full w-full flex-col' : 'hidden'}
             >
+              {/* A broadcast-selected session's real view is mounted in its
+                  deck tile — mounting a second copy here would put two
+                  xterms on one PTY. The row itself stays so the session
+                  remounts in place when it leaves the set. */}
+              {broadcastIds.length > 1 && broadcastSet.has(session.id) ? null : (
+              <>
               {sessionBanners(session, enabledPlugins).map(({ plugin, stateKey, banner }) => (
                 <Banner
                   key={stateKey}
@@ -2394,7 +2765,6 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                     session={session}
                     backend={backend}
                     onSessionNameChange={applySessionAutoName}
-                    onSessionOutput={handleSessionOutput}
                     onEditorRequest={openEditor}
                     onBrowserRequest={openBrowser}
                     onPreviewRequest={openPreview}
@@ -2427,73 +2797,13 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         onClick: () => closeTab(session, ed.id),
                       }}
                     >
-                    {ed.kind === 'browser' ? (
-                      <BrowserView
-                        path={ed.path}
-                        cwd={session.cwd}
-                        sessionId={session.id}
-                        isVisible={isVisible && activeTab === ed.id}
-                        onOpenFile={(path) => openEditor(session.id, path)}
-                        onPreviewFile={(path) => openPreview(session.id, path)}
-                        onIdeRequest={(dirPath) => openIde(session.id, dirPath)}
-                      />
-                    ) : ed.kind === 'preview' ? (
-                      <PreviewView
-                        path={ed.path}
-                        cwd={session.cwd}
-                        sessionId={session.id}
-                        isVisible={isVisible && activeTab === ed.id}
-                      />
-                    ) : ed.kind === 'shell' ? (
-                      <SubShellView
-                        session={session}
-                        tab={ed}
-                        isVisible={isVisible && activeTab === ed.id}
-                        onClose={() => closeTab(session, ed.id)}
-                        onRename={(label) => renameTab(session.id, ed.id, label)}
-                        onUpdateTab={(patch) => updateEditorTab(session.id, ed.id, patch)}
-                        onEditorRequest={openEditor}
-                        onBrowserRequest={openBrowser}
-                        onPreviewRequest={openPreview}
-                        onIdeRequest={openIde}
-                        onSessionCommand={handleSessionCommand}
-                        onCompleteInput={handleCompleteInput}
-                        onUserInput={clearSessionAttention}
-                      />
-                    ) : ed.kind === 'ide' ? (
-                      <IdeView
-                        ref={(handle) => registerEditor(ed.id, handle)}
-                        path={ed.path}
-                        cwd={session.cwd}
-                        sessionId={session.id}
-                        isVisible={isVisible && activeTab === ed.id}
-                        fileService={backendFileService(backend, session.id)}
-                        onDirtyChange={(dirty) => setEditorDirty(session.id, ed.id, dirty)}
-                      />
-                    ) : ed.kind === 'git' ? (
-                      <GitInspectView
-                        session={session}
-                        tab={ed}
-                        isVisible={isVisible && activeTab === ed.id}
-                        onOpenFile={(path) => openEditor(session.id, path)}
-                        onOpenSubShell={(command, cwd, label, agent) =>
-                          openSubShell(session.id, command, cwd, label, agent)
-                        }
-                      />
-                    ) : (
-                      <EditorView
-                        ref={(handle) => registerEditor(ed.id, handle)}
-                        path={ed.path}
-                        cwd={session.cwd}
-                        isVisible={isVisible && activeTab === ed.id}
-                        fileService={backendFileService(backend, session.id)}
-                        onDirtyChange={(dirty) => setEditorDirty(session.id, ed.id, dirty)}
-                      />
-                    )}
+                    {renderEditorView(session, ed, isVisible && activeTab === ed.id)}
                     </ErrorBoundary>
                   </div>
                 ))}
               </div>
+              </>
+              )}
             </div>
           );
         })}
@@ -2639,6 +2949,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             </div>
           );
         })()}
+        </div>
         </div>
         {/* Touch key bar — coarse-pointer devices only, and only while a
             terminal tab (main shell or sub-shell) is active. */}
@@ -2801,10 +3112,15 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         <CloseConfirmModal
           sessionCount={sessions.length}
           runningCount={runningCount}
+          otherWindowCount={otherWindowWorkspaces.size}
           onCancel={() => setCloseConfirmOpen(false)}
+          onCloseThisWindow={() => {
+            setCloseConfirmOpen(false);
+            void removeAndClose();
+          }}
           onConfirm={() => {
             setCloseConfirmOpen(false);
-            void closeNow();
+            closeAllWindows();
           }}
         />
       )}

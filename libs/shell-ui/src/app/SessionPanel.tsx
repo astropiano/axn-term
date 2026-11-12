@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fragment, type CSSProperties } from 'react';
 import { useIconBag, resolveIcon, resolveProcessIcon, type IconBag } from './iconModel';
 import { ContextMenu, menuItemClass } from '../ContextMenu';
-import { Plus, Save, FolderOpen, FolderCog, FolderPlus, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText, PanelLeft } from 'lucide-react';
+import { broadcastSet, useBroadcastMarked, useBroadcastSet } from './broadcastSet';
+import { Plus, Save, FolderOpen, FolderCog, FolderPlus, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText, PanelLeft, Radio } from 'lucide-react';
 import { Trans, useLingui } from '@lingui/react/macro';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
@@ -17,7 +18,7 @@ import { sanitizeSvgIcon } from './sanitizeSvg';
 import { useContextMenuTrigger } from '../useContextMenuTrigger';
 import type { MenuPosition } from '../useContextMenuTrigger';
 import type { AgentCli, ShellSession, Workspace } from '../types';
-import { ptyIdOf } from '../types';
+import { sessionDisplayName, ptyIdOf } from '../types';
 import type { RepoMenuItem, SessionViewPlugin } from './session-plugins/plugin';
 import type { TaskStateSnapshot } from './useAgentTasks';
 import { SetDefaultFolderModal } from './SetDefaultFolderModal';
@@ -60,6 +61,7 @@ interface SessionPanelProps {
   plugins: readonly SessionViewPlugin[];
   onOpenBrowser: (sessionId: string, path: string) => void;
   onOpenIde: (sessionId: string, path: string) => void;
+  onOpenBroadcastDeck?: (sessionId: string) => void;
   onOpenTab: (
     sessionId: string,
     tab: { path: string; kind: 'editor' | 'browser' | 'preview' | 'git' },
@@ -553,6 +555,9 @@ function WorkspaceHeader({
 
 interface SessionContextMenuProps {
   session: ShellSession;
+  /** Multi-selected session ids when this session is in a multi-selection. */
+  bulkIds?: string[];
+  onBulkClose?: (ids: string[]) => void;
   position: MenuPosition;
   onClose: () => void;
   onDuplicate: () => void;
@@ -566,6 +571,8 @@ interface SessionContextMenuProps {
   onSubShell: () => void;
   onBrowse: () => void;
   onIde: () => void;
+  /** Opens the broadcast-deck tab for this session. */
+  onOpenBroadcastDeck?: () => void;
   /** Copies the shell's live working directory; absent where it can't be read. */
   onCopyPath?: () => void;
   onCloseSession: () => void;
@@ -576,6 +583,8 @@ interface SessionContextMenuProps {
 
 function SessionContextMenu({
   session,
+  bulkIds,
+  onBulkClose,
   position,
   onClose,
   onDuplicate,
@@ -586,6 +595,7 @@ function SessionContextMenu({
   onSubShell,
   onBrowse,
   onIde,
+  onOpenBroadcastDeck,
   onCopyPath,
   onCloseSession,
   onTurnIntoWorkspace,
@@ -683,9 +693,9 @@ function SessionContextMenu({
         ) : (
           <div
             className="min-w-0 flex-1 truncate px-2 py-1 text-[10px] text-[var(--text-secondary)]"
-            data-tip={session.name}
+            data-tip={sessionDisplayName(session)}
           >
-            {session.name}
+            {(bulkIds?.length ?? 0) > 1 ? `${bulkIds!.length} sessions selected` : sessionDisplayName(session)}
           </div>
         )}
         {session.customName && (
@@ -701,12 +711,34 @@ function SessionContextMenu({
         )}
       </div>
       <div className="my-1 h-px bg-[var(--border)]" />
-      {!renaming && (
-        <button type="button" onClick={() => setRenaming(true)} className={itemClass}>
-          <Pencil className="h-3.5 w-3.5 shrink-0" />
-          Rename…
-        </button>
+      {!renaming && (bulkIds?.length ?? 0) > 1 && (
+        <>
+          {onBulkClose && (
+            <button
+              type="button"
+              onClick={() => {
+                onBulkClose(bulkIds!);
+                onClose();
+              }}
+              className={itemClass}
+            >
+              <Trash2 className="h-3.5 w-3.5 shrink-0" />
+              {`Close ${bulkIds!.length} sessions`}
+            </button>
+          )}
+          <div className="my-1 h-px bg-[var(--border)]" />
+        </>
       )}
+      {!renaming && (bulkIds?.length ?? 0) <= 1 && (
+        <>
+          <button type="button" onClick={() => setRenaming(true)} className={itemClass}>
+            <Pencil className="h-3.5 w-3.5 shrink-0" />
+            Rename…
+          </button>
+        </>
+      )}
+      {(bulkIds?.length ?? 0) > 1 ? null : (
+        <>
       <button
         type="button"
         onClick={() => {
@@ -775,6 +807,20 @@ function SessionContextMenu({
         <PanelLeft className="h-3.5 w-3.5 shrink-0" />
         IDE view
       </button>
+
+      {onOpenBroadcastDeck && (
+        <button
+          type="button"
+          onClick={() => {
+            onOpenBroadcastDeck();
+            onClose();
+          }}
+          className={itemClass}
+        >
+          <Radio className="h-3.5 w-3.5 shrink-0" />
+          Broadcast deck
+        </button>
+      )}
       {onCopyPath && (
         <button
           type="button"
@@ -856,6 +902,8 @@ function SessionContextMenu({
         <X className="h-3.5 w-3.5 shrink-0" />
         Close session
       </button>
+        </>
+      )}
       </>
       )}
     </ContextMenu>
@@ -979,6 +1027,10 @@ export function SessionItem({
   session,
   workspaces,
   isSelected,
+  isMultiSel,
+  suppressDetails,
+  bulkIds,
+  onBulkClose,
   onOpenSubShell,
   onTurnIntoWorkspace,
   taskState,
@@ -993,6 +1045,7 @@ export function SessionItem({
   plugins,
   onOpenBrowser,
   onOpenIde,
+  onOpenBroadcastDeck,
   onOpenTab,
   onAddSession,
   pluginData,
@@ -1011,7 +1064,13 @@ export function SessionItem({
   /** Active panel filter — matched name substring is highlighted. */
   searchQuery?: string;
   taskState: TaskStateSnapshot | null;
-  onSelect: () => void;
+  onSelect: (e: React.MouseEvent) => void;
+  isMultiSel?: boolean;
+  /** Collapse task/progress/summary details while a multi-selection is active. */
+  suppressDetails?: boolean;
+  /** Other multi-selected sessions when this row is in a multi-selection. */
+  bulkIds?: string[];
+  onBulkClose?: (ids: string[]) => void;
   /** Opens the "Move to workspace" picker for this session. */
   onRequestMove?: () => void;
   /** Moves this session into a new window; absent hides the menu row. */
@@ -1033,6 +1092,7 @@ export function SessionItem({
   plugins: readonly SessionViewPlugin[];
   onOpenBrowser: (sessionId: string, path: string) => void;
   onOpenIde: (sessionId: string, path: string) => void;
+  onOpenBroadcastDeck?: () => void;
   onOpenTab: (
     sessionId: string,
     tab: { path: string; kind: 'editor' | 'browser' | 'preview' | 'git' },
@@ -1049,6 +1109,9 @@ export function SessionItem({
   const backend = useSessionBackend();
   const platform = useShellPlatform();
   const { services } = useShellServices();
+  const broadcastMarked = useBroadcastMarked(session.id);
+  // A lone selection isn't "broadcasting" — badge shows only with ≥2 targets.
+  const broadcastActive = useBroadcastSet().length > 1;
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition>({ x: 0, y: 0 });
   // Summary editor modal — `summaryWidth` snapshots the row's width so the
@@ -1103,15 +1166,17 @@ export function SessionItem({
     <>
       <div
         ref={itemRef}
-        onClick={onSelect}
+        onClick={(e) => onSelect(e)}
         onDragOver={onDragOver}
         onDrop={onDrop}
         className={`relative mb-1 cursor-pointer rounded border transition ${
           isSelected
             ? 'border-[var(--border)] border-l-0 bg-[var(--surface)] pl-px shadow-[inset_3px_0_0_var(--accent)]'
-            : 'border-transparent hover:bg-[var(--surface)]'
+            : isMultiSel
+              ? 'border-[var(--accent)]/40 border-l-0 bg-[var(--accent)]/10 pl-px shadow-[inset_3px_0_0_var(--accent)]'
+              : 'border-transparent hover:bg-[var(--surface)]'
         }${isDragging ? ' opacity-40' : ''}${dropBefore ? ` before:absolute before:-top-px before:left-0 before:right-0 before:h-[3px] before:rounded-full before:bg-[var(--accent)] before:content-['']` : ''}`}
-        data-tip={[session.name, ...rowTips].join('\n')}
+        data-tip={[sessionDisplayName(session), ...rowTips].join('\n')}
       >
         <div
           draggable
@@ -1140,8 +1205,13 @@ export function SessionItem({
             </span>
           </span>
           <span className="min-w-0 flex-1 truncate font-semibold">
-            <Highlight text={session.name} query={searchQuery ?? ''} />
+            <Highlight text={sessionDisplayName(session)} query={searchQuery ?? ''} />
           </span>
+          {broadcastMarked && broadcastActive && (
+            <span className="flex shrink-0" data-tip="broadcast target — receives axn-broadcast">
+              <Radio className="h-3 w-3 text-[var(--accent)]" />
+            </span>
+          )}
           {rowBadges}
           {session.status &&
             (session.status === 'running' && (session.progress ?? 0) > 0 ? (
@@ -1181,7 +1251,7 @@ export function SessionItem({
           </div>
         )}
 
-        {isSelected && (
+        {isSelected && !suppressDetails && (
           <div className="px-2 py-2 text-xs leading-relaxed text-[var(--text-primary)]">
             {session.process && (
               <p className="mb-2 text-[10px] text-[var(--text-secondary)]">
@@ -1256,6 +1326,9 @@ export function SessionItem({
       {menuOpen && (
         <SessionContextMenu
           session={session}
+          bulkIds={bulkIds}
+          onBulkClose={onBulkClose}
+          onOpenBroadcastDeck={onOpenBroadcastDeck}
           position={menuPos}
           onClose={() => setMenuOpen(false)}
           pluginItems={plugins.flatMap((plugin) => {
@@ -1376,6 +1449,7 @@ export function SessionPanel({
   plugins,
   onOpenBrowser,
   onOpenIde,
+  onOpenBroadcastDeck,
   onOpenTab,
   onOpenSubShell,
   onTurnIntoWorkspace,
@@ -1395,6 +1469,46 @@ export function SessionPanel({
     beforeSessionId: string | null;
   } | null>(null);
   const [dragWorkspaceId, setDragWorkspaceId] = useState<string | null>(null);
+  // Session multiselect (Shift=range, Cmd/Ctrl=toggle) — a marking set for
+  // bulk ops (close, broadcast) shown as an accent-tinted row.
+  const multiSelIds = useBroadcastSet();
+  const setMultiSelIds = (ids: Iterable<string>) => broadcastSet.replaceAll([...ids]);
+  const selectAnchorRef = useRef<string | null>(null);
+  const handleSessionSelect = useCallback(
+    (e: React.MouseEvent, sessionId: string, workspaceId: string) => {
+      const wsIds = sessions
+        .filter((s) => s.workspaceId === workspaceId)
+        .map((s) => s.id);
+      if (e.shiftKey && selectAnchorRef.current) {
+        if (wsIds.includes(selectAnchorRef.current)) {
+          // Same-workspace range: anchor row through clicked row.
+          const a = wsIds.indexOf(selectAnchorRef.current);
+          const b = wsIds.indexOf(sessionId);
+          const [lo, hi] = a < b ? [a, b] : [b, a];
+          setMultiSelIds(new Set(wsIds.slice(lo, hi + 1)));
+        } else {
+          // Cross-workspace Shift+click: no shared range — extend the
+          // selection with the clicked session instead of resetting it.
+          const next = new Set(multiSelIds);
+          next.add(sessionId);
+          setMultiSelIds(next);
+        }
+      } else if (e.metaKey || e.ctrlKey) {
+        const next = new Set(multiSelIds);
+        if (!next.delete(sessionId)) next.add(sessionId);
+        setMultiSelIds(next);
+        selectAnchorRef.current = sessionId;
+      } else {
+        if (!(multiSelIds.length === 1 && multiSelIds.includes(sessionId))) {
+          setMultiSelIds(new Set([sessionId]));
+        }
+        selectAnchorRef.current = sessionId;
+        onSelectSession(sessionId);
+        onSelectWorkspace(workspaceId);
+      }
+    },
+    [sessions, multiSelIds, onSelectSession, onSelectWorkspace],
+  );
   // Index in the workspaces array the dragged workspace would land at.
   const [workspaceDropIndex, setWorkspaceDropIndex] = useState<number | null>(null);
   // Header filter — matched name substrings are highlighted in the rows.
@@ -1745,10 +1859,15 @@ export function SessionPanel({
                         workspaces={workspaces}
                         isSelected={isSelected}
                         taskState={isSelected ? taskState : null}
-                        onSelect={() => {
-                          onSelectSession(session.id);
-                          onSelectWorkspace(workspace.id);
-                        }}
+                        isMultiSel={multiSelIds.includes(session.id)}
+                        suppressDetails={multiSelIds.length > 1}
+                        bulkIds={
+                          multiSelIds.length > 1 && multiSelIds.includes(session.id)
+                            ? [...multiSelIds]
+                            : undefined
+                        }
+                        onBulkClose={(ids) => ids.forEach((id) => onCloseSession(id))}
+                        onSelect={(e) => handleSessionSelect(e, session.id, workspace.id)}
                         onRequestMove={
                           onRequestMoveSession ? () => onRequestMoveSession(session.id) : undefined
                         }
@@ -1765,6 +1884,11 @@ export function SessionPanel({
                         plugins={plugins}
                         onOpenBrowser={onOpenBrowser}
                         onOpenIde={onOpenIde}
+                        onOpenBroadcastDeck={
+                          onOpenBroadcastDeck
+                            ? () => onOpenBroadcastDeck(session.id)
+                            : undefined
+                        }
                         onOpenTab={onOpenTab}
                         onOpenSubShell={onOpenSubShell}
                         onAddSession={onAddSession}

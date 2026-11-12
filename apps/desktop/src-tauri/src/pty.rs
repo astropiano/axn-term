@@ -952,6 +952,27 @@ pub(crate) fn take_session_tree(state: &AppState, session_id: &str) -> Result<Ve
         .collect())
 }
 
+/// Kill every session still in the map — SIGHUP, SIGKILL after
+/// `CLOSE_GRACE` — and wait for the kill passes to land (≤ `CLOSE_GRACE`,
+/// the killers run concurrently). Called on every process-exit path so no
+/// PTY child outlives the app: a window destroyed without React teardown,
+/// or a frontend the watchdogs had to bypass, would otherwise leave its
+/// shells running as orphans reparented to init.
+pub(crate) fn kill_all_sessions(state: &AppState) {
+    let sessions: Vec<Session> = match state.sessions.lock() {
+        Ok(mut map) => map.drain().map(|(_, s)| s).collect(),
+        Err(_) => return,
+    };
+    if sessions.is_empty() {
+        return;
+    }
+    log::info!("killing {} leftover session PTY(s) before exit", sessions.len());
+    let waits: Vec<_> = sessions.into_iter().map(end_session).collect();
+    for wait in waits {
+        let _ = wait.join();
+    }
+}
+
 /// How long a closed session's processes get to exit after SIGHUP.
 #[cfg(unix)]
 pub(crate) const CLOSE_GRACE: Duration = Duration::from_millis(500);
@@ -1371,6 +1392,23 @@ mod close_tests {
         let done = eof(reader, "ready");
         end_session(session).join().unwrap();
         done.recv_timeout(Duration::from_secs(5)).expect("terminal still held open");
+    }
+
+    #[test]
+    fn kill_all_sessions_empties_the_map_and_ends_every_process() {
+        let state = AppState::new(false);
+        let mut done = Vec::new();
+        for (id, parent) in [("a", None), ("a-sub", Some("a")), ("b", None)] {
+            let (session, reader) = spawn("echo ready; sleep 100", parent);
+            done.push(eof(reader, "ready"));
+            state.sessions.lock().unwrap().insert(id.into(), session);
+        }
+        kill_all_sessions(&state);
+        assert!(state.sessions.lock().unwrap().is_empty());
+        // Dead children close the slave side — every reader hits EOF/EIO.
+        for rx in done {
+            rx.recv_timeout(Duration::from_secs(5)).expect("terminal still held open");
+        }
     }
 
     #[test]
