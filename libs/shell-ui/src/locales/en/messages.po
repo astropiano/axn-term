@@ -8,11 +8,11 @@ msgstr ""
 msgid "{0} running {1} will be terminated"
 msgstr "{0} running {1} will be terminated"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:511
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:521
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} is running in the main checkout — isolate it in a worktree?"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1146
+#: libs/shell-ui/src/app/SettingsModal.tsx:1147
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 
@@ -20,8 +20,8 @@ msgstr "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{
 #~ msgid "Account"
 #~ msgstr "Account"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1171
-#: libs/shell-ui/src/app/SettingsModal.tsx:1173
+#: libs/shell-ui/src/app/SettingsModal.tsx:1172
+#: libs/shell-ui/src/app/SettingsModal.tsx:1174
 msgid "Add icon"
 msgstr "Add icon"
 
@@ -63,7 +63,7 @@ msgstr "Both"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:113
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1157
+#: libs/shell-ui/src/app/SettingsModal.tsx:1158
 msgid "Cancel"
 msgstr "Cancel"
 
@@ -89,7 +89,7 @@ msgstr "Clients: {0}"
 msgid "Close tab"
 msgstr "Close tab"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:482
+#: libs/shell-ui/src/app/SessionPanel.tsx:484
 msgid "Collapse"
 msgstr "Collapse"
 
@@ -181,12 +181,12 @@ msgid "Default shell"
 msgstr "Default shell"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:537
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:547
 msgid "Delete {0}"
 msgstr "Delete {0}"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:525
+#: libs/shell-ui/src/app/SessionPanel.tsx:527
 msgid "Delete workspace"
 msgstr "Delete workspace"
 
@@ -203,7 +203,7 @@ msgstr "Directory"
 msgid "disabled"
 msgstr "disabled"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:513
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:523
 msgid "Don't ask again"
 msgstr "Don't ask again"
 
@@ -211,11 +211,11 @@ msgstr "Don't ask again"
 msgid "Edit"
 msgstr "Edit"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1100
+#: libs/shell-ui/src/app/SettingsModal.tsx:1101
 msgid "Edit icon"
 msgstr "Edit icon"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:751
+#: libs/shell-ui/src/app/SessionPanel.tsx:753
 msgid "Edit summary…"
 msgstr "Edit summary…"
 
@@ -245,7 +245,7 @@ msgstr "End of session list"
 msgid "Enter code {0} in the browser to finish sign-in."
 msgstr "Enter code {0} in the browser to finish sign-in."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:482
+#: libs/shell-ui/src/app/SessionPanel.tsx:484
 msgid "Expand"
 msgstr "Expand"
 
@@ -278,7 +278,7 @@ msgstr "File previews"
 msgid "Filter plugins…"
 msgstr "Filter plugins…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:192
+#: libs/shell-ui/src/app/SessionPanel.tsx:194
 msgid "Filter sessions…"
 msgstr "Filter sessions…"
 
@@ -294,7 +294,7 @@ msgstr "Fix the path or open the session in your home folder."
 msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
 msgstr "Font for the session/workspace panel. Size scales it relative to the 12px default."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1260
+#: libs/shell-ui/src/app/SettingsModal.tsx:1261
 msgid "Font not installed — keeping the previous font."
 msgstr "Font not installed — keeping the previous font."
 
@@ -302,7 +302,7 @@ msgstr "Font not installed — keeping the previous font."
 msgid "Font size (px)"
 msgstr "Font size (px)"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:528
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:538
 msgid "Force remove"
 msgstr "Force remove"
 
@@ -398,15 +398,15 @@ msgstr "Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTe
 msgid "Move “{sessionName}” to workspace"
 msgstr "Move “{sessionName}” to workspace"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:883
+#: libs/shell-ui/src/app/SessionPanel.tsx:885
 msgid "Move to new window"
 msgstr "Move to new window"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:867
+#: libs/shell-ui/src/app/SessionPanel.tsx:869
 msgid "Move to workspace…"
 msgstr "Move to workspace…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1931
+#: libs/shell-ui/src/app/SessionPanel.tsx:2025
 msgid "New session"
 msgstr "New session"
 
@@ -414,11 +414,11 @@ msgstr "New session"
 msgid "New session button"
 msgstr "New session button"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2004
+#: libs/shell-ui/src/app/SessionPanel.tsx:2098
 msgid "New session in folder…"
 msgstr "New session in folder…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:511
+#: libs/shell-ui/src/app/SessionPanel.tsx:513
 msgid "New session in workspace"
 msgstr "New session in workspace"
 
@@ -432,7 +432,7 @@ msgstr "New session with agent…"
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:212
+#: libs/shell-ui/src/app/SessionPanel.tsx:214
 msgid "New workspace"
 msgstr "New workspace"
 
@@ -444,7 +444,7 @@ msgstr "New workspace “{name}” in this window"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "New workspace “{trimmed}” in this window"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:512
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:522
 msgid "New worktree session"
 msgstr "New worktree session"
 
@@ -452,7 +452,7 @@ msgstr "New worktree session"
 msgid "no clients"
 msgstr "no clients"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1110
+#: libs/shell-ui/src/app/SettingsModal.tsx:1111
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "No icons configured — every session shows the default terminal icon."
 
@@ -507,7 +507,7 @@ msgstr "only this device, not viewing a session"
 msgid "Open"
 msgstr "Open"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1984
+#: libs/shell-ui/src/app/SessionPanel.tsx:2078
 msgid "Open a saved workspace set file"
 msgstr "Open a saved workspace set file"
 
@@ -535,11 +535,11 @@ msgstr "Open log folder…"
 msgid "Open preview in a tab"
 msgstr "Open preview in a tab"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1992
+#: libs/shell-ui/src/app/SessionPanel.tsx:2086
 msgid "Open workspace set from file…"
 msgstr "Open workspace set from file…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1763
+#: libs/shell-ui/src/app/SessionPanel.tsx:1857
 msgid "Open…"
 msgstr "Open…"
 
@@ -569,7 +569,7 @@ msgstr "Pause viewport"
 msgid "permissions:"
 msgstr "permissions:"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1999
+#: libs/shell-ui/src/app/SessionPanel.tsx:2093
 msgid "Pick a folder — the new session starts in it"
 msgstr "Pick a folder — the new session starts in it"
 
@@ -585,7 +585,7 @@ msgstr "Preview"
 msgid "Preview unavailable"
 msgstr "Preview unavailable"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1119
+#: libs/shell-ui/src/app/SettingsModal.tsx:1120
 msgid "Process"
 msgstr "Process"
 
@@ -642,7 +642,7 @@ msgstr "Remote console"
 #~ msgid "Remote control"
 #~ msgstr "Remote control"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1103
+#: libs/shell-ui/src/app/SettingsModal.tsx:1104
 msgid "Remove icon"
 msgstr "Remove icon"
 
@@ -660,7 +660,7 @@ msgstr "Render session summaries (set via axn-session-summary)"
 msgid "requires {0}{1}"
 msgstr "requires {0}{1}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:704
+#: libs/shell-ui/src/app/SessionPanel.tsx:706
 msgid "Reset to process name"
 msgstr "Reset to process name"
 
@@ -696,11 +696,11 @@ msgstr "sandboxed — no permissions (no shell, files or terminal access)"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1165
+#: libs/shell-ui/src/app/SettingsModal.tsx:1166
 msgid "Save"
 msgstr "Save"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1759
+#: libs/shell-ui/src/app/SessionPanel.tsx:1853
 msgid "Save workspace set"
 msgstr "Save workspace set"
 
@@ -799,7 +799,7 @@ msgstr "Sign out"
 msgid "Signed in as {0}"
 msgstr "Signed in as {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:2952
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3311
 msgid "Start workflow…"
 msgstr "Start workflow…"
 
@@ -918,11 +918,11 @@ msgid "Workspace header"
 msgstr "Workspace header"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:527
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:537
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "worktree remove failed (dirty?): {0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:536
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
 msgid "worktree removed — branch {0} kept"
 msgstr "worktree removed — branch {0} kept"

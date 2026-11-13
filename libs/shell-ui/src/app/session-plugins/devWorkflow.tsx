@@ -2,7 +2,7 @@ import { t } from '@lingui/core/macro';
 import { i18n } from '../../i18n';
 import { useEffect, useState } from 'react';
 import { load as loadYaml, dump as dumpYaml } from 'js-yaml';
-import { ChevronLeft, ChevronRight, Columns3, Loader2, Play, Workflow } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Columns3, Loader2, Play, Workflow } from 'lucide-react';
 import type { ShellSession, Workspace } from '../../types';
 import { SessionIcon } from '../SessionPanel';
 import { usePluginSettings } from '../PluginSettingsProvider';
@@ -14,9 +14,12 @@ import { forgeOfRemote } from './forge';
 import { pickFromList } from '../pickerHost';
 import { resolvePersona, agentLauncherFor } from './agentRegistry';
 import type { AgentLaunchTools } from './agentRegistry';
+import { CardChips, ChipView, useCardEnrichment, type CardSubject } from './cardEnrichers';
 import { registerMrActions, type MrActionProps, type MrRef, type MrRowEnv } from './mrActions';
 import { normalizeReviewAgent } from '../gitReview';
-import { checkoutsOf } from '../repoDirectory';
+import { checkoutsOf, localCheckouts, parseRepoRoots } from '../repoDirectory';
+import { ticketListKey, useTicketLists, type Ticket } from './ticketSources';
+import type { PluginSettings } from '../pluginSettings';
 import {
   normPath,
   worktreeBranchFor,
@@ -170,11 +173,36 @@ export interface WorkflowDef {
   /** Runnable actions per state — several named actions may share one state. */
   steps: Record<string, WorkflowAction[]>;
   /**
+   * Ticket link — maps an external tracker's coarse statuses onto this
+   * (finer) workflow. The status comes from a card enricher's fields
+   * (`<source>.status` / `<source>.statusCategory`, e.g. the jira plugin).
+   */
+  tickets?: WorkflowTickets;
+  /**
    * Per-state descriptions — shown in the session banner's lighter detail
    * text. Set by the flat action's `description` or the reserved
    * `description` key inside a named-actions map.
    */
   descriptions?: Record<string, string>;
+}
+
+export interface WorkflowTickets {
+  /** Enricher id whose fields carry the status (default `jira`). */
+  source: string;
+  /** The workflow var holding the ticket key (default `ticket`). */
+  var: string;
+  /**
+   * Tracker status (lowercased) → the workflow state a ticket in that status
+   * enters at. Each mapped state opens a range that runs up to the next
+   * mapped state, so one coarse status covers several local states.
+   */
+  statusMap: Record<string, string>;
+  /**
+   * Source query (JQL for jira) listing the tickets this workflow should
+   * show — those without a session appear as backlog cards in their status's
+   * entry state. Absent: no backlog, only enrichment of bound cards.
+   */
+  query?: string;
 }
 
 export interface WorkflowStateRecord {
@@ -377,11 +405,103 @@ export function parseWorkflows(settings: unknown): WorkflowDef[] {
         return vars.length > 0 ? vars : undefined;
       })(),
       transitions: Object.keys(transitions).length > 0 ? transitions : undefined,
+      tickets: parseWorkflowTickets(w.tickets, states),
       steps,
       descriptions: Object.keys(descriptions).length > 0 ? descriptions : undefined,
     });
   }
   return defs;
+}
+
+/**
+ * `tickets: { source?, var?, status-map: { <status>: <state> } }`. Status
+ * names stay verbatim (matched case-insensitively); entries naming an
+ * unknown state are dropped. An empty map still links the workflow — the
+ * status category then decides (see `ticketRange`).
+ */
+export function parseWorkflowTickets(raw: unknown, states: string[]): WorkflowTickets | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = camelKeys(raw);
+  const statusMap: Record<string, string> = {};
+  const map = r.statusMap;
+  if (map && typeof map === 'object' && !Array.isArray(map)) {
+    for (const [status, state] of Object.entries(map as Record<string, unknown>)) {
+      if (typeof state === 'string' && states.includes(state)) {
+        statusMap[status.trim().toLowerCase()] = state;
+      }
+    }
+  }
+  return {
+    source: typeof r.source === 'string' && r.source ? r.source : 'jira',
+    var: typeof r.var === 'string' && r.var ? r.var : 'ticket',
+    statusMap,
+    query: typeof r.query === 'string' && r.query.trim() ? r.query.trim() : undefined,
+  };
+}
+
+export interface TicketRange {
+  /** The state a ticket in this status enters at. */
+  entry: string;
+  /** Every state the status covers, in workflow order. */
+  states: string[];
+}
+
+/**
+ * The workflow states a ticket status covers. An explicitly mapped status
+ * covers its entry state up to (not including) the next mapped entry state;
+ * statuses sharing an entry share the range. Unmapped statuses fall back to
+ * the status category: `new` → the start state, `done` → the last state,
+ * `indeterminate` → everything in between. Undefined when nothing applies.
+ */
+export function ticketRange(
+  def: WorkflowDef,
+  status: string | undefined,
+  category: string | undefined,
+): TicketRange | undefined {
+  const tickets = def.tickets;
+  if (!tickets) return undefined;
+  const states = def.states;
+  const entry = status ? tickets.statusMap[status.trim().toLowerCase()] : undefined;
+  if (entry) {
+    const from = states.indexOf(entry);
+    const entries = new Set(Object.values(tickets.statusMap).map((s) => states.indexOf(s)));
+    let to = states.length;
+    for (const i of entries) if (i > from && i < to) to = i;
+    return { entry, states: states.slice(from, to) };
+  }
+  const start = states.indexOf(def.start);
+  const last = states.length - 1;
+  switch (category) {
+    case 'new':
+      return { entry: def.start, states: [def.start] };
+    case 'done':
+      return { entry: states[last], states: [states[last]] };
+    case 'indeterminate':
+      return start + 1 < last
+        ? { entry: states[start + 1], states: states.slice(start + 1, last) }
+        : undefined;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * A message when the session's state lies outside what the ticket's status
+ * covers — shown as a badge, never acted on (two writers would ping-pong).
+ */
+export function ticketDrift(
+  def: WorkflowDef,
+  state: string,
+  status: string | undefined,
+  category: string | undefined,
+): string | undefined {
+  const range = ticketRange(def, status, category);
+  if (!range || range.states.includes(state)) return undefined;
+  const span =
+    range.states.length > 1
+      ? `${range.states[0]}…${range.states[range.states.length - 1]}`
+      : range.states[0];
+  return `Ticket is '${status ?? category}' — that covers ${span}, the session is in ${state}`;
 }
 
 function workflowsOf(ctx: Ctx): WorkflowDef[] {
@@ -1894,7 +2014,10 @@ function menuStart(ctx: Ctx, def: WorkflowDef): void {
  * `startMrReview` before `openSession` so `onSessionOpen` binds the review
  * session with the MR vars already in place.
  */
-const pendingReviews = new Map<string, { workflow: string; vars: Record<string, string> }>();
+const pendingReviews = new Map<
+  string,
+  { workflow: string; vars: Record<string, string>; /** Start state; default `def.start`. */ state?: string }
+>();
 
 /**
  * The 'review' contribution rendered on MR rows in glab-mr: resolve the
@@ -2069,6 +2192,122 @@ export function mrWorkspace(env: MrRowEnv, mr: MrRef): Workspace | undefined {
             (short !== undefined && s.repo?.root.endsWith(`/${short}`))),
       ),
   );
+}
+
+/** Session-less environment `startTicket` needs from the board. */
+export interface TicketStartEnv {
+  sessions: ShellSession[];
+  apiFor: (sessionId: string) => Ctx | undefined;
+  selectSession: (sessionId: string) => void;
+  settings: PluginSettings;
+}
+
+/**
+ * Main checkouts a ticket can start in: repo-dir providers (axn-dev) plus the
+ * forge plugins' `repo-roots`, and the repos of open sessions that are not
+ * themselves linked worktrees.
+ */
+async function ticketRepoCandidates(host: Ctx, env: TicketStartEnv): Promise<string[]> {
+  const roots = [
+    ...parseRepoRoots(env.settings['glab-mr']?.repoRoots),
+    ...parseRepoRoots(env.settings['gh-pr']?.repoRoots),
+  ];
+  const found = await localCheckouts((c, cwd) => host.exec(c, cwd), roots).catch(() => []);
+  const paths = new Set<string>();
+  for (const c of found) if (c.isMain !== false) paths.add(normPath(c.path));
+  for (const s of env.sessions) {
+    const root = s.repo?.root;
+    if (root && !/\/worktrees\//.test(root)) paths.add(normPath(root));
+  }
+  return [...paths].sort((a, b) => a.localeCompare(b));
+}
+
+/** Shell script: reuse or create the ticket worktree off the default branch. */
+export function ticketWorktreeScript(root: string, dir: string, branch: string): string {
+  const r = shellQuote(root);
+  const d = shellQuote(dir);
+  const b = shellQuote(branch);
+  return [
+    `if git -C ${d} rev-parse --is-inside-work-tree >/dev/null 2>&1; then exit 0; fi`,
+    `git -C ${r} fetch origin >/dev/null 2>&1 || true`,
+    `base=$(git -C ${r} symbolic-ref -q --short refs/remotes/origin/HEAD || echo HEAD)`,
+    `if git -C ${r} show-ref --verify --quiet refs/heads/${branch}; then`,
+    `  git -C ${r} worktree add ${d} ${b}`,
+    'else',
+    `  git -C ${r} worktree add -b ${b} ${d} "$base"`,
+    'fi',
+  ].join('\n');
+}
+
+/**
+ * Start a backlog ticket: pick a repo, reuse or create
+ * `<parent>/worktrees/<repo>-<KEY>` on `wt/<KEY>` (off origin's default
+ * branch), open a session there and stage the binding — the ticket var
+ * filled, started in the state its tracker status enters at. A session
+ * already open in that worktree is selected instead. Resolves an error
+ * message, or undefined (also when the picker is dismissed).
+ */
+export async function startTicket(
+  def: WorkflowDef,
+  ticket: Ticket,
+  env: TicketStartEnv,
+): Promise<string | undefined> {
+  const host = env.sessions.map((s) => env.apiFor(s.id)).find(Boolean);
+  if (!host) return 'open any session first — it runs the git commands';
+  const candidates = await ticketRepoCandidates(host, env);
+  if (candidates.length === 0) {
+    return 'no local repo found — open a session in the repo, or set repo-roots on glab-mr/gh-pr';
+  }
+  const root = await pickFromList({
+    title: `Start ${ticket.key} in…`,
+    placeholder: 'Repository',
+    items: candidates.map((p) => ({
+      key: p,
+      label: p.split('/').pop() ?? p,
+      detail: p,
+    })),
+  });
+  if (!root) return undefined;
+  const dir = worktreeDirFor(root, ticket.key);
+  const open = env.sessions.find((s) => normPath(s.repo?.root ?? s.cwd) === normPath(dir));
+  if (open) {
+    env.selectSession(open.id);
+    return undefined;
+  }
+  const branch = worktreeBranchFor(ticket.key);
+  try {
+    await host.exec(ticketWorktreeScript(root, dir, branch), root);
+  } catch (e) {
+    return `${ticket.key} worktree failed: ${String(e).split('\n')[0].slice(0, 200)}`;
+  }
+  const varKey = def.tickets?.var ?? 'ticket';
+  const vars = expandVars(def, { [varKey]: ticket.key }, {
+    [`${varKey}_summary`]: ticket.summary,
+    [`${varKey}_url`]: ticket.url,
+    worktree: dir,
+    branch,
+  });
+  const entry = ticketRange(def, ticket.status, ticket.statusCategory)?.entry;
+  pendingReviews.set(normPath(dir), { workflow: def.id, vars, state: entry });
+  axnLog('info', 'dev-workflow', `ticket staged: ${ticket.key} → ${dir} (workflow ${def.id}, state ${entry ?? def.start})`);
+  host.openSession(dir, `${ticket.key} ${ticket.summary}`.trim().slice(0, 80));
+  return undefined;
+}
+
+/** Tickets of `list` no instance of `def` is bound to yet. */
+export function backlogTickets(
+  def: WorkflowDef,
+  tickets: Ticket[],
+  instances: Record<string, WorkflowInstance>,
+): Ticket[] {
+  const varKey = def.tickets?.var ?? 'ticket';
+  const bound = new Set(
+    Object.values(instances)
+      .filter((i) => i.workflow === def.id)
+      .map((i) => i.vars?.[varKey]?.trim().toUpperCase())
+      .filter(Boolean),
+  );
+  return tickets.filter((t) => !bound.has(t.key.toUpperCase()));
 }
 
 /**
@@ -2251,6 +2490,84 @@ registerMrActions('dev-workflow', MrReviewButton);
 // ---------------------------------------------------------------------------
 
 /** A var value rendered compactly — MR/PR urls collapse to a `!N`/`#N` chip. */
+/** A ticket without a session: dimmed, with a Start button. */
+function BacklogCard({ def, ticket, env }: { def: WorkflowDef; ticket: Ticket; env: TicketStartEnv }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <div
+      className="rounded border border-dashed border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[11px] opacity-75 transition hover:opacity-100"
+      data-tip={[ticket.summary, [ticket.type, ticket.assignee ?? 'Unassigned'].filter(Boolean).join(' · ')].join('\n')}
+    >
+      <div className="flex items-center gap-1.5">
+        <ChipView
+          chip={{
+            label: `${ticket.key} · ${ticket.status}`,
+            href: ticket.url,
+            color: ticket.color,
+          }}
+        />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            setErr(null);
+            void startTicket(def, ticket, env)
+              .then((e) => setErr(e ?? null))
+              .catch((e) => setErr(String(e instanceof Error ? e.message : e).slice(0, 200)))
+              .finally(() => setBusy(false));
+          }}
+          data-tip={err ?? `Start ${ticket.key}: worktree + session, workflow bound`}
+          className="ml-auto flex shrink-0 items-center gap-0.5 rounded border border-[var(--border)] px-1 py-px text-[9px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-wait"
+        >
+          {busy ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Play className="h-2.5 w-2.5" />}
+          {err ? <span className="text-[var(--red)]">failed</span> : 'Start'}
+        </button>
+      </div>
+      <div className="mt-0.5 line-clamp-2 break-words text-[10px] text-[var(--text-secondary)]">
+        {ticket.summary}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Enricher chips for a kanban card plus, for a workflow with a `tickets`
+ * link, a drift badge when the session's state lies outside the range the
+ * ticket's tracker status covers.
+ */
+function TicketCardInfo({
+  def,
+  state,
+  subject,
+}: {
+  def: WorkflowDef;
+  state: string;
+  subject: CardSubject;
+}) {
+  const enrichments = useCardEnrichment(subject);
+  const source = def.tickets?.source;
+  const fields = Object.assign({}, ...enrichments.map((e) => e.fields ?? {})) as Record<string, string>;
+  const drift = source
+    ? ticketDrift(def, state, fields[`${source}.status`] || undefined, fields[`${source}.statusCategory`] || undefined)
+    : undefined;
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-1">
+      <CardChips subject={subject} />
+      {drift && (
+        <span
+          data-tip={drift}
+          className="inline-flex items-center gap-0.5 rounded border border-[var(--orange)] px-1 py-px text-[9px] text-[var(--orange)]"
+        >
+          <AlertTriangle className="h-2.5 w-2.5" />
+          drift
+        </span>
+      )}
+    </div>
+  );
+}
+
 function VarValue({ value }: { value: string }) {
   const chip = varChipFor(value);
   const cls = 'truncate font-semibold text-[var(--accent)]';
@@ -2406,6 +2723,18 @@ function DevWorkflowView({
   const instances =
     (appState as { instances?: Record<string, WorkflowInstance> } | undefined)?.instances ?? {};
   const liveIds = new Set(sessions.map((s) => s.id));
+  // Backlog: tickets of linked workflows that no session works on yet.
+  const { pluginSettings: allSettings } = usePluginSettings();
+  const ticketRequests = defs
+    .filter((d) => d.tickets?.query)
+    .map((d) => ({ sourceId: d.tickets!.source, query: d.tickets!.query! }));
+  const ticketLists = useTicketLists(ticketRequests, allSettings);
+  const ticketEnv: TicketStartEnv = {
+    sessions,
+    apiFor: sessionApi,
+    selectSession,
+    settings: allSettings,
+  };
   // Drag & drop: card being dragged + the column currently hovered.
   const [drag, setDrag] = useState<{ sessionId: string; workflow: string; from: string } | null>(
     null,
@@ -2444,6 +2773,12 @@ function DevWorkflowView({
       </div>
       {defs.map((def) => {
         const cards = Object.entries(instances).filter(([, i]) => i.workflow === def.id);
+        const ticketList = def.tickets?.query
+          ? ticketLists.get(ticketListKey(def.tickets.source, def.tickets.query))
+          : undefined;
+        const backlog = ticketList ? backlogTickets(def, ticketList.tickets, instances) : [];
+        const backlogEntry = (t: Ticket) =>
+          ticketRange(def, t.status, t.statusCategory)?.entry ?? def.start;
         return (
           <div key={def.id} className="mb-6">
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
@@ -2575,6 +2910,20 @@ function DevWorkflowView({
                               {session.summary}
                             </div>
                           )}
+                          <TicketCardInfo
+                            def={def}
+                            state={inst.state}
+                            subject={{
+                              vars: live
+                                ? ((sessionApi(sessionId)?.pluginState as BindingState | undefined)
+                                    ?.vars ?? inst.vars)
+                                : inst.vars,
+                              session: {
+                                name: inst.sessionName ?? session?.name,
+                                cwd: inst.cwd,
+                              },
+                            }}
+                          />
                           {(def.vars?.length ?? 0) > 0 && (
                             <div className="mt-0.5 flex flex-col gap-0.5">
                               {def.vars!.map((spec) => {
@@ -2685,11 +3034,21 @@ function DevWorkflowView({
                         </div>
                       );
                     })}
+                  {backlog
+                    .filter((tk) => backlogEntry(tk) === state)
+                    .map((tk) => (
+                      <BacklogCard key={tk.key} def={def} ticket={tk} env={ticketEnv} />
+                    ))}
                 </div>
                 );
               })}
             </div>
-            {cards.length === 0 && (
+            {ticketList?.error && (
+              <div className="text-[10px] text-[var(--red)]" data-tip={ticketList.error}>
+                tickets could not be loaded — see the app log ({def.tickets?.source})
+              </div>
+            )}
+            {cards.length === 0 && backlog.length === 0 && (
               <div className="text-[10px] text-[var(--text-secondary)]">
                 no sessions on this workflow — start one with axn-workflow-start {def.id}
               </div>
@@ -2990,32 +3349,50 @@ export const devWorkflowPlugin: SessionViewPlugin = {
   },
 
   // Under the selected session: "workflow · state" chip + set var chips.
-  render: (ctx) => {
-    const bound = bindingOf(ctx);
-    if (!bound.workflow) return null;
-    const def = workflowsOf(ctx).find((d) => d.id === bound.workflow);
-    const specs = def?.vars ?? [];
-    return (
-      <div className="mb-2 flex flex-wrap items-baseline gap-x-2 text-[10px] text-[var(--text-secondary)]">
-        <span>
-          workflow:{' '}
-          <span className="text-[var(--accent)]">
-            {def?.title ?? bound.workflow} · {bound.state ?? '?'}
-          </span>
-        </span>
-        {specs.map((spec) => {
-          const v = bound.vars?.[spec.key];
-          if (!v) return null;
-          return (
-            <span key={spec.key}>
-              {spec.label ?? spec.key}: <VarValue value={v} />
+  sessionFields: [
+    {
+      id: 'state',
+      label: 'Workflow state',
+      kind: 'block',
+      zone: 'selected',
+      // Searchable: workflow, state and the declared vars the block shows.
+      search: (ctx) => {
+        const bound = bindingOf(ctx);
+        if (!bound.workflow) return null;
+        const def = workflowsOf(ctx).find((d) => d.id === bound.workflow);
+        return [
+          def?.title ?? bound.workflow,
+          bound.state ?? '',
+          ...(def?.vars ?? []).map((spec) => bound.vars?.[spec.key] ?? ''),
+        ];
+      },
+      value: (ctx) => {
+        const bound = bindingOf(ctx);
+        if (!bound.workflow) return null;
+        const def = workflowsOf(ctx).find((d) => d.id === bound.workflow);
+        const specs = def?.vars ?? [];
+        return (
+          <div className="mb-2 flex flex-wrap items-baseline gap-x-2 text-[10px] text-[var(--text-secondary)]">
+            <span>
+              workflow:{' '}
+              <span className="text-[var(--accent)]">
+                {def?.title ?? bound.workflow} · {bound.state ?? '?'}
+              </span>
             </span>
-          );
-        })}
-      </div>
-    );
-  },
-
+            {specs.map((spec) => {
+              const v = bound.vars?.[spec.key];
+              if (!v) return null;
+              return (
+                <span key={spec.key}>
+                  {spec.label ?? spec.key}: <VarValue value={v} />
+                </span>
+              );
+            })}
+          </div>
+        );
+      },
+    },
+  ],
   // Banner buttons declared by showState: ‹/› move through states, the
   // trailing `run:<name>` buttons launch the current state's actions.
   onBannerAction: (ctx, actionId) => {
@@ -3059,7 +3436,12 @@ export const devWorkflowPlugin: SessionViewPlugin = {
         writeBinding(ctx, { vars: pending.vars });
         void (async () => {
           if ((await attachExisting(ctx, def)) !== undefined) return;
-          const res = await transitionTo(ctx, def, def.start, { waitForPrompt: true });
+          const res = await transitionTo(
+            ctx,
+            def,
+            pending.state && def.states.includes(pending.state) ? pending.state : def.start,
+            { waitForPrompt: true },
+          );
           if (res.error) {
             ctx.setAttention({ level: 'warning', message: res.error });
           }

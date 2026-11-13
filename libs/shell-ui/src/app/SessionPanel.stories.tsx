@@ -5,7 +5,7 @@ import type { SessionAttention, ShellSession } from '../types';
 import type { SessionViewPlugin } from './session-plugins/plugin';
 
 // Stub plugin objects — SessionItem only needs id/stateKey to read attention
-// flags (and renderRow if provided) from session.pluginState.
+// flags (and session fields if provided) from session.pluginState.
 const devinStub: SessionViewPlugin = { id: 'devin', title: 'devin', stateKey: 'devin' };
 const gitStub: SessionViewPlugin = { id: 'git-status', title: 'git', stateKey: 'gitStatus' };
 
