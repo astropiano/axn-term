@@ -230,7 +230,28 @@ pub fn run() {
                     let _ = app.emit("menu-reload", ());
                 }
                 "axn-preferences" => {
-                    if let Some(w) = app.get_webview_window("settings") {
+                    // One way to settings: the in-app dialog of a shell
+                    // window — the one the rail's gear opens. The focused
+                    // shell window toggles it ("menu-settings", targeted at
+                    // that window only); see window::settings_target for
+                    // the choice when none is focused. The standalone
+                    // settings window below stays as the fallback for when
+                    // no shell window is open.
+                    let open: Vec<(String, bool)> = app
+                        .webview_windows()
+                        .iter()
+                        .map(|(label, w)| (label.clone(), w.is_focused().unwrap_or(false)))
+                        .collect();
+                    let target = window::settings_target(
+                        open.iter().map(|(label, focused)| (label.as_str(), *focused)),
+                    )
+                    .map(str::to_owned);
+                    if let Some(label) = target {
+                        if let Some(w) = app.get_webview_window(&label) {
+                            let _ = w.set_focus();
+                        }
+                        let _ = app.emit_to(label.as_str(), "menu-settings", ());
+                    } else if let Some(w) = app.get_webview_window("settings") {
                         let _ = w.set_focus();
                     } else {
                         let _ = tauri::WebviewWindowBuilder::new(

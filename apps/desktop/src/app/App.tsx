@@ -73,6 +73,12 @@ export default function App() {
     const pendingReload = listen('menu-reload', () => {
       window.dispatchEvent(new CustomEvent('axn:menu-reload'));
     });
+    // Preferences… (⌘, / Ctrl+,): the native side picks the shell window
+    // that shows the in-app settings dialog and targets only that window —
+    // hence the window-scoped listener, not the global one.
+    const pendingSettings = getCurrentWindow().listen('menu-settings', () => {
+      window.dispatchEvent(new CustomEvent('axn:menu-settings'));
+    });
     // WKWebView scrolled-layer desync (see scrollResync.ts): crossing a
     // Retina↔non-Retina screen boundary can leave hit-testing offset by
     // scrollTop. Nudge all scrollers when the scale factor flips — once now
@@ -85,6 +91,7 @@ export default function App() {
     return () => {
       void pending.then((un) => un());
       void pendingReload.then((un) => un());
+      void pendingSettings.then((un) => un());
       void pendingScale.then((un) => un());
     };
   }, [updateSettings]);

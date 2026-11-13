@@ -116,12 +116,26 @@ pub(crate) fn create_window_with<M: Manager<Wry>>(
     if let Some((x, y)) = window_position(options.x, options.y) {
         builder = builder.position(x, y);
     }
-    // macOS: transparent titlebar — native height/buttons/title stay, but
-    // its fill becomes the window backgroundColor (the theme's header
-    // color pushed via set_titlebar_color) instead of the default gray.
+    // macOS: overlay title bar — the webview extends under it, so the app's
+    // first row (rail top + session-panel toolbar) is the title bar and holds
+    // the traffic lights; the title text is hidden. The frontend reserves
+    // room for the lights (data-titlebar="overlay" → --titlebar-h /
+    // --titlebar-overhang in styles.css) and marks its strips as drag
+    // regions (data-tauri-drag-region, needs core:window:allow-start-dragging).
+    // The window backgroundColor (the theme's chrome colour pushed via
+    // set_titlebar_color) still paints behind the webview while it loads or
+    // resizes. To go back to the native bar: TitleBarStyle::Transparent, drop
+    // hidden_title/traffic_light_position, and stop setting data-titlebar in
+    // apps/desktop/src/app/titlebar.ts.
     #[cfg(target_os = "macos")]
     {
-        builder = builder.title_bar_style(tauri::TitleBarStyle::Transparent);
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true)
+            // Centres the lights in the 40px toolbar row (tao adds the
+            // button height to y for the title bar container) and gives
+            // them the same margin on the left.
+            .traffic_light_position(tauri::LogicalPosition::new(14.0, 19.0));
     }
     builder = builder.visible(false);
     // macOS/Windows: no native file-drop target. The default wry drop handler
@@ -233,9 +247,10 @@ pub(crate) fn create_window(app: AppHandle, options: Option<NewWindowOptions>) -
     Ok(id)
 }
 
-/// Tints the native titlebar to the theme's header color. On macOS the
-/// window's backgroundColor paints the titlebar area; other platforms keep
-/// their default chrome, so the call is a no-op there.
+/// Paints the native window background in the theme's chrome color. On macOS
+/// that is what shows behind the overlay title bar while the webview loads
+/// or resizes; other platforms keep their default chrome, so the call is a
+/// no-op there.
 #[tauri::command]
 pub(crate) fn set_titlebar_color(
     window: tauri::WebviewWindow,
@@ -333,6 +348,72 @@ mod new_window_options_tests {
     }
 }
 
+
+/// True for the labels of shell windows — the terminal UI: "main" and the
+/// secondary / tear-off windows "w-N". The settings and dev windows are not.
+pub(crate) fn is_shell_window_label(label: &str) -> bool {
+    label == "main" || label.starts_with("w-")
+}
+
+/// The shell window that shows the in-app settings dialog when Preferences…
+/// (Cmd/Ctrl+,) is chosen from the app menu, given every open window as
+/// `(label, focused)`: the focused shell window; with none focused (the
+/// menu was used from another window, or the app is in the background)
+/// "main", else the shell window with the lowest label. `None` when no shell
+/// window is open — the caller falls back to the standalone settings window.
+pub(crate) fn settings_target<'a>(
+    windows: impl IntoIterator<Item = (&'a str, bool)>,
+) -> Option<&'a str> {
+    let mut shells: Vec<(&str, bool)> = windows
+        .into_iter()
+        .filter(|(label, _)| is_shell_window_label(label))
+        .collect();
+    shells.sort();
+    shells
+        .iter()
+        .find(|(_, focused)| *focused)
+        .or_else(|| shells.iter().find(|(label, _)| *label == "main"))
+        .or_else(|| shells.first())
+        .map(|(label, _)| *label)
+}
+
+#[cfg(test)]
+mod settings_target_tests {
+    use super::*;
+
+    #[test]
+    fn recognises_shell_window_labels() {
+        assert!(is_shell_window_label("main"));
+        assert!(is_shell_window_label("w-0"));
+        assert!(is_shell_window_label("w-12"));
+        assert!(!is_shell_window_label("settings"));
+        assert!(!is_shell_window_label("dev-settings"));
+        assert!(!is_shell_window_label("window"));
+    }
+
+    #[test]
+    fn the_focused_shell_window_shows_the_dialog() {
+        let windows = [("main", false), ("w-0", true), ("w-1", false)];
+        assert_eq!(settings_target(windows), Some("w-0"));
+        assert_eq!(settings_target([("main", true)]), Some("main"));
+    }
+
+    #[test]
+    fn without_a_focused_shell_window_main_is_preferred() {
+        // The settings window has the focus, or the app is in the background.
+        let windows = [("w-3", false), ("settings", true), ("main", false)];
+        assert_eq!(settings_target(windows), Some("main"));
+        // Main was closed: the lowest secondary window, whatever the order.
+        assert_eq!(settings_target([("w-2", false), ("w-1", false)]), Some("w-1"));
+    }
+
+    #[test]
+    fn no_shell_window_means_the_standalone_settings_window() {
+        assert_eq!(settings_target([("settings", true)]), None);
+        assert_eq!(settings_target([("dev-settings", false), ("settings", false)]), None);
+        assert_eq!(settings_target(std::iter::empty()), None);
+    }
+}
 
 #[cfg(test)]
 mod window_id_tests {
