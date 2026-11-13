@@ -138,6 +138,14 @@ export const ramPlugin: SessionViewPlugin = {
   version: '0.1.0',
   defaultEnabled: false,
   needsMemoryStats: true,
-  render: (ctx) => <RamSessionView sessionId={ctx.session.id} />,
+  sessionFields: [
+    {
+      id: 'memory',
+      label: 'Session memory',
+      kind: 'block',
+      zone: 'selected',
+      value: (ctx) => <RamSessionView sessionId={ctx.session.id} />,
+    },
+  ],
   renderRail: ({ setAppAttention }) => <RamRailView setAppAttention={setAppAttention} />,
 };

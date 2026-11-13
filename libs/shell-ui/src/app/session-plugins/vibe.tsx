@@ -568,18 +568,31 @@ export const vibePlugin: SessionViewPlugin = {
   // "Resume vibe session '<name>'" — the shared last-session capability;
   // offered on idle sessions once a vibe conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'vibe'),
-  render: (ctx) => (
-    <>
-      {agentResumePanel(ctx, 'vibe')}
-      <VibeTasks ctx={ctx} />
-    </>
-  ),
-  renderRow: (ctx) => <VibeRow ctx={ctx} />,
-  rowTip: (ctx) =>
-    sessionNameRequiresAttention(ctx.getSession().name)
-      ? `!: session name indicates action required`
-      : null,
-
+  sessionFields: [
+    {
+      id: 'attention',
+      label: 'Vibe attention marker',
+      kind: 'inline',
+      zone: 'title',
+      value: (ctx) => <VibeRow ctx={ctx} />,
+      tip: (ctx) =>
+        sessionNameRequiresAttention(ctx.getSession().name)
+          ? `!: session name indicates action required`
+          : null,
+    },
+    {
+      id: 'panel',
+      label: 'Vibe',
+      kind: 'block',
+      zone: 'selected',
+      value: (ctx) => (
+        <>
+          {agentResumePanel(ctx, 'vibe')}
+          <VibeTasks ctx={ctx} />
+        </>
+      ),
+    },
+  ],
   pendingRestore: (ctx) => {
     if (!getVibeSettings(ctx).restoreSession) return undefined;
     const remembered = rememberedVibeSession(ctx);

@@ -1,3 +1,4 @@
+import type { SessionZone } from '../sessionCardLayout';
 import type { ReactNode } from 'react';
 import type { DirEntry, PathStat, SessionBackend } from '@axn-term/session-backend';
 import type { AgentHookSpec } from '@axn-term/plugin-sdk';
@@ -435,6 +436,8 @@ export interface PluginSettingField {
   type: 'boolean' | 'number' | 'string';
   /** When set for `type: 'string'`, renders a select instead of a text input. */
   options?: { value: string; label: string }[];
+  /** For `type: 'string'`: a password input (tokens) — the value is masked. */
+  secret?: boolean;
   /** Effective value while the key is unset in plugins.yaml. */
   default?: boolean | number | string;
 }
@@ -445,6 +448,79 @@ export interface PluginSettingsViewContext {
   settings: Record<string, unknown>;
   /** Shallow-merge a patch into the section and persist plugins.yaml. */
   update: (patch: Record<string, unknown>) => void;
+}
+
+/**
+ * One piece of session information a plugin offers the session panel (see
+ * `SessionViewPlugin.sessionFields`). The plugin only provides it — where
+ * it shows (title row, always-visible rows, the selected card) is the
+ * panel's layout (`app/sessionCardLayout.ts`, the `sessionCard` setting).
+ */
+export interface SessionField {
+  /** Local id; the layout addresses it as `<pluginId>.<id>`. */
+  id: string;
+  /** Name in the layout editor/settings. */
+  label: string;
+  /**
+   * `inline`: compact (a badge/chip, ~9-10px, single line) — fits the title
+   * row and `·`-joined rows. `block`: full width, possibly multi-line — never
+   * placed in the title row.
+   */
+  kind: 'inline' | 'block';
+  /** Where the default layout puts it. */
+  zone: SessionZone;
+  /** The content for this session — null/false when there is nothing. */
+  value: (ctx: SessionViewContext & PluginApi) => ReactNode;
+  /**
+   * Tooltip line(s) for the card explaining the value — one
+   * `<marker>: <meaning>` line each (plain text). Only collected while the
+   * field is shown; return null when `value` is empty.
+   */
+  tip?: (ctx: SessionViewContext & PluginApi) => string | string[] | null;
+  /**
+   * Plain-text term(s) the panel filter matches for this field — declaring
+   * it makes the field searchable. Only placed fields are searched (a field
+   * the layout hides is never matched — the user cannot see why a session
+   * would match), so mirror `value`'s gate: return null when nothing shows.
+   */
+  search?: (ctx: SessionViewContext & PluginApi) => string | string[] | null;
+}
+
+/**
+ * Hooks of the pre-field card API, still honoured on external `.mjs`
+ * plugins through `pluginSessionFields` (`renderRow` → a title field,
+ * `render` → a selected-card block).
+ */
+interface LegacyCardHooks {
+  render?: (ctx: SessionViewContext & PluginApi) => ReactNode;
+  renderRow?: (ctx: SessionViewContext & PluginApi) => ReactNode;
+  rowTip?: (ctx: SessionViewContext & PluginApi) => string | string[] | null;
+}
+
+/** One of the plugin's session fields by local id (tests, layout editor). */
+export function findSessionField(plugin: SessionViewPlugin, id: string): SessionField | undefined {
+  return pluginSessionFields(plugin).find((f) => f.id === id);
+}
+
+/** The plugin's session fields — declared ones, else adapted legacy hooks. */
+export function pluginSessionFields(plugin: SessionViewPlugin): SessionField[] {
+  if (plugin.sessionFields) return plugin.sessionFields;
+  const legacy = plugin as SessionViewPlugin & LegacyCardHooks;
+  const out: SessionField[] = [];
+  if (legacy.renderRow) {
+    out.push({
+      id: 'row',
+      label: `${plugin.title} (badge)`,
+      kind: 'inline',
+      zone: 'title',
+      value: legacy.renderRow,
+      tip: legacy.rowTip,
+    });
+  }
+  if (legacy.render) {
+    out.push({ id: 'panel', label: plugin.title, kind: 'block', zone: 'selected', value: legacy.render });
+  }
+  return out;
 }
 
 export interface SessionViewPlugin {
@@ -541,7 +617,6 @@ export interface SessionViewPlugin {
     actionId: string,
     attention: SessionAttention,
   ) => void;
-  render?: (ctx: SessionViewContext & PluginApi) => ReactNode;
   /** Pinned rail items render first, above the reorderable ones, and are
    * not draggable. */
   pinned?: boolean;
@@ -643,20 +718,13 @@ export interface SessionViewPlugin {
    */
   repoDirs?: (ctx: RepoDirsContext) => Promise<RepoDir[]>;
   /**
-   * Render a compact element inside the session row in the left panel —
-   * shown for every session, whether selected or not. Keep it tiny (single
-   * line, ~9-10px); anything bigger belongs in `render`.
+   * Session information this plugin offers the session panel card — the
+   * panel lays it out (title row / always-visible rows / selected card) from
+   * the `sessionCard` setting or each field's default `zone`. This replaced
+   * `renderRow`/`rowTip`/`render`, which external `.mjs` plugins may still
+   * declare (`pluginSessionFields` adapts them).
    */
-  renderRow?: (ctx: SessionViewContext & PluginApi) => ReactNode;
-  /**
-   * Text line(s) contributed to the session-card tooltip explaining the
-   * marker `renderRow` shows — one `<marker>: <meaning>` line each, joined
-   * with the session name (`whitespace-pre-line`, plain text only). Must
-   * mirror renderRow's visibility gate: return `null` when the badge is not
-   * rendered. Works for external `.mjs` plugins too; the sandboxed iframe
-   * tier cannot implement it (tips are collected synchronously).
-   */
-  rowTip?: (ctx: SessionViewContext & PluginApi) => string | string[] | null;
+  sessionFields?: SessionField[];
   onClose?: (ctx: SessionViewContext & PluginApi) => void | Promise<void>;
   /**
    * A sub-shell tab PTY owned by this session exited — `tabId` is the tab/PTY

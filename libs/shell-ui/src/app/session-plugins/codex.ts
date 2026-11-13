@@ -127,8 +127,15 @@ export const codexPlugin: SessionViewPlugin = {
   // "Resume codex session" — the shared last-session capability; offered on
   // idle sessions once a codex conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'codex'),
-  render: (ctx) => agentResumePanel(ctx, 'codex'),
-
+  sessionFields: [
+    {
+      id: 'resume',
+      label: 'Resume Codex',
+      kind: 'block',
+      zone: 'selected',
+      value: (ctx) => agentResumePanel(ctx, 'codex'),
+    },
+  ],
   // A submitted command starts new shell work — a terminal badge left by a
   // finished agent run no longer applies, and a stale needs-you flag is gone.
   onCommand: (ctx) => {

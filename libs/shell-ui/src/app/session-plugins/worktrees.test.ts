@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { findSessionField } from './plugin';
 import type { ShellSession, Workspace } from '../../types';
 import type { PluginApi, SessionViewContext } from './plugin';
 import {
@@ -561,12 +562,12 @@ describe('rowTip', () => {
       {},
       { worktree: { repoRoot: REPO, path: `${REPO}-wt-feat`, branch: 'wt/feat' } },
     );
-    expect(worktreesPlugin.rowTip?.(h.ctx)).toBe(
+    expect(findSessionField(worktreesPlugin, 'worktree')!.tip!(h.ctx)).toBe(
       `⎇ wt/feat: linked worktree — ${REPO}-wt-feat`,
     );
   });
 
   it('returns null without a worktree', () => {
-    expect(worktreesPlugin.rowTip?.(makeHarness().ctx)).toBeNull();
+    expect(findSessionField(worktreesPlugin, 'worktree')!.tip!(makeHarness().ctx)).toBeNull();
   });
 });

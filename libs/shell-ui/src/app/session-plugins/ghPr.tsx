@@ -17,6 +17,7 @@ import { getSessionViewPlugins, isPluginEnabled } from './index';
 import { PluginIcon } from '../SessionPanel';
 import type { PluginSettings } from '../pluginSettings';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
+import { CardChips } from './cardEnrichers';
 import { MrDescription } from './mrDescription';
 import { shellQuote } from '../../shellQuote';
 import {
@@ -962,6 +963,7 @@ function PrRow({ pr, badge, env, showDescription = true }: { showDescription?: b
             </span>
           )}
         </a>
+        <CardChips subject={{ mr: pr }} className="mt-0.5" />
         {showDescription && pr.description && <MrDescription markdown={pr.description} />}
       </div>
       <PrActions pr={pr} env={env} />
@@ -1223,45 +1225,74 @@ export const ghPrPlugin: SessionViewPlugin = {
     sessionLastFetch.delete(ctx.session.id);
     sessionLastKey.delete(ctx.session.id);
   },
-  render: (ctx) => {
-    const settings = ctx.pluginSettings as
-      | { showInPanel?: boolean; showInHeader?: boolean }
-      | undefined;
-    // `showInHeader` is the legacy key so existing plugins.yaml values apply.
-    if ((settings?.showInPanel ?? settings?.showInHeader) === false) return null;
-    return <SessionPrs ctx={ctx} />;
-  },
-  renderRow: (ctx) => {
-    const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
-    if (settings?.showInTitle === false) return null;
-    const state = ctx.pluginState as { prs?: SessionPr[] } | undefined;
-    const prs = state?.prs ?? [];
-    if (prs.length === 0) return null;
-    const first = prs[0];
-    return (
-      <a
-        href={first.url}
-        target="_blank"
-        rel="noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        data-tip={['GitHub', ...prs.map((m) => `${m.reference} ${m.title}`)].join('\n')}
-        className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)] hover:underline"
-      >
-        <GitPullRequest className="h-2.5 w-2.5" />
-        {first.reference}
-        {prs.length > 1 ? `+${prs.length - 1}` : ''}
-      </a>
-    );
-  },
-  rowTip: (ctx) => {
-    const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
-    if (settings?.showInTitle === false) return null;
-    const prs =
-      (ctx.pluginState as { prs?: SessionPr[] } | undefined)?.prs ?? [];
-    if (prs.length === 0) return null;
-    const first = prs[0];
-    return `${first.reference}${prs.length > 1 ? ` +${prs.length - 1}` : ''}: open pull request${prs.length > 1 ? 's' : ''} on this branch — ${first.title}`;
-  },
+  sessionFields: [
+    {
+      id: 'pr',
+      label: 'GitHub pull request',
+      kind: 'inline',
+      zone: 'title',
+      // Searchable: the refs (`!622`/`#82`) and titles.
+      search: (ctx) => {
+        const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
+        if (settings?.showInTitle === false) return null;
+        const items = (ctx.pluginState as { prs?: SessionPr[] } | undefined)?.prs ?? [];
+        return items.flatMap((m) => [m.reference, m.title]);
+      },
+      value: (ctx) => {
+        const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
+        if (settings?.showInTitle === false) return null;
+        const state = ctx.pluginState as { prs?: SessionPr[] } | undefined;
+        const prs = state?.prs ?? [];
+        if (prs.length === 0) return null;
+        const first = prs[0];
+        return (
+          <a
+            href={first.url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            data-tip={['GitHub', ...prs.map((m) => `${m.reference} ${m.title}`)].join('\n')}
+            className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)] hover:underline"
+          >
+            <GitPullRequest className="h-2.5 w-2.5" />
+            {first.reference}
+            {prs.length > 1 ? `+${prs.length - 1}` : ''}
+          </a>
+        );
+      },
+      tip: (ctx) => {
+        const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
+        if (settings?.showInTitle === false) return null;
+        const prs =
+          (ctx.pluginState as { prs?: SessionPr[] } | undefined)?.prs ?? [];
+        if (prs.length === 0) return null;
+        const first = prs[0];
+        return `${first.reference}${prs.length > 1 ? ` +${prs.length - 1}` : ''}: open pull request${prs.length > 1 ? 's' : ''} on this branch — ${first.title}`;
+      },
+    },
+    {
+      id: 'prs',
+      label: 'GitHub pull requests',
+      kind: 'block',
+      zone: 'selected',
+      search: (ctx) => {
+        const settings = ctx.pluginSettings as
+          | { showInPanel?: boolean; showInHeader?: boolean }
+          | undefined;
+        if ((settings?.showInPanel ?? settings?.showInHeader) === false) return null;
+        const items = (ctx.pluginState as { prs?: SessionPr[] } | undefined)?.prs ?? [];
+        return items.flatMap((m) => [m.reference, m.title]);
+      },
+      value: (ctx) => {
+        const settings = ctx.pluginSettings as
+          | { showInPanel?: boolean; showInHeader?: boolean }
+          | undefined;
+        // `showInHeader` is the legacy key so existing plugins.yaml values apply.
+        if ((settings?.showInPanel ?? settings?.showInHeader) === false) return null;
+        return <SessionPrs ctx={ctx} />;
+      },
+    },
+  ],
   renderRail: ({
     pluginSettings,
     viewActive,

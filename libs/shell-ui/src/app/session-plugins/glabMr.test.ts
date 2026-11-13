@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { findSessionField } from './plugin';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -199,40 +200,40 @@ function ctx(
 
 describe('visibility settings', () => {
   it('renders the panel and title indicator by default', () => {
-    expect(glabMrPlugin.render?.(ctx(undefined))).not.toBeNull();
-    expect(glabMrPlugin.render?.(ctx({}))).not.toBeNull();
-    expect(glabMrPlugin.renderRow?.(ctx({}))).not.toBeNull();
+    expect(findSessionField(glabMrPlugin, 'mrs')!.value(ctx(undefined))).not.toBeNull();
+    expect(findSessionField(glabMrPlugin, 'mrs')!.value(ctx({}))).not.toBeNull();
+    expect(findSessionField(glabMrPlugin, 'mr')!.value(ctx({}))).not.toBeNull();
   });
 
   it('hides the panel when showInPanel is false', () => {
-    expect(glabMrPlugin.render?.(ctx({ showInPanel: false }))).toBeNull();
-    expect(glabMrPlugin.renderRow?.(ctx({ showInPanel: false }))).not.toBeNull();
+    expect(findSessionField(glabMrPlugin, 'mrs')!.value(ctx({ showInPanel: false }))).toBeNull();
+    expect(findSessionField(glabMrPlugin, 'mr')!.value(ctx({ showInPanel: false }))).not.toBeNull();
   });
 
   it('keeps the legacy showInHeader key hiding the panel', () => {
-    expect(glabMrPlugin.render?.(ctx({ showInHeader: false }))).toBeNull();
+    expect(findSessionField(glabMrPlugin, 'mrs')!.value(ctx({ showInHeader: false }))).toBeNull();
   });
 
   it('hides the title indicator when showInTitle is false', () => {
-    expect(glabMrPlugin.renderRow?.(ctx({ showInTitle: false }))).toBeNull();
-    expect(glabMrPlugin.render?.(ctx({ showInTitle: false }))).not.toBeNull();
+    expect(findSessionField(glabMrPlugin, 'mr')!.value(ctx({ showInTitle: false }))).toBeNull();
+    expect(findSessionField(glabMrPlugin, 'mrs')!.value(ctx({ showInTitle: false }))).not.toBeNull();
   });
 });
 
 describe('rowTip', () => {
   it('explains the MR badge', () => {
-    expect(glabMrPlugin.rowTip?.(ctx({}))).toBe(
+    expect(findSessionField(glabMrPlugin, 'mr')!.tip!(ctx({}))).toBe(
       '!1: open merge request on this branch — mr',
     );
     const two = [mr(), mr({ key: 'a/b!2', iid: 2, reference: '!2' })];
-    expect(glabMrPlugin.rowTip?.(ctx({}, two))).toBe(
+    expect(findSessionField(glabMrPlugin, 'mr')!.tip!(ctx({}, two))).toBe(
       '!1 +1: open merge requests on this branch — mr',
     );
   });
 
   it('mirrors the badge visibility gate', () => {
-    expect(glabMrPlugin.rowTip?.(ctx({ showInTitle: false }))).toBeNull();
-    expect(glabMrPlugin.rowTip?.(ctx({}, []))).toBeNull();
+    expect(findSessionField(glabMrPlugin, 'mr')!.tip!(ctx({ showInTitle: false }))).toBeNull();
+    expect(findSessionField(glabMrPlugin, 'mr')!.tip!(ctx({}, []))).toBeNull();
   });
 });
 
@@ -448,5 +449,14 @@ describe('refreshMrOverview failures', () => {
     runtime(async () => JSON.stringify({ data: { currentUser: null } }));
     await refreshMrOverview();
     expect(currentMrOverview()).toMatchObject({ status: 'error', failure: 'signed-out' });
+  });
+});
+
+describe('search', () => {
+  it('offers MR refs and titles, gated like the badge', () => {
+    const terms = findSessionField(glabMrPlugin, 'mr')!.search!(ctx({})) as string[];
+    expect(terms.length).toBeGreaterThan(0);
+    expect(terms.some((t) => t.startsWith('!'))).toBe(true);
+    expect(findSessionField(glabMrPlugin, 'mr')!.search!(ctx({ showInTitle: false }))).toBeNull();
   });
 });

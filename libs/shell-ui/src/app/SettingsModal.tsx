@@ -1022,7 +1022,8 @@ function PluginSettingRow({
             </select>
           ) : (
             <input
-              type={field.type}
+              type={field.secret ? 'password' : field.type}
+              autoComplete={field.secret ? 'off' : undefined}
               value={typeof value === 'number' || typeof value === 'string' ? value : ''}
               onChange={(e) =>
                 onChange(

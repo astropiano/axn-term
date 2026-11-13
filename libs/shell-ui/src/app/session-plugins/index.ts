@@ -3,6 +3,7 @@ import { gitInspectPlugin } from './gitInspect';
 import { awesomeListPlugin } from './awesomeList';
 import { glabMrPlugin } from './glabMr';
 import { ghPrPlugin } from './ghPr';
+import { jiraPlugin } from './jira';
 import { devinPlugin } from './devinTasks';
 import { claudePlugin } from './claude';
 import { codexPlugin } from './codex';
@@ -35,6 +36,9 @@ export { gitInspectPlugin } from './gitInspect';
 export { awesomeListPlugin } from './awesomeList';
 export { glabMrPlugin } from './glabMr';
 export { ghPrPlugin } from './ghPr';
+export { jiraPlugin } from './jira';
+export { registerCardEnricher, CardChips } from './cardEnrichers';
+export type { CardEnricher, CardSubject, CardEnrichment, CardChip } from './cardEnrichers';
 export { devinPlugin } from './devinTasks';
 export { claudePlugin } from './claude';
 export { codexPlugin } from './codex';
@@ -60,6 +64,7 @@ const defaultPlugins: SessionViewPlugin[] = [
   awesomeListPlugin,
   glabMrPlugin,
   ghPrPlugin,
+  jiraPlugin,
   devinPlugin,
   claudePlugin,
   codexPlugin,
