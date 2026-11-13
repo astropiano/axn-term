@@ -151,7 +151,7 @@ export function MobileKeyBar({ target }: { target: () => TerminalInput | undefin
             data-tip={key.tip}
             aria-label={key.tip}
             aria-pressed={latched}
-            className={`flex h-7 min-w-8 shrink-0 select-none items-center justify-center rounded border px-1.5 font-mono text-[11px] transition ${
+            className={`flex h-7 min-w-8 shrink-0 select-none items-center justify-center rounded border px-1.5 font-mono text-xs transition ${
               latched
                 ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--text-inverted)]'
                 : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] active:bg-[var(--surface-hover)]'

@@ -23,10 +23,10 @@ function SvgPreview({ ctx }: { ctx: FilePreviewContext }) {
   }, [ctx]);
 
   if (error) {
-    return <div className="p-4 text-[11px] text-[var(--red)]">{error}</div>;
+    return <div className="p-4 text-xs text-[var(--red)]">{error}</div>;
   }
   if (html === null) {
-    return <div className="p-4 text-[11px] text-[var(--text-secondary)]">Loading…</div>;
+    return <div className="p-4 text-xs text-[var(--text-secondary)]">Loading…</div>;
   }
   // Inlined (sanitized) so the SVG scales with the container instead of being
   // rasterized like a bitmap image.

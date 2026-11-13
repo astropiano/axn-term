@@ -63,14 +63,14 @@ export function TabContextMenu({
   };
 
   const itemClass =
-    'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]';
+    'flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-xs text-[var(--text-primary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-2)]';
 
   return (
     <ContextMenu
       x={position.x}
       y={position.y}
       onClose={onClose}
-      className="rounded-lg bg-[var(--surface)] p-1 shadow-2xl"
+      className="rounded-[var(--radius-lg)] bg-[var(--elevated)] p-1 shadow-[var(--shadow-pop)]"
     >
       <div className="flex items-center gap-1 pr-1">
         {renaming && onRename ? (
@@ -88,11 +88,11 @@ export function TabContextMenu({
                 setRenaming(false);
               }
             }}
-            className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--bg)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none"
+            className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none"
           />
         ) : (
           <div
-            className="min-w-0 flex-1 truncate px-2 py-1 text-[10px] text-[var(--text-secondary)]"
+            className="min-w-0 flex-1 truncate px-2 py-1 text-[11px] text-[var(--text-secondary)]"
             data-tip={tab.kind === 'shell' ? tabLabel : tab.path}
           >
             {tabLabel}
@@ -110,7 +110,7 @@ export function TabContextMenu({
           </button>
         )}
       </div>
-      <div className="my-1 h-px bg-[var(--border)]" />
+      <div className="my-1 h-px bg-[var(--hairline)]" />
       {!renaming && onRename && (
         <button type="button" onClick={() => setRenaming(true)} className={itemClass}>
           <Pencil className="h-3.5 w-3.5 shrink-0" />
@@ -145,7 +145,7 @@ export function TabContextMenu({
       )}
       {moveTargets && moveTargets.length > 0 && (
         <>
-          <div className="px-2 pb-0.5 pt-1 text-[9px] uppercase tracking-wide text-[var(--text-secondary)]">
+          <div className="px-2 pb-0.5 pt-1 text-[11px] font-semibold text-[var(--text-secondary)]">
             Move to
           </div>
           {moveTargets.map((target) => (
@@ -162,7 +162,7 @@ export function TabContextMenu({
               <span className="truncate">{target.label}</span>
             </button>
           ))}
-          <div className="my-1 h-px bg-[var(--border)]" />
+          <div className="my-1 h-px bg-[var(--hairline)]" />
         </>
       )}
       <button

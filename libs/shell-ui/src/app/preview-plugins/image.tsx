@@ -38,10 +38,10 @@ function ImagePreview({ ctx }: { ctx: FilePreviewContext }) {
   }, [ctx]);
 
   if (error) {
-    return <div className="p-4 text-[11px] text-[var(--red)]">{error}</div>;
+    return <div className="p-4 text-xs text-[var(--red)]">{error}</div>;
   }
   if (!url) {
-    return <div className="p-4 text-[11px] text-[var(--text-secondary)]">Loading…</div>;
+    return <div className="p-4 text-xs text-[var(--text-secondary)]">Loading…</div>;
   }
   return (
     <div className="relative flex h-full items-center justify-center p-4">
@@ -59,7 +59,7 @@ function ImagePreview({ ctx }: { ctx: FilePreviewContext }) {
               .catch(() => {});
           }}
           data-tip={t`Copy image to clipboard`}
-          className="absolute right-2 top-2 flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-[var(--text-primary)] transition hover:text-[var(--accent)]"
+          className="absolute right-2 top-2 flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 text-[11px] text-[var(--text-primary)] transition hover:text-[var(--accent)]"
         >
           <ImageIcon className="h-3 w-3" />
           <Trans>Copy</Trans>

@@ -142,7 +142,7 @@ function CommitHoverCard({
       }}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
-      className="fixed z-[70] max-w-md rounded border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[10px] leading-snug text-[var(--text-primary)] shadow-lg"
+      className="fixed z-[70] max-w-md rounded border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[11px] leading-snug text-[var(--text-primary)] shadow-lg"
       style={pos ? { left: pos.left, top: pos.top } : { left: 0, top: 0, visibility: 'hidden' }}
     >
       <button
@@ -152,12 +152,12 @@ function CommitHoverCard({
           void services.copyText(c.hash);
           setCopied(true);
         }}
-        className="group flex w-full items-baseline gap-2 text-left font-mono text-[11px]"
+        className="group flex w-full items-baseline gap-2 text-left font-mono text-xs"
       >
         <span className="whitespace-nowrap text-[var(--accent)] group-hover:underline">
           {c.hash}
         </span>
-        <span className="shrink-0 font-sans text-[9px] text-[var(--text-secondary)]">
+        <span className="shrink-0 font-sans text-[10px] text-[var(--text-secondary)]">
           {copied ? '✓ copied' : 'click to copy'}
         </span>
       </button>
@@ -365,10 +365,10 @@ export function GitGraph({ rows, laneCount, selectedHash, onSelect, onContextMen
               e.preventDefault();
               onContextMenu(c, { x: e.clientX, y: e.clientY });
             }}
-            className={`absolute flex cursor-pointer items-center gap-2 overflow-hidden whitespace-nowrap px-2 text-[11px] transition ${
+            className={`absolute flex cursor-pointer items-center gap-2 overflow-hidden whitespace-nowrap px-2 text-xs transition ${
               selected
                 ? 'bg-[var(--surface)] text-[var(--text-primary)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]'
             }`}
             style={{
               top: i * ROW_H,
@@ -384,7 +384,7 @@ export function GitGraph({ rows, laneCount, selectedHash, onSelect, onContextMen
             {chips.map((chip, j) => (
               <span
                 key={j}
-                className={`shrink-0 rounded px-1 py-px font-mono text-[9px] leading-tight ${chipColor[chip.kind]}`}
+                className={`shrink-0 rounded px-1 py-px font-mono text-[10px] leading-tight ${chipColor[chip.kind]}`}
               >
                 {chip.label}
               </span>
@@ -396,7 +396,7 @@ export function GitGraph({ rows, laneCount, selectedHash, onSelect, onContextMen
             >
               {c.subject || '(no message)'}
             </span>
-            <span className="ml-auto flex shrink-0 items-center gap-2 font-mono text-[9px]">
+            <span className="ml-auto flex shrink-0 items-center gap-2 font-mono text-[10px]">
               {c.hash !== '' && rowExtra?.(c)}
               <span className="max-w-28 truncate">{c.author}</span>
               <span>{relTime(c.time)}</span>

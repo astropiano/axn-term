@@ -14,9 +14,9 @@ const tabs: EditorTab[] = [
 ];
 
 /**
- * The three h-8 strips side by side — panel header (buttons + filter),
- * plugin banner and session tab strip — all sharing px-1 edges, gap-1
- * spacing and h-6 controls.
+ * The chrome strips side by side — session-panel toolbar (buttons, then the
+ * filter row), plugin banner and session tab strip — all borderless, on the
+ * shared design tokens (styles.css).
  */
 function Strips() {
   const [query, setQuery] = useState('');
@@ -24,19 +24,21 @@ function Strips() {
   return (
     <div className="flex flex-col gap-4">
       <div className="w-96 min-w-40 resize-x overflow-hidden outline outline-1 -outline-offset-1 outline-[var(--border)]">
-        <div className="flex h-8 shrink-0 items-center justify-between gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1">
-          <div className="flex min-w-0 items-center gap-1">
+        <div className="bg-[var(--chrome)]">
+          <div className="flex h-10 shrink-0 items-center gap-0.5 px-2">
             <IconButton title="New workspace" onClick={() => {}}>
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-4 w-4" />
             </IconButton>
             <IconButton title="Save workspace set" onClick={() => {}}>
-              <Save className="h-3.5 w-3.5" />
+              <Save className="h-4 w-4" />
             </IconButton>
             <IconButton title="Open…" onClick={() => {}}>
-              <FolderOpen className="h-3.5 w-3.5" />
+              <FolderOpen className="h-4 w-4" />
             </IconButton>
           </div>
-          <PanelSearch value={query} onChange={setQuery} />
+          <div className="flex px-2.5 pb-2">
+            <PanelSearch value={query} onChange={setQuery} />
+          </div>
         </div>
       </div>
       <div className="w-[560px] min-w-40 resize-x overflow-hidden outline outline-1 -outline-offset-1 outline-[var(--border)]">

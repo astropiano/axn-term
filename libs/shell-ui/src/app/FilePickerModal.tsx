@@ -141,8 +141,8 @@ export function FilePickerModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="flex h-[26rem] w-[28rem] max-w-[90vw] flex-col rounded border border-[var(--border)] bg-[var(--surface)] p-4 shadow-lg">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)]">
+      <div className="flex h-[26rem] w-[28rem] max-w-[90vw] flex-col rounded-[var(--radius-xl)] bg-[var(--elevated)] p-5 shadow-[var(--shadow-pop)]">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
           {mode === 'file' ? <Trans>Open file</Trans> : <Trans>Select folder</Trans>}
         </h2>
         <div className="mb-2 flex items-center gap-1">
@@ -163,18 +163,18 @@ export function FilePickerModal({
             onKeyDown={(e) => {
               if (e.key === 'Enter') submitDraft();
             }}
-            className="h-6 min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 font-mono text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            className="h-6 min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
           />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto rounded border border-[var(--border)] bg-[var(--bg)] py-1">
-          {error && <div className="px-2 py-1 text-[11px] text-[var(--red)]">{error}</div>}
+          {error && <div className="px-2 py-1 text-xs text-[var(--red)]">{error}</div>}
           {!entries && !error && (
-            <div className="px-2 py-1 text-[11px] italic text-[var(--text-secondary)]">
+            <div className="px-2 py-1 text-xs italic text-[var(--text-secondary)]">
               <Trans>loading…</Trans>
             </div>
           )}
           {entries && entries.length === 0 && !error && (
-            <div className="px-2 py-1 text-[11px] italic text-[var(--text-secondary)]">
+            <div className="px-2 py-1 text-xs italic text-[var(--text-secondary)]">
               <Trans>empty</Trans>
             </div>
           )}
@@ -182,7 +182,7 @@ export function FilePickerModal({
             <button
               type="button"
               onClick={() => setCurrentPath(parent)}
-              className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[11px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+              className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
             >
               <ArrowUp className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
               <span className="truncate">..</span>
@@ -196,7 +196,7 @@ export function FilePickerModal({
                   key={entry.name}
                   type="button"
                   onClick={() => setCurrentPath(path)}
-                  className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[11px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                  className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
                 >
                   <Folder className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
                   <span className="truncate">{entry.name}</span>
@@ -211,7 +211,7 @@ export function FilePickerModal({
                 disabled={!pickable}
                 onClick={() => setSelected(path)}
                 onDoubleClick={() => pickable && onPick(path)}
-                className={`flex w-full items-center gap-1.5 px-2 py-1 text-left text-[11px] ${
+                className={`flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs ${
                   pickable
                     ? 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                     : 'text-[var(--text-secondary)] opacity-50'
@@ -227,7 +227,7 @@ export function FilePickerModal({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+            className="rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
           >
             <Trans>Cancel</Trans>
           </button>
@@ -236,7 +236,7 @@ export function FilePickerModal({
               type="button"
               disabled={!currentPath}
               onClick={() => currentPath && onPick(currentPath)}
-              className="rounded bg-[var(--accent)] px-3 py-1.5 text-xs text-[var(--text-inverted)] hover:opacity-90 disabled:opacity-40"
+              className="rounded bg-[var(--accent)] px-3 py-1.5 text-[13px] text-[var(--text-inverted)] hover:opacity-90 disabled:opacity-40"
             >
               <Trans>Select this folder</Trans>
             </button>
@@ -245,7 +245,7 @@ export function FilePickerModal({
               type="button"
               disabled={!selected}
               onClick={() => selected && onPick(selected)}
-              className="rounded bg-[var(--accent)] px-3 py-1.5 text-xs text-[var(--text-inverted)] hover:opacity-90 disabled:opacity-40"
+              className="rounded bg-[var(--accent)] px-3 py-1.5 text-[13px] text-[var(--text-inverted)] hover:opacity-90 disabled:opacity-40"
             >
               <Trans>Open</Trans>
             </button>

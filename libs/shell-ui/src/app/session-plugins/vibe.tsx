@@ -469,12 +469,12 @@ function VibeTasks({ ctx }: { ctx: SessionViewContext & PluginApi }): ReactNode 
 
   return (
     <div className="mb-2">
-      <div className="mb-1 text-[10px] uppercase tracking-wide text-[var(--text-secondary)]">
-        tasks
+      <div className="mb-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+        Tasks
       </div>
       <ul className="max-h-24 space-y-0.5 overflow-y-auto">
         {tasks.map((task) => (
-          <li key={task.id} className="flex items-start gap-1.5 text-[10px]">
+          <li key={task.id} className="flex items-start gap-1.5 text-[11px]">
             <span className={`shrink-0 select-none whitespace-nowrap ${statusClasses[task.status]}`}>
               {statusIcons[task.status]}
             </span>
@@ -490,7 +490,7 @@ function VibeTasks({ ctx }: { ctx: SessionViewContext & PluginApi }): ReactNode 
           </li>
         ))}
       </ul>
-      <div className="mt-1 text-[10px] text-[var(--text-secondary)]">
+      <div className="mt-1 text-[11px] text-[var(--text-secondary)]">
         {completed}/{tasks.length} done
       </div>
     </div>
@@ -502,7 +502,7 @@ function VibeRow({ ctx }: { ctx: SessionViewContext & PluginApi }): ReactNode {
   const session = ctx.getSession();
   if (!sessionNameRequiresAttention(session.name)) return null;
   return (
-    <span className="text-[10px] text-[var(--red)]" data-tip="Session name indicates action required">
+    <span className="text-[11px] text-[var(--red)]" data-tip="Session name indicates action required">
       !
     </span>
   );

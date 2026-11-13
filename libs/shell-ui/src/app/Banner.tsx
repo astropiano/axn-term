@@ -38,7 +38,7 @@ function BannerAction({
         type="button"
         disabled={action.disabled}
         onClick={() => onAction?.(action.id)}
-        className="flex h-6 items-center gap-1 rounded bg-[var(--surface)] px-1.5 text-[9px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-40"
+        className="flex h-6 items-center gap-1 rounded-[var(--radius-md)] bg-[var(--fill-2)] px-2 text-xs text-[var(--text-primary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--hairline-strong)] disabled:pointer-events-none disabled:opacity-40"
       >
         {ActionIcon && <ActionIcon className="h-3 w-3" />}
         {action.label ?? (!ActionIcon ? action.id : null)}
@@ -69,8 +69,13 @@ export function Banner({
   return (
     <div
       role="status"
-      className="flex h-8 shrink-0 items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1 text-[11px] text-[var(--text-primary)]"
-      style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
+      className="flex h-9 shrink-0 items-center gap-2 px-3 text-xs text-[var(--text-primary)] shadow-[inset_0_-1px_0_var(--hairline)]"
+      style={{
+        zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined,
+        // A faint wash in the level colour — enough to read as a notice
+        // without competing with the terminal below.
+        background: `color-mix(in srgb, ${levelColor[level]} 9%, transparent)`,
+      }}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: levelColor[level] }} />
       {actions && actions.length > 0 && (
@@ -106,7 +111,7 @@ export function Banner({
           onClick={onDismiss}
           data-tip="Dismiss"
           aria-label="Dismiss"
-          className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--text-secondary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-2)] hover:text-[var(--text-primary)]"
         >
           <X className="h-3 w-3" />
         </button>
