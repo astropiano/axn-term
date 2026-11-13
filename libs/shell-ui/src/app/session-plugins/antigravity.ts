@@ -178,8 +178,15 @@ export const antigravityPlugin: SessionViewPlugin = {
   // "Resume antigravity session" — the shared last-session capability;
   // offered on idle sessions once an agy conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'antigravity'),
-  render: (ctx) => agentResumePanel(ctx, 'antigravity'),
-
+  sessionFields: [
+    {
+      id: 'resume',
+      label: 'Resume Antigravity',
+      kind: 'block',
+      zone: 'selected',
+      value: (ctx) => agentResumePanel(ctx, 'antigravity'),
+    },
+  ],
   // A submitted command starts new shell work — a terminal badge left by a
   // finished agent run no longer applies, and a stale needs-you flag is gone.
   onCommand: (ctx) => {

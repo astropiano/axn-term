@@ -29,8 +29,9 @@ import type { ShellSession } from '../../types';
  * Two frames per plugin: a hidden *logic* frame (`plugin.mjs`) receiving
  * session lifecycle events and issuing RPC calls, and an optional *view*
  * frame (`index.html`) mounted into the plugin's full-area view.
- * `render`/`renderRow` become pushed sanitized-HTML surfaces
- * (`axn.setSurface`) since RPC can't satisfy their synchronous contract.
+ * The session-panel fields (`row`/`render` surfaces) are pushed
+ * sanitized-HTML surfaces (`axn.setSurface`) since RPC can't satisfy the
+ * fields' synchronous `value` contract.
  *
  * Capabilities are opt-in: a call or hook needing a `PluginPermission` the
  * manifest's `permissions` does not list is refused here, at the bridge.
@@ -706,12 +707,28 @@ export function sandboxedPlugin(spec: SandboxPluginSpec): SandboxedPlugin {
         string | false | void
       >;
     },
-    render: (ctx) => (
-      <SandboxedSurface pluginId={m.id} sessionId={ctx.session.id} surface="render" />
-    ),
-    renderRow: (ctx) => (
-      <SandboxedSurface pluginId={m.id} sessionId={ctx.session.id} surface="row" />
-    ),
+    // The two pushed surfaces (`axn.setSurface('row'|'render', …)`) are
+    // offered as session fields like any in-process plugin's.
+    sessionFields: [
+      {
+        id: 'row',
+        label: `${m.title} (badge)`,
+        kind: 'inline',
+        zone: 'title',
+        value: (ctx) => (
+          <SandboxedSurface pluginId={m.id} sessionId={ctx.session.id} surface="row" />
+        ),
+      },
+      {
+        id: 'panel',
+        label: m.title,
+        kind: 'block',
+        zone: 'selected',
+        value: (ctx) => (
+          <SandboxedSurface pluginId={m.id} sessionId={ctx.session.id} surface="render" />
+        ),
+      },
+    ],
     sandbox: spec,
   };
   if (spec.viewSource != null) {

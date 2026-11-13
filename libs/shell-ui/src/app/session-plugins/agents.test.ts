@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { findSessionField } from './plugin';
 import { pickFromList } from '../pickerHost';
 
 vi.mock('../pickerHost', () => ({ pickFromList: vi.fn(async () => null) }));
@@ -250,8 +251,8 @@ describe('agents plugin', () => {
   it('renderRow badges persona-stamped sessions', () => {
     const stamped = makeCtx();
     stamped.session.pluginState = { agents: { persona: 'reviewer' } };
-    expect(agentsPlugin.renderRow!(stamped)).not.toBeNull();
-    expect(agentsPlugin.renderRow!(makeCtx())).toBeNull();
+    expect(findSessionField(agentsPlugin, 'persona')!.value(stamped)).not.toBeNull();
+    expect(findSessionField(agentsPlugin, 'persona')!.value(makeCtx())).toBeNull();
   });
 
   it('builds workspace and session menus without writing application state', () => {

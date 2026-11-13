@@ -449,22 +449,29 @@ export const agentsPlugin: SessionViewPlugin = {
     />
   ),
 
-  renderRow: (ctx) => {
-    const persona = personaOf(ctx.session);
-    if (!persona) return null;
-    return (
-      <span
-        className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)]"
-        data-tip={`persona: ${persona}`}
-      >
-        <Bot className="h-2.5 w-2.5 shrink-0" />
-        <span className="max-w-16 truncate">{persona}</span>
-      </span>
-    );
-  },
-
-  rowTip: (ctx) => {
-    const persona = personaOf(ctx.session);
-    return persona ? `${persona}: agent persona of this session` : null;
-  },
+  sessionFields: [
+    {
+      id: 'persona',
+      label: 'Agent persona',
+      kind: 'inline',
+      zone: 'title',
+      value: (ctx) => {
+        const persona = personaOf(ctx.session);
+        if (!persona) return null;
+        return (
+          <span
+            className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)]"
+            data-tip={`persona: ${persona}`}
+          >
+            <Bot className="h-2.5 w-2.5 shrink-0" />
+            <span className="max-w-16 truncate">{persona}</span>
+          </span>
+        );
+      },
+      tip: (ctx) => {
+        const persona = personaOf(ctx.session);
+        return persona ? `${persona}: agent persona of this session` : null;
+      },
+    },
+  ],
 };

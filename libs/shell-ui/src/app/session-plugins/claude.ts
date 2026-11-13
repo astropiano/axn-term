@@ -507,8 +507,15 @@ export const claudePlugin: SessionViewPlugin = {
   // "Resume claude session '<id>'" — the shared last-session capability;
   // offered on idle sessions once a claude conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'claude'),
-  render: (ctx) => agentResumePanel(ctx, 'claude'),
-
+  sessionFields: [
+    {
+      id: 'resume',
+      label: 'Resume Claude Code',
+      kind: 'block',
+      zone: 'selected',
+      value: (ctx) => agentResumePanel(ctx, 'claude'),
+    },
+  ],
   // A submitted command starts new shell work — a terminal badge left by a
   // finished agent run no longer applies, and a stale needs-you flag is gone.
   onCommand: (ctx, command) => {

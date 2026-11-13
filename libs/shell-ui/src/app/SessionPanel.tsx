@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fragment, type CSSProperties } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fragment, type CSSProperties, type ReactNode } from 'react';
 import { useIconBag, resolveIcon, resolveProcessIcon, type IconBag } from './iconModel';
 import { ContextMenu, menuItemClass } from '../ContextMenu';
 import { broadcastSet, useBroadcastMarked, useBroadcastSet } from './broadcastSet';
@@ -6,7 +6,9 @@ import { Plus, Save, FolderOpen, FolderCog, FolderPlus, Search, ChevronRight, Ch
 import { Trans, useLingui } from '@lingui/react/macro';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
-import { SessionView } from './SessionView';
+import { pluginSessionFields } from './session-plugins/plugin';
+import { CORE_FIELDS, parseCardLayout, resolveCardLayout, type FieldMeta } from './sessionCardLayout';
+import { matchesTerms, placedFieldIds, searchLayout, sessionSearchTerms } from './sessionSearch';
 import { useSettings } from '../SettingsProvider';
 import { fontStackAvailable } from '../themes';
 import { usePluginSettings } from './PluginSettingsProvider';
@@ -1136,11 +1138,14 @@ export function SessionItem({
     }
   }, [taskState?.tasks]);
 
-  // One pass over the plugins — each contributes a row badge (renderRow)
-  // and optionally tooltip lines explaining it (rowTip).
-  const rowTips: string[] = [];
-  const rowBadges = plugins.map((plugin) => {
-    if (!plugin.renderRow && !plugin.rowTip) return null;
+  // Assemble the card from session fields: plugins only provide them
+  // (`sessionFields`); where each shows — title row, always-visible rows,
+  // the selected card — comes from the `sessionCard` layout setting.
+  const fieldMetas: FieldMeta[] = [...CORE_FIELDS];
+  const pluginFieldValues = new Map<string, { value: () => ReactNode; tip?: () => string | string[] | null }>();
+  for (const plugin of plugins) {
+    const fields = pluginSessionFields(plugin);
+    if (fields.length === 0) continue;
     const api = createPluginApi(session, plugin, {
       backend,
       updateSession,
@@ -1155,12 +1160,167 @@ export function SessionItem({
       pluginData,
       mergePluginData,
     });
-    const tip = plugin.rowTip?.(api);
+    for (const field of fields) {
+      const id = `${plugin.id}.${field.id}`;
+      fieldMetas.push({ id, label: field.label, kind: field.kind, zone: field.zone });
+      pluginFieldValues.set(id, {
+        value: () => field.value(api),
+        tip: field.tip ? () => field.tip!(api) : undefined,
+      });
+    }
+  }
+  const layout = resolveCardLayout(parseCardLayout(settings.sessionCard), fieldMetas);
+
+  const coreValue = (id: string): ReactNode => {
+    switch (id) {
+      case 'core.name':
+        return (
+          <>
+            <span className="min-w-0 flex-1 truncate font-semibold">
+              <Highlight text={sessionDisplayName(session)} query={searchQuery ?? ''} />
+            </span>
+            {broadcastMarked && broadcastActive && (
+              <span className="flex shrink-0" data-tip="broadcast target — receives axn-broadcast">
+                <Radio className="h-3 w-3 text-[var(--accent)]" />
+              </span>
+            )}
+          </>
+        );
+      case 'core.status':
+        return (
+          session.status &&
+            (session.status === 'running' && (session.progress ?? 0) > 0 ? (
+              <span
+                className="flex shrink-0 items-center gap-1.5"
+                data-tip={`running — ${session.progress}%`}
+              >
+                <span className="h-1.5 w-10 overflow-hidden rounded bg-[var(--bg)]">
+                  <span
+                    className="block h-full transition-all"
+                    style={{
+                      width: `${session.progress}%`,
+                      backgroundColor: statusColor.running,
+                    }}
+                  />
+                </span>
+                <span className="text-[10px]" style={{ color: statusColor.running }}>
+                  {session.progress}%
+                </span>
+              </span>
+            ) : (
+              <span
+                className="shrink-0 text-[10px] uppercase tracking-wide"
+                style={{ color: statusColor[session.status] }}
+              >
+                {statusLabel[session.status]}
+              </span>
+            ))
+        );
+      case 'core.summary':
+        return session.summary && settings.sessionSummaries !== false ? (
+          <div
+            className="line-clamp-3 whitespace-pre-line break-words text-[11px] text-[var(--text-secondary)]"
+            data-tip={session.summary}
+          >
+            {session.summary}
+          </div>
+        ) : null;
+      case 'core.process':
+        return session.process ? (
+          <p className="text-[10px] text-[var(--text-secondary)]">
+            process: <span className="text-[var(--text-primary)]">{session.process}</span>
+          </p>
+        ) : null;
+      case 'core.tasks':
+        return (
+          taskState && taskState.tasks.length > 0 && (
+            <div className="mb-2">
+              <span className="text-[var(--accent)]">tasks:</span>
+              <ul
+                ref={taskListRef}
+                style={{ maxHeight: taskListMaxHeight ?? 384 }}
+                className="mt-1 space-y-0.5 overflow-y-auto pl-3"
+              >
+                {taskState.tasks.map((task) => (
+                  <li key={task.id} className="flex items-start gap-1.5">
+                    <span className="inline-block w-4 shrink-0 select-none text-center text-[var(--text-secondary)]">
+                      {task.status === 'completed' ? '✓' : '•'}
+                    </span>
+                    <span
+                      className={`min-w-0 break-words${task.status === 'completed' ? ' line-through text-[var(--text-secondary)]' : ''}`}
+                    >
+                      {task.title}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        );
+      case 'core.progress':
+        return (
+          ((taskState?.tasks?.length ?? 0) > 0 ||
+            (session.tasks ?? []).length > 0 ||
+            (session.progress ?? 0) > 0) && (
+            <div>
+              <div className="mb-0.5 flex justify-between text-[10px] text-[var(--text-secondary)]">
+                <span>progress</span>
+                <span>{session.progress}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden bg-[var(--bg)]">
+                <div
+                  className="h-full transition-all"
+                  style={{
+                    width: `${session.progress}%`,
+                    backgroundColor: session.status
+                      ? statusColor[session.status]
+                      : 'var(--text-secondary)',
+                  }}
+                />
+              </div>
+            </div>
+          )
+        );
+      default:
+        return null;
+    }
+  };
+  // Tips of plugin fields actually shown, for the card tooltip.
+  const rowTips: string[] = [];
+  const valueOf = (id: string): ReactNode => {
+    if (id.startsWith('core.')) return coreValue(id);
+    const field = pluginFieldValues.get(id);
+    if (!field) return null;
+    const node = field.value();
+    if (node === null || node === undefined || node === false) return null;
+    const tip = field.tip?.();
     if (tip) rowTips.push(...(Array.isArray(tip) ? tip : [tip]));
-    return plugin.renderRow ? (
-      <Fragment key={plugin.id}>{plugin.renderRow(api)}</Fragment>
-    ) : null;
-  });
+    return node;
+  };
+  /** One layout row: a lone field as-is, several `·`-joined. */
+  const renderRow = (row: string[], key: string) => {
+    const parts = row
+      .map((id) => ({ id, node: valueOf(id) }))
+      .filter((p) => p.node !== null && p.node !== undefined && p.node !== false);
+    if (parts.length === 0) return null;
+    if (parts.length === 1) return <div key={key}>{parts[0].node}</div>;
+    return (
+      <div key={key} className="flex flex-wrap items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+        {parts.map((p, i) => (
+          <Fragment key={p.id}>
+            {i > 0 && <span aria-hidden>·</span>}
+            {p.node}
+          </Fragment>
+        ))}
+      </div>
+    );
+  };
+  const titleNodes = layout.title.map((id) => <Fragment key={id}>{valueOf(id)}</Fragment>);
+  const alwaysRows = layout.always.map((row, i) => renderRow(row, `a${i}`)).filter(Boolean);
+  const selectedRows =
+    isSelected && !suppressDetails
+      ? layout.selected.map((row, i) => renderRow(row, `s${i}`)).filter(Boolean)
+      : [];
 
   return (
     <>
@@ -1204,121 +1364,16 @@ export function SessionItem({
               <SessionIcon process={session.process} />
             </span>
           </span>
-          <span className="min-w-0 flex-1 truncate font-semibold">
-            <Highlight text={sessionDisplayName(session)} query={searchQuery ?? ''} />
-          </span>
-          {broadcastMarked && broadcastActive && (
-            <span className="flex shrink-0" data-tip="broadcast target — receives axn-broadcast">
-              <Radio className="h-3 w-3 text-[var(--accent)]" />
-            </span>
-          )}
-          {rowBadges}
-          {session.status &&
-            (session.status === 'running' && (session.progress ?? 0) > 0 ? (
-              <span
-                className="flex shrink-0 items-center gap-1.5"
-                data-tip={`running — ${session.progress}%`}
-              >
-                <span className="h-1.5 w-10 overflow-hidden rounded bg-[var(--bg)]">
-                  <span
-                    className="block h-full transition-all"
-                    style={{
-                      width: `${session.progress}%`,
-                      backgroundColor: statusColor.running,
-                    }}
-                  />
-                </span>
-                <span className="text-[10px]" style={{ color: statusColor.running }}>
-                  {session.progress}%
-                </span>
-              </span>
-            ) : (
-              <span
-                className="shrink-0 text-[10px] uppercase tracking-wide"
-                style={{ color: statusColor[session.status] }}
-              >
-                {statusLabel[session.status]}
-              </span>
-            ))}
+          {titleNodes}
         </div>
 
-        {session.summary && settings.sessionSummaries !== false && (
-          <div
-            className="line-clamp-3 whitespace-pre-line break-words px-2 pb-1.5 text-[11px] text-[var(--text-secondary)]"
-            data-tip={session.summary}
-          >
-            {session.summary}
-          </div>
+        {alwaysRows.length > 0 && (
+          <div className="flex flex-col gap-1 px-2 pb-1.5 [&>div:empty]:hidden">{alwaysRows}</div>
         )}
 
-        {isSelected && !suppressDetails && (
-          <div className="px-2 py-2 text-xs leading-relaxed text-[var(--text-primary)]">
-            {session.process && (
-              <p className="mb-2 text-[10px] text-[var(--text-secondary)]">
-                process:{' '}
-                <span className="text-[var(--text-primary)]">{session.process}</span>
-              </p>
-            )}
-
-            <SessionView
-              session={session}
-              updateSession={updateSession}
-              mergePluginState={mergePluginState}
-              plugins={plugins}
-              onOpenBrowser={onOpenBrowser}
-              onOpenTab={onOpenTab}
-              onOpenSubShell={onOpenSubShell}
-              onOpenSession={onAddSession}
-              getWorkspaces={() => workspaces}
-              pluginData={pluginData}
-              mergePluginData={mergePluginData}
-            />
-
-            {taskState && taskState.tasks.length > 0 && (
-              <div className="mb-2">
-                <span className="text-[var(--accent)]">tasks:</span>
-                <ul
-                  ref={taskListRef}
-                  style={{ maxHeight: taskListMaxHeight ?? 384 }}
-                  className="mt-1 space-y-0.5 overflow-y-auto pl-3"
-                >
-                  {taskState.tasks.map((task) => (
-                    <li key={task.id} className="flex items-start gap-1.5">
-                      <span className="inline-block w-4 shrink-0 select-none text-center text-[var(--text-secondary)]">
-                        {task.status === 'completed' ? '✓' : '•'}
-                      </span>
-                      <span
-                        className={`min-w-0 break-words${task.status === 'completed' ? ' line-through text-[var(--text-secondary)]' : ''}`}
-                      >
-                        {task.title}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {((taskState?.tasks?.length ?? 0) > 0 ||
-              (session.tasks ?? []).length > 0 ||
-              (session.progress ?? 0) > 0) && (
-              <div>
-                <div className="mb-0.5 flex justify-between text-[10px] text-[var(--text-secondary)]">
-                  <span>progress</span>
-                  <span>{session.progress}%</span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden bg-[var(--bg)]">
-                  <div
-                    className="h-full transition-all"
-                    style={{
-                      width: `${session.progress}%`,
-                      backgroundColor: session.status
-                        ? statusColor[session.status]
-                        : 'var(--text-secondary)',
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+        {selectedRows.length > 0 && (
+          <div className="flex flex-col gap-2 px-2 py-2 text-xs leading-relaxed text-[var(--text-primary)] [&>div:empty]:hidden">
+            {selectedRows}
           </div>
         )}
       </div>
@@ -1715,13 +1770,52 @@ export function SessionPanel({
   };
 
   const matchesFilter = (name: string) => name.toLowerCase().includes(q);
+  // A session matches on what its card shows: its name (custom or
+  // terminal-reported) and every placed session field whose plugin declares
+  // a search string (branch, MR ref, Jira key, …) — see app/sessionSearch.ts.
+  const sessionMatches = (() => {
+    if (!q) return () => true;
+    const placed = placedFieldIds(searchLayout(plugins, settings.sessionCard));
+    const cache = new Map<string, boolean>();
+    return (s: ShellSession) => {
+      let hit = cache.get(s.id);
+      if (hit === undefined) {
+        hit = matchesTerms(
+          sessionSearchTerms(
+            s,
+            plugins,
+            placed,
+            { sessionSummaries: settings.sessionSummaries !== false },
+            (plugin) =>
+              createPluginApi(s, plugin, {
+                backend,
+                updateSession,
+                mergePluginState,
+                pluginSettings,
+                plugins,
+                openBrowser: onOpenBrowser,
+                openTab: onOpenTab,
+                openSubShell: onOpenSubShell,
+                openSession: onAddSession,
+                getWorkspaces: () => workspaces,
+                pluginData,
+                mergePluginData,
+              }),
+          ),
+          q,
+        );
+        cache.set(s.id, hit);
+      }
+      return hit;
+    };
+  })();
   // A workspace stays listed when its own name matches or it hosts a matching
   // session.
   const visibleWorkspaces = q
     ? workspaces.filter(
         (ws) =>
           matchesFilter(ws.name) ||
-          sessions.some((s) => s.workspaceId === ws.id && matchesFilter(s.name)),
+          sessions.some((s) => s.workspaceId === ws.id && sessionMatches(s)),
       )
     : workspaces;
 
@@ -1792,7 +1886,7 @@ export function SessionPanel({
       >
         {visibleWorkspaces.map((workspace, index) => {
           const workspaceSessions = sessions.filter(
-            (s) => s.workspaceId === workspace.id && (!q || matchesFilter(s.name)),
+            (s) => s.workspaceId === workspace.id && (!q || sessionMatches(s)),
           );
           // A filter hides collapsed groups' content — force-expand while it
           // is active so matches stay visible.

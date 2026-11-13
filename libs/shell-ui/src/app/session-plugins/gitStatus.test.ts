@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { findSessionField } from './plugin';
 import { gitStatusPlugin } from './gitStatus';
 import type { ShellSession } from '../../types';
 import type { SessionViewContext, PluginApi } from './plugin';
@@ -26,30 +27,30 @@ function ctx(
 
 describe('git-status visibility settings', () => {
   it('renders the panel and title indicator by default', () => {
-    expect(gitStatusPlugin.render?.(ctx(undefined))).not.toBeNull();
-    expect(gitStatusPlugin.render?.(ctx({}))).not.toBeNull();
-    expect(gitStatusPlugin.renderRow?.(ctx(undefined))).not.toBeNull();
-    expect(gitStatusPlugin.renderRow?.(ctx({}))).not.toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'repo')!.value(ctx(undefined))).not.toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'repo')!.value(ctx({}))).not.toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'branch')!.value(ctx(undefined))).not.toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'branch')!.value(ctx({}))).not.toBeNull();
   });
 
   it('hides the panel when showInPanel is false', () => {
-    expect(gitStatusPlugin.render?.(ctx({ showInPanel: false }))).toBeNull();
-    expect(gitStatusPlugin.renderRow?.(ctx({ showInPanel: false }))).not.toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'repo')!.value(ctx({ showInPanel: false }))).toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'branch')!.value(ctx({ showInPanel: false }))).not.toBeNull();
   });
 
   it('keeps the legacy showInHeader key hiding the panel', () => {
-    expect(gitStatusPlugin.render?.(ctx({ showInHeader: false }))).toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'repo')!.value(ctx({ showInHeader: false }))).toBeNull();
   });
 
   it('hides the title indicator when showInTitle is false', () => {
-    expect(gitStatusPlugin.renderRow?.(ctx({ showInTitle: false }))).toBeNull();
-    expect(gitStatusPlugin.render?.(ctx({ showInTitle: false }))).not.toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'branch')!.value(ctx({ showInTitle: false }))).toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'repo')!.value(ctx({ showInTitle: false }))).not.toBeNull();
   });
 });
 
 describe('rowTip', () => {
   it('explains the clean repo marker', () => {
-    expect(gitStatusPlugin.rowTip?.(ctx(undefined))).toBe(
+    expect(findSessionField(gitStatusPlugin, 'branch')!.tip!(ctx(undefined))).toBe(
       '⎇ axn-term @ main — ✓: clean',
     );
   });
@@ -63,13 +64,22 @@ describe('rowTip', () => {
       dirty: true,
       untracked: 3,
     };
-    expect(gitStatusPlugin.rowTip?.(ctx(undefined, dirty))).toBe(
+    expect(findSessionField(gitStatusPlugin, 'branch')!.tip!(ctx(undefined, dirty))).toBe(
       '⎇ axn-term @ main — ×: remote branch missing, ↑2: ahead of origin, ↓1: behind origin, ~: uncommitted changes, ?3: untracked files',
     );
   });
 
   it('mirrors the badge visibility gate', () => {
-    expect(gitStatusPlugin.rowTip?.(ctx({ showInTitle: false }))).toBeNull();
-    expect(gitStatusPlugin.rowTip?.(ctx(undefined, null))).toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'branch')!.tip!(ctx({ showInTitle: false }))).toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'branch')!.tip!(ctx(undefined, null))).toBeNull();
+  });
+});
+
+describe('search', () => {
+  it('offers branch + repo name, gated like the badge', () => {
+    const terms = findSessionField(gitStatusPlugin, 'branch')!.search!(ctx(undefined)) as string[];
+    expect(terms.length).toBe(2);
+    expect(findSessionField(gitStatusPlugin, 'branch')!.search!(ctx({ showInTitle: false }))).toBeNull();
+    expect(findSessionField(gitStatusPlugin, 'repo')!.search!(ctx({ showInPanel: false }))).toBeNull();
   });
 });

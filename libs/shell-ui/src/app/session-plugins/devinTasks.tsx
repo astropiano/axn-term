@@ -765,13 +765,20 @@ export const devinPlugin: SessionViewPlugin = {
   // "Resume devin session '<name>'" — the shared last-session capability;
   // offered on idle sessions once a devin conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'devin'),
-  render: (ctx) => (
-    <>
-      {agentResumePanel(ctx, 'devin')}
-      <DevinTasks ctx={ctx} />
-    </>
-  ),
-
+  sessionFields: [
+    {
+      id: 'panel',
+      label: 'Devin',
+      kind: 'block',
+      zone: 'selected',
+      value: (ctx) => (
+        <>
+          {agentResumePanel(ctx, 'devin')}
+          <DevinTasks ctx={ctx} />
+        </>
+      ),
+    },
+  ],
   // Declared before onSessionOpen injects the resume command: the app covers
   // the terminal with a "restoring" overlay so input cannot race the
   // injected line. Cleared in finishRestore (ok/gone/timeout) and on every
