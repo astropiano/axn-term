@@ -5,6 +5,8 @@ import { useShellPlatform } from '../../services';
 import { useSettings } from '../../SettingsProvider';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { ChevronsLeftRightEllipsis } from 'lucide-react';
+import { RailItem } from '../RailItem';
+import { PublishPanelStatus } from '../PanelStatusSection';
 import { RemoteIcon } from './remoteIcon';
 import type { RemoteConsoleSnapshot } from '@axn-term/session-backend';
 import type { SessionViewPlugin } from './plugin';
@@ -55,7 +57,7 @@ type RemoteAuthActions = {
 };
 
 const authBtnCls =
-  'rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)] disabled:opacity-50';
+  'rounded border border-[var(--border)] px-2 py-1 text-[13px] hover:bg-[var(--surface-hover)] disabled:opacity-50';
 
 /** Sign-in/out controls — one actionable button per auth state, so a
  *  failed browser hop (expired code, untrusted cert, closed tab) can
@@ -72,7 +74,7 @@ export function RemoteAuthRow({
   if (auth.state === 'signedIn') {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-xs text-[var(--text-secondary)]">
+        <span className="text-[13px] text-[var(--text-secondary)]">
           <Trans>Signed in as {auth.user ?? ''}</Trans>
         </span>
         <button
@@ -88,11 +90,11 @@ export function RemoteAuthRow({
   if (auth.state === 'pending') {
     return (
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-[var(--text-secondary)]">
+        <span className="text-[13px] text-[var(--text-secondary)]">
           <Trans>Enter code {auth.userCode ?? ''} in the browser to finish sign-in.</Trans>
         </span>
         {auth.verificationUri ? (
-          <span className="select-all break-all text-[10px] text-[var(--text-secondary)]">
+          <span className="select-all break-all text-[11px] text-[var(--text-secondary)]">
             {auth.verificationUri}
           </span>
         ) : null}
@@ -127,9 +129,9 @@ export function RemoteAuthRow({
         <Trans>Sign in…</Trans>
       </button>
       {auth.state === 'error' ? (
-        <span className="text-xs text-[var(--error,#e05)]">{auth.error}</span>
+        <span className="text-[13px] text-[var(--error,#e05)]">{auth.error}</span>
       ) : issuerConfigured ? (
-        <span className="text-xs text-[var(--text-secondary)]"><Trans>Not signed in</Trans></span>
+        <span className="text-[13px] text-[var(--text-secondary)]"><Trans>Not signed in</Trans></span>
       ) : null}
     </div>
   );
@@ -199,10 +201,10 @@ function RemoteConnectionOverlay({
           <Trans>Connection lost</Trans>
         </div>
         {detail && (
-          <div className="text-xs text-[var(--text-secondary)]">{detail}</div>
+          <div className="text-[13px] text-[var(--text-secondary)]">{detail}</div>
         )}
         {snap.retrying && (
-          <div className="text-xs text-[var(--text-secondary)]">
+          <div className="text-[13px] text-[var(--text-secondary)]">
             <Trans>Retrying…</Trans>
           </div>
         )}
@@ -210,7 +212,7 @@ function RemoteConnectionOverlay({
           <button
             type="button"
             onClick={retryNow}
-            className="rounded border border-[var(--border)] bg-[var(--accent)]/15 px-3 py-1 text-xs text-[var(--accent)] hover:bg-[var(--accent)]/25"
+            className="rounded border border-[var(--border)] bg-[var(--accent)]/15 px-3 py-1 text-[13px] text-[var(--accent)] hover:bg-[var(--accent)]/25"
           >
             <Trans>Retry now</Trans>
           </button>
@@ -219,7 +221,7 @@ function RemoteConnectionOverlay({
           <button
             type="button"
             onClick={signOut}
-            className="rounded border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+            className="rounded border border-[var(--border)] px-3 py-1 text-[13px] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
           >
             <Trans>Sign out</Trans>
           </button>
@@ -267,29 +269,33 @@ function RemoteRailItem({
   return (
     <>
       <RemoteConnectionOverlay snap={snap} retryNow={console_?.retryNow} signOut={shellPlatform()?.signOut} />
-      <button
-        type="button"
+      <RailItem
+        title={remoteLinkPlugin.title}
+        status={stateLabel(snap)}
         onClick={onToggle}
-      data-tip={t`Remote — ${snap.role === 'authority' ? 'host' : `viewing ${snap.hostName ?? 'host'}`} · ${stateLabel(snap)} · ${count} client(s)`}
-      aria-label={t`Remote console`}
-      aria-pressed={active}
-      className={`flex h-8 w-7 flex-col items-center justify-center gap-px rounded border transition-colors ${
-        active
-          ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]'
-          : live
-            ? 'border-transparent text-[var(--accent)] hover:bg-[var(--surface-hover)]'
-            : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-      }`}
-    >
-      <RemoteIcon state={iconState} className="h-4 w-4" />
-      <span
-        className={`select-none text-[8px] font-bold leading-none ${
-          active ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'
-        }`}
+        active={active}
+        badge={count > 0 ? count : undefined}
+        badgeTone={live ? 'success' : 'neutral'}
       >
-        {count}
-      </span>
-      </button>
+        <RemoteIcon state={iconState} />
+      </RailItem>
+      <PublishPanelStatus
+        source={remoteLinkPlugin.id}
+        group={{
+          title: remoteLinkPlugin.title,
+          icon: 'Globe',
+          meters: [
+            {
+              label: t`Connection`,
+              value: stateLabel(snap),
+              detail: snap.role === 'authority' ? 'host' : `viewing ${snap.hostName ?? 'host'}`,
+              level: snap.state === 'failed' && !snap.retrying ? 2 : 0,
+              color: 'var(--red)',
+            },
+            { label: t`Clients`, value: String(count) },
+          ],
+        }}
+      />
     </>
   );
 }
@@ -313,13 +319,13 @@ function RemoteConsoleView() {
   );
 
   const inputCls =
-    'flex-1 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none';
+    'flex-1 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[13px] text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none';
   const rowCls = 'flex items-center gap-2';
-  const labelCls = 'w-28 shrink-0 text-xs text-[var(--text-secondary)]';
+  const labelCls = 'w-28 shrink-0 text-[13px] text-[var(--text-secondary)]';
 
   const configSection = (
     <div className="mt-5">
-      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+      <div className="mb-2 text-[13px] font-medium text-[var(--text-secondary)]">
         <Trans>Connection</Trans>
       </div>
       <div className="flex flex-col gap-1.5">
@@ -391,7 +397,7 @@ function RemoteConsoleView() {
           <div className="text-sm font-semibold">
             {snap.role === 'authority' ? t`Remote — this machine is the host` : t`Remote — viewing`}
           </div>
-          <div className="text-xs text-[var(--text-secondary)]">
+          <div className="text-[13px] text-[var(--text-secondary)]">
             {snap.hostName && <span>{snap.hostDevice ? `${snap.hostDevice} · ` : ''}{snap.hostName} · </span>}
             {stateLabel(snap)}
             {snap.error && <span className="text-[var(--error,#e5534b)]"> — {snap.error}</span>}
@@ -401,7 +407,7 @@ function RemoteConsoleView() {
           <button
             type="button"
             onClick={() => console_?.setViewportPaused?.(!paused)}
-            className="rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-hover)]"
+            className="rounded border border-[var(--border)] px-2 py-1 text-[13px] hover:bg-[var(--surface-hover)]"
           >
             {paused ? <Trans>Resume viewport</Trans> : <Trans>Pause viewport</Trans>}
           </button>
@@ -412,7 +418,7 @@ function RemoteConsoleView() {
           desktops publish (viewer only). */}
       {snap.role === 'viewer' && snap.sessions && snap.sessions.length > 1 && (
         <>
-          <div className="mb-3 text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+          <div className="mb-3 text-[13px] font-medium text-[var(--text-secondary)]">
             <Trans>Sessions ({snap.sessions.length})</Trans>
           </div>
           <div className="mb-5 flex flex-wrap gap-1.5">
@@ -421,7 +427,7 @@ function RemoteConsoleView() {
                 key={id}
                 type="button"
                 onClick={() => console_?.chooseSession?.(id)}
-                className={`rounded border px-2 py-0.5 text-xs ${
+                className={`rounded border px-2 py-0.5 text-[13px] ${
                   id === snap.sessionId
                     ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)]'
                     : 'border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -434,19 +440,19 @@ function RemoteConsoleView() {
         </>
       )}
 
-      <div className="mb-3 text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+      <div className="mb-3 text-[13px] font-medium text-[var(--text-secondary)]">
         <Trans>Clients: {viewers.length}</Trans>
       </div>
       <div className="mb-5 flex flex-wrap gap-1.5">
         {snap.role === 'authority' && (
-          <span className="rounded border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)]">
+          <span className="rounded border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-2 py-0.5 text-[13px] text-[var(--accent)]">
             <Trans>This machine is the host</Trans>
           </span>
         )}
         {viewers.map((id) => (
           <span
             key={id}
-            className={`rounded border px-2 py-0.5 text-xs ${
+            className={`rounded border px-2 py-0.5 text-[13px] ${
               id === snap.selfViewerId
                 ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)]'
                 : 'border-[var(--border)] text-[var(--text-secondary)]'
@@ -456,7 +462,7 @@ function RemoteConsoleView() {
           </span>
         ))}
         {viewers.length === 0 && snap.role === 'viewer' && (
-          <span className="text-xs text-[var(--text-secondary)]">
+          <span className="text-[13px] text-[var(--text-secondary)]">
             {live ? <Trans>only this device, not viewing a session</Trans> : <Trans>no clients</Trans>}
           </span>
         )}
@@ -466,10 +472,10 @@ function RemoteConsoleView() {
         // Client view: where this device is attached to + account sign-out.
         // The host config form is meaningless here (it configures publishing).
         <div className="mt-5">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+          <div className="mb-2 text-[13px] font-medium text-[var(--text-secondary)]">
             <Trans>Connected to</Trans>
           </div>
-          <div className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]">
+          <div className="flex flex-col gap-1.5 text-[13px] text-[var(--text-secondary)]">
             {snap.authorityUrl && (
               <div className="select-all break-all">{snap.authorityUrl}</div>
             )}

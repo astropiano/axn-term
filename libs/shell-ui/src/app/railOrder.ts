@@ -70,3 +70,31 @@ export function railDropIndexAt(
   }
   return rects.length;
 }
+
+/**
+ * The rail's views in display order — what the `⌘1`…`⌘9` shortcuts count:
+ * rail slots that open a view (`hasView`) and currently show something
+ * (`visible`; a plugin may render no rail item at all, e.g. a forge whose
+ * CLI is missing). Indicator-only slots are skipped. `slots` must be in
+ * display order (pinned first, then the user's order).
+ */
+export function railViewIds(
+  slots: readonly { id: string; hasView: boolean; visible: boolean }[],
+): string[] {
+  return slots.filter((slot) => slot.hasView && slot.visible).map((slot) => slot.id);
+}
+
+/**
+ * Which view a rail shortcut activates: the view at `index`, or `null` when
+ * that view is already active (the shortcut toggles back to the session).
+ * `undefined` when there is no view at that position — nothing happens.
+ */
+export function railViewAfterShortcut(
+  viewIds: readonly string[],
+  index: number,
+  activeViewId: string | null,
+): string | null | undefined {
+  const id = viewIds[index];
+  if (id === undefined) return undefined;
+  return id === activeViewId ? null : id;
+}

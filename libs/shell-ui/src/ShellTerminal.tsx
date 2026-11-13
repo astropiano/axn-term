@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { isMac } from './platform';
 import { Terminal, type ILink, type ILinkProvider } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import type { PathStat, SessionBackend, Unsubscribe } from '@axn-term/session-backend';
@@ -24,7 +25,7 @@ import {
 } from './terminalLinks';
 import { agentInputPluginFor, agentInputPluginForTitle } from './app/session-plugins/agentHookBridge';
 import { createHiddenCommandInput } from './app/hiddenCommands';
-import { isAppNavigationShortcut, isReloadShortcut } from './app/shortcuts';
+import { isAppChromeShortcut, isAppNavigationShortcut, isReloadShortcut } from './app/shortcuts';
 import { useShellServices } from './services';
 import { axnLog } from './app/log';
 import { createFlowControl } from './flowControl';
@@ -804,7 +805,13 @@ export function ShellTerminal({
         term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
           // App navigation shortcuts must bubble to ShellApp's window
           // listener instead of becoming escape sequences.
-          if (isAppNavigationShortcut(event) || isReloadShortcut(event)) return false;
+          if (
+            isAppNavigationShortcut(event) ||
+            isReloadShortcut(event) ||
+            isAppChromeShortcut(event, isMac)
+          ) {
+            return false;
+          }
           const isShiftEnter =
             event.key === 'Enter' &&
             event.shiftKey &&
