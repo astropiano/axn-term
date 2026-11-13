@@ -121,20 +121,20 @@ export function FileHoverPreview({
   }
   if (preview === null) {
     return (
-      <div className="text-[10px] text-[var(--text-secondary)]">
+      <div className="text-[11px] text-[var(--text-secondary)]">
         <Trans>Loading…</Trans>
       </div>
     );
   }
   return (
-    <pre className="whitespace-pre-wrap break-all font-mono text-[10px] leading-snug text-[var(--text-primary)]">
+    <pre className="whitespace-pre-wrap break-all font-mono text-[11px] leading-snug text-[var(--text-primary)]">
       {preview}
     </pre>
   );
 }
 
 const actionButtonClass =
-  'flex shrink-0 items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-[var(--text-primary)] transition hover:text-[var(--accent)]';
+  'flex shrink-0 items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 text-[11px] text-[var(--text-primary)] transition hover:text-[var(--accent)]';
 
 /** Item/divider styles live in ContextMenu; re-exported for existing imports. */
 export { menuItemClass, menuDividerClass };
@@ -311,7 +311,7 @@ export function PathActionMenu({
   const preview = !copyOnly && (
     <div className={isMenu ? 'max-h-64 overflow-auto px-1.5 pb-1 pt-0.5' : 'max-h-64 overflow-auto p-2'}>
       {isUrl ? (
-        <div className="break-all font-mono text-[10px] leading-snug text-[var(--text-primary)]">
+        <div className="break-all font-mono text-[11px] leading-snug text-[var(--text-primary)]">
           {resolvedPath}
         </div>
       ) : (
@@ -330,7 +330,7 @@ export function PathActionMenu({
     return (
       <div className="p-1">
         <div
-          className="truncate px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]"
+          className="truncate px-2 py-1 font-mono text-[11px] text-[var(--text-secondary)]"
           data-tip={resolvedPath}
         >
           {resolvedPath}
@@ -351,7 +351,7 @@ export function PathActionMenu({
     <>
       <div className="flex items-start gap-1.5 border-b border-[var(--border)] px-2 py-1.5">
         {actions}
-        <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--text-secondary)]">
           {resolvedPath}
         </span>
       </div>

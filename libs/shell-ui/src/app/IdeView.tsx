@@ -122,7 +122,7 @@ export function IdeView({
             >
               <PanelLeft className="h-3.5 w-3.5" />
             </button>
-            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--text-secondary)]">
               {path}
             </span>
           </div>
@@ -143,7 +143,7 @@ export function IdeView({
             </div>
           ))}
           {!activeFile && (
-            <div className="flex h-full items-center justify-center px-4 text-center text-[11px] text-[var(--text-secondary)]">
+            <div className="flex h-full items-center justify-center px-4 text-center text-xs text-[var(--text-secondary)]">
               {coarsePointer || !wide
                 ? 'Tap the tree button and pick a file'
                 : 'Select a file from the tree to edit'}

@@ -670,12 +670,12 @@ function DevinTasks({ ctx }: { ctx: SessionViewContext & PluginApi }) {
 
   return (
     <div className="mb-2">
-      <div className="mb-1 text-[10px] uppercase tracking-wide text-[var(--text-secondary)]">
-        tasks
+      <div className="mb-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+        Tasks
       </div>
       <ul className="max-h-24 space-y-0.5 overflow-y-auto">
         {tasks.map((task) => (
-          <li key={task.id} className="flex items-start gap-1.5 text-[10px]">
+          <li key={task.id} className="flex items-start gap-1.5 text-[11px]">
             <span className={`shrink-0 select-none whitespace-nowrap ${statusClasses[task.status]}`}>
               {statusIcons[task.status]}
             </span>
@@ -691,7 +691,7 @@ function DevinTasks({ ctx }: { ctx: SessionViewContext & PluginApi }) {
           </li>
         ))}
       </ul>
-      <div className="mt-1 text-[10px] text-[var(--text-secondary)]">
+      <div className="mt-1 text-[11px] text-[var(--text-secondary)]">
         {completed}/{tasks.length} done
       </div>
     </div>

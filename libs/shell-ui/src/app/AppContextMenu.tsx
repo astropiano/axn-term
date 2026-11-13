@@ -200,7 +200,7 @@ export function AppContextMenu({
 
   const visible = rows.filter(Boolean);
   return (
-    <ContextMenu x={x} y={y} onClose={onClose} widthClass="w-48" className="rounded-lg bg-[var(--surface)] p-1 shadow-2xl">
+    <ContextMenu x={x} y={y} onClose={onClose} widthClass="w-48" className="rounded-[var(--radius-lg)] bg-[var(--elevated)] p-1 shadow-[var(--shadow-pop)]">
       {visible}
       {visible.length > 0 && <div className={menuDividerClass} />}
       <button type="button" onClick={run(onReload)} className={menuItemClass}>
@@ -208,7 +208,7 @@ export function AppContextMenu({
         <span className="flex-1">
           <Trans>Reload window</Trans>
         </span>
-        <span className="text-[10px] text-[var(--text-secondary)]">{reloadShortcut}</span>
+        <span className="text-[11px] text-[var(--text-secondary)]">{reloadShortcut}</span>
       </button>
     </ContextMenu>
   );

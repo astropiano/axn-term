@@ -30,12 +30,12 @@ export function RestoringOverlay({
       className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-2.5 bg-[var(--bg)]/85 outline-none backdrop-blur-[1px]"
     >
       <Loader2 className="h-5 w-5 animate-spin text-[var(--accent)]" />
-      <div className="px-6 text-center text-xs text-[var(--text-primary)]">
+      <div className="px-6 text-center text-[13px] text-[var(--text-primary)]">
         {labels.map((label, i) => (
           <div key={i}>Restoring {label}…</div>
         ))}
       </div>
-      <div className="text-[10px] text-[var(--text-secondary)]">
+      <div className="text-[11px] text-[var(--text-secondary)]">
         input is locked until the restore finishes
       </div>
       <button

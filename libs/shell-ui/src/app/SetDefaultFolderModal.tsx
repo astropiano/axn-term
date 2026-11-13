@@ -38,11 +38,11 @@ export function SetDefaultFolderModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-96 max-w-[90vw] rounded border border-[var(--border)] bg-[var(--surface)] p-4 shadow-lg">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)]">
+      <div className="w-96 max-w-[90vw] rounded-[var(--radius-xl)] bg-[var(--elevated)] p-5 shadow-[var(--shadow-pop)]">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
           <Trans>Default folder</Trans>
         </h2>
-        <p className="mb-3 text-xs text-[var(--text-secondary)]">
+        <p className="mb-3 text-[13px] text-[var(--text-secondary)]">
           <Trans>
             New sessions in “{workspace.name}” start in this folder. Leave empty for your home
             directory.
@@ -57,20 +57,20 @@ export function SetDefaultFolderModal({
             if (e.key === 'Enter') save();
           }}
           placeholder="~/projects"
-          className="mb-3 w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          className="mb-3 w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 font-mono text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
         />
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+            className="rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
           >
             <Trans>Cancel</Trans>
           </button>
           <button
             type="button"
             onClick={save}
-            className="rounded bg-[var(--accent)] px-3 py-1.5 text-xs text-[var(--text-inverted)] hover:opacity-90"
+            className="rounded bg-[var(--accent)] px-3 py-1.5 text-[13px] text-[var(--text-inverted)] hover:opacity-90"
           >
             <Trans>Save</Trans>
           </button>

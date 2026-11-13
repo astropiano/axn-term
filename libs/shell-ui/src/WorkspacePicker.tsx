@@ -29,7 +29,7 @@ export function WorkspacePicker({
   const { t } = useLingui();
   return (
     <ContextMenu x={x} y={y} onClose={onClose}>
-      <div className="px-2 pt-1.5 pb-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+      <div className="px-2 pt-1.5 pb-1 text-[11px] font-semibold text-[var(--text-secondary)]">
         {title ?? t`Open in workspace`}
       </div>
       {workspaces.map((ws) => (
@@ -47,7 +47,7 @@ export function WorkspacePicker({
         </button>
       ))}
       {workspaces.length === 0 && (
-        <div className="px-2 py-1.5 text-[11px] italic text-[var(--text-secondary)]">
+        <div className="px-2 py-1.5 text-xs italic text-[var(--text-secondary)]">
           <Trans>no workspaces</Trans>
         </div>
       )}

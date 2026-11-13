@@ -39,6 +39,88 @@
   --orange: #f97316;
   --violet: #c08fd8;
   color-scheme: dark;
+
+  /* ---- Design tokens ------------------------------------------------
+     Everything below is derived from the theme values above (applyTheme
+     sets those per theme), so every bundled theme gets the same chrome
+     without edits. A theme may pin any of them via its optional `ui`
+     keys (chrome, raised, elevated, attention). */
+
+  /* Chrome font: rail, session panel, tabs, panels, dialogs. Monospace
+     stays for the terminal, the editor and inline code (`font-mono`).
+     Settings → "Interface font" overrides it via --font-ui-user. */
+  --font-ui-default:
+    -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Text',
+    'Segoe UI Variable Text',
+    'Segoe UI',
+    'Inter',
+    'Noto Sans',
+    system-ui,
+    sans-serif;
+  --font-ui: var(--font-ui-user, var(--font-ui-default));
+
+  /* Surfaces */
+  --chrome: color-mix(in srgb, var(--bg) 94%, var(--text-primary)); /* rail, session panel, window base */
+  --raised: color-mix(in srgb, var(--bg) 95.5%, var(--text-primary)); /* cards on the content pane */
+  --elevated: color-mix(in srgb, var(--bg) 88%, var(--text-primary)); /* menus, tooltips, badges */
+  /* Lines and fills — alpha over whatever lies below */
+  --hairline: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --hairline-strong: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --fill-1: color-mix(in srgb, var(--text-primary) 5.5%, transparent); /* hover, input fill */
+  --fill-2: color-mix(in srgb, var(--text-primary) 10%, transparent); /* pressed, active tab */
+  --fill-accent: color-mix(in srgb, var(--accent) 17%, transparent); /* selection */
+  --fill-attention: color-mix(in srgb, var(--attention) 16%, transparent);
+  /* Text and state */
+  --text-tertiary: color-mix(in srgb, var(--text-secondary) 86%, var(--bg)); /* counts, placeholders — never required information */
+  --attention: var(--red); /* "needs you" */
+  --ring: color-mix(in srgb, var(--accent) 55%, transparent); /* focus ring */
+  --shadow-pop: 0 0 0 1px var(--hairline), 0 12px 32px -8px rgb(0 0 0 / 0.45);
+
+  /* Metrics */
+  --rail-w: 52px;
+  --toolbar-h: 40px;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /* Motion */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* macOS overlay title bar (desktop sets data-titlebar="overlay"): the
+     traffic lights sit inside the first toolbar row. Both insets are 0
+     everywhere else. */
+  --titlebar-h: 0px; /* room above the rail's first item */
+  --titlebar-overhang: 0px; /* how far the lights reach past the rail */
+}
+
+/* Light themes: overlays are near-white with a shadow, not a darker grey. */
+:root[data-theme='light'] {
+  --elevated: color-mix(in srgb, var(--bg) 30%, white);
+  --shadow-pop: 0 0 0 1px var(--hairline), 0 12px 32px -10px rgb(0 0 0 / 0.22);
+}
+
+:root[data-titlebar='overlay'] {
+  --titlebar-h: var(--toolbar-h);
+  --titlebar-overhang: 30px;
+}
+
+/* Elements that only make sense in the title-bar row (the session panel
+   toggle while the panel is closed) and their stand-ins elsewhere. */
+.axn-titlebar-only {
+  display: none;
+}
+
+:root[data-titlebar='overlay'] .axn-titlebar-only {
+  display: flex;
+}
+
+:root[data-titlebar='overlay'] .axn-no-titlebar-only {
+  display: none;
 }
 
 * {
@@ -52,7 +134,7 @@ body {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   color: var(--text-primary);
   background-color: var(--bg);
   /* App-like feel on touch: no pull-to-refresh rubber-banding, no
@@ -74,6 +156,36 @@ body {
 button {
   font-family: inherit;
   cursor: pointer;
+}
+
+/* One focus treatment for every control. Text fields keep their own
+   (border/ring) styling. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+.xterm :focus-visible,
+.monaco-editor :focus-visible {
+  outline: none;
+}
+
+/* Lucide ships stroke-width 2 — a touch lighter reads calmer at 14–18px. */
+svg.lucide {
+  stroke-width: 1.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Touch-primary devices */
@@ -98,46 +210,49 @@ button {
   }
 }
 
-/* "Needs attention" indicators — a dot that slowly fades in and out. */
+/* "Needs attention" indicators — a soft halo that slowly fades in and out. */
 @keyframes attention-pulse {
   0%,
   100% {
-    opacity: 0.15;
+    opacity: 0.12;
   }
   50% {
-    opacity: 0.6;
+    opacity: 0.42;
   }
 }
 
 .attention-dot {
-  animation: attention-pulse 1.6s ease-in-out infinite;
+  animation: attention-pulse 2.2s ease-in-out infinite;
 }
 
-/* Shell-looking custom scrollbars */
+/* Quiet scrollbars: no track, rounded thumb that darkens on hover. */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg);
+  background: transparent;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--surface-hover);
-  border: 1px solid var(--bg);
+  background: var(--fill-2);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
+  background: var(--hairline-strong);
+  background-clip: padding-box;
 }
 
 .xterm-viewport::-webkit-scrollbar {
-  width: 8px;
-}
-
-.xterm-viewport::-webkit-scrollbar-thumb {
-  background: var(--surface-hover);
+  width: 10px;
 }
 
 /* Rendered markup inside file-preview tabs (markdown/asciidoc/external). */
