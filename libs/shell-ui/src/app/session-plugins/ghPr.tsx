@@ -1,7 +1,13 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { PublishPanelStatus } from '../PanelStatusSection';
+import { ghostButtonClass } from '../chromeStyles';
+import { PanelHeader, PanelHeaderButton, PanelHeaderChip, PanelHeaderSpacer } from '../PanelHeader';
+import { usePluginSettingsOptional } from '../PluginSettingsProvider';
+import { ForgeSetup, suggestForgeHost } from './forgeSetup';
 import { appRuntime } from '../appRuntime';
 import {
   GitPullRequest,
+  Globe,
   MessageSquare,
   RefreshCw,
   Text,
@@ -15,6 +21,7 @@ import type { ShellSession, SessionAttention} from '../../types';
 import { sessionLastSelectedAt } from '../attention';
 import { getSessionViewPlugins, isPluginEnabled } from './index';
 import { PluginIcon } from '../SessionPanel';
+import { RailItem } from '../RailItem';
 import type { PluginSettings } from '../pluginSettings';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
 import { CardChips } from './cardEnrichers';
@@ -22,7 +29,6 @@ import { MrDescription } from './mrDescription';
 import { shellQuote } from '../../shellQuote';
 import {
   authCommand,
-  authStatusHint,
   defaultHostNote,
   classifyCliError,
   compactCliError,
@@ -719,7 +725,7 @@ function SessionPrs({ ctx }: { ctx: SessionViewContext & PluginApi }) {
 
   return (
     <div className="mb-2">
-      <div className="flex flex-col gap-1 text-[10px]">
+      <div className="flex flex-col gap-1 text-[11px]">
         {prs.map((pr) => {
           // `openThreads` is authoritative once fetched; snapshots without it
           // fall back to the boolean `discussionsResolved` chip.
@@ -832,57 +838,60 @@ function GhPrRail({
   // No gh (or nothing fetched yet): a GitLab-only user sees no GitHub icon.
   if (mode === 'hidden') return null;
 
-  const title =
-    mode === 'signed-out'
-      ? `GitHub pull requests — not signed in.\nRun \`${authCommand('gh', 'login', data.host)}\` in a shell to see your PRs here.`
-      : mode === 'error'
-      ? `pull requests unavailable\ngh: ${data.error ?? 'unknown error'}\n${authStatusHint('gh', 'GitHub', data.host)}`
-      : [
-          `${mineAction}/${data.mine.length} assigned/authored PRs need action (open threads, conflicts, failing checks, changes requested or approved)`,
-          `${reviewWaiting}/${data.review.length} review requests waiting for you`,
-          data.status === 'loading' ? 'refreshing…' : null,
-        ]
-          .filter(Boolean)
-          .join('\n');
-
+  const waiting = mineAction + reviewWaiting;
   return (
-    <button
-      type="button"
-      onClick={toggleView}
-      data-tip={title}
-      className={`flex flex-col items-center gap-0.5 rounded px-1 py-0.5 transition ${
-        viewActive
-          ? 'bg-[var(--surface)] text-[var(--accent)]'
-          : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-      }`}
-    >
-      <PluginIcon
-        plugin={ghPrPlugin}
-        className={`h-3.5 w-3.5${mode === 'signed-out' ? ' opacity-50' : ''}`}
+    <>
+      <RailItem
+        title="Pull requests"
+        // One short line only where it matters; the numbers are in the
+        // tool's accordion in the session panel.
+        status={
+          mode === 'signed-out'
+            ? 'not signed in'
+            : mode === 'error'
+              ? 'unavailable'
+              : waiting > 0
+                ? `${waiting} waiting for you`
+                : undefined
+        }
+        onClick={toggleView}
+        active={viewActive}
+        muted={mode === 'signed-out'}
+        // One number: what waits for the user. Orange when own work needs
+        // action, accent when only reviews are waiting.
+        badge={mode === 'counts' && waiting > 0 ? waiting : undefined}
+        badgeTone={mineAction > 0 ? 'warning' : 'accent'}
+        pip={mode === 'signed-out' ? 'setup' : mode === 'error' ? 'attention' : undefined}
+      >
+        <PluginIcon plugin={ghPrPlugin} />
+      </RailItem>
+      <PublishPanelStatus
+        source={ghPrPlugin.id}
+        group={
+          mode === 'counts' && data.mine.length + data.review.length > 0
+            ? {
+                title: 'Pull requests',
+                meters: [
+                  {
+                    label: 'Mine',
+                    value: `${mineAction}/${data.mine.length}`,
+                    detail: 'assigned or authored, need action',
+                    level: mineAction > 0 ? 2 : 0,
+                    color: 'var(--orange)',
+                    tip: `${mineAction} of ${data.mine.length} assigned/authored PRs need action (open threads, conflicts, failing checks, changes requested or approved)`,
+                  },
+                  {
+                    label: 'Reviews',
+                    value: `${reviewWaiting}/${data.review.length}`,
+                    detail: 'review requests waiting for you',
+                    tip: `${reviewWaiting} of ${data.review.length} review requests waiting for you`,
+                  },
+                ],
+              }
+            : null
+        }
       />
-      {mode === 'signed-out' ? null : mode === 'error' ? (
-        <AlertTriangle className="h-3 w-3 text-[var(--red)]" />
-      ) : (
-        <>
-          <span
-            className={`select-none text-[8px] font-bold leading-none ${
-              mineAction > 0 ? 'text-[var(--orange)]' : ''
-            }`}
-            data-tip="assigned / authored"
-          >
-            {mineAction}/{data.mine.length}
-          </span>
-          <span
-            className={`select-none text-[8px] font-bold leading-none ${
-              reviewWaiting > 0 ? 'text-[var(--cyan)]' : ''
-            }`}
-            data-tip="review requested"
-          >
-            {reviewWaiting}/{data.review.length}
-          </span>
-        </>
-      )}
-    </button>
+    </>
   );
 }
 
@@ -910,7 +919,7 @@ function PrRow({ pr, badge, env, showDescription = true }: { showDescription?: b
   const threads = openThreads(pr);
   return (
     <div className="flex items-start gap-1">
-      <div className="min-w-0 flex-1 rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface)]">
+      <div className="min-w-0 flex-1 rounded px-2 py-1.5 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface)]">
         <a
           href={pr.url}
           target="_blank"
@@ -924,40 +933,40 @@ function PrRow({ pr, badge, env, showDescription = true }: { showDescription?: b
           </span>
           <span className="min-w-0 flex-1 truncate">{pr.title}</span>
           {badge && (
-            <span className="shrink-0 rounded bg-[var(--accent)]/15 px-1 text-[9px] font-semibold text-[var(--accent)]">
+            <span className="shrink-0 rounded bg-[var(--accent)]/15 px-1 text-[10px] font-semibold text-[var(--accent)]">
               {badge}
             </span>
           )}
           {pr.draft && (
-            <span className="shrink-0 rounded bg-slate-500/20 px-1 text-[9px] text-slate-500">
+            <span className="shrink-0 rounded bg-slate-500/20 px-1 text-[10px] text-slate-500">
               draft
             </span>
           )}
           {pr.conflicts && (
-            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
+            <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--red)]">
               <AlertTriangle className="h-3 w-3" />
               conflicts
             </span>
           )}
           {pr.reviewDecision === 'changes_requested' && (
-            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--red)]">
+            <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--red)]">
               <GitPullRequestClosed className="h-3 w-3" />
               changes
             </span>
           )}
           {threads > 0 && (
-            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--orange)]">
+            <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--orange)]">
               <MessageSquare className="h-3 w-3" />
               {threads}
             </span>
           )}
           {pr.pipeline && (
-            <span className="shrink-0 text-[9px]">
+            <span className="shrink-0 text-[10px]">
               <ChecksChip status={pr.pipeline} />
             </span>
           )}
           {pr.approved && (
-            <span className="flex shrink-0 items-center gap-0.5 text-[9px] text-[var(--green)]">
+            <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--green)]">
               <Check className="h-3 w-3" />
               approved
             </span>
@@ -991,14 +1000,14 @@ function PrSection({
 }) {
   return (
     <div className="mb-4">
-      <div className="mb-1 flex items-baseline gap-2 px-2 text-[10px] uppercase tracking-wide text-[var(--text-secondary)]">
+      <div className="mb-1 flex items-baseline gap-2 px-2 text-[11px] text-[var(--text-secondary)]">
         <span>{title}</span>
         <span className={count > 0 ? 'font-semibold text-[var(--orange)]' : ''}>
           {count}/{total}
         </span>
       </div>
       {prs.length === 0 ? (
-        <div className="px-2 py-1 text-[11px] italic text-[var(--text-secondary)]">none</div>
+        <div className="px-2 py-1 text-xs italic text-[var(--text-secondary)]">none</div>
       ) : (
         <div className="flex flex-col gap-0.5">
           {prs.map((pr) => (
@@ -1030,6 +1039,7 @@ function GhPrView({
   close,
   env,
   settings,
+  selectedSessionId,
   showDescriptions = true,
   onToggleDescriptions,
 }: {
@@ -1039,9 +1049,16 @@ function GhPrView({
   env: MrRowEnv;
   /** The plugin's settings — carries `hostname`; without it the CLI queries its default host. */
   settings?: { hostname?: unknown };
+  /** The session selected in the panel — hosts the sign-in shell of the onboarding. */
+  selectedSessionId?: string;
 }) {
   const data = usePrOverview();
   const me = data.username ?? '';
+  // Onboarding helpers: write the `hostname` setting, run the sign-in in a
+  // shell tab of the selected (else first) session.
+  const pluginSettingsCtx = usePluginSettingsOptional();
+  const settingsKey = ghPrPlugin.settingsKey ?? ghPrPlugin.id;
+  const loginSession = env.sessions.find((s) => s.id === selectedSessionId) ?? env.sessions[0];
 
   useEffect(() => {
     if (data.status === 'idle') void refreshPrOverview(settings);
@@ -1057,37 +1074,38 @@ function GhPrView({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)]">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-3">
-        <GitPullRequest className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-primary)]">
-          pull requests
-        </span>
+      <PanelHeader
+        icon={<GitPullRequest />}
+        title="Pull requests"
+        meta={
+          <PanelHeaderChip title={data.host ? 'Host the gh CLI asks' : 'Host the gh CLI asks — its default'}>
+            <Globe className="h-3 w-3 shrink-0" />
+            {data.host ?? 'github.com'}
+          </PanelHeaderChip>
+        }
+      >
         {data.fetchedAt && (
-          <span className="text-[10px] text-[var(--text-secondary)]">
+          <span className="text-[11px] text-[var(--text-secondary)]">
             updated {Math.max(0, Math.round((Date.now() - data.fetchedAt) / 1000))}s ago
           </span>
         )}
-        <div className="flex-1" />
+        <PanelHeaderSpacer />
         {onToggleDescriptions && (
-          <button
-            type="button"
+          <PanelHeaderButton
+            title={showDescriptions ? 'Hide descriptions' : 'Show descriptions'}
             onClick={onToggleDescriptions}
-            data-tip={showDescriptions ? 'Hide descriptions' : 'Show descriptions'}
-            aria-label={showDescriptions ? 'Hide descriptions' : 'Show descriptions'}
-            aria-pressed={showDescriptions}
-            className={`flex h-6 w-6 items-center justify-center rounded transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)] ${
-              showDescriptions ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] opacity-60'
-            }`}
+            active={showDescriptions}
+            pressed={showDescriptions}
           >
             <Text className="h-3.5 w-3.5" />
-          </button>
+          </PanelHeaderButton>
         )}
         <button
           type="button"
           onClick={() => void refreshPrOverview(settings)}
           data-tip="Refresh"
           aria-label="Refresh"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+          className={ghostButtonClass}
         >
           <RefreshCw className={`h-3.5 w-3.5 ${data.status === 'loading' ? 'animate-spin' : ''}`} />
         </button>
@@ -1096,34 +1114,40 @@ function GhPrView({
           onClick={close}
           data-tip="Close"
           aria-label="Close"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+          className={ghostButtonClass}
         >
           <X className="h-3.5 w-3.5" />
         </button>
-      </div>
+      </PanelHeader>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {data.status === 'error' && data.failure !== 'error' ? (
-          <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
-            <div className="mb-1 font-semibold">
-              {data.failure === 'missing' ? 'GitHub CLI not installed' : 'Not signed in to GitHub'}
-            </div>
-            <div className="text-[var(--text-secondary)]">
-              {data.failure === 'missing' ? (
-                <>
-                  Install <code className="text-[var(--accent)]">gh</code> (https://cli.github.com), then
-                  run <code className="text-[var(--accent)]">{authCommand('gh', 'login', data.host)}</code>.
-                </>
-              ) : (
-                <>
-                  Run <code className="text-[var(--accent)]">{authCommand('gh', 'login', data.host)}</code> in a shell to see your
-                  pull requests here.
-                </>
-              )}
-            </div>
-          </div>
+          <ForgeSetup
+            cli="gh"
+            forgeName="GitHub"
+            defaultHost="github.com"
+            installUrl="https://cli.github.com"
+            failure={data.failure === 'missing' ? 'missing' : 'signed-out'}
+            host={data.host}
+            suggestedHost={suggestForgeHost('github', env.sessions, selectedSessionId)}
+            icon={<GitPullRequest />}
+            onUseHost={
+              pluginSettingsCtx
+                ? (host) => pluginSettingsCtx.updatePluginSection(settingsKey, { hostname: host })
+                : undefined
+            }
+            onRunLogin={
+              loginSession
+                ? (command) => {
+                    env.apiFor(loginSession.id)?.openSubShell(command, undefined, 'gh login');
+                    env.selectSession(loginSession.id);
+                  }
+                : undefined
+            }
+            onRetry={() => void refreshPrOverview(settings)}
+          />
         ) : data.status === 'error' ? (
-          <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
-            <div className="mb-1 font-semibold text-[var(--red)]">failed to load pull requests</div>
+          <div className="rounded-[var(--radius-lg)] bg-[var(--raised)] p-3.5 text-xs leading-relaxed text-[var(--text-primary)] shadow-[0_0_0_1px_var(--hairline)]">
+            <div className="mb-1 font-semibold text-[var(--red)]">Failed to load pull requests</div>
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
             <div className="text-[var(--text-secondary)]">
               Check <code className="text-[var(--accent)]">{authCommand('gh', 'status', data.host)}</code> in a shell.
@@ -1135,7 +1159,7 @@ function GhPrView({
         ) : (
           <>
             <PrSection
-              title="assigned to me / authored without assignee"
+              title="Assigned to me / authored without assignee"
               prs={mine}
               count={mineAction}
               total={mine.length}
@@ -1144,7 +1168,7 @@ function GhPrView({
               showDescriptions={showDescriptions}
             />
             <PrSection
-              title="review requested"
+              title="Review requested"
               prs={review}
               count={reviewWaiting}
               total={review.length}
@@ -1153,9 +1177,7 @@ function GhPrView({
               showDescriptions={showDescriptions}
             />
             {data.status === 'loading' && (
-              <div className="px-2 text-[10px] italic text-[var(--text-secondary)]">
-                refreshing…
-              </div>
+              <div className="px-2 text-[11px] text-[var(--text-tertiary)]">Refreshing…</div>
             )}
           </>
         )}
@@ -1312,7 +1334,7 @@ export const ghPrPlugin: SessionViewPlugin = {
       sessionApi={sessionApi}
     />
   ),
-  renderView: ({ pluginSettings, close, sessions, workspaces, selectSession, sessionApi, appState, updateAppState }) => (
+  renderView: ({ pluginSettings, close, sessions, workspaces, selectSession, selectedSessionId, sessionApi, appState, updateAppState }) => (
     <GhPrView
       close={close}
       showDescriptions={(appState as { showDescriptions?: boolean } | undefined)?.showDescriptions !== false}
@@ -1322,6 +1344,7 @@ export const ghPrPlugin: SessionViewPlugin = {
         })
       }
       settings={pluginSettings as { hostname?: unknown } | undefined}
+      selectedSessionId={selectedSessionId}
       env={{
         sessions,
         workspaces,
