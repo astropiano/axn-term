@@ -20,8 +20,8 @@
       "@axn-term/session-backend": ["libs/session-backend/src/index.ts"],
       "@axn-term/shell-ui": ["libs/shell-ui/src/index.ts"],
       "@axn-term/plugin-sdk": ["libs/plugin-sdk/src/index.ts"],
-      // Sibling checkout: dev/libraries/ramphastos (axn-dev layout); in
-      // containers the same tree mounts at /libraries/ramphastos.
+      // Sibling checkout: ../ramphastos next to axn-term; containers mount
+      // it as the repo's sibling.
       // Resolves via the package exports to dist/ — rebuild the client
       // package there when its sources change.
       "@ramphastos/ramphastos-client": ["../ramphastos/src/client/ramphastos-client"]

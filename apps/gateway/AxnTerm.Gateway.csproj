@@ -25,9 +25,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Sibling checkout: dev/libraries/ramphastos (see nuget.config feeds).
-         In the gateway Dockerfile the same tree lands at /libraries. -->
-    <ProjectReference Include="../../../../libraries/ramphastos/src/Ramphastos.Server/Ramphastos.Server.csproj" />
+    <!-- Sibling checkout: ../ramphastos next to axn-term.
+         In the gateway Dockerfile it lands at /ramphastos (same depth). -->
+    <ProjectReference Include="../../../ramphastos/src/Ramphastos.Server/Ramphastos.Server.csproj" />
   </ItemGroup>
 
 </Project>

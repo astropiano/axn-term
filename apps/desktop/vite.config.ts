@@ -48,11 +48,11 @@ export default defineConfig(async () => ({
       "@axn-term/plugin-sdk": fileURLToPath(
         new URL("../../libs/plugin-sdk/src/index.ts", import.meta.url),
       ),
-      // Sibling checkout (dev/libraries/ramphastos); containers mount
-      // the same tree at /libraries — the relative depth resolves there.
+      // Sibling checkout (../ramphastos next to axn-term); containers mount
+      // it as the repo's sibling, so the relative depth resolves there too.
       "@ramphastos/ramphastos-client": fileURLToPath(
         new URL(
-          "../../../../libraries/ramphastos/src/client/ramphastos-client",
+          "../../../ramphastos/src/client/ramphastos-client",
           import.meta.url,
         ),
       ),

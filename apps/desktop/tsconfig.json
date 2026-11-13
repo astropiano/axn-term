@@ -19,8 +19,8 @@
       "@axn-term/session-backend": ["../../libs/session-backend/src/index.ts"],
       "@axn-term/session-backend/tauri": ["../../libs/session-backend/src/tauri.ts"],
       "@axn-term/session-backend/remote": ["../../libs/session-backend/src/remote.ts"],
-      // Sibling checkout: dev/libraries/ramphastos; containers mount it
-      // at /libraries (same relative depth).
+      // Sibling checkout: ../ramphastos next to axn-term; containers mount
+      // it as the repo's sibling (same relative depth).
       "@ramphastos/ramphastos-client": ["../../../ramphastos/src/client/ramphastos-client"],
       "@axn-term/shell-ui": ["../../libs/shell-ui/src/index.ts"],
       "@axn-term/plugin-sdk": ["../../libs/plugin-sdk/src/index.ts"]

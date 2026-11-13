@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const link = path.join(repoRoot, "node_modules", "@ramphastos", "ramphastos-client");
-const target = path.resolve(repoRoot, "../../libraries/ramphastos/src/client/ramphastos-client");
+const target = path.resolve(repoRoot, "../ramphastos/src/client/ramphastos-client");
 if (!existsSync(link)) {
   mkdirSync(path.dirname(link), { recursive: true });
   symlinkSync(target, link, "junction");

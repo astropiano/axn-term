@@ -11,14 +11,14 @@ axn-dev stop -s axn-term-online -p 18092
 
 ## Troubleshooting — read this before debugging
 
-### `stat /libraries: no such file or directory` (or `ramphastos` sibling) at build time
+### `ramphastos` sibling not found at build time
 
-`AXN_LIBS_ROOT` must point at the directory **containing the sibling
-checkouts** (`ramphastos`, `reflectiontools`, `totalserializer`) — it feeds
-`additional_contexts: libraries` and the sibling bind-mount. The compose
-default already resolves it relative to this file; only override if your
-checkouts live elsewhere. Never point it at a container path like
-`/libraries` — that only exists inside images, not on the host.
+`AXN_LIBS_ROOT` must point at the directory **containing axn-term and its
+sibling `ramphastos` checkout** (by default the parent of the axn-term repo)
+— it feeds `additional_contexts: libraries` and the sibling bind-mount. The
+compose default already resolves it relative to this file; only override if
+ramphastos lives elsewhere. Never point it at a container path like
+`/ramphastos` — that only exists inside images, not on the host.
 
 ### `additional privileges requested: pass --allow=fs.read=/`
 

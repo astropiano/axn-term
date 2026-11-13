@@ -21,9 +21,9 @@ services:
     image: axn-term-desktop-builder:latest
     volumes:
       - .:/src:ro
-      # dev/libraries — the ramphastos-client vite alias resolves to
-      # /libraries inside the container (same relative depth).
-      - ${AXN_LIBS_ROOT:-../../libraries}:/libraries:ro
+      # Sibling ramphastos checkout — the build runs in /build/source, so the
+      # ramphastos-client alias (../../../ramphastos) resolves to /build/ramphastos.
+      - ${AXN_LIBS_ROOT:-..}/ramphastos:/build/ramphastos:ro
       - desktop-cargo-cache:/cache/cargo
       - desktop-pnpm-cache:/cache/pnpm
       - desktop-vite-cache:/cache/vite
@@ -42,7 +42,7 @@ services:
     image: axn-term-windows-builder:latest
     volumes:
       - .:/src:ro
-      - ${AXN_LIBS_ROOT:-../../libraries}:/libraries:ro
+      - ${AXN_LIBS_ROOT:-..}/ramphastos:/build/ramphastos:ro
       - desktop-windows-cargo-cache:/cache/cargo
       - desktop-pnpm-cache:/cache/pnpm
       - desktop-vite-cache:/cache/vite
