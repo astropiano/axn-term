@@ -56,42 +56,42 @@ export function CloseConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-80 max-w-[90vw] rounded border border-[var(--border)] bg-[var(--surface)] p-4 shadow-lg">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)]">
+      <div className="w-80 max-w-[90vw] rounded-[var(--radius-xl)] bg-[var(--elevated)] p-5 shadow-[var(--shadow-pop)]">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
           Close window?
         </h2>
-        <p className="mb-1 text-xs text-[var(--text-primary)]">
+        <p className="mb-1 text-[13px] text-[var(--text-primary)]">
           {sessionCount} open session{sessionCount === 1 ? '' : 's'}
           {multiWindow ? ' in this window' : ''}
         </p>
         {multiWindow && (
-          <p className="mb-1 text-xs text-[var(--text-primary)]">
+          <p className="mb-1 text-[13px] text-[var(--text-primary)]">
             {otherWindowCount} other window{otherWindowCount === 1 ? '' : 's'} open
           </p>
         )}
-        <p className="mb-3 text-xs text-[var(--text-secondary)]">
+        <p className="mb-3 text-[13px] text-[var(--text-secondary)]">
           {runningCount > 0
             ? `${runningCount} ${runningCount === 1 ? 'session has' : 'sessions have'} a running process`
             : 'All sessions are idle'}
         </p>
         {runningCount > 0 && (
-          <p className="mb-3 text-xs text-[var(--orange)]">
+          <p className="mb-3 text-[13px] text-[var(--orange)]">
             Running processes will be terminated.
           </p>
         )}
         {multiWindow ? (
           <>
-            <p className="mb-3 text-xs text-[var(--text-secondary)]">
+            <p className="mb-3 text-[13px] text-[var(--text-secondary)]">
               Closing this window ends its sessions for good. Closing all
               windows saves every window's sessions for the next launch.
             </p>
-            <p className="mb-3 text-xs text-[var(--text-secondary)]">
+            <p className="mb-3 text-[13px] text-[var(--text-secondary)]">
               Closing all windows automatically in {secondsLeft}s — Cancel
               keeps the windows open.
             </p>
           </>
         ) : (
-          <p className="mb-3 text-xs text-[var(--text-secondary)]">
+          <p className="mb-3 text-[13px] text-[var(--text-secondary)]">
             Closing automatically in {secondsLeft}s — Cancel keeps the window open.
           </p>
         )}
@@ -100,21 +100,21 @@ export function CloseConfirmModal({
             <button
               type="button"
               onClick={onConfirm}
-              className="w-full rounded bg-[var(--red)] px-3 py-1.5 text-xs text-[var(--text-inverted)] hover:opacity-90"
+              className="w-full rounded bg-[var(--red)] px-3 py-1.5 text-[13px] text-[var(--text-inverted)] hover:opacity-90"
             >
               Close all windows &amp; save ({secondsLeft}s)
             </button>
             <button
               type="button"
               onClick={onCloseThisWindow}
-              className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+              className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
             >
               Close this window only
             </button>
             <button
               type="button"
               onClick={onCancel}
-              className="w-full rounded px-3 py-1 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              className="w-full rounded px-3 py-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
               Cancel
             </button>
@@ -124,14 +124,14 @@ export function CloseConfirmModal({
             <button
               type="button"
               onClick={onCancel}
-              className="rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+              className="rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={onConfirm}
-              className="rounded bg-[var(--red)] px-3 py-1.5 text-xs text-[var(--text-inverted)] hover:opacity-90"
+              className="rounded bg-[var(--red)] px-3 py-1.5 text-[13px] text-[var(--text-inverted)] hover:opacity-90"
             >
               Close ({secondsLeft}s)
             </button>

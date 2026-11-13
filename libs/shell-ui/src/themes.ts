@@ -45,6 +45,19 @@ export interface ThemeUi {
   accent?: string;
   accentHover?: string;
   cursor?: string;
+  /**
+   * Optional overrides for the derived design tokens in styles.css. Unset,
+   * each is computed there from the values above (color-mix), so a theme
+   * only needs these to pin an exact colour.
+   */
+  /** Rail, session panel and window base. */
+  chrome?: string;
+  /** Cards on the content pane. */
+  raised?: string;
+  /** Menus, tooltips, badges. */
+  elevated?: string;
+  /** "Needs you" colour (default: the theme's red). */
+  attention?: string;
 }
 
 export interface ThemeDefinition {
@@ -74,7 +87,13 @@ export interface AppSettings {
    * defaults to 1.0). Applies to terminals only, not the panel.
    */
   shellLineHeight?: number;
-  /** Session/workspace panel font family. Empty/unset = app font. */
+  /**
+   * Interface font family — rail, session panel, tabs, panels, dialogs.
+   * Empty/unset = the system UI font. Terminals and editors keep their
+   * monospace font.
+   */
+  uiFontFamily?: string;
+  /** Session/workspace panel font family. Empty/unset = interface font. */
   panelFontFamily?: string;
   /** Panel font size in px — scales the panel relative to its 12px base. */
   panelFontSize?: number;
@@ -299,37 +318,80 @@ const GENERIC_FONT_FAMILIES = new Set([
 ]);
 
 /**
- * Font existence check: draw the probe string in "family, monospace" and
- * compare widths with plain monospace — a missing font falls back to the
- * same glyph run and measures identically. Reliable for system fonts where
- * document.fonts.check() reports false positives.
+ * Font existence check. Two cases:
+ *
+ * - A web font registered with the document (bundled `@font-face`, or a
+ *   `FontFace` added at runtime) is found in `document.fonts`.
+ * - An installed font is measured in the DOM against two different generic
+ *   fallbacks: a family that exists renders the probe itself and measures
+ *   the same next to `serif` and `monospace`; a missing one falls through
+ *   and takes each fallback's width.
+ *
+ * `document.fonts.check()` is NOT used: for a name without a matching
+ * `@font-face` it answers "nothing to load" (true) in WebKit and Chromium,
+ * so every typo would pass. A detached canvas is not used either — in
+ * WebKit it cannot see user-installed fonts, and comparing against
+ * `monospace` alone misreports the many coding fonts that share its 0.6em
+ * advance.
  */
-let fontProbeCtx: CanvasRenderingContext2D | null | undefined;
 const fontProbeCache = new Map<string, boolean>();
 // Webfonts resolve asynchronously — a name probed "missing" before the font
 // loaded must not stay cached as missing forever.
 if (typeof document !== 'undefined') {
   void document.fonts?.ready?.then(() => fontProbeCache.clear());
 }
+
+const FONT_PROBE_TEXT = 'mmmmmmmmmmWWWiiiiill';
+
+function isRegisteredWebFont(name: string): boolean {
+  const wanted = name.toLowerCase();
+  try {
+    const faces = document.fonts as unknown as Iterable<{ family: string }> | undefined;
+    if (!faces || typeof (faces as { [Symbol.iterator]?: unknown })[Symbol.iterator] !== 'function') {
+      return false;
+    }
+    for (const face of faces) {
+      if (face.family.replace(/^["']|["']$/g, '').toLowerCase() === wanted) return true;
+    }
+  } catch {
+    // FontFaceSet not iterable here — fall through to the measurement.
+  }
+  return false;
+}
+
+/** Rendered width of the probe text in `fontFamily`, or null without layout. */
+function measureProbe(fontFamily: string): number | null {
+  const host = document.body ?? document.documentElement;
+  if (!host) return null;
+  const el = document.createElement('span');
+  el.textContent = FONT_PROBE_TEXT;
+  el.setAttribute('aria-hidden', 'true');
+  el.style.cssText =
+    'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap;' +
+    'font-size:72px;font-style:normal;font-weight:400;letter-spacing:0;font-variant:normal;';
+  el.style.fontFamily = fontFamily;
+  host.appendChild(el);
+  const width = el.getBoundingClientRect().width;
+  el.remove();
+  return Number.isFinite(width) ? width : null;
+}
+
 function singleFontExists(name: string): boolean {
   const cached = fontProbeCache.get(name);
   if (cached !== undefined) return cached;
   let exists = true;
   try {
-    if (document.fonts?.check?.(`12px "${name}"`)) {
-      exists = true;
-    } else {
-      if (fontProbeCtx === undefined) {
-        fontProbeCtx = document.createElement('canvas').getContext('2d');
-      }
-      if (!fontProbeCtx) {
-        exists = true;
-      } else {
-        const probe = 'mmmmmmmmmmWWW';
-        fontProbeCtx.font = '72px monospace';
-        const base = fontProbeCtx.measureText(probe).width;
-        fontProbeCtx.font = `72px "${name}", monospace`;
-        exists = Math.abs(fontProbeCtx.measureText(probe).width - base) > 0.01;
+    if (!isRegisteredWebFont(name)) {
+      const quoted = `"${name.replace(/["\\]/g, '')}"`;
+      const serif = measureProbe('serif');
+      const mono = measureProbe('monospace');
+      // No layout engine (tests, SSR) or indistinguishable fallbacks: there
+      // is nothing to compare against, so stay permissive.
+      if (serif !== null && mono !== null && Math.abs(serif - mono) > 0.5) {
+        const nextToSerif = measureProbe(`${quoted}, serif`);
+        const nextToMono = measureProbe(`${quoted}, monospace`);
+        exists =
+          nextToSerif !== null && nextToMono !== null && Math.abs(nextToSerif - nextToMono) < 0.5;
       }
     }
   } catch {
@@ -337,6 +399,11 @@ function singleFontExists(name: string): boolean {
   }
   fontProbeCache.set(name, exists);
   return exists;
+}
+
+/** Test hook: forget probe results (fonts registered after a probe). */
+export function resetFontProbeCache(): void {
+  fontProbeCache.clear();
 }
 
 /**
@@ -368,6 +435,29 @@ export function fontStackAvailable(stack: string): boolean {
   return names.some(
     (n) => GENERIC_FONT_FAMILIES.has(n.toLowerCase()) || fontFamilyExists(n),
   );
+}
+
+/**
+ * The interface (chrome) font from settings: the configured stack when it
+ * resolves to something real, else `undefined` — the stylesheet's system UI
+ * stack applies. A generic fallback is appended so a partially matching
+ * stack never drops to serif.
+ */
+export function resolveUiFont(settings: AppSettings): string | undefined {
+  const family = settings.uiFontFamily?.trim();
+  if (!family || !fontStackAvailable(family)) return undefined;
+  return /(^|,)\s*(sans-serif|system-ui|ui-sans-serif|monospace|ui-monospace|serif)\s*$/i.test(family)
+    ? family
+    : `${family}, system-ui, sans-serif`;
+}
+
+/** Push the interface font to the document (unset → stylesheet default). */
+export function applyUiFont(settings: AppSettings) {
+  if (typeof document === 'undefined') return;
+  const family = resolveUiFont(settings);
+  const root = document.documentElement;
+  if (family) root.style.setProperty('--font-ui-user', family);
+  else root.style.removeProperty('--font-ui-user');
 }
 
 /** Resolve the shell terminal font from settings (defaults in parens). */
@@ -423,6 +513,22 @@ export function getXtermColors(theme: ThemeDefinition): ITheme {
   };
 }
 
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+/** Share of `--bg` in `--chrome` — keep in sync with styles.css. */
+const CHROME_BG_SHARE = 0.94;
+
+/**
+ * sRGB mix of two #rrggbb colours (`share` of `a`, the rest `b`) — the same
+ * result as CSS `color-mix(in srgb, a share%, b)`. Undefined when either is
+ * not a plain hex colour.
+ */
+export function mixHex(a: string | undefined, b: string | undefined, share: number): string | undefined {
+  if (!a || !b || !HEX_COLOR.test(a) || !HEX_COLOR.test(b)) return undefined;
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const mixed = [0, 1, 2].map((i) => Math.round(channel(a, i) * share + channel(b, i) * (1 - share)));
+  return `#${mixed.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 export function applyTheme(theme: ThemeDefinition) {
   if (typeof document === 'undefined') return;
 
@@ -463,11 +569,26 @@ export function applyTheme(theme: ThemeDefinition) {
     }
   }
 
-  // Desktop (macOS): tint the native titlebar to the header color. Only
-  // #rrggbb values translate — anything else (rgb(), var leftovers) skips.
-  const bgSecondary = vars['--bg-secondary'];
-  if (bgSecondary && /^#[0-9a-fA-F]{6}$/.test(bgSecondary)) {
-    shellPlatform()?.setTitlebarColor?.(bgSecondary);
+  // Optional pins for the derived tokens — cleared when the theme leaves
+  // them out, so the stylesheet's color-mix defaults apply again.
+  const derived: Record<string, string | undefined> = {
+    '--chrome': ui.chrome,
+    '--raised': ui.raised,
+    '--elevated': ui.elevated,
+    '--attention': ui.attention,
+  };
+  for (const [key, value] of Object.entries(derived)) {
+    if (value) root.style.setProperty(key, value);
+    else root.style.removeProperty(key);
+  }
+
+  // Desktop (macOS): paint the native window background / title bar in the
+  // chrome colour, so the title bar row and the rail read as one surface.
+  // The native side needs #rrggbb, so the stylesheet's color-mix default is
+  // computed here as well; anything that is not a hex colour skips.
+  const chrome = ui.chrome ?? mixHex(vars['--bg'], vars['--text-primary'], CHROME_BG_SHARE);
+  if (chrome && HEX_COLOR.test(chrome)) {
+    shellPlatform()?.setTitlebarColor?.(chrome);
   }
 
   root.dataset.theme = theme.mode;

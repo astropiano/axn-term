@@ -216,14 +216,14 @@ function MonacoDiff({
 
   if (diff.binary) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-xs text-[var(--text-secondary)]">
+      <div className="flex h-full w-full items-center justify-center text-[13px] text-[var(--text-secondary)]">
         Binary file — no diff to display
       </div>
     );
   }
   if (diff.note) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-xs text-[var(--text-secondary)]">
+      <div className="flex h-full w-full items-center justify-center text-[13px] text-[var(--text-secondary)]">
         {diff.note}
       </div>
     );
@@ -1060,10 +1060,10 @@ export function GitInspectView({
           setViewMenu({ x: e.clientX, y: e.clientY, title: f.path, items });
         }}
         data-tip={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}
-        className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-0.5 text-left font-mono text-[10px] transition ${
+        className={`group flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-0.5 text-left font-mono text-[11px] transition ${
           selected
             ? 'bg-[var(--surface)] text-[var(--text-primary)]'
-            : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+            : 'text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]'
         }`}
       >
         <span className={`w-3 shrink-0 font-semibold ${LETTER_COLOR[letter] ?? ''}`}>
@@ -1108,7 +1108,7 @@ export function GitInspectView({
     if (files.length === 0) return null;
     return (
       <div className="mb-1">
-        <div className="flex items-center justify-between px-2 pb-0.5 pt-1.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+        <div className="flex items-center justify-between px-2 pb-0.5 pt-1.5 text-[11px] font-semibold text-[var(--text-secondary)]">
           <span>
             {title} ({files.length})
           </span>
@@ -1137,26 +1137,26 @@ export function GitInspectView({
       {/* toolbar */}
       <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
         <GitBranch className="h-3.5 w-3.5 text-[var(--cyan)]" />
-        <span className="truncate font-semibold text-[11px] text-[var(--text-primary)]">
+        <span className="truncate font-semibold text-xs text-[var(--text-primary)]">
           {repoName}
         </span>
-        <span className="max-w-48 truncate font-mono text-[10px] text-[var(--cyan)]">
+        <span className="max-w-48 truncate font-mono text-[11px] text-[var(--cyan)]">
           {branch === 'HEAD' ? '(detached)' : branch}
         </span>
         {base && (
           <span
-            className="flex shrink-0 items-center gap-1 font-mono text-[9px] text-[var(--accent)]"
+            className="flex shrink-0 items-center gap-1 font-mono text-[10px] text-[var(--accent)]"
             data-tip="Compare base — the view diffs merge-base vs HEAD"
           >
             <GitCompareArrows className="h-3 w-3" />
             {base}
           </span>
         )}
-        <span className="min-w-0 flex-1 truncate font-mono text-[9px] text-[var(--text-secondary)]">
+        <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--text-secondary)]">
           {root}
         </span>
         {hasChanges && (
-          <span className="shrink-0 font-mono text-[9px] text-[var(--yellow)]">
+          <span className="shrink-0 font-mono text-[10px] text-[var(--yellow)]">
             {status!.staged.length + status!.unstaged.length + status!.untracked.length + status!.conflicted.length}{' '}
             changed
           </span>
@@ -1174,7 +1174,7 @@ export function GitInspectView({
       </div>
 
       {error && (
-        <div className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-1 font-mono text-[10px] text-[var(--red)]">
+        <div className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-1 font-mono text-[11px] text-[var(--red)]">
           {error}
         </div>
       )}
@@ -1187,12 +1187,12 @@ export function GitInspectView({
             <>
               <div className="min-h-0 flex-1 overflow-y-auto py-1">
                 {!status && (
-                  <div className="px-3 py-2 text-[10px] text-[var(--text-secondary)]">
+                  <div className="px-3 py-2 text-[11px] text-[var(--text-secondary)]">
                     loading…
                   </div>
                 )}
                 {status && !hasChanges && (
-                  <div className="px-3 py-2 text-[10px] italic text-[var(--text-secondary)]">
+                  <div className="px-3 py-2 text-[11px] italic text-[var(--text-secondary)]">
                     working tree clean
                   </div>
                 )}
@@ -1207,7 +1207,7 @@ export function GitInspectView({
                           ? compare.error
                           : 'Files this branch would change when merged into the base ref'
                       }
-                      className={`flex w-full items-center gap-1.5 rounded border px-2 py-1 text-left text-[10px] transition ${
+                      className={`flex w-full items-center gap-1.5 rounded border px-2 py-1 text-left text-[11px] transition ${
                         compare && 'error' in compare
                           ? 'border-[var(--border)] text-[var(--red)]'
                           : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
@@ -1270,10 +1270,10 @@ export function GitInspectView({
                   onChange={(e) => setCommitMsg(e.currentTarget.value)}
                   placeholder={amend ? 'Amend message (empty keeps the old one)' : 'Commit message'}
                   rows={3}
-                  className="w-full resize-none rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-[10px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                  className="w-full resize-none rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
                 />
                 <div className="mt-1 flex items-center gap-2">
-                  <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                  <label className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)]">
                     <input
                       type="checkbox"
                       checked={amend}
@@ -1290,7 +1290,7 @@ export function GitInspectView({
                       busy ||
                       (!amend && (commitMsg.trim() === '' || stagedPaths.length === 0))
                     }
-                    className="rounded bg-[var(--accent)] px-3 py-1 text-[10px] font-semibold text-[var(--text-inverted)] transition hover:opacity-90 disabled:opacity-40"
+                    className="rounded bg-[var(--accent)] px-3 py-1 text-[11px] font-semibold text-[var(--text-inverted)] transition hover:opacity-90 disabled:opacity-40"
                   >
                     {amend ? 'Amend' : 'Commit'}
                   </button>
@@ -1308,18 +1308,18 @@ export function GitInspectView({
                     setDiff(null);
                   });
                 }}
-                className="m-2 shrink-0 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+                className="m-2 shrink-0 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
               >
                 ← Working copy
               </button>
               <div className="border-b border-[var(--border)] px-3 pb-2">
-                <div className="font-mono text-[10px] text-[var(--accent)]">
+                <div className="font-mono text-[11px] text-[var(--accent)]">
                   {sel.commit.hash.slice(0, 10)}
                 </div>
-                <div className="mt-0.5 text-[11px] font-semibold text-[var(--text-primary)]">
+                <div className="mt-0.5 text-xs font-semibold text-[var(--text-primary)]">
                   {sel.commit.subject}
                 </div>
-                <div className="mt-0.5 text-[10px] text-[var(--text-secondary)]">
+                <div className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
                   {sel.commit.author}
                   {sel.commit.time > 0 &&
                     ` · ${new Date(sel.commit.time * 1000).toLocaleString()}`}
@@ -1329,7 +1329,7 @@ export function GitInspectView({
                     {sel.commit.refs.map((r) => (
                       <span
                         key={r}
-                        className="rounded bg-[var(--surface-hover)] px-1 py-px font-mono text-[9px] text-[var(--text-primary)]"
+                        className="rounded bg-[var(--surface-hover)] px-1 py-px font-mono text-[10px] text-[var(--text-primary)]"
                       >
                         {r}
                       </span>
@@ -1337,7 +1337,7 @@ export function GitInspectView({
                   </div>
                 )}
               </div>
-              <div className="px-2 pb-0.5 pt-1.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+              <div className="px-2 pb-0.5 pt-1.5 text-[11px] font-semibold text-[var(--text-secondary)]">
                 Files ({commitFiles.length})
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto pb-1">
@@ -1380,10 +1380,10 @@ export function GitInspectView({
                         setViewMenu({ x: e.clientX, y: e.clientY, title: f.path, items });
                       }}
                       data-tip={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}
-                      className={`flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left font-mono text-[10px] transition ${
+                      className={`flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left font-mono text-[11px] transition ${
                         selFile?.path === f.path
                           ? 'bg-[var(--surface)] text-[var(--text-primary)]'
-                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+                          : 'text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]'
                       }`}
                     >
                       <span
@@ -1407,7 +1407,7 @@ export function GitInspectView({
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
             <FileDiff className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--text-secondary)]">
               {diff?.title ?? 'select a file or commit'}
             </span>
             {diff?.editablePath && (
@@ -1455,7 +1455,7 @@ export function GitInspectView({
                 onDiscuss={canTalk && selFile ? discussSelection : undefined}
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-xs text-[var(--text-secondary)]">
+              <div className="flex h-full w-full items-center justify-center text-[13px] text-[var(--text-secondary)]">
                 Select a changed file or a commit to inspect the diff
               </div>
             )}
@@ -1488,7 +1488,7 @@ export function GitInspectView({
         <button
           type="button"
           onClick={() => setHistoryOpen((v) => !v)}
-          className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+          className="text-[11px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
         >
           {historyOpen ? '▾' : '▸'} History
           {commits.length > 0 && ` (${commits.length})`}
@@ -1497,7 +1497,7 @@ export function GitInspectView({
       {historyOpen && (
         <div className="shrink-0 overflow-auto" style={{ height: historyH }}>
           {rows.length === 0 ? (
-            <div className="px-3 py-2 text-[10px] italic text-[var(--text-secondary)]">
+            <div className="px-3 py-2 text-[11px] italic text-[var(--text-secondary)]">
               no commits yet
             </div>
           ) : (
@@ -1546,7 +1546,7 @@ export function GitInspectView({
       {viewMenu && (
         <ContextMenu x={viewMenu.x} y={viewMenu.y} onClose={() => setViewMenu(null)}>
           {viewMenu.title && (
-            <div className="truncate px-2 pb-1 pt-1.5 font-mono text-[9px] text-[var(--text-secondary)]">
+            <div className="truncate px-2 pb-1 pt-1.5 font-mono text-[10px] text-[var(--text-secondary)]">
               {viewMenu.title}
             </div>
           )}
@@ -1577,11 +1577,11 @@ export function GitInspectView({
           onClose={() => setExplainPop(null)}
           widthClass="w-80"
         >
-          <div className="max-h-64 overflow-y-auto whitespace-pre-wrap px-3 pb-2 pt-2.5 text-[11px] leading-snug text-[var(--text-primary)]">
+          <div className="max-h-64 overflow-y-auto whitespace-pre-wrap px-3 pb-2 pt-2.5 text-xs leading-snug text-[var(--text-primary)]">
             {explanations[explainPop.key].text}
           </div>
           <div className="flex items-center gap-2 border-t border-[var(--border)] px-3 py-1.5">
-            <span className="flex-1 truncate font-mono text-[9px] text-[var(--text-secondary)]">
+            <span className="flex-1 truncate font-mono text-[10px] text-[var(--text-secondary)]">
               {explanations[explainPop.key].agent} ·{' '}
               {new Date(explanations[explainPop.key].at).toLocaleString()}
             </span>

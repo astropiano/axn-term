@@ -93,12 +93,12 @@ export function SearchPickerModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[60vh] w-[420px] max-w-[92vw] flex-col rounded border border-[var(--border)] bg-[var(--surface)] shadow-lg"
+        className="flex max-h-[60vh] w-[420px] max-w-[92vw] flex-col overflow-hidden rounded-[var(--radius-xl)] bg-[var(--elevated)] shadow-[var(--shadow-pop)]"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
       >
         <div className="border-b border-[var(--border)] px-3 py-2">
-          <div className="mb-1.5 truncate text-[11px] text-[var(--text-secondary)]">{title}</div>
+          <div className="mb-1.5 truncate text-xs text-[var(--text-secondary)]">{title}</div>
           <div className="flex items-center gap-2 rounded border border-[var(--border)] bg-[var(--bg)] px-2 focus-within:border-[var(--accent)]">
             <Search className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
             <input
@@ -108,13 +108,13 @@ export function SearchPickerModal({
               onChange={(e) => setQuery(e.target.value)}
               placeholder={placeholder ?? t`Search…`}
               spellCheck={false}
-              className="min-w-0 flex-1 bg-transparent py-1 text-xs text-[var(--text-primary)] outline-none"
+              className="min-w-0 flex-1 bg-transparent py-1 text-[13px] text-[var(--text-primary)] outline-none"
             />
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-1">
           {rowCount === 0 && (
-            <div className="px-2 py-2 text-[11px] text-[var(--text-secondary)]">
+            <div className="px-2 py-2 text-xs text-[var(--text-secondary)]">
               <Trans>No matches.</Trans>
             </div>
           )}
@@ -124,7 +124,7 @@ export function SearchPickerModal({
             return (
               <div key={item.key}>
                 {header && (
-                  <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-2 text-[10px] uppercase tracking-wide text-[var(--text-secondary)]">
+                  <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-2 text-[11px] text-[var(--text-secondary)]">
                     <Layers className="h-3 w-3" />
                     {item.group}
                   </div>
@@ -134,7 +134,7 @@ export function SearchPickerModal({
                   disabled={item.disabled}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => choose(i)}
-                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] ${
+                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs ${
                     active === i ? 'bg-[var(--surface-hover)]' : ''
                   } ${item.disabled ? 'cursor-default text-[var(--text-secondary)]' : 'text-[var(--text-primary)]'}`}
                 >
@@ -145,12 +145,12 @@ export function SearchPickerModal({
                   )}
                   <span className="min-w-0 truncate">{item.label}</span>
                   {item.detail && (
-                    <span className="min-w-0 flex-1 truncate text-[10px] text-[var(--text-secondary)]">
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-secondary)]">
                       {item.detail}
                     </span>
                   )}
                   {!item.detail && <span className="flex-1" />}
-                  {item.badge && <span className="shrink-0 text-[10px]">{item.badge}</span>}
+                  {item.badge && <span className="shrink-0 text-[11px]">{item.badge}</span>}
                 </button>
               </div>
             );
@@ -160,7 +160,7 @@ export function SearchPickerModal({
               type="button"
               onMouseEnter={() => setActive(matches.length)}
               onClick={() => choose(matches.length)}
-              className={`mt-1 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] ${
+              className={`mt-1 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-[var(--text-primary)] ${
                 active === matches.length ? 'bg-[var(--surface-hover)]' : ''
               }`}
             >

@@ -35,17 +35,17 @@ function RepoMenu({
   return (
     <ContextMenu x={position.x} y={position.y} onClose={onClose}>
       <div className="p-2">
-      <div className="mb-1 truncate px-2 py-1 text-[10px] text-[var(--text-secondary)]">
+      <div className="mb-1 truncate px-2 py-1 text-[11px] text-[var(--text-secondary)]">
         <span className="font-semibold text-[var(--text-primary)]">Repo:</span> {repo.root}
       </div>
-      <div className="my-1.5 h-px bg-[var(--border)]" />
+      <div className="my-1.5 h-px bg-[var(--hairline)]" />
       <button
         type="button"
         onClick={() => {
           void services.copyText(cwd ?? repo.root);
           onClose();
         }}
-        className="flex w-full items-center rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+        className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
       >
         Copy folder path
       </button>
@@ -55,7 +55,7 @@ function RepoMenu({
           void services.copyText(repo.root);
           onClose();
         }}
-        className="flex w-full items-center rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+        className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
       >
         Copy repo root
       </button>
@@ -66,7 +66,7 @@ function RepoMenu({
           if (repo.remote) void services.copyText(repo.remote);
           onClose();
         }}
-        className={`flex w-full items-center rounded px-2 py-1.5 text-left text-[11px] transition ${
+        className={`flex w-full items-center rounded px-2 py-1.5 text-left text-xs transition ${
           repo.remote
             ? 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
             : 'cursor-not-allowed text-[var(--text-secondary)]'
@@ -74,14 +74,14 @@ function RepoMenu({
       >
         Copy remote
       </button>
-      <div className="my-1.5 h-px bg-[var(--border)]" />
+      <div className="my-1.5 h-px bg-[var(--hairline)]" />
       <button
         type="button"
         onClick={() => {
           ctx.openBrowser(folder);
           onClose();
         }}
-        className="flex w-full items-center rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+        className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
       >
         Browse
       </button>
@@ -91,11 +91,11 @@ function RepoMenu({
           services.openDirectory?.(folder);
           onClose();
         }}
-        className="flex w-full items-center rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+        className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
       >
         {openFolderLabel}
       </button>
-      {items.length > 0 && <div className="my-1.5 h-px bg-[var(--border)]" />}
+      {items.length > 0 && <div className="my-1.5 h-px bg-[var(--hairline)]" />}
       {items.map((item, i) => (
         <button
           key={i}
@@ -104,7 +104,7 @@ function RepoMenu({
             item.onClick();
             onClose();
           }}
-          className="flex w-full items-center rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+          className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
         >
           {item.label}
         </button>
@@ -147,7 +147,7 @@ function GitStatus({
 
   return (
     <div
-      className="flex min-w-0 flex-col gap-0.5 overflow-hidden font-mono text-[10px]"
+      className="flex min-w-0 flex-col gap-0.5 overflow-hidden font-mono text-[11px]"
       onContextMenu={handleContextMenu}
     >
       <div
@@ -209,7 +209,7 @@ function GitStatusRow({
   return (
     <>
       <span
-        className="flex shrink-0 items-center gap-1 font-mono text-[9px] leading-none"
+        className="flex shrink-0 items-center gap-1 font-mono text-[10px] leading-none"
         data-tip={`${repo.root}\n${branch}`}
         onContextMenu={(e) => {
           e.preventDefault();

@@ -31,7 +31,7 @@ export function agentResumePanel(
         type="button"
         onClick={() => resumeAgentSession(ctx, agent, last, 'panel')}
         data-tip={last.command}
-        className="flex max-w-full items-center gap-1.5 rounded border border-[var(--border)] px-2 py-1 text-[10px] text-[var(--accent)] hover:bg-[var(--bg)]"
+        className="flex max-w-full items-center gap-1.5 rounded border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--accent)] hover:bg-[var(--bg)]"
       >
         <Play className="h-2.5 w-2.5 shrink-0" />
         <span className="truncate">

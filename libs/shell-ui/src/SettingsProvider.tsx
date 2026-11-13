@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { I18nProvider } from '@lingui/react';
 import { load as loadYaml, dump as dumpYaml } from 'js-yaml';
 import type { AppSettings, ThemeDefinition, ThemeMode } from './themes';
-import { applyTheme, defaultSettings, resolveTheme, themeMap } from './themes';
+import { applyTheme, applyUiFont, defaultSettings, resolveTheme, themeMap } from './themes';
 import type { AppConfigStore } from './platform';
 import { setAppAttention } from './app/attention';
 import { activateLanguage, i18n } from './i18n';
@@ -243,6 +243,11 @@ export function SettingsProvider({
     media.addEventListener('change', listener);
     return () => media.removeEventListener('change', listener);
   }, [settings]);
+
+  useEffect(() => {
+    applyUiFont(settings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.uiFontFamily]);
 
   useEffect(() => {
     const apply = () => activateLanguage(settings.language ?? 'system');
