@@ -9,19 +9,13 @@ COPY --from=axn-term Directory.Build.props ./
 COPY --from=axn-term nuget.config ./
 COPY --from=axn-term apps/session-host ./apps/session-host
 
-# Sibling repos under a `libraries` build context (dev/libraries locally):
-# ramphastos sources for the ProjectReference, plus its package feeds —
-# the nuget.config paths (../../libraries/...) resolve to /libraries here.
-# Directory.Packages.props carries the library versions (central package
-# management lives at the ramphastos repo root, above src/). NuGet finds
-# configs by walking up from each *project's* directory, so the feed config
-# must sit beside the referenced projects too — same relative paths resolve
-# (/libraries/ramphastos/../../libraries → /libraries).
-COPY --from=libraries ramphastos/Directory.Packages.props /libraries/ramphastos/Directory.Packages.props
-COPY --from=axn-term nuget.config /libraries/ramphastos/nuget.config
-COPY --from=libraries ramphastos/src /libraries/ramphastos/src
-COPY --from=libraries reflectiontools/src/packages /libraries/reflectiontools/src/packages
-COPY --from=libraries totalserializer/packages-local /libraries/totalserializer/packages-local
+# Sibling checkout of ramphastos (the `libraries` build context is the
+# directory holding axn-term and its siblings). The ProjectReference
+# ../../../ramphastos resolves to /ramphastos from the build root.
+# Central package versions live at the ramphastos repo root.
+COPY --from=libraries ramphastos/Directory.Packages.props /ramphastos/Directory.Packages.props
+COPY --from=libraries ramphastos/nuget.config /ramphastos/nuget.config
+COPY --from=libraries ramphastos/src /ramphastos/src
 
 RUN dotnet publish apps/session-host/AxnTerm.SessionHost.csproj \
     -c Release \

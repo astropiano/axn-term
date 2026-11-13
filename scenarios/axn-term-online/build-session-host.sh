@@ -32,7 +32,7 @@ else
 fi
 
 echo "==> Building $IMAGE with $ENGINE (repo: $REPO_ROOT)"
-LIBS_ROOT="${AXN_LIBS_ROOT:-$(cd "$REPO_ROOT/../libraries" 2>/dev/null && pwd || echo "$REPO_ROOT/../libraries")}"
+LIBS_ROOT="${AXN_LIBS_ROOT:-$(cd "$REPO_ROOT/.." 2>/dev/null && pwd || echo "$REPO_ROOT/..")}"
 "$ENGINE" build \
   --build-context "axn-term=$REPO_ROOT" \
   --build-context "libraries=$LIBS_ROOT" \

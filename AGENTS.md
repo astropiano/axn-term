@@ -64,8 +64,8 @@
   fs/exec/cwd/fg/tty map to VM commands. Kept behind a subpath export so the
   desktop build doesn't need the ramphastos-client dependency. Selected in
   `apps/web` via `VITE_RAMPHASTOS_URL` (absent → `WsBackend`). Client dep is a
-  sibling-checkout alias (`ramphastos-client` → `dev/libraries/ramphastos`,
-  mounted at `/libraries` in containers); rebuild the client package's `dist/`
+  sibling-checkout alias (`ramphastos-client` → `../ramphastos`, a checkout
+  next to axn-term; containers mount or copy it as the repo's sibling); rebuild the client package's `dist/`
   when its sources change. End-to-end: `tests/ramphastos-e2e.mjs` (raw protocol)
   and `tests/remote-backend-e2e.mjs` (backend surface; run with
   `node --experimental-strip-types`), both against a locally running
@@ -1376,8 +1376,8 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
   fs/exec/cwd/fg/tty map to VM commands. Kept behind a subpath export so the
   desktop build doesn't need the ramphastos-client dependency. Selected in
   `apps/web` via `VITE_RAMPHASTOS_URL` (absent → `WsBackend`). Client dep is a
-  sibling-checkout alias (`ramphastos-client` → `dev/libraries/ramphastos`,
-  mounted at `/libraries` in containers); rebuild the client package's `dist/`
+  sibling-checkout alias (`ramphastos-client` → `../ramphastos`, a checkout
+  next to axn-term; containers mount or copy it as the repo's sibling); rebuild the client package's `dist/`
   when its sources change. End-to-end: `tests/ramphastos-e2e.mjs` (raw protocol)
   and `tests/remote-backend-e2e.mjs` (backend surface; run with
   `node --experimental-strip-types`), both against a locally running

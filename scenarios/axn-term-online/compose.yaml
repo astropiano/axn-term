@@ -71,9 +71,9 @@ services:
     volumes:
       - ${AXN_TERM_ROOT:-../..}:/app
       - axn-term-online-node_modules:/app/node_modules
-      # dev/libraries at /libraries — the ramphastos-client vite alias
-      # (../../libraries/...) resolves there inside the container.
-      - ${AXN_LIBS_ROOT:-../../../../libraries}:/libraries:ro
+      # Sibling ramphastos checkout at /ramphastos — next to /app, so the
+      # ramphastos-client alias (../ramphastos) resolves there.
+      - ${AXN_LIBS_ROOT:-../../..}/ramphastos:/ramphastos:ro
       # plugins.yaml seed for first load (VITE_PLUGINS_YAML_SEED, web platform.ts).
       # Nested over the /app bind — apps/web/public/plugins.seed.yaml must exist
       # in the repo (empty placeholder, .gitignored) or this mount breaks.
@@ -107,9 +107,9 @@ services:
     build:
       context: ${AXN_TERM_ROOT:-../..}
       additional_contexts:
-        # dev/libraries — ramphastos sources + package feeds land at
-        # /libraries inside the build (matching the nuget.config paths).
-        libraries: ${AXN_LIBS_ROOT:-../../../../libraries}
+        # Directory holding axn-term and its sibling checkouts — ramphastos
+        # lands at /ramphastos inside the build (the ProjectReference depth).
+        libraries: ${AXN_LIBS_ROOT:-../../..}
       dockerfile: apps/gateway/Dockerfile
     image: axn-term-gateway:latest
     ports:
@@ -200,9 +200,9 @@ services:
       context: ./session-host
       additional_contexts:
         axn-term: ${AXN_TERM_ROOT:-../..}
-        # dev/libraries — ramphastos sources + package feeds land at
-        # /libraries inside the build (matching the nuget.config paths).
-        libraries: ${AXN_LIBS_ROOT:-../../../../libraries}
+        # Directory holding axn-term and its sibling checkouts — ramphastos
+        # lands at /ramphastos inside the build (the ProjectReference depth).
+        libraries: ${AXN_LIBS_ROOT:-../../..}
       dockerfile: Dockerfile
     image: axn-term-host
     scale: 0
