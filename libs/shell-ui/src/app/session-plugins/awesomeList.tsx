@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react';
+import { PublishPanelStatus } from '../PanelStatusSection';
+import { ghostButtonClass } from '../chromeStyles';
+import { PanelHeader, PanelHeaderSpacer } from '../PanelHeader';
+import { RailItem } from '../RailItem';
 import { appRuntime } from '../appRuntime';
 import { shellServices } from '../../services';
 import { ContextMenu, menuDividerClass, menuItemClass } from '../../ContextMenu';
@@ -318,7 +322,7 @@ function AwesomeListView({
   const commandCount = items.length - bookmarkCount;
 
   const sectionHeader = (label: string) => (
-    <div className="px-2 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+    <div className="px-2 pb-0.5 pt-2 text-[11px] font-semibold text-[var(--text-secondary)]">
       {label}
     </div>
   );
@@ -334,7 +338,7 @@ function AwesomeListView({
             value={editLabel}
             onChange={(e) => setEditLabel(e.target.value)}
             placeholder="Label (optional)"
-            className="w-36 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            className="w-36 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
           />
           <input
             type="text"
@@ -345,7 +349,7 @@ function AwesomeListView({
               if (e.key === 'Escape') setEditing(null);
             }}
             autoFocus
-            className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--surface)] px-2 py-0.5 font-mono text-[11px] text-[var(--text-primary)] outline-none"
+            className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--surface)] px-2 py-0.5 font-mono text-xs text-[var(--text-primary)] outline-none"
           />
           <button
             type="button"
@@ -397,16 +401,16 @@ function AwesomeListView({
           className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
         >
           <KindIcon kind={kind} />
-          <span className="shrink-0 text-[11px] font-semibold text-[var(--text-primary)]">
+          <span className="shrink-0 text-xs font-semibold text-[var(--text-primary)]">
             {item.label ?? (command ? item.path : basename(item.path))}
           </span>
           {(command ? item.label !== undefined : true) && (
-            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--text-secondary)]">
               {item.path}
             </span>
           )}
           {kind === 'missing' && (
-            <span className="shrink-0 rounded bg-[var(--orange)]/15 px-1 text-[9px] text-[var(--orange)]">
+            <span className="shrink-0 rounded bg-[var(--orange)]/15 px-1 text-[10px] text-[var(--orange)]">
               not found
             </span>
           )}
@@ -475,28 +479,24 @@ function AwesomeListView({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)]">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-3">
-        <FolderHeart className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-primary)]">
-          awesome list
-        </span>
-        <span className="text-[10px] text-[var(--text-secondary)]">
+      <PanelHeader icon={<FolderHeart />} title="Awesome list">
+        <span className="text-[11px] text-[var(--text-secondary)]">
           {bookmarkCount > 0 && `${bookmarkCount} bookmark${bookmarkCount === 1 ? '' : 's'}`}
           {bookmarkCount > 0 && commandCount > 0 && ' · '}
           {commandCount > 0 && `${commandCount} command${commandCount === 1 ? '' : 's'}`}
           {items.length === 0 && '0 bookmarks'}
         </span>
-        <div className="flex-1" />
+        <PanelHeaderSpacer />
         <button
           type="button"
           onClick={close}
           data-tip="Close"
           aria-label="Close"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+          className={ghostButtonClass}
         >
           <X className="h-3.5 w-3.5" />
         </button>
-      </div>
+      </PanelHeader>
 
       <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2">
         <input
@@ -507,14 +507,14 @@ function AwesomeListView({
             if (e.key === 'Enter') void addItem();
           }}
           placeholder="Add a path or URL — or '> a command'  (> label = cmd)"
-          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
         />
         <button
           type="button"
           onClick={() => void addItem()}
           data-tip="Add to awesome list"
           aria-label="Add to awesome list"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+          className={ghostButtonClass}
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -532,10 +532,10 @@ function AwesomeListView({
           }}
           placeholder="Filter…"
           spellCheck={false}
-          className="min-w-0 flex-1 bg-transparent py-0.5 text-[11px] text-[var(--text-primary)] outline-none"
+          className="min-w-0 flex-1 bg-transparent py-0.5 text-xs text-[var(--text-primary)] outline-none"
         />
         {filtering && (
-          <span className="shrink-0 text-[10px] text-[var(--text-secondary)]">
+          <span className="shrink-0 text-[11px] text-[var(--text-secondary)]">
             {indexed.length} of {items.length}
           </span>
         )}
@@ -543,11 +543,11 @@ function AwesomeListView({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {items.length === 0 ? (
-          <div className="px-2 py-3 text-[11px] italic text-[var(--text-secondary)]">
+          <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
             No bookmarks yet — add a path, URL or {'>'} command above.
           </div>
         ) : indexed.length === 0 ? (
-          <div className="px-2 py-3 text-[11px] italic text-[var(--text-secondary)]">
+          <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
             No matches for “{query.trim()}”.
           </div>
         ) : (
@@ -849,23 +849,36 @@ export const awesomeListPlugin: SessionViewPlugin = {
     },
   ],
   renderRail: ({ viewActive, toggleView, appState }) => {
-    const count = readItems(appState).length;
+    const items = readItems(appState);
+    const count = items.length;
+    const commands = items.filter(isCommandItem).length;
+    const bookmarks = count - commands;
     return (
-      <button
-        type="button"
-        onClick={toggleView}
-        data-tip={`awesome list — ${count} favorite${count === 1 ? '' : 's'} (paths, URLs & commands)`}
-        className={`flex flex-col items-center gap-0.5 rounded px-1 py-0.5 transition ${
-          viewActive
-            ? 'bg-[var(--surface)] text-[var(--accent)]'
-            : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-        }`}
-      >
-        <FolderHeart className="h-3.5 w-3.5" />
-        {count > 0 && (
-          <span className="select-none text-[8px] font-bold leading-none">{count}</span>
-        )}
-      </button>
+      <>
+        <RailItem
+          title="Awesome list"
+          onClick={toggleView}
+          active={viewActive}
+          badge={count > 0 ? count : undefined}
+        >
+          <FolderHeart />
+        </RailItem>
+        <PublishPanelStatus
+          source={awesomeListPlugin.id}
+          group={
+            count > 0
+              ? {
+                  title: 'Awesome list',
+                  icon: 'FolderHeart',
+                  meters: [
+                    { label: 'Bookmarks', value: String(bookmarks), detail: 'paths and URLs' },
+                    { label: 'Commands', value: String(commands), detail: 'shell commands' },
+                  ].filter((m) => m.value !== '0'),
+                }
+              : null
+          }
+        />
+      </>
     );
   },
   renderView: ({ appState, updateAppState, openTab, close, sessions, workspaces, selectedSessionId, sessionApi, selectSession }) => (

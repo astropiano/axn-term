@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { isMac } from '../platform';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { useSessionBackend, useShellServices } from '../services';
@@ -34,7 +35,7 @@ import {
   withLoginShell,
 } from './subShellAgents';
 import { talkResumeCommand } from './gitReview';
-import { isAppNavigationShortcut, isReloadShortcut } from './shortcuts';
+import { isAppChromeShortcut, isAppNavigationShortcut, isReloadShortcut } from './shortcuts';
 import type { EditorTab, ShellSession } from '../types';
 import { createFlowControl } from '../flowControl';
 
@@ -172,7 +173,10 @@ export function SubShellView({
     // App navigation shortcuts must bubble to ShellApp's window listener
     // instead of becoming escape sequences.
     t.attachCustomKeyEventHandler(
-      (event) => !isAppNavigationShortcut(event) && !isReloadShortcut(event),
+      (event) =>
+        !isAppNavigationShortcut(event) &&
+        !isReloadShortcut(event) &&
+        !isAppChromeShortcut(event, isMac),
     );
     term.current = t;
     fitAddon.current = fit;

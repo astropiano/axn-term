@@ -1,6 +1,9 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { PublishPanelStatus } from '../PanelStatusSection';
+import { ghostButtonClass } from '../chromeStyles';
+import { PanelHeader } from '../PanelHeader';
 import {
-  AlertTriangle,
+
   Boxes,
   FolderTree,
   GitFork,
@@ -15,6 +18,7 @@ import {
 import { appRuntime } from '../appRuntime';
 import type { RepoDir, RepoDirsContext } from '../repoDirectory';
 import { PanelSearch } from '../SessionPanel';
+import { RailItem } from '../RailItem';
 import type { SessionViewPlugin } from './plugin';
 
 // ---------------------------------------------------------------------------
@@ -441,42 +445,40 @@ function AxnDevRail({
     .filter((s) => s.running)
     .map((s) => s.name);
 
-  const title =
-    data.status === 'error'
-      ? `axn-dev list failed\n${data.error ?? 'unknown error'}`
-      : [
-          `axn-dev — ${running}/${total} scenarios running`,
-          runningNames.length ? `running: ${runningNames.join(', ')}` : null,
-          data.status === 'loading' ? 'refreshing…' : null,
-        ]
-          .filter(Boolean)
-          .join('\n');
-
+  const failed = data.status === 'error';
   return (
-    <button
-      type="button"
-      onClick={toggleView}
-      data-tip={title}
-      className={`flex flex-col items-center gap-0.5 rounded px-1 py-0.5 transition ${
-        viewActive
-          ? 'bg-[var(--surface)] text-[var(--accent)]'
-          : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-      }`}
-    >
-      <Boxes className="h-3.5 w-3.5" />
-      {data.status === 'error' ? (
-        <AlertTriangle className="h-3 w-3 text-[var(--red)]" />
-      ) : (
-        <span
-          className={`select-none text-[8px] font-bold leading-none ${
-            running > 0 ? 'text-[var(--green)]' : ''
-          }`}
-          data-tip="running / found scenarios"
-        >
-          {running}/{total}
-        </span>
-      )}
-    </button>
+    <>
+      <RailItem
+        title="axn-dev scenarios"
+        status={failed ? 'list failed' : undefined}
+        onClick={toggleView}
+        active={viewActive}
+        badge={failed ? undefined : running > 0 ? running : undefined}
+        badgeTone="success"
+        pip={failed ? 'attention' : undefined}
+      >
+        <Boxes />
+      </RailItem>
+      <PublishPanelStatus
+        source={axnDevPlugin.id}
+        group={
+          !failed && total > 0
+            ? {
+                title: 'axn-dev',
+                icon: 'Boxes',
+                meters: [
+                  {
+                    label: 'Running',
+                    value: `${running}/${total}`,
+                    detail: runningNames.length ? runningNames.join(', ') : 'no scenario running',
+                    tip: `${running} of ${total} scenarios running`,
+                  },
+                ],
+              }
+            : null
+        }
+      />
+    </>
   );
 }
 
@@ -514,7 +516,7 @@ function ScenarioOpButton({ scenario, op }: { scenario: AxnDevScenario; op?: Sce
       ) : (
         <>
           <span
-            className={`text-[10px] leading-none transition group-hover:hidden ${
+            className={`text-[11px] leading-none transition group-hover:hidden ${
               scenario.running ? 'text-[var(--green)]' : 'text-[var(--text-secondary)]'
             }`}
           >
@@ -531,7 +533,7 @@ function ScenarioOpButton({ scenario, op }: { scenario: AxnDevScenario; op?: Sce
 
 function TagBadge({ tag }: { tag: string }) {
   return (
-    <span className="flex shrink-0 items-center gap-0.5 rounded bg-[var(--surface)] px-1 text-[9px] text-[var(--text-secondary)]">
+    <span className="flex shrink-0 items-center gap-0.5 rounded bg-[var(--surface)] px-1 text-[10px] text-[var(--text-secondary)]">
       <Tag className="h-2 w-2" />
       {tag}
     </span>
@@ -545,12 +547,12 @@ function ScenarioRow({ scenario, op }: { scenario: AxnDevScenario; op?: Scenario
         <ScenarioOpButton scenario={scenario} op={op} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="font-mono text-[11px] font-semibold text-[var(--text-primary)]">
+            <span className="font-mono text-xs font-semibold text-[var(--text-primary)]">
               {scenario.name}
             </span>
             {scenario.worktree && (
               <span
-                className="flex items-center gap-0.5 rounded bg-[color-mix(in_srgb,var(--violet)_15%,transparent)] px-1 font-mono text-[9px] text-[var(--violet)]"
+                className="flex items-center gap-0.5 rounded bg-[color-mix(in_srgb,var(--violet)_15%,transparent)] px-1 font-mono text-[10px] text-[var(--violet)]"
                 data-tip={scenario.worktree.path}
               >
                 <GitFork className="h-2.5 w-2.5" />
@@ -562,19 +564,19 @@ function ScenarioRow({ scenario, op }: { scenario: AxnDevScenario; op?: Scenario
             ))}
           </div>
           {scenario.description && (
-            <div className="mt-0.5 break-words text-[10px] text-[var(--text-secondary)]">
+            <div className="mt-0.5 break-words text-[11px] text-[var(--text-secondary)]">
               {scenario.description}
             </div>
           )}
           {op?.error && (
-            <div className="mt-0.5 break-words text-[10px] text-[var(--red)]">
+            <div className="mt-0.5 break-words text-[11px] text-[var(--red)]">
               {op.op} failed: {op.error}
             </div>
           )}
         </div>
       </div>
       {scenario.running && scenario.resources && (
-        <div className="ml-12 pt-0.5 text-[10px] text-[var(--text-secondary)]">
+        <div className="ml-12 pt-0.5 text-[11px] text-[var(--text-secondary)]">
           cpu {scenario.resources.cpuPercent}% · mem {scenario.resources.mem}
         </div>
       )}
@@ -586,7 +588,7 @@ function ScenarioRow({ scenario, op }: { scenario: AxnDevScenario; op?: Scenario
               href={ep.url}
               target="_blank"
               rel="noreferrer"
-              className="flex items-baseline gap-2 text-[10px] hover:underline"
+              className="flex items-baseline gap-2 text-[11px] hover:underline"
             >
               <span className="w-36 shrink-0 truncate text-[var(--text-secondary)]">
                 {ep.label}
@@ -615,8 +617,8 @@ function ScenarioSectionView({
   const running = scenarios.filter((s) => s.running).length;
   return (
     <div className="mb-4">
-      <div className="mb-1 flex items-baseline gap-2 px-2 text-[10px] uppercase tracking-wide text-[var(--text-secondary)]">
-        <span>{section.scope === 'global' ? 'global scenarios' : section.label}</span>
+      <div className="mb-1 flex items-baseline gap-2 px-2 text-[11px] text-[var(--text-secondary)]">
+        <span>{section.scope === 'global' ? 'Global scenarios' : section.label}</span>
         <span className={running > 0 ? 'font-semibold text-[var(--green)]' : ''}>
           {runningOnly ? scenarios.length : `${running}/${scenarios.length}`}
         </span>
@@ -645,7 +647,7 @@ function TagFolderView({
     <div className={depth === 0 ? '' : 'mb-2'}>
       {node.path && (
         <div
-          className="mb-1 flex items-baseline gap-2 px-2 text-[10px] uppercase tracking-wide text-[var(--text-secondary)]"
+          className="mb-1 flex items-baseline gap-2 px-2 text-[11px] text-[var(--text-secondary)]"
           style={{ paddingLeft: `${8 + depth * 12}px` }}
         >
           <span>{node.segment}</span>
@@ -712,15 +714,11 @@ function AxnDevView({
     .filter((r) => r.scenarios.length > 0);
 
   const viewButton =
-    'flex h-6 w-6 items-center justify-center rounded text-[10px] transition';
+    'flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-md)] transition-colors duration-[var(--dur-1)]';
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)]">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-3">
-        <Boxes className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-primary)]">
-          axn-dev scenarios
-        </span>
+      <PanelHeader icon={<Boxes />} title="axn-dev scenarios">
         <div className="min-w-0 flex-1">
           <PanelSearch
             value={query}
@@ -735,8 +733,8 @@ function AxnDevView({
           aria-label="List view"
           className={`${viewButton} ${
             !treeView
-              ? 'bg-[var(--surface)] text-[var(--accent)]'
-              : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+              ? 'bg-[var(--fill-accent)] text-[var(--accent)]'
+              : 'text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]'
           }`}
         >
           <List className="h-3.5 w-3.5" />
@@ -748,8 +746,8 @@ function AxnDevView({
           aria-label="Tag tree view"
           className={`${viewButton} ${
             treeView
-              ? 'bg-[var(--surface)] text-[var(--accent)]'
-              : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+              ? 'bg-[var(--fill-accent)] text-[var(--accent)]'
+              : 'text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]'
           }`}
         >
           <FolderTree className="h-3.5 w-3.5" />
@@ -758,13 +756,13 @@ function AxnDevView({
           type="button"
           onClick={() => updateAppState({ runningOnly: !runningOnly })}
           data-tip="Only list running scenarios"
-          className={`flex h-6 items-center rounded px-2 text-[10px] transition ${
+          className={`flex h-7 shrink-0 items-center rounded-[var(--radius-md)] px-2.5 text-xs transition-colors duration-[var(--dur-1)] ${
             runningOnly
-              ? 'bg-[var(--surface)] text-[var(--accent)]'
-              : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+              ? 'bg-[var(--fill-accent)] text-[var(--accent)]'
+              : 'text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]'
           }`}
         >
-          running only
+          Running only
         </button>
         <button
           type="button"
@@ -773,20 +771,20 @@ function AxnDevView({
           aria-label="Show worktree scenarios"
           className={`${viewButton} ${
             showWorktrees
-              ? 'bg-[var(--surface)] text-[var(--accent)]'
-              : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+              ? 'bg-[var(--fill-accent)] text-[var(--accent)]'
+              : 'text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]'
           }`}
         >
           <GitFork className="h-3.5 w-3.5" />
         </button>
         <span
-          className={`text-[10px] ${running > 0 ? 'font-semibold text-[var(--green)]' : 'text-[var(--text-secondary)]'}`}
+          className={`text-[11px] ${running > 0 ? 'font-semibold text-[var(--green)]' : 'text-[var(--text-secondary)]'}`}
           data-tip="running / total scenarios"
         >
           {running}/{total}
         </span>
         {data.fetchedAt && (
-          <span className="text-[10px] text-[var(--text-secondary)]">
+          <span className="text-[11px] text-[var(--text-secondary)]">
             updated {Math.max(0, Math.round((Date.now() - data.fetchedAt) / 1000))}s ago
           </span>
         )}
@@ -795,7 +793,7 @@ function AxnDevView({
           onClick={() => void refreshScenarios()}
           data-tip="Refresh"
           aria-label="Refresh"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+          className={ghostButtonClass}
         >
           <RefreshCw className={`h-3.5 w-3.5 ${data.status === 'loading' ? 'animate-spin' : ''}`} />
         </button>
@@ -804,14 +802,14 @@ function AxnDevView({
           onClick={close}
           data-tip="Close"
           aria-label="Close"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+          className={ghostButtonClass}
         >
           <X className="h-3.5 w-3.5" />
         </button>
-      </div>
+      </PanelHeader>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {data.status === 'error' ? (
-          <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
+          <div className="rounded-[var(--radius-lg)] bg-[var(--raised)] p-3.5 text-xs leading-relaxed text-[var(--text-primary)] shadow-[0_0_0_1px_var(--hairline)]">
             <div className="mb-1 font-semibold text-[var(--red)]">failed to load scenarios</div>
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
             <div className="text-[var(--text-secondary)]">
@@ -819,7 +817,7 @@ function AxnDevView({
             </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="px-2 py-1 text-[11px] italic text-[var(--text-secondary)]">
+          <div className="px-2 py-1 text-xs italic text-[var(--text-secondary)]">
             {data.status === 'loading' && total === 0
               ? 'loading…'
               : query
@@ -842,7 +840,7 @@ function AxnDevView({
               />
             ))}
             {data.status === 'loading' && (
-              <div className="px-2 text-[10px] italic text-[var(--text-secondary)]">
+              <div className="px-2 text-[11px] italic text-[var(--text-secondary)]">
                 refreshing…
               </div>
             )}

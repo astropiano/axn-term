@@ -40,7 +40,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-it('gets from "loading sessions..." to the loaded app without a hook-order crash', async () => {
+it('gets from "Loading sessions…" to the loaded app without a hook-order crash', async () => {
   // Hold the state load so the first render is the loading screen.
   let release!: (state: WindowState | null) => void;
   const loadGate = new Promise<WindowState | null>((r) => (release = r));
@@ -52,16 +52,34 @@ it('gets from "loading sessions..." to the loaded app without a hook-order crash
   vi.spyOn(console, 'error').mockImplementation((...args) => errors.push(args));
 
   await mountApp(platform);
-  expect(container.textContent).toContain('loading sessions...');
+  expect(container.textContent).toContain('Loading sessions…');
 
   await act(async () => {
     release(null);
     await loadGate;
   });
 
-  expect(container.textContent).not.toContain('loading sessions...');
+  expect(container.textContent).not.toContain('Loading sessions…');
   expect(container.textContent).not.toContain('unexpected error');
   expect(errors.map(String).join('\n')).not.toMatch(/Rendered more hooks|#310/);
+});
+
+it('toggles the settings dialog on the app menu event (Preferences…, ⌘,)', async () => {
+  await mountApp(storyPlatform);
+  await act(async () => new Promise((r) => setTimeout(r, 0)));
+  const dialog = () => container.ownerDocument.querySelector('.fixed.inset-0 h2');
+  expect(dialog()).toBeNull();
+
+  await act(async () => {
+    window.dispatchEvent(new CustomEvent('axn:menu-settings'));
+  });
+  expect(dialog()?.textContent).toBe('Settings');
+
+  // The same key closes it again — like the gear at the bottom of the rail.
+  await act(async () => {
+    window.dispatchEvent(new CustomEvent('axn:menu-settings'));
+  });
+  expect(dialog()).toBeNull();
 });
 
 it('keeps both sub-shell tabs when two are opened before a re-render', async () => {

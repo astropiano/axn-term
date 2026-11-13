@@ -1,5 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Puzzle } from 'lucide-react';
+import { RailItem } from '../RailItem';
 import {
   AXN_PLUGIN_API_VERSION,
   hookPermission,
@@ -194,8 +195,8 @@ function SandboxedSurface({
     <div
       className={
         surface === 'row'
-          ? 'truncate text-[10px] text-[var(--text-secondary)]'
-          : 'border-t border-[var(--border)] px-3 py-1 text-[11px] text-[var(--text-secondary)]'
+          ? 'truncate text-[11px] text-[var(--text-secondary)]'
+          : 'border-t border-[var(--border)] px-3 py-1 text-xs text-[var(--text-secondary)]'
       }
       style={previewContainStyle}
       onClick={(e) => {
@@ -733,18 +734,9 @@ export function sandboxedPlugin(spec: SandboxPluginSpec): SandboxedPlugin {
   };
   if (spec.viewSource != null) {
     stub.renderRail = ({ viewActive, toggleView }) => (
-      <button
-        type="button"
-        onClick={toggleView}
-        data-tip={m.title}
-        className={`flex h-8 w-8 items-center justify-center rounded transition ${
-          viewActive
-            ? 'bg-[var(--accent)] text-[var(--text-inverted)]'
-            : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-        }`}
-      >
-        <Puzzle size={16} />
-      </button>
+      <RailItem title={m.title} onClick={toggleView} active={viewActive}>
+        <Puzzle />
+      </RailItem>
     );
     stub.renderView = (viewCtx) => <SandboxedView spec={spec} viewCtx={viewCtx} />;
   }

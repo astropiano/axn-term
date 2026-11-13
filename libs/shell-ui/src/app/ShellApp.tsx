@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Trans } from '@lingui/react/macro';
 import { ErrorBoundary } from './ErrorBoundary';
 import { dump } from 'js-yaml';
-import { Menu, X, Settings, FileText, Folder, Eye, AlertOctagon, AlertTriangle } from 'lucide-react';
+import { PanelLeft, X, Settings, FileText, Folder, Eye } from 'lucide-react';
 import { ShellTerminal, splitAnsiTail, stripAnsi } from '../ShellTerminal';
 import {
   SessionBackendProvider,
@@ -85,20 +85,35 @@ import { IconBagContext, collectIconBag, ICONS_PLUGIN_DATA_KEY, ICONS_SHARED_KEY
 import { bindAppRuntime } from './appRuntime';
 import { setRepoDirProviders } from './repoDirectory';
 import { bindGitBackend } from './gitClient';
-import { AttentionDot } from './AttentionDot';
 import { AttentionModal } from './AttentionModal';
 import { Banner, sessionBanners } from './Banner';
-import { isAppNavigationShortcut, isReloadShortcut } from './shortcuts';
+import {
+  isAppNavigationShortcut,
+  isPanelToggleShortcut,
+  isReloadShortcut,
+  panelToggleShortcutLabel,
+  railViewAriaShortcut,
+  railViewShortcutIndex,
+  railViewShortcutLabel,
+} from './shortcuts';
 import { AppContextMenu, appMenuTarget, type AppMenuTarget } from './AppContextMenu';
 import { sessionAttention, setAppAttention, summarizeAttention, useAppAttention, noteSessionSelected } from './attention';
 import type { RailFlag } from './attention';
-import { RAIL_ORDER_KEY, orderRailPlugins, railDropIndexAt, railOrderAfterDrop, storedRailOrder } from './railOrder';
+import {
+  RAIL_ORDER_KEY,
+  orderRailPlugins,
+  railDropIndexAt,
+  railOrderAfterDrop,
+  railViewAfterShortcut,
+  railViewIds,
+  storedRailOrder,
+} from './railOrder';
 import { ptyIdOf } from '../types';
 import { CloseConfirmModal } from './CloseConfirmModal';
 import { TabContextMenu } from './TabContextMenu';
 import { useSessionCommands } from './useSessionCommands';
 import { SessionTabStrip } from './SessionTabStrip';
-import { tabStripTabClasses } from './tabStyles';
+import { tabStripClasses, tabStripTabClasses } from './tabStyles';
 import { browserTabPatch, ideTabPatch, resolveSessionPath } from './shellCommandSupport';
 import { BroadcastDeck } from './BroadcastDeck';
 import { broadcastSet, useBroadcastSet } from './broadcastSet';
@@ -115,7 +130,8 @@ import {
   releaseHookSpec,
 } from './session-plugins/agentHookBridge';
 import { terminalInput } from '../terminalRegistry';
-import { IconButton } from './IconButton';
+import { RailItem, RailShortcutContext } from './RailItem';
+import { ghostButtonClass } from './chromeStyles';
 import { MobileKeyBar } from './MobileKeyBar';
 import { LONG_PRESS_MS } from '../useContextMenuTrigger';
 import { useCoarsePointer, useVisualViewportSize } from '../useMediaQuery';
@@ -356,6 +372,76 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // 4px to start, release to drop; Esc cancels. The click that follows a
   // drag is swallowed so dropping does not also toggle the plugin.
   const railItemRefs = useRef(new Map<string, HTMLDivElement>());
+
+  // The rail's views in display order — what ⌘1…⌘9 (Ctrl elsewhere)
+  // count. Read from the rendered rail: a plugin may render no item at all
+  // (a forge whose CLI is missing, remote access turned off), and such a
+  // slot must not take a number. Slots are marked `data-rail-view` when the
+  // plugin has a view; the observer keeps the list current when a plugin's
+  // item appears or disappears on its own.
+  const [railEl, setRailEl] = useState<HTMLDivElement | null>(null);
+  const [visibleRailViews, setVisibleRailViews] = useState<string[]>([]);
+  const visibleRailViewsRef = useRef(visibleRailViews);
+  visibleRailViewsRef.current = visibleRailViews;
+  useLayoutEffect(() => {
+    if (!railEl) return;
+    const read = () => {
+      const ids = railViewIds(
+        Array.from(railEl.querySelectorAll<HTMLElement>('[data-rail-slot]')).map((el) => ({
+          id: el.dataset.railSlot ?? '',
+          hasView: el.dataset.railView !== undefined,
+          visible: el.childElementCount > 0,
+        })),
+      );
+      setVisibleRailViews((prev) =>
+        prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids,
+      );
+    };
+    read();
+    if (typeof MutationObserver === 'undefined') return;
+    const observer = new MutationObserver(read);
+    observer.observe(railEl, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [railEl, railPlugins, pinnedRailPlugins]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      // ⌃⌘S (Ctrl+Shift+S elsewhere): show/hide the session panel.
+      if (isPanelToggleShortcut(event, isMac)) {
+        event.preventDefault();
+        event.stopPropagation();
+        setSidebarOpen((v) => !v);
+        return;
+      }
+      const index = railViewShortcutIndex(event, isMac);
+      if (index === null) return;
+      const next = railViewAfterShortcut(
+        visibleRailViewsRef.current,
+        index,
+        activePluginViewRef.current,
+      );
+      // No view at that position: leave the key alone.
+      if (next === undefined) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setActivePluginView(next);
+    };
+    // Capture phase, like the reload shortcut: editors and inputs must not
+    // swallow it. Terminals let it through (see isRailViewShortcut).
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
+  /** Tooltip / aria shortcut of a rail slot, when it is one of the first ten views. */
+  const railShortcutOf = useCallback(
+    (pluginId: string) => {
+      const label = railViewShortcutLabel(visibleRailViews.indexOf(pluginId), isMac);
+      return label
+        ? { label, aria: railViewAriaShortcut(visibleRailViews.indexOf(pluginId), isMac) }
+        : undefined;
+    },
+    [visibleRailViews],
+  );
   const suppressRailClick = useRef(false);
   const startRailDrag = useCallback(
     (e: React.PointerEvent, pluginId: string) => {
@@ -482,8 +568,10 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   enabledPluginsRef.current = enabledPlugins;
 
   // App-level "needs attention": any session flag plus global flags raised by
-  // rail plugins (e.g. RAM pressure). Shown as a pulsing icon in the rail;
-  // clicking it opens a modal listing every raised flag.
+  // plugins (e.g. RAM pressure). The session panel's toolbar shows them — an
+  // "N waiting" filter for session flags, a warning button for the rest that
+  // opens a modal listing every raised flag — and, while the panel is
+  // closed, the panel toggle carries their count.
   const appAttention = useAppAttention();
   const railFlags = useMemo<RailFlag[]>(() => {
     const flags: RailFlag[] = Object.entries(appAttention).map(([source, attention]) => ({
@@ -1834,6 +1922,15 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     return () => window.removeEventListener('axn:menu-reload', onMenuReload);
   }, [reloadWindow]);
 
+  // Preferences… from the app menu (⌘, / Ctrl+,) opens and closes the same
+  // settings dialog as the gear at the bottom of the rail. The desktop host
+  // forwards the menu event to the one window that should react.
+  useEffect(() => {
+    const onMenuSettings = () => setSettingsOpen((open) => !open);
+    window.addEventListener('axn:menu-settings', onMenuSettings);
+    return () => window.removeEventListener('axn:menu-settings', onMenuSettings);
+  }, []);
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!isAppNavigationShortcut(event)) return;
@@ -2319,10 +2416,46 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     platform.publishSharedState?.(ICONS_SHARED_KEY, iconBagJson);
   }, [loaded, iconBagJson, platform]);
 
+  // uiZoom scales the chrome; insets that must match the unscaled window
+  // (the macOS traffic lights) are computed against it.
+  const uiScale = settings.uiZoom && settings.uiZoom > 0 ? settings.uiZoom / 100 : 1;
+  // Flags that belong to no session — the panel shows them as a warning
+  // button next to its "N waiting" filter.
+  const appFlags = railFlags.filter((f) => !f.sessionId);
+  const appFlagSummary = summarizeAttention(
+    Object.fromEntries(appFlags.map((f) => [f.source, f.attention])),
+  );
+  // The session panel toggle (see where it is placed below). While the
+  // panel is closed it shows how many attention flags are raised.
+  const panelToggle = (
+    <button
+      type="button"
+      onClick={() => setSidebarOpen((v) => !v)}
+      data-tip={`${sidebarOpen ? 'Hide sessions' : 'Show sessions'}\n${panelToggleShortcutLabel(isMac)}`}
+      aria-label={sidebarOpen ? 'Hide sessions' : 'Show sessions'}
+      aria-expanded={sidebarOpen}
+      aria-keyshortcuts={isMac ? 'Control+Meta+S' : 'Control+Shift+S'}
+      className={`relative ${ghostButtonClass}`}
+    >
+      <PanelLeft className="h-4 w-4" />
+      {!sidebarOpen && railAttention && (
+        <span
+          className={`pointer-events-none absolute -right-1 -top-1 min-w-4 select-none rounded-full px-1 text-center text-[10px] font-semibold leading-4 tabular-nums shadow-[0_0_0_2px_var(--chrome)] ${
+            railAttention.level === 'critical'
+              ? 'bg-[var(--attention)] text-white'
+              : 'bg-[var(--orange)] text-[var(--text-inverted)]'
+          }`}
+        >
+          {railFlags.length}
+        </span>
+      )}
+    </button>
+  );
+
   if (!loaded || !selectedSession) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[var(--bg)] text-[var(--text-primary)]">
-        <span className="font-mono text-sm">loading sessions...</span>
+      <div className="flex h-screen w-full items-center justify-center bg-[var(--chrome)] text-[var(--text-secondary)]">
+        <span className="text-[13px]">Loading sessions…</span>
       </div>
     );
   }
@@ -2436,7 +2569,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     <ShellServicesProvider services={mergedServices} fileReader={fileReader}>
     <MemoryStatsProvider active={enabledPlugins.some((p) => p.needsMemoryStats)}>
     <div
-      className="relative flex h-screen w-full overflow-hidden border-t border-[var(--border)] bg-[var(--bg)]"
+      className="relative flex h-screen w-full overflow-hidden bg-[var(--chrome)]"
       style={{
         // On touch devices track the visual viewport so the on-screen
         // keyboard shrinks/translates the app instead of covering it
@@ -2448,54 +2581,74 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             : undefined,
         padding:
           'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)',
+        // Room the session panel's toolbar row leaves for the panel toggle
+        // that floats in the title-bar row.
+        ['--panel-toggle-w' as string]: '2rem',
       }}
     >
-      {/* Slim left rail — always visible, holds the hamburger + settings. */}
+      {/* Headless status sources: plugins whose meters show in the session
+          panel's status stack publish them from here — mounted for as
+          long as the plugin is enabled, also while the panel is hidden. */}
+      {enabledPlugins.map((plugin) =>
+        plugin.panelStatus ? (
+          <Fragment key={plugin.id}>
+            {plugin.panelStatus({
+              backend,
+              pluginSettings: pluginSettings[(plugin.settingsKey ?? plugin.id) as keyof typeof pluginSettings],
+              setAppAttention: (attention) => setAppAttention(plugin.id, attention),
+              sessions,
+            })}
+          </Fragment>
+        ) : null,
+      )}
+
+      {/* Session panel toggle — in the title-bar row, right of the macOS
+          traffic lights, like the sidebar button of Finder or Xcode. It
+          floats above the panel's toolbar row (which leaves room for it,
+          --panel-toggle-w) and, with the panel closed, above the strip the
+          content pane leaves for the traffic lights. Without that strip
+          (no overlay title bar, or fullscreen) and with the panel closed,
+          the copy at the top of the rail takes over. While the panel is
+          closed it carries the number of raised attention flags. */}
       <div
-        className="flex w-10 shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--bg-secondary)] pt-1 pb-2"
-        style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
+        className={`absolute z-[45] ${sidebarOpen ? 'flex' : 'axn-titlebar-only'}`}
+        style={{
+          left: `calc(var(--rail-w) * ${uiScale} + var(--titlebar-overhang) + ${8 * uiScale}px)`,
+          top: `${6 * uiScale}px`,
+        }}
+      >
+        <div style={{ zoom: uiScale === 1 ? undefined : uiScale }}>{panelToggle}</div>
+      </div>
+
+      {/* Left rail — always visible, tools only: one item per plugin view,
+          Settings set apart at the bottom. With the macOS overlay title bar
+          the traffic lights sit above its first item (--titlebar-h,
+          counter-scaled because the rail is zoomed and the lights are not).
+          Slots carry data-rail-slot / data-rail-view so the ⌘1…⌘9 numbering
+          can follow what is actually shown. */}
+      <div
+        ref={setRailEl}
+        className="flex w-[var(--rail-w)] shrink-0 flex-col items-center gap-1 bg-[var(--chrome)] pb-2.5"
+        style={{
+          zoom: uiScale === 1 ? undefined : uiScale,
+          paddingTop: `calc(var(--titlebar-h) / ${uiScale} + 4px)`,
+        }}
         data-tauri-drag-region
       >
-        <IconButton
-          title={sidebarOpen ? 'Hide sessions' : 'Show sessions'}
-          onClick={() => setSidebarOpen((v) => !v)}
-          size="md"
-        >
-          <Menu className="h-3.5 w-3.5" />
-        </IconButton>
-        {/* Active/total session counter — a permanent rail slot so plugin
-            views below never shift when an attention flag appears. With
-            flags raised it doubles as the attention button (pulsing dot +
-            level icon above the counter, click opens the modal). */}
-        <button
-          type="button"
-          onClick={railAttention ? () => setAttentionOpen(true) : undefined}
-          data-tip={
-            (railAttention ? `${railAttention.title}\n—\n` : '') +
-            `${sessions.length} session${sessions.length === 1 ? '' : 's'}, ${runningCount} with a running process`
-          }
-          className={`relative mt-2 flex h-8 w-7 flex-col items-center justify-center gap-px ${
-            railAttention ? 'cursor-pointer' : 'cursor-default'
-          }`}
-        >
-          {railAttention && (
-            <AttentionDot
-              level={railAttention.level}
-              className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2"
-            />
-          )}
-          {railAttention &&
-            (railAttention.level === 'critical' ? (
-              <AlertOctagon className="relative h-3 w-3 text-[var(--red)]" />
-            ) : (
-              <AlertTriangle className="relative h-3 w-3 text-[var(--orange)]" />
-            ))}
-          <span className="relative select-none text-[8px] font-bold leading-none text-[var(--text-secondary)]">
-            {runningCount}/{sessions.length}
-          </span>
-        </button>
+        {!sidebarOpen && (
+          <div className="axn-no-titlebar-only mb-1 flex flex-col items-center gap-1.5">
+            {panelToggle}
+            <div className="h-px w-5 bg-[var(--hairline)]" />
+          </div>
+        )}
         {pinnedRailPlugins.map((plugin) => (
-          <div key={plugin.id} className="mt-3">
+          <div
+            key={plugin.id}
+            data-rail-slot={plugin.id}
+            data-rail-view={plugin.renderView ? '' : undefined}
+            className="flex flex-col items-center empty:hidden"
+          >
+            <RailShortcutContext.Provider value={railShortcutOf(plugin.id)}>
             {plugin.renderRail!({
               backend,
               pluginSettings: pluginSettings[(plugin.settingsKey ?? plugin.id) as keyof typeof pluginSettings],
@@ -2513,6 +2666,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 return s ? buildPluginApi(s, plugin) : undefined;
               },
             })}
+            </RailShortcutContext.Provider>
           </div>
         ))}
         {railPlugins.map((plugin, i) => {
@@ -2524,7 +2678,10 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 if (el) railItemRefs.current.set(plugin.id, el);
                 else railItemRefs.current.delete(plugin.id);
               }}
+              data-rail-slot={plugin.id}
+              data-rail-view={plugin.renderView ? '' : undefined}
               data-tip={`${plugin.title} (drag to reorder)`}
+              data-tip-side="right"
               onPointerDown={(e) => startRailDrag(e, plugin.id)}
               onClickCapture={(e) => {
                 if (!suppressRailClick.current) return;
@@ -2533,7 +2690,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 e.stopPropagation();
               }}
               onDragStart={(e) => e.preventDefault()}
-              className={`mt-3 touch-none select-none${railDragId ? ' cursor-grabbing' : ''}${
+              className={`flex touch-none select-none flex-col items-center empty:hidden${railDragId ? ' cursor-grabbing' : ''}${
                 railDragId === plugin.id ? ' opacity-40' : ''
               }${
                 railDropIndex === i && railDragId !== plugin.id
@@ -2547,6 +2704,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                   : ''
               }`}
             >
+              <RailShortcutContext.Provider value={railShortcutOf(plugin.id)}>
               {plugin.renderRail!({
                 backend,
                 pluginSettings: pluginSettings[settingsKey as keyof typeof pluginSettings],
@@ -2564,6 +2722,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                   return s ? buildPluginApi(s, plugin) : undefined;
                 },
               })}
+              </RailShortcutContext.Provider>
             </div>
           );
         })}
@@ -2576,13 +2735,15 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
               : ''
           }`}
         />
-        <IconButton
+        {/* Settings is not a tool — a hairline sets it apart from them. */}
+        <div className="mb-0.5 h-px w-5 shrink-0 bg-[var(--hairline)]" />
+        <RailItem
           title="Settings"
           onClick={() => setSettingsOpen((v) => !v)}
-          size="md"
+          active={settingsOpen}
         >
-          <Settings className="h-3.5 w-3.5" />
-        </IconButton>
+          <Settings />
+        </RailItem>
       </div>
 
       {/* Session panel: overlay drawer on small screens, inline column on sm+ */}
@@ -2593,7 +2754,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             onClick={() => setSidebarOpen(false)}
           />
           <div
-            className="absolute bottom-0 left-10 top-0 z-40 min-w-[12rem] max-w-[85vw] shadow-lg sm:static sm:z-auto sm:shadow-none"
+            className="absolute bottom-0 left-[var(--rail-w)] top-0 z-40 min-w-[12rem] max-w-[85vw] shadow-lg sm:static sm:z-auto sm:shadow-none"
             style={{ width: sidebarWidth }}
           >
             <div className="relative h-full w-full">
@@ -2638,17 +2799,31 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 onSessionDragEnd={handleSessionDragEnd}
                 foreignDrag={foreignDrag}
                 onForeignDrop={claimForeignDrop}
+                appAttention={
+                  appFlagSummary
+                    ? { count: appFlags.length, level: appFlagSummary.level, title: appFlagSummary.title }
+                    : null
+                }
+                onShowAttention={() => setAttentionOpen(true)}
               />
               <div
                 onMouseDown={startSidebarResize}
-                className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize select-none hover:bg-[var(--surface-hover)]"
+                className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize select-none transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-2)]"
               />
             </div>
           </div>
         </>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      {/* Content pane — an inset card on the chrome. With the session panel
+          hidden, the macOS traffic lights have no toolbar row to sit in, so
+          the pane starts below them (the gap is a window drag region). */}
+      <div
+        className="flex min-w-0 flex-1 flex-col sm:pb-2 sm:pr-2 sm:pt-2 sm:data-[sidebar=closed]:pt-[max(0.5rem,var(--titlebar-h))]"
+        data-sidebar={sidebarOpen ? 'open' : 'closed'}
+        data-tauri-drag-region
+      >
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--bg)] sm:rounded-[var(--radius-lg)] sm:shadow-[0_0_0_1px_var(--hairline)]">
         {stateNotice && (
           <Banner level="warning" message={stateNotice} onDismiss={dismissStateNotice} />
         )}
@@ -2820,7 +2995,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
               {tabSet && (
                 <div
-                  className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto bg-[var(--bg-secondary)] px-2 shadow-[inset_0_-1px_0_var(--border)]"
+                  className={tabStripClasses}
                   data-tauri-drag-region
                   onTouchStart={handleTabStripTouchStart}
                   onTouchMove={handleTabStripTouchMove}
@@ -2832,7 +3007,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                     type="button"
                     onClick={() => updatePluginTabs(viewPlugin.id, { activeTab: 'view' })}
                     data-tip={viewPlugin.title}
-                    className={`relative flex shrink-0 items-center gap-1.5 px-2 text-[11px] transition ${tabStripTabClasses(
+                    className={`relative flex shrink-0 items-center gap-1.5 px-2.5 text-xs transition-colors duration-[var(--dur-1)] ${tabStripTabClasses(
                       viewTab === 'view',
                     )}`}
                   >
@@ -2852,7 +3027,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                           y: e.clientY,
                         });
                       }}
-                      className={`relative flex shrink-0 items-center pl-2 pr-1 text-[11px] transition ${tabStripTabClasses(
+                      className={`relative flex shrink-0 items-center pl-2.5 pr-1 text-xs transition-colors duration-[var(--dur-1)] ${tabStripTabClasses(
                         viewTab === ed.id,
                       )}`}
                     >
@@ -2881,7 +3056,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         onClick={() => closePluginTab(viewPlugin.id, ed.id)}
                         data-tip="Close tab"
                         aria-label="Close tab"
-                        className="ml-0.5 flex h-4 w-4 items-center justify-center rounded text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--red)]"
+                        className="ml-1 flex h-[18px] w-[18px] items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-tertiary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-2)] hover:text-[var(--text-primary)]"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -2956,6 +3131,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         {coarsePointer && keybarPtyId && (
           <MobileKeyBar target={() => terminalInput(keybarPtyId)} />
         )}
+      </div>
       </div>
 
       {tabMenu && (
@@ -3083,11 +3259,11 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       )}
       {closing && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
-          <div className="w-80 max-w-[90vw] rounded border border-[var(--border)] bg-[var(--surface)] p-4 shadow-lg">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)]">
+          <div className="w-80 max-w-[90vw] rounded-[var(--radius-xl)] bg-[var(--elevated)] p-5 shadow-[var(--shadow-pop)]">
+            <h2 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">
               Closing…
             </h2>
-            <p className="text-xs text-[var(--text-secondary)]">
+            <p className="text-[13px] text-[var(--text-secondary)]">
               Collecting session state from plugins before closing.
             </p>
             {closingProgress && (
@@ -3100,7 +3276,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                     }}
                   />
                 </div>
-                <span className="text-[10px] text-[var(--text-secondary)]">
+                <span className="text-[11px] text-[var(--text-secondary)]">
                   {Math.min(100, Math.round((closingProgress.done / closingProgress.total) * 100))}%
                 </span>
               </div>

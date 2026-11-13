@@ -3,7 +3,7 @@ import {
   RAIL_ORDER_KEY,
   orderRailPlugins,
   railOrderAfterDrop,
-  storedRailOrder, railDropIndexAt } from './railOrder';
+  storedRailOrder, railDropIndexAt, railViewAfterShortcut, railViewIds } from './railOrder';
 
 const plugins = (...ids: string[]) => ids.map((id) => ({ id }));
 const data = (order: unknown) => ({ [RAIL_ORDER_KEY]: { order } });
@@ -84,5 +84,48 @@ describe('railDropIndexAt', () => {
 
   it('skips items that are not mounted', () => {
     expect(railDropIndexAt(150, [undefined, { top: 140, height: 28 }])).toBe(1);
+  });
+});
+
+describe('railViewIds', () => {
+  const slot = (id: string, hasView = true, visible = true) => ({ id, hasView, visible });
+
+  it('keeps the display order of the slots that open a view', () => {
+    expect(railViewIds([slot('agents'), slot('glab-mr'), slot('servdemo-board')])).toEqual([
+      'agents',
+      'glab-mr',
+      'servdemo-board',
+    ]);
+  });
+
+  it('skips indicator-only slots and slots that render nothing', () => {
+    expect(
+      railViewIds([
+        slot('glab-mr'),
+        slot('ram', false), // an indicator, not a view
+        slot('gh-pr', true, false), // gh not installed: no rail item
+        slot('docker'),
+      ]),
+    ).toEqual(['glab-mr', 'docker']);
+    expect(railViewIds([])).toEqual([]);
+  });
+});
+
+describe('railViewAfterShortcut', () => {
+  const views = ['glab-mr', 'docker', 'servdemo-board'];
+
+  it('opens the view at the pressed position', () => {
+    expect(railViewAfterShortcut(views, 0, null)).toBe('glab-mr');
+    expect(railViewAfterShortcut(views, 2, 'glab-mr')).toBe('servdemo-board');
+  });
+
+  it('returns to the session when that view is already active', () => {
+    expect(railViewAfterShortcut(views, 1, 'docker')).toBeNull();
+  });
+
+  it('does nothing past the last view', () => {
+    expect(railViewAfterShortcut(views, 3, null)).toBeUndefined();
+    expect(railViewAfterShortcut(views, 9, 'docker')).toBeUndefined();
+    expect(railViewAfterShortcut([], 0, null)).toBeUndefined();
   });
 });
