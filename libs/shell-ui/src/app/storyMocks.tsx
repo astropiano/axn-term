@@ -1,14 +1,15 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { MemoryStats, SessionBackend, ShellServices } from '@axn-term/session-backend';
 import type { ShellPlatform } from '../platform';
-import { AlertOctagon, AlertTriangle, Menu, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import type { ShellSession } from '../types';
 import { SessionBackendProvider, ShellPlatformProvider, ShellServicesProvider, bindShellServices } from '../services';
 import { SettingsProvider } from '../SettingsProvider';
 import { PluginSettingsProvider } from './PluginSettingsProvider';
 import { MemoryStatsProvider } from './useMemoryStats';
-import { AttentionDot } from './AttentionDot';
-import { setAppAttention, summarizeAttention, useAppAttention } from './attention';
+import { RailItem, RailShortcutContext } from './RailItem';
+import { railViewShortcutLabel } from './shortcuts';
+import { setAppAttention } from './attention';
 import { bindAppRuntime } from './appRuntime';
 import { orderRailPlugins } from './railOrder';
 import { getSessionViewPlugins } from './session-plugins';
@@ -358,54 +359,28 @@ export function StoryRail({
   /** pluginData.<settingsKey> the rail plugins read as appState. */
   pluginData?: Record<string, unknown>;
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const plugins = orderRailPlugins(
     getSessionViewPlugins().filter((p) => p.renderRail),
     pluginData,
   );
-  const appAttention = useAppAttention();
-  const railAttention = summarizeAttention(appAttention);
-  const runningCount = 2;
+  const viewIds = plugins.filter((p) => p.renderView).map((p) => p.id);
 
   return (
     <MemoryStatsProvider active>
-      <div className="flex h-full w-10 flex-col items-center rounded border border-[var(--border)] bg-[var(--bg-secondary)] py-2">
-        <button
-          type="button"
-          onClick={() => setSidebarOpen((v) => !v)}
-          data-tip={sidebarOpen ? 'Hide sessions' : 'Show sessions'}
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
-        >
-          <Menu className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          data-tip={
-            (railAttention ? `${railAttention.title}\n—\n` : '') +
-            `${storySessions.length} sessions, ${runningCount} with a running process`
-          }
-          className="relative mt-2 flex h-8 w-7 cursor-default flex-col items-center justify-center gap-px"
-        >
-          {railAttention && (
-            <AttentionDot
-              level={railAttention.level}
-              className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2"
-            />
-          )}
-          {railAttention &&
-            (railAttention.level === 'critical' ? (
-              <AlertOctagon className="relative h-3 w-3 text-[var(--red)]" />
-            ) : (
-              <AlertTriangle className="relative h-3 w-3 text-[var(--orange)]" />
-            ))}
-          <span className="relative select-none text-[8px] font-bold leading-none text-[var(--text-secondary)]">
-            {runningCount}/{storySessions.length}
-          </span>
-        </button>
+      <div className="flex h-full w-[var(--rail-w)] flex-col items-center gap-1 rounded-[var(--radius-lg)] bg-[var(--chrome)] py-2 shadow-[0_0_0_1px_var(--hairline)]">
         {plugins.map((plugin) => {
           const settingsKey = plugin.settingsKey ?? plugin.id;
           return (
-            <div key={plugin.id} className="mt-3">
+            <div key={plugin.id} className="flex flex-col items-center empty:hidden">
+              <RailShortcutContext.Provider
+                value={
+                  // The app numbers the slots that show an item; the mock
+                  // numbers every view in order.
+                  plugin.renderView && railViewShortcutLabel(viewIds.indexOf(plugin.id), true)
+                    ? { label: railViewShortcutLabel(viewIds.indexOf(plugin.id), true)! }
+                    : undefined
+                }
+              >
               {plugin.renderRail!({
                 backend: storyBackend,
                 pluginSettings: storyPluginSettings[settingsKey],
@@ -419,18 +394,15 @@ export function StoryRail({
                 sessions: storySessions,
                 sessionApi: () => undefined,
               })}
+              </RailShortcutContext.Provider>
             </div>
           );
         })}
         <div className="flex-1" />
-        <button
-          type="button"
-          data-tip="Settings"
-          aria-label="Settings"
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
-        >
-          <Settings className="h-4 w-4" />
-        </button>
+        <div className="mb-0.5 h-px w-5 shrink-0 bg-[var(--hairline)]" />
+        <RailItem title="Settings" onClick={() => {}}>
+          <Settings />
+        </RailItem>
       </div>
     </MemoryStatsProvider>
   );

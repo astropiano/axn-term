@@ -91,7 +91,9 @@ const fieldPlugin: SessionViewPlugin = {
 };
 
 const titleRowOf = (name: string) =>
-  [...container.querySelectorAll('span.font-semibold')].find((s) => s.textContent === name)?.parentElement;
+  [...container.querySelectorAll('span')]
+    .find((s) => s.className.includes('font-medium') && s.textContent === name)
+    ?.closest('[class*="group/row"]');
 
 it('places fields in their default zones', async () => {
   await render({ plugins: [fieldPlugin] });

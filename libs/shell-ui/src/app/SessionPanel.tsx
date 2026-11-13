@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fra
 import { useIconBag, resolveIcon, resolveProcessIcon, type IconBag } from './iconModel';
 import { ContextMenu, menuItemClass } from '../ContextMenu';
 import { broadcastSet, useBroadcastMarked, useBroadcastSet } from './broadcastSet';
-import { Plus, Save, FolderOpen, FolderCog, FolderPlus, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText, PanelLeft, Radio } from 'lucide-react';
+import { Plus, Save, FolderOpen, FolderCog, FolderPlus, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText, PanelLeft, Radio, Check, AlertTriangle, MoreHorizontal } from 'lucide-react';
 import { Trans, useLingui } from '@lingui/react/macro';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
@@ -16,10 +16,18 @@ import { createPluginApi } from './session-plugins/plugin';
 import { AttentionDot } from './AttentionDot';
 import { sessionAttention, summarizeAttention } from './attention';
 import { IconButton } from './IconButton';
+import { PanelStatusSection } from './PanelStatusSection';
+import {
+  PANEL_UI_KEY,
+  storedExpandedGroups,
+  storedSystemExpanded,
+  toggleExpandedGroup,
+} from './panelStatus';
+import { orderRailPlugins } from './railOrder';
 import { sanitizeSvgIcon } from './sanitizeSvg';
 import { useContextMenuTrigger } from '../useContextMenuTrigger';
 import type { MenuPosition } from '../useContextMenuTrigger';
-import type { AgentCli, ShellSession, Workspace } from '../types';
+import type { AgentCli, AttentionLevel, ShellSession, Workspace } from '../types';
 import { sessionDisplayName, ptyIdOf } from '../types';
 import type { RepoMenuItem, SessionViewPlugin } from './session-plugins/plugin';
 import type { TaskStateSnapshot } from './useAgentTasks';
@@ -27,6 +35,7 @@ import { SetDefaultFolderModal } from './SetDefaultFolderModal';
 import { EditSessionSummaryModal } from './EditSessionSummaryModal';
 import { InvalidDefaultFolderModal } from './InvalidDefaultFolderModal';
 import { DeleteWorkspaceModal } from './DeleteWorkspaceModal';
+import { isRenameShortcut, isTextEntryTarget } from './shortcuts';
 import { FilePickerModal } from './FilePickerModal';
 import {
   createDragExitTracker,
@@ -88,6 +97,26 @@ interface SessionPanelProps {
   foreignDrag?: { sessionId: string; name: string } | null;
   /** Take the foreign session at this spot; true when claimed. */
   onForeignDrop?: (workspaceId: string, beforeSessionId: string | null) => boolean;
+  /**
+   * Raised attention flags that belong to no session (memory pressure, an
+   * invalid config file, …) — shown as a warning button in the toolbar row.
+   */
+  appAttention?: { count: number; level: AttentionLevel; title: string } | null;
+  /** Open the list of all raised flags (the warning button's click). */
+  onShowAttention?: () => void;
+}
+
+/**
+ * Whether a session row passes the panel's filters: the text filter
+ * (`query`, lower-cased) and — when `attentionIds` is given — "only
+ * sessions that need you".
+ */
+export function panelSessionVisible(
+  session: Pick<ShellSession, 'id' | 'name'>,
+  filter: { query: string; attentionIds: ReadonlySet<string> | null },
+): boolean {
+  if (filter.attentionIds && !filter.attentionIds.has(session.id)) return false;
+  return !filter.query || session.name.toLowerCase().includes(filter.query);
 }
 
 export interface SessionDragEndInfo {
@@ -109,6 +138,37 @@ const statusLabel: Record<string, string> = {
   blocked: 'blocked',
   completed: 'completed',
 };
+
+/**
+ * Short, human path for a session row's second line: the home directory
+ * collapses to `~` and only the last two segments are kept
+ * (`/Users/me/dev/axn-term` → `~/dev/axn-term`, deeper paths → `…/a/b`).
+ */
+export function cwdLabel(cwd: string | undefined): string | null {
+  if (!cwd) return null;
+  const trimmed = cwd.length > 1 ? cwd.replace(/[\\/]+$/, '') : cwd;
+  const home = trimmed.replace(/^\/(?:Users|home)\/[^/]+/, '~');
+  const parts = home.split('/').filter(Boolean);
+  if (parts.length <= 3) return home || '/';
+  return `…/${parts.slice(-2).join('/')}`;
+}
+
+/**
+ * The row's second line: why the session needs attention, else where it
+ * runs — unless its name already says so (a name that contains the folder
+ * needs no second line).
+ */
+export function sessionMetaLine(
+  session: Pick<ShellSession, 'name' | 'cwd'>,
+  attentionTitle?: string,
+): string | null {
+  if (attentionTitle) return attentionTitle.split('\n')[0];
+  const label = cwdLabel(session.cwd);
+  if (!label) return null;
+  const folder = label.split('/').filter(Boolean).pop();
+  if (!folder || folder === '~' || session.name.toLowerCase().includes(folder.toLowerCase())) return null;
+  return label;
+}
 
 // Inline rename editing for the workspace header — triggered programmatically
 // from the workspace context menu, so it must not swallow pointer events the
@@ -183,7 +243,7 @@ export function PanelSearch({
   const { t } = useLingui();
   return (
     <div className="relative flex min-w-0 flex-1 items-center">
-      <Search className="pointer-events-none absolute left-1.5 h-3 w-3 text-[var(--text-secondary)]" />
+      <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-[var(--text-tertiary)]" />
       <input
         type="text"
         value={value}
@@ -192,14 +252,14 @@ export function PanelSearch({
           if (e.key === 'Escape') onChange('');
         }}
         placeholder={placeholder ?? t`Filter sessions…`}
-        className="h-6 w-full min-w-0 rounded border border-[var(--border)] bg-[var(--bg)] pl-5 pr-5 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)] focus:border-[var(--accent)]"
+        className="h-7 w-full min-w-0 rounded-[var(--radius-md)] bg-[var(--fill-1)] pl-7 pr-6 text-xs text-[var(--text-primary)] shadow-[inset_0_0_0_1px_var(--hairline)] outline-none transition-shadow duration-[var(--dur-1)] placeholder:text-[var(--text-tertiary)] focus:shadow-[inset_0_0_0_1px_var(--accent),0_0_0_3px_var(--ring)]"
       />
       {value && (
         <button
           type="button"
           onClick={() => onChange('')}
           aria-label="Clear filter"
-          className="absolute right-1 flex h-4 w-4 items-center justify-center rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          className="absolute right-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--fill-2)] hover:text-[var(--text-primary)]"
         >
           <X className="h-3 w-3" />
         </button>
@@ -212,7 +272,7 @@ function AddWorkspaceButton({ onClick }: { onClick: () => void }) {
   const { t } = useLingui();
   return (
     <IconButton onClick={onClick} title={t`New workspace`}>
-      <Plus className="h-3.5 w-3.5" />
+      <Plus className="h-4 w-4" />
     </IconButton>
   );
 }
@@ -255,7 +315,7 @@ function WorkspaceContextMenu({
 
 
   const itemClass =
-    'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]';
+    'flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-xs text-[var(--text-primary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-2)]';
   const disabled = ' pointer-events-none opacity-40';
 
   return (
@@ -263,24 +323,24 @@ function WorkspaceContextMenu({
       x={position.x}
       y={position.y}
       onClose={onClose}
-      className="rounded-lg bg-[var(--surface)] p-1 shadow-2xl"
+      className="rounded-[var(--radius-lg)] bg-[var(--elevated)] p-1 shadow-[var(--shadow-pop)]"
     >
       <div
-        className="truncate px-2 py-1 text-[10px] text-[var(--text-secondary)]"
+        className="truncate px-2 py-1 text-[11px] text-[var(--text-secondary)]"
         data-tip={workspace.name}
       >
         {workspace.name}
       </div>
       {workspace.defaultFolder && (
         <div
-          className="flex items-center gap-2 truncate px-2 py-1 text-[10px] text-[var(--text-secondary)]"
+          className="flex items-center gap-2 truncate px-2 py-1 text-[11px] text-[var(--text-secondary)]"
           data-tip={`default folder: ${workspace.defaultFolder}`}
         >
           <FolderOpen className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{workspace.defaultFolder.split('/').filter(Boolean).pop()}</span>
         </div>
       )}
-      <div className="my-1 h-px bg-[var(--border)]" />
+      <div className="my-1 h-px bg-[var(--hairline)]" />
       <button
         type="button"
         onClick={() => {
@@ -353,7 +413,7 @@ function WorkspaceContextMenu({
       </button>
       {pluginItems && pluginItems.length > 0 && (
         <>
-          <div className="my-1 h-px bg-[var(--border)]" />
+          <div className="my-1 h-px bg-[var(--hairline)]" />
           {pluginItems.map((item) => (
             <button
               key={item.label}
@@ -371,7 +431,7 @@ function WorkspaceContextMenu({
       )}
       {canDelete && (
         <>
-          <div className="my-1 h-px bg-[var(--border)]" />
+          <div className="my-1 h-px bg-[var(--hairline)]" />
           <button
             type="button"
             onClick={() => {
@@ -454,7 +514,7 @@ function WorkspaceHeader({
   return (
     <>
       <div
-        className={`group flex items-center gap-1 text-xs text-[var(--text-primary)]${
+        className={`group flex h-7 items-center gap-0.5 text-xs text-[var(--text-secondary)]${
           isDragging ? ' opacity-40' : ''
         }`}
         onClick={wrapClick(onToggle)}
@@ -483,9 +543,9 @@ function WorkspaceHeader({
         }}
         data-tip={isCollapsed ? t`Expand` : t`Collapse`}
         aria-label={isCollapsed ? 'Expand' : 'Collapse'}
-        className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-tertiary)] transition-colors duration-[var(--dur-1)] hover:text-[var(--text-primary)]"
       >
-        {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
       </button>
 
       {editing ? (
@@ -493,12 +553,12 @@ function WorkspaceHeader({
           {input && (
             <input
               {...(input.props as React.InputHTMLAttributes<HTMLInputElement>)}
-              className="w-full rounded border border-[var(--accent)] bg-[var(--bg)] px-1.5 py-0.5 text-xs text-[var(--text-primary)] outline-none"
+              className="w-full rounded-[var(--radius-sm)] bg-[var(--bg)] px-1.5 py-0.5 text-xs text-[var(--text-primary)] shadow-[inset_0_0_0_1px_var(--accent),0_0_0_3px_var(--ring)] outline-none"
             />
           )}
         </div>
       ) : (
-        <span className="flex-1 cursor-pointer truncate py-1.5 pl-1 font-semibold">
+        <span className="flex-1 cursor-pointer truncate font-semibold tracking-[0.01em] transition-colors duration-[var(--dur-1)] group-hover:text-[var(--text-primary)]">
           <Highlight text={workspace.name} query={searchQuery ?? ''} />
         </span>
       )}
@@ -512,7 +572,7 @@ function WorkspaceHeader({
         }}
         data-tip={t`New session in workspace`}
         aria-label="New session in workspace"
-        className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] opacity-50 transition hover:bg-[var(--surface)] hover:text-[var(--accent)] group-hover:opacity-100 pointer-coarse:opacity-100"
+        className="flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-secondary)] opacity-50 transition hover:bg-[var(--fill-2)] hover:text-[var(--text-primary)] group-hover:opacity-100 pointer-coarse:opacity-100"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
@@ -526,7 +586,7 @@ function WorkspaceHeader({
           }}
           data-tip={t`Delete workspace`}
           aria-label="Delete workspace"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] opacity-50 transition hover:bg-[var(--surface)] hover:text-[var(--red)] group-hover:opacity-100 pointer-coarse:opacity-100"
+          className="flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-secondary)] opacity-50 transition hover:bg-[var(--fill-2)] hover:text-[var(--red)] group-hover:opacity-100 pointer-coarse:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -635,21 +695,21 @@ function SessionContextMenu({
   };
 
   const itemClass =
-    'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]';
+    'flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-xs text-[var(--text-primary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-2)]';
 
   return (
     <ContextMenu
       x={position.x}
       y={position.y}
       onClose={onClose}
-      className="rounded-lg bg-[var(--surface)] p-1 shadow-2xl"
+      className="rounded-[var(--radius-lg)] bg-[var(--elevated)] p-1 shadow-[var(--shadow-pop)]"
     >
       {confirmClose ? (
         <div className="px-2 py-2">
-          <div className="mb-1 text-[11px] font-semibold text-[var(--text-primary)]">
+          <div className="mb-1 text-xs font-semibold text-[var(--text-primary)]">
             Close session?
           </div>
-          <div className="mb-2 text-[10px] text-[var(--text-secondary)]">
+          <div className="mb-2 text-[11px] text-[var(--text-secondary)]">
             <span className="font-medium text-[var(--orange)]">{session.process}</span> is still
             running — it will be terminated.
           </div>
@@ -657,7 +717,7 @@ function SessionContextMenu({
             <button
               type="button"
               onClick={() => setConfirmClose(false)}
-              className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[10px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+              className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[11px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
             >
               Cancel
             </button>
@@ -667,7 +727,7 @@ function SessionContextMenu({
                 onCloseSession();
                 onClose();
               }}
-              className="rounded bg-[var(--red)] px-2 py-1 text-[10px] text-[var(--text-inverted)] hover:opacity-90"
+              className="rounded bg-[var(--red)] px-2 py-1 text-[11px] text-[var(--text-inverted)] hover:opacity-90"
             >
               Close
             </button>
@@ -690,11 +750,11 @@ function SessionContextMenu({
                 setRenaming(false);
               }
             }}
-            className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--bg)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none"
+            className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none"
           />
         ) : (
           <div
-            className="min-w-0 flex-1 truncate px-2 py-1 text-[10px] text-[var(--text-secondary)]"
+            className="min-w-0 flex-1 truncate px-2 py-1 text-[11px] text-[var(--text-secondary)]"
             data-tip={sessionDisplayName(session)}
           >
             {(bulkIds?.length ?? 0) > 1 ? `${bulkIds!.length} sessions selected` : sessionDisplayName(session)}
@@ -712,7 +772,7 @@ function SessionContextMenu({
           </button>
         )}
       </div>
-      <div className="my-1 h-px bg-[var(--border)]" />
+      <div className="my-1 h-px bg-[var(--hairline)]" />
       {!renaming && (bulkIds?.length ?? 0) > 1 && (
         <>
           {onBulkClose && (
@@ -728,14 +788,20 @@ function SessionContextMenu({
               {`Close ${bulkIds!.length} sessions`}
             </button>
           )}
-          <div className="my-1 h-px bg-[var(--border)]" />
+          <div className="my-1 h-px bg-[var(--hairline)]" />
         </>
       )}
       {!renaming && (bulkIds?.length ?? 0) <= 1 && (
         <>
           <button type="button" onClick={() => setRenaming(true)} className={itemClass}>
             <Pencil className="h-3.5 w-3.5 shrink-0" />
-            Rename…
+            <span className="flex-1">Rename…</span>
+            <span
+              className="shrink-0 pl-4 text-[11px] text-[var(--text-secondary)]"
+              data-tip={t`Faster: F2 on the selected session, or double-click its name`}
+            >
+              <Trans>F2 · double-click</Trans>
+            </span>
           </button>
         </>
       )}
@@ -838,7 +904,7 @@ function SessionContextMenu({
       )}
       {(pluginItems?.length ?? 0) > 0 && (
         <>
-          <div className="my-1 h-px bg-[var(--border)]" />
+          <div className="my-1 h-px bg-[var(--hairline)]" />
           {pluginItems!.map((item, i) => (
             <button
               key={i}
@@ -856,7 +922,7 @@ function SessionContextMenu({
       )}
       {onRequestMove && (
         <>
-          <div className="my-1 h-px bg-[var(--border)]" />
+          <div className="my-1 h-px bg-[var(--hairline)]" />
           <button
             type="button"
             onClick={() => {
@@ -872,7 +938,7 @@ function SessionContextMenu({
       )}
       {onMoveToNewWindow && (
         <>
-          {!onRequestMove && <div className="my-1 h-px bg-[var(--border)]" />}
+          {!onRequestMove && <div className="my-1 h-px bg-[var(--hairline)]" />}
           <button
             type="button"
             onClick={() => {
@@ -886,7 +952,7 @@ function SessionContextMenu({
           </button>
         </>
       )}
-      <div className="my-1 h-px bg-[var(--border)]" />
+      <div className="my-1 h-px bg-[var(--hairline)]" />
       <button
         type="button"
         onClick={() => {
@@ -899,7 +965,7 @@ function SessionContextMenu({
             onClose();
           }
         }}
-        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[var(--red)] transition hover:bg-[var(--surface-hover)]"
+        className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-xs text-[var(--red)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-2)]"
       >
         <X className="h-3.5 w-3.5 shrink-0" />
         Close session
@@ -1120,12 +1186,55 @@ export function SessionItem({
   // modal's editing column wraps exactly like the panel's clamped render.
   const [summaryEdit, setSummaryEdit] = useState(false);
   const [summaryWidth, setSummaryWidth] = useState<number | undefined>(undefined);
+  // Inline rename: double-click on the name, the hover pencil, or F2 on the
+  // selected session (only while focus is outside terminals and text fields,
+  // so TUI programs keep their F2). Same semantics as the context menu: an
+  // empty name clears the override back to the process-reported name.
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(session.name);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameCancelled = useRef(false);
+  const startRename = useCallback(() => {
+    renameCancelled.current = false;
+    setRenameValue(session.customName ?? session.name);
+    setRenaming(true);
+  }, [session.customName, session.name]);
+  const commitRename = () => {
+    if (renameCancelled.current) return;
+    renameCancelled.current = true;
+    const trimmed = renameValue.trim();
+    if (trimmed ? trimmed !== session.name : session.customName) onRename(trimmed);
+    setRenaming(false);
+  };
+  const cancelRename = () => {
+    renameCancelled.current = true;
+    setRenaming(false);
+  };
+  useEffect(() => {
+    if (renaming && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renaming]);
+  useEffect(() => {
+    if (!isSelected) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!isRenameShortcut(e) || isTextEntryTarget(e.target)) return;
+      e.preventDefault();
+      startRename();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isSelected, startRename]);
   const itemRef = useRef<HTMLDivElement>(null);
   const taskListRef = useRef<HTMLUListElement | null>(null);
   const [taskListMaxHeight, setTaskListMaxHeight] = useState<number | undefined>(undefined);
   const { pluginSettings } = usePluginSettings();
   const { settings } = useSettings();
   const attention = summarizeAttention(sessionAttention(session, plugins));
+  const attentionColor = attention?.level === 'warning' ? 'var(--orange)' : 'var(--attention)';
+  const metaLine = sessionMetaLine(session, attention?.title);
+  const { t } = useLingui();
   const { onContextMenu, onMouseDown, onMouseUp, onMouseLeave, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, wrapClick } =
     useContextMenuTrigger((pos) => {
       setMenuPos(pos);
@@ -1315,7 +1424,13 @@ export function SessionItem({
       </div>
     );
   };
-  const titleNodes = layout.title.map((id) => <Fragment key={id}>{valueOf(id)}</Fragment>);
+  // Title-zone plugin fields (worktree badge, persona, MR ref…) sit in the
+  // title row where the legacy renderRow badges did; core.name/core.status
+  // are the row's own chrome (rename field + name, status indicators) and
+  // render natively below.
+  const badgeNodes = layout.title
+    .filter((id) => id !== 'core.name' && id !== 'core.status')
+    .map((id) => <Fragment key={id}>{valueOf(id)}</Fragment>);
   const alwaysRows = layout.always.map((row, i) => renderRow(row, `a${i}`)).filter(Boolean);
   const selectedRows =
     isSelected && !suppressDetails
@@ -1329,17 +1444,17 @@ export function SessionItem({
         onClick={(e) => onSelect(e)}
         onDragOver={onDragOver}
         onDrop={onDrop}
-        className={`relative mb-1 cursor-pointer rounded border transition ${
+        className={`relative cursor-pointer rounded-[var(--radius-md)] transition-colors duration-[var(--dur-1)] ${
           isSelected
-            ? 'border-[var(--border)] border-l-0 bg-[var(--surface)] pl-px shadow-[inset_3px_0_0_var(--accent)]'
+            ? 'bg-[var(--fill-1)] shadow-[inset_0_0_0_1px_var(--hairline)]'
             : isMultiSel
-              ? 'border-[var(--accent)]/40 border-l-0 bg-[var(--accent)]/10 pl-px shadow-[inset_3px_0_0_var(--accent)]'
-              : 'border-transparent hover:bg-[var(--surface)]'
+              ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_40%,transparent)]'
+              : 'hover:bg-[var(--fill-1)]'
         }${isDragging ? ' opacity-40' : ''}${dropBefore ? ` before:absolute before:-top-px before:left-0 before:right-0 before:h-[3px] before:rounded-full before:bg-[var(--accent)] before:content-['']` : ''}`}
         data-tip={[sessionDisplayName(session), ...rowTips].join('\n')}
       >
         <div
-          draggable
+          draggable={!renaming}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onContextMenu={onContextMenu}
@@ -1351,20 +1466,150 @@ export function SessionItem({
           onTouchEnd={onTouchEnd}
           onTouchCancel={onTouchCancel}
           onClick={wrapClick()}
-          className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-xs text-[var(--text-primary)]"
+          className={`group/row flex min-h-8 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[13px] text-[var(--text-primary)]${
+            isSelected ? ' bg-[var(--fill-accent)]' : ''
+          }`}
         >
-          <span className="relative flex shrink-0" data-tip={attention?.title}>
+          {/* Icon tile — tinted while selected, coloured (with a soft halo)
+              while the session needs attention. */}
+          <span
+            className={`relative flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] ${
+              attention
+                ? ''
+                : isSelected
+                  ? 'bg-[color-mix(in_srgb,var(--accent)_22%,transparent)] text-[var(--accent)]'
+                  : 'bg-[var(--fill-1)] text-[var(--text-secondary)]'
+            }`}
+            style={
+              attention
+                ? {
+                    color: attentionColor,
+                    backgroundColor: `color-mix(in srgb, ${attentionColor} 16%, transparent)`,
+                  }
+                : undefined
+            }
+            data-tip={attention?.title}
+          >
             {attention && (
               <AttentionDot
                 level={attention.level}
-                className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2"
+                className="absolute -inset-[3px] rounded-[9px]"
               />
             )}
             <span className="relative flex">
-              <SessionIcon process={session.process} />
+              <SessionIcon process={session.process} className="h-3.5 w-3.5 shrink-0" />
             </span>
           </span>
-          {titleNodes}
+          <span className="flex min-w-0 flex-1 flex-col">
+            {renaming ? (
+              <input
+                ref={renameInputRef}
+                type="text"
+                aria-label={t`Rename session`}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') commitRename();
+                  if (e.key === 'Escape') cancelRename();
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+                className="min-w-0 rounded-[var(--radius-sm)] border border-[var(--accent)] bg-[var(--bg)] px-1 text-[13px] font-medium leading-[18px] text-[var(--text-primary)] outline-none"
+              />
+            ) : (
+              <span
+                className="truncate font-medium leading-[18px]"
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  startRename();
+                }}
+              >
+                <Highlight text={sessionDisplayName(session)} query={searchQuery ?? ''} />
+              </span>
+            )}
+            {metaLine && (
+              <span
+                className="truncate text-[11px] leading-[15px] text-[var(--text-secondary)]"
+                style={attention ? { color: `color-mix(in srgb, ${attentionColor} 78%, var(--text-primary))` } : undefined}
+              >
+                {metaLine}
+              </span>
+            )}
+          </span>
+          {!renaming && (
+            <button
+              type="button"
+              aria-label={t`Session actions`}
+              aria-haspopup="menu"
+              data-tip={t`Session actions`}
+              onClick={(e) => {
+                e.stopPropagation();
+                const r = e.currentTarget.getBoundingClientRect();
+                setMenuPos({ x: r.left, y: r.bottom + 2 });
+                setMenuOpen(true);
+              }}
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-secondary)] transition-opacity duration-[var(--dur-1)] hover:bg-[var(--fill-2)] hover:text-[var(--text-primary)] focus-visible:opacity-100 ${
+                menuOpen ? 'opacity-100' : isSelected ? 'opacity-60' : 'opacity-0 group-hover/row:opacity-60'
+              }`}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {broadcastMarked && broadcastActive && (
+            <span className="flex shrink-0" data-tip="broadcast target — receives axn-broadcast">
+              <Radio className="h-3 w-3 text-[var(--accent)]" />
+            </span>
+          )}
+          {badgeNodes}
+          {attention?.level === 'critical' && (
+            <span className="shrink-0 rounded-full bg-[var(--fill-attention)] px-1.5 text-[10px] font-semibold leading-[17px] text-[color-mix(in_srgb,var(--attention)_82%,var(--text-primary))]">
+              {t`Needs you`}
+            </span>
+          )}
+          {/* Status: idle shows nothing — the default state stays quiet. */}
+          {session.status === 'running' && (session.progress ?? 0) > 0 ? (
+            <span
+              className="flex shrink-0 items-center gap-1.5"
+              data-tip={`running — ${session.progress}%`}
+            >
+              <span className="h-1 w-10 overflow-hidden rounded-full bg-[var(--fill-2)]">
+                <span
+                  className="block h-full rounded-full transition-all"
+                  style={{
+                    width: `${session.progress}%`,
+                    backgroundColor: statusColor.running,
+                  }}
+                />
+              </span>
+              <span className="text-[11px] tabular-nums text-[var(--text-secondary)]">
+                {session.progress}%
+              </span>
+            </span>
+          ) : session.status === 'running' && !attention ? (
+            // A session that needs attention already says so — no second marker.
+            <span
+              className="mr-1 h-[7px] w-[7px] shrink-0 rounded-full bg-[var(--green)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--green)_20%,transparent)]"
+              data-tip={statusLabel.running}
+            />
+          ) : session.status === 'blocked' ? (
+            <span
+              className="shrink-0 rounded-full px-2 text-[11px] font-semibold capitalize leading-[18px]"
+              style={{
+                color: statusColor.blocked,
+                backgroundColor: `color-mix(in srgb, ${statusColor.blocked} 16%, transparent)`,
+              }}
+            >
+              {statusLabel.blocked}
+            </span>
+          ) : session.status === 'completed' ? (
+            <Check
+              className="h-3.5 w-3.5 shrink-0"
+              style={{ color: statusColor.completed, strokeWidth: 2.2 }}
+              data-tip={statusLabel.completed}
+            />
+          ) : null}
         </div>
 
         {alwaysRows.length > 0 && (
@@ -1372,7 +1617,7 @@ export function SessionItem({
         )}
 
         {selectedRows.length > 0 && (
-          <div className="flex flex-col gap-2 px-2 py-2 text-xs leading-relaxed text-[var(--text-primary)] [&>div:empty]:hidden">
+          <div className="flex flex-col gap-2 px-2.5 pb-2 pt-1.5 text-xs leading-relaxed text-[var(--text-primary)] [&>div:empty]:hidden">
             {selectedRows}
           </div>
         )}
@@ -1515,6 +1760,8 @@ export function SessionPanel({
   onSessionDragEnd,
   foreignDrag,
   onForeignDrop,
+  appAttention,
+  onShowAttention,
 }: SessionPanelProps) {
   const { t } = useLingui();
   const { settings } = useSettings();
@@ -1576,6 +1823,33 @@ export function SessionPanel({
   const platform = useShellPlatform();
   const { pluginSettings } = usePluginSettings();
   const q = query.trim().toLowerCase();
+  // uiZoom scales the whole panel; insets that must match unscaled window
+  // chrome (the macOS traffic lights) are divided by it again.
+  const uiScale = settings.uiZoom && settings.uiZoom > 0 ? settings.uiZoom / 100 : 1;
+  // Footer summary — the counts that used to sit in the rail as "3/8".
+  const runningCount = sessions.filter((s) => s.status === 'running' || !!s.process).length;
+  // Sessions with a raised attention flag — counted in the toolbar's
+  // "N waiting" indicator, which also filters the list down to them.
+  const attentionIds = useMemo(
+    () =>
+      new Set(
+        sessions
+          .filter((s) => summarizeAttention(sessionAttention(s, plugins)) !== null)
+          .map((s) => s.id),
+      ),
+    [sessions, plugins],
+  );
+  const attentionCount = attentionIds.size;
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  // Nothing waits any more: drop the filter instead of showing an empty list.
+  useEffect(() => {
+    if (attentionCount === 0) setAttentionOnly(false);
+  }, [attentionCount]);
+  const filtering = q !== '' || attentionOnly;
+  // Field-aware text match (name, branch, MR/Jira fields…) plus the
+  // "only sessions that need you" gate when the waiting filter is on.
+  const sessionVisible = (session: ShellSession) =>
+    sessionMatches(session) && (!attentionOnly || attentionIds.has(session.id));
 
   // The open button's dropdown — the bare FolderOpen icon reads as "open a
   // folder", so the click opens labeled rows instead of a file dialog.
@@ -1811,11 +2085,12 @@ export function SessionPanel({
   })();
   // A workspace stays listed when its own name matches or it hosts a matching
   // session.
-  const visibleWorkspaces = q
+  const visibleWorkspaces = filtering
     ? workspaces.filter(
         (ws) =>
-          matchesFilter(ws.name) ||
-          sessions.some((s) => s.workspaceId === ws.id && sessionMatches(s)),
+          // A matching workspace name only counts for the text filter.
+          (q !== '' && !attentionOnly && matchesFilter(ws.name)) ||
+          sessions.some((s) => s.workspaceId === ws.id && sessionVisible(s)),
       )
     : workspaces;
 
@@ -1841,32 +2116,81 @@ export function SessionPanel({
 
   return (
     <div
-      className="flex h-full w-full select-none flex-col border-r border-[var(--border)] bg-[var(--bg)] [&_input]:select-text [&_textarea]:select-text"
-      style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
+      className="relative flex h-full w-full select-none flex-col bg-[var(--chrome)] [&_input]:select-text [&_textarea]:select-text"
+      style={{ zoom: uiScale === 1 ? undefined : uiScale }}
     >
+      {/* Hairline against the rail — starts below the title-bar row so it
+          does not run through the macOS traffic lights. */}
       <div
-        className="flex h-8 shrink-0 items-center justify-between gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-1"
+        className="pointer-events-none absolute bottom-0 left-0 w-px bg-[var(--hairline)]"
+        style={{ top: `calc(var(--titlebar-h) / ${uiScale})` }}
+      />
+      {/* Toolbar row. With the macOS overlay title bar the traffic lights
+          reach past the rail into this row, so the actions start after
+          them (--titlebar-overhang, counter-scaled like the rail's inset:
+          the panel is zoomed, the lights are not). The empty part of the
+          row is a window drag region. */}
+      <div
+        className="flex h-10 shrink-0 items-center justify-between gap-1 pr-2"
+        style={{
+          paddingLeft: `calc(var(--titlebar-overhang) / ${uiScale} + 0.5rem + var(--panel-toggle-w, 0px))`,
+        }}
         data-tauri-drag-region
       >
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <AddWorkspaceButton onClick={onAddWorkspace} />
           <IconButton title={t`Save workspace set`} onClick={onSaveWorkspaceSet}>
-            <Save className="h-3.5 w-3.5" />
+            <Save className="h-4 w-4" />
           </IconButton>
           <IconButton
             title={t`Open…`}
             onClick={(e) => setOpenMenu({ x: e.clientX, y: e.clientY })}
           >
-            <FolderOpen className="h-3.5 w-3.5" />
+            <FolderOpen className="h-4 w-4" />
           </IconButton>
         </div>
+        {/* Attention. "N waiting" counts the sessions that need the user
+            and filters the list down to them (click again to clear). Flags
+            that belong to no session get their own warning button, which
+            opens the list of everything raised. */}
+        <div className="flex min-w-0 items-center gap-1">
+          {appAttention && appAttention.count > 0 && (
+            <button
+              type="button"
+              onClick={onShowAttention}
+              data-tip={appAttention.title}
+              aria-label={appAttention.title.split('\n')[0]}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--radius-md)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-1)]"
+              style={{ color: appAttention.level === 'critical' ? 'var(--attention)' : 'var(--orange)' }}
+            >
+              <AlertTriangle className="h-4 w-4" />
+            </button>
+          )}
+          {attentionCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setAttentionOnly((v) => !v)}
+              aria-pressed={attentionOnly}
+              data-tip={attentionOnly ? t`Show all sessions` : t`Show only sessions that need you`}
+              className={`h-6 shrink-0 truncate rounded-full px-2 text-[11px] font-semibold tabular-nums transition-colors duration-[var(--dur-1)] ${
+                attentionOnly
+                  ? 'bg-[var(--attention)] text-white'
+                  : 'bg-[var(--fill-attention)] text-[color-mix(in_srgb,var(--attention)_82%,var(--text-primary))] hover:bg-[color-mix(in_srgb,var(--attention)_26%,transparent)]'
+              }`}
+            >
+              {t`${attentionCount} waiting`}
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="flex shrink-0 px-2.5 pb-2">
         <PanelSearch value={query} onChange={setQuery} />
       </div>
 
-      {/* panelFontSize scales the list only — the h-8 header strip must keep
-          its native metrics to stay aligned with the session tab strip. */}
+      {/* panelFontSize scales the list only — the toolbar row must keep its
+          native metrics to stay aligned with the window controls. */}
       <div
-        className="flex-1 overflow-y-auto p-2"
+        className="flex-1 overflow-y-auto px-2 pb-2"
         style={{
           // Setting the VAR (not just fontFamily) makes the configured panel
           // font reach font-mono utility classes inside too — otherwise
@@ -1886,11 +2210,11 @@ export function SessionPanel({
       >
         {visibleWorkspaces.map((workspace, index) => {
           const workspaceSessions = sessions.filter(
-            (s) => s.workspaceId === workspace.id && (!q || sessionMatches(s)),
+            (s) => s.workspaceId === workspace.id && sessionVisible(s),
           );
           // A filter hides collapsed groups' content — force-expand while it
           // is active so matches stay visible.
-          const isCollapsed = q ? false : (workspace.collapsed ?? false);
+          const isCollapsed = filtering ? false : (workspace.collapsed ?? false);
 
           return (
             <Fragment key={workspace.id}>
@@ -1943,7 +2267,7 @@ export function SessionPanel({
                 />
 
               {!isCollapsed && (
-                <div className="mt-1 space-y-1 pl-2">
+                <div className="mt-0.5 space-y-px">
                   {workspaceSessions.map((session) => {
                     const isSelected = session.id === selectedSessionId;
                     return (
@@ -2005,8 +2329,8 @@ export function SessionPanel({
                     );
                   })}
                   {workspaceSessions.length === 0 && q && (
-                    <div className="px-2 py-1 text-xs italic text-[var(--text-secondary)]">
-                      no matching sessions
+                    <div className="px-2 py-1 text-xs text-[var(--text-tertiary)]">
+                      No matching sessions
                     </div>
                   )}
                   {/* Ghost append row — the "add at the end" affordance
@@ -2015,13 +2339,15 @@ export function SessionPanel({
                       Hidden while filtering, inside collapsed blocks, and
                       when newSessionButton moves the affordance to the
                       workspace header. */}
-                  {!q && (settings.newSessionButton ?? 'both') !== 'header' && (
+                  {!filtering && (settings.newSessionButton ?? 'both') !== 'header' && (
                     <button
                       type="button"
                       onClick={() => handleAddSession(workspace)}
-                      className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs text-[var(--text-secondary)] opacity-60 transition hover:bg-[var(--surface)] hover:text-[var(--accent)] hover:opacity-100"
+                      className="flex h-7 w-full items-center gap-2 rounded-[var(--radius-md)] px-2 text-left text-xs text-[var(--text-tertiary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]"
                     >
-                      <Plus className="h-3 w-3 shrink-0" />
+                      <span className="flex w-[22px] shrink-0 justify-center">
+                        <Plus className="h-3.5 w-3.5" />
+                      </span>
                       <Trans>New session</Trans>
                     </button>
                   )}
@@ -2034,8 +2360,54 @@ export function SessionPanel({
         {dragWorkspaceId && workspaceDropIndex === visibleWorkspaces.length && (
           <div className="h-0.5 rounded-full bg-[var(--accent)]" />
         )}
-        {q && visibleWorkspaces.length === 0 && (
-          <div className="px-2 py-1 text-xs italic text-[var(--text-secondary)]">no matches</div>
+        {filtering && visibleWorkspaces.length === 0 && (
+          <div className="px-2 py-1 text-xs text-[var(--text-tertiary)]">No matches</div>
+        )}
+      </div>
+
+      {/* The status stack: one accordion per rail tool with statistics
+          (rail order) and, last, "System" with the machine's own metrics.
+          Which ones are open is kept with the window, like the rail order.
+          It scrolls on its own beyond ~40% of the panel, so the session
+          list keeps its room. Hidden while nothing is published. */}
+      <PanelStatusSection
+        systemExpanded={storedSystemExpanded(pluginData)}
+        onToggleSystem={() =>
+          mergePluginData(PANEL_UI_KEY, { systemExpanded: !storedSystemExpanded(pluginData) })
+        }
+        expandedGroups={storedExpandedGroups(pluginData)}
+        onToggleGroup={(source) =>
+          mergePluginData(PANEL_UI_KEY, {
+            expandedGroups: toggleExpandedGroup(storedExpandedGroups(pluginData), source),
+          })
+        }
+        sourceOrder={[
+          ...plugins.filter((p) => p.renderRail && p.pinned),
+          ...orderRailPlugins(plugins.filter((p) => p.renderRail && !p.pinned), pluginData),
+        ].map((p) => p.id)}
+        renderIcon={({ source, group }) => {
+          // The plugin's own icon (it follows the user's icon overrides)
+          // when it declares one, else the icon the group names.
+          const plugin = plugins.find((p) => p.id === source);
+          return plugin?.logo !== undefined ? (
+            <PluginIcon plugin={plugin} className="h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <SessionIconGlyph value={group.icon ?? 'Puzzle'} className="h-3.5 w-3.5 shrink-0" />
+          );
+        }}
+      />
+
+      {/* Summary: how many sessions and how many are busy (the count that
+          used to sit in the rail). Label-then-number avoids plural forms. */}
+      <div className="flex h-8 shrink-0 items-center gap-3 overflow-hidden whitespace-nowrap px-3.5 text-[11px] tabular-nums text-[var(--text-tertiary)] shadow-[inset_0_1px_0_var(--hairline)]">
+        <span>
+          <Trans>Sessions</Trans> {sessions.length}
+        </span>
+        {runningCount > 0 && (
+          <span className="flex items-center gap-1.5 text-[var(--text-secondary)]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--green)]" />
+            <Trans>Running</Trans> {runningCount}
+          </span>
         )}
       </div>
 
