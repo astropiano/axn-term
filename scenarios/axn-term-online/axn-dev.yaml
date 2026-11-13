@@ -19,7 +19,7 @@ env:
   AXN_KC_PORT: "18093"
   AXN_GW_PORT: "18094"
   # ramphastos sources for the session-host build + vite alias
-  AXN_LIBS_ROOT: "../../../../libraries"
+  AXN_LIBS_ROOT: "../../.."
   # external additional_contexts (sibling checkouts) — grant bake fs access
   BUILDX_BAKE_ENTITLEMENTS_FS: "0"
   # Fixed dev cert pair in ./certs (AXN_CERT_DIR mount) — generated once,

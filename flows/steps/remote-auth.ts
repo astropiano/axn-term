@@ -28,11 +28,11 @@ async function main() {
 
 // The real client — same code path the desktop app runs (raw-WS hello with
 // auth in the envelope + access_token query param). Sibling checkout layout
-// (dev/libraries/ramphastos), overridable via RAMPHASTOS_CLIENT_DIST.
+// (../ramphastos next to axn-term), overridable via RAMPHASTOS_CLIENT_DIST.
 const clientDist =
   process.env.RAMPHASTOS_CLIENT_DIST ??
   new URL(
-    '../../../../libraries/ramphastos/src/client/ramphastos-client/dist/index.js',
+    '../../../ramphastos/src/client/ramphastos-client/dist/index.js',
     import.meta.url,
   ).href;
 const { RamphastosAuthority } = await import(clientDist);
