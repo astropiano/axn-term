@@ -8,11 +8,11 @@ msgstr ""
 msgid "{0} running {1} will be terminated"
 msgstr "실행 중인 {1} {0}개가 종료됩니다"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:511
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:521
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent}이(가) 메인 체크아웃에서 실행 중 — 워크트리로 격리할까요?"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1146
+#: libs/shell-ui/src/app/SettingsModal.tsx:1147
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "Lucide 아이콘 이름(예: <0>GitFork</0>) 또는 인라인 SVG 태그(예: <1>{SVG_HINT_EXAMPLE}</1>)"
 
@@ -20,8 +20,8 @@ msgstr "Lucide 아이콘 이름(예: <0>GitFork</0>) 또는 인라인 SVG 태그
 #~ msgid "Account"
 #~ msgstr "계정"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1171
-#: libs/shell-ui/src/app/SettingsModal.tsx:1173
+#: libs/shell-ui/src/app/SettingsModal.tsx:1172
+#: libs/shell-ui/src/app/SettingsModal.tsx:1174
 msgid "Add icon"
 msgstr "아이콘 추가"
 
@@ -63,7 +63,7 @@ msgstr "둘 다"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:113
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1157
+#: libs/shell-ui/src/app/SettingsModal.tsx:1158
 msgid "Cancel"
 msgstr "취소"
 
@@ -89,7 +89,7 @@ msgstr "클라이언트: {0}"
 msgid "Close tab"
 msgstr "탭 닫기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:482
+#: libs/shell-ui/src/app/SessionPanel.tsx:484
 msgid "Collapse"
 msgstr "접기"
 
@@ -181,12 +181,12 @@ msgid "Default shell"
 msgstr "기본 셸"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:537
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:547
 msgid "Delete {0}"
 msgstr "{0} 삭제"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:525
+#: libs/shell-ui/src/app/SessionPanel.tsx:527
 msgid "Delete workspace"
 msgstr "워크스페이스 삭제"
 
@@ -203,7 +203,7 @@ msgstr "디렉터리"
 msgid "disabled"
 msgstr "비활성화됨"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:513
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:523
 msgid "Don't ask again"
 msgstr "다시 묻지 않기"
 
@@ -211,11 +211,11 @@ msgstr "다시 묻지 않기"
 msgid "Edit"
 msgstr "편집"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1100
+#: libs/shell-ui/src/app/SettingsModal.tsx:1101
 msgid "Edit icon"
 msgstr "아이콘 편집"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:751
+#: libs/shell-ui/src/app/SessionPanel.tsx:753
 msgid "Edit summary…"
 msgstr "요약 편집…"
 
@@ -245,7 +245,7 @@ msgstr "세션 목록 끝"
 msgid "Enter code {0} in the browser to finish sign-in."
 msgstr "브라우저에서 코드 {0}을(를) 입력하여 로그인을 완료하세요."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:482
+#: libs/shell-ui/src/app/SessionPanel.tsx:484
 msgid "Expand"
 msgstr "펼치기"
 
@@ -278,7 +278,7 @@ msgstr "파일 미리보기"
 msgid "Filter plugins…"
 msgstr "플러그인 필터…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:192
+#: libs/shell-ui/src/app/SessionPanel.tsx:194
 msgid "Filter sessions…"
 msgstr "세션 필터…"
 
@@ -294,7 +294,7 @@ msgstr "경로를 수정하거나 홈 폴더에서 세션을 여세요."
 msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
 msgstr "세션/워크스페이스 패널의 글꼴입니다. 크기는 기본 12px 기준으로 배율이 적용됩니다."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1260
+#: libs/shell-ui/src/app/SettingsModal.tsx:1261
 msgid "Font not installed — keeping the previous font."
 msgstr "글꼴이 설치되어 있지 않습니다 — 이전 글꼴을 유지합니다."
 
@@ -302,7 +302,7 @@ msgstr "글꼴이 설치되어 있지 않습니다 — 이전 글꼴을 유지�
 msgid "Font size (px)"
 msgstr "글꼴 크기 (px)"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:528
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:538
 msgid "Force remove"
 msgstr "강제 삭제"
 
@@ -398,15 +398,15 @@ msgstr "실행 파일 이름이나 플러그인 ID를 Lucide 아이콘(예: Bot,
 msgid "Move “{sessionName}” to workspace"
 msgstr "“{sessionName}”을(를) 워크스페이스로 이동"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:883
+#: libs/shell-ui/src/app/SessionPanel.tsx:885
 msgid "Move to new window"
 msgstr "새 창으로 이동"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:867
+#: libs/shell-ui/src/app/SessionPanel.tsx:869
 msgid "Move to workspace…"
 msgstr "워크스페이스로 이동…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1931
+#: libs/shell-ui/src/app/SessionPanel.tsx:2025
 msgid "New session"
 msgstr "새 세션"
 
@@ -414,11 +414,11 @@ msgstr "새 세션"
 msgid "New session button"
 msgstr "새 세션 버튼"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2004
+#: libs/shell-ui/src/app/SessionPanel.tsx:2098
 msgid "New session in folder…"
 msgstr "폴더에서 새 세션…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:511
+#: libs/shell-ui/src/app/SessionPanel.tsx:513
 msgid "New session in workspace"
 msgstr "워크스페이스에서 새 세션"
 
@@ -432,7 +432,7 @@ msgstr "에이전트로 새 세션…"
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "“{0}”의 새 세션은 이 폴더에서 시작합니다. 비워 두면 홈 디렉터리를 사용합니다."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:212
+#: libs/shell-ui/src/app/SessionPanel.tsx:214
 msgid "New workspace"
 msgstr "새 워크스페이스"
 
@@ -444,7 +444,7 @@ msgstr "이 창에 새 워크스페이스 “{name}”"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "이 창에 새 워크스페이스 “{trimmed}”"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:512
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:522
 msgid "New worktree session"
 msgstr "새 워크트리 세션"
 
@@ -452,7 +452,7 @@ msgstr "새 워크트리 세션"
 msgid "no clients"
 msgstr "클라이언트 없음"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1110
+#: libs/shell-ui/src/app/SettingsModal.tsx:1111
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "설정된 아이콘이 없습니다 — 모든 세션에 기본 터미널 아이콘이 표시됩니다."
 
@@ -507,7 +507,7 @@ msgstr "이 기기만, 세션을 보고 있지 않음"
 msgid "Open"
 msgstr "열기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1984
+#: libs/shell-ui/src/app/SessionPanel.tsx:2078
 msgid "Open a saved workspace set file"
 msgstr "저장된 워크스페이스 세트 파일 열기"
 
@@ -535,11 +535,11 @@ msgstr "로그 폴더 열기…"
 msgid "Open preview in a tab"
 msgstr "탭에서 미리보기 열기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1992
+#: libs/shell-ui/src/app/SessionPanel.tsx:2086
 msgid "Open workspace set from file…"
 msgstr "파일에서 워크스페이스 세트 열기…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1763
+#: libs/shell-ui/src/app/SessionPanel.tsx:1857
 msgid "Open…"
 msgstr "열기…"
 
@@ -569,7 +569,7 @@ msgstr "뷰포트 일시 중지"
 msgid "permissions:"
 msgstr "권한:"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1999
+#: libs/shell-ui/src/app/SessionPanel.tsx:2093
 msgid "Pick a folder — the new session starts in it"
 msgstr "폴더 선택 — 새 세션이 여기서 시작됩니다"
 
@@ -585,7 +585,7 @@ msgstr "미리보기"
 msgid "Preview unavailable"
 msgstr "미리보기를 사용할 수 없음"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1119
+#: libs/shell-ui/src/app/SettingsModal.tsx:1120
 msgid "Process"
 msgstr "프로세스"
 
@@ -642,7 +642,7 @@ msgstr "리모트 콘솔"
 #~ msgid "Remote control"
 #~ msgstr "\\uc6d0\\uaca9 \\uc81c\\uc5b4"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1103
+#: libs/shell-ui/src/app/SettingsModal.tsx:1104
 msgid "Remove icon"
 msgstr "아이콘 제거"
 
@@ -660,7 +660,7 @@ msgstr "세션 요약 표시 (axn-session-summary로 설정)"
 msgid "requires {0}{1}"
 msgstr "{0}{1} 필요"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:704
+#: libs/shell-ui/src/app/SessionPanel.tsx:706
 msgid "Reset to process name"
 msgstr "프로세스 이름으로 재설정"
 
@@ -695,11 +695,11 @@ msgstr "샌드박스 — 권한 없음 (셸, 파일, 터미널 접근 불가)"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1165
+#: libs/shell-ui/src/app/SettingsModal.tsx:1166
 msgid "Save"
 msgstr "저장"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1759
+#: libs/shell-ui/src/app/SessionPanel.tsx:1853
 msgid "Save workspace set"
 msgstr "워크스페이스 세트 저장"
 
@@ -798,7 +798,7 @@ msgstr "로그아웃"
 msgid "Signed in as {0}"
 msgstr "{0}(으)로 로그인됨"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:2952
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3311
 msgid "Start workflow…"
 msgstr "워크플로 시작…"
 
@@ -917,11 +917,11 @@ msgid "Workspace header"
 msgstr "워크스페이스 헤더"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:527
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:537
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "워크트리 삭제 실패 (변경 사항 있음?): {0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:536
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
 msgid "worktree removed — branch {0} kept"
 msgstr "워크트리 삭제됨 — 브랜치 {0} 유지"

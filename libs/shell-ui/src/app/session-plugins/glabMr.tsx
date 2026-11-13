@@ -12,6 +12,7 @@ import {
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import type { ShellSession, SessionAttention} from '../../types';
 import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
+import { CardChips } from './cardEnrichers';
 import { MrDescription } from './mrDescription';
 import { shellQuote } from '../../shellQuote';
 import { sessionLastSelectedAt } from '../attention';
@@ -1078,6 +1079,7 @@ function MrRow({ mr, badge, env, showDescription = true }: { showDescription?: b
             </span>
           )}
         </a>
+        <CardChips subject={{ mr }} className="mt-0.5" />
         {showDescription && mr.description && <MrDescription markdown={mr.description} />}
       </div>
       <MrActions mr={mr} env={env} />
@@ -1341,45 +1343,74 @@ export const glabMrPlugin: SessionViewPlugin = {
     sessionLastFetch.delete(ctx.session.id);
     sessionLastKey.delete(ctx.session.id);
   },
-  render: (ctx) => {
-    const settings = ctx.pluginSettings as
-      | { showInPanel?: boolean; showInHeader?: boolean }
-      | undefined;
-    // `showInHeader` is the legacy key so existing plugins.yaml values apply.
-    if ((settings?.showInPanel ?? settings?.showInHeader) === false) return null;
-    return <SessionMrs ctx={ctx} />;
-  },
-  renderRow: (ctx) => {
-    const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
-    if (settings?.showInTitle === false) return null;
-    const state = ctx.pluginState as { mrs?: SessionMr[] } | undefined;
-    const mrs = state?.mrs ?? [];
-    if (mrs.length === 0) return null;
-    const first = mrs[0];
-    return (
-      <a
-        href={first.url}
-        target="_blank"
-        rel="noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        data-tip={['GitLab', ...mrs.map((m) => `${m.reference} ${m.title}`)].join('\n')}
-        className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)] hover:underline"
-      >
-        <GitMerge className="h-2.5 w-2.5" />
-        {first.reference}
-        {mrs.length > 1 ? `+${mrs.length - 1}` : ''}
-      </a>
-    );
-  },
-  rowTip: (ctx) => {
-    const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
-    if (settings?.showInTitle === false) return null;
-    const mrs =
-      (ctx.pluginState as { mrs?: SessionMr[] } | undefined)?.mrs ?? [];
-    if (mrs.length === 0) return null;
-    const first = mrs[0];
-    return `${first.reference}${mrs.length > 1 ? ` +${mrs.length - 1}` : ''}: open merge request${mrs.length > 1 ? 's' : ''} on this branch — ${first.title}`;
-  },
+  sessionFields: [
+    {
+      id: 'mr',
+      label: 'GitLab merge request',
+      kind: 'inline',
+      zone: 'title',
+      // Searchable: the refs (`!622`/`#82`) and titles.
+      search: (ctx) => {
+        const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
+        if (settings?.showInTitle === false) return null;
+        const items = (ctx.pluginState as { mrs?: SessionMr[] } | undefined)?.mrs ?? [];
+        return items.flatMap((m) => [m.reference, m.title]);
+      },
+      value: (ctx) => {
+        const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
+        if (settings?.showInTitle === false) return null;
+        const state = ctx.pluginState as { mrs?: SessionMr[] } | undefined;
+        const mrs = state?.mrs ?? [];
+        if (mrs.length === 0) return null;
+        const first = mrs[0];
+        return (
+          <a
+            href={first.url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            data-tip={['GitLab', ...mrs.map((m) => `${m.reference} ${m.title}`)].join('\n')}
+            className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)] hover:underline"
+          >
+            <GitMerge className="h-2.5 w-2.5" />
+            {first.reference}
+            {mrs.length > 1 ? `+${mrs.length - 1}` : ''}
+          </a>
+        );
+      },
+      tip: (ctx) => {
+        const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
+        if (settings?.showInTitle === false) return null;
+        const mrs =
+          (ctx.pluginState as { mrs?: SessionMr[] } | undefined)?.mrs ?? [];
+        if (mrs.length === 0) return null;
+        const first = mrs[0];
+        return `${first.reference}${mrs.length > 1 ? ` +${mrs.length - 1}` : ''}: open merge request${mrs.length > 1 ? 's' : ''} on this branch — ${first.title}`;
+      },
+    },
+    {
+      id: 'mrs',
+      label: 'GitLab merge requests',
+      kind: 'block',
+      zone: 'selected',
+      search: (ctx) => {
+        const settings = ctx.pluginSettings as
+          | { showInPanel?: boolean; showInHeader?: boolean }
+          | undefined;
+        if ((settings?.showInPanel ?? settings?.showInHeader) === false) return null;
+        const items = (ctx.pluginState as { mrs?: SessionMr[] } | undefined)?.mrs ?? [];
+        return items.flatMap((m) => [m.reference, m.title]);
+      },
+      value: (ctx) => {
+        const settings = ctx.pluginSettings as
+          | { showInPanel?: boolean; showInHeader?: boolean }
+          | undefined;
+        // `showInHeader` is the legacy key so existing plugins.yaml values apply.
+        if ((settings?.showInPanel ?? settings?.showInHeader) === false) return null;
+        return <SessionMrs ctx={ctx} />;
+      },
+    },
+  ],
   renderRail: ({
     pluginSettings,
     viewActive,

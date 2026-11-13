@@ -82,6 +82,11 @@ export interface AppSettings {
   /** Render `session.summary` (set via `axn-session-summary`/`axn-session set --summary`) in the panel. */
   sessionSummaries?: boolean;
   /**
+   * How a session card in the panel is assembled from session fields —
+   * see `app/sessionCardLayout.ts`. Unset = the default layout.
+   */
+  sessionCard?: import('./app/sessionCardLayout').SessionCardLayout;
+  /**
    * Where the panel's "new session" affordance lives: a ghost row at the
    * end of each workspace's session list (`list`), a `+` button in the
    * workspace header (`header`), or `both` (default).

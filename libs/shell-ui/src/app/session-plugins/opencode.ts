@@ -261,8 +261,15 @@ export const opencodePlugin: SessionViewPlugin = {
   // "Resume opencode session" — the shared last-session capability; offered
   // on idle sessions once an opencode conversation was captured.
   sessionMenuItems: (ctx) => agentResumeMenuItem(ctx, 'opencode'),
-  render: (ctx) => agentResumePanel(ctx, 'opencode'),
-
+  sessionFields: [
+    {
+      id: 'resume',
+      label: 'Resume opencode',
+      kind: 'block',
+      zone: 'selected',
+      value: (ctx) => agentResumePanel(ctx, 'opencode'),
+    },
+  ],
   // OpenCode exits with the session (no graceful-close capture): keep the
   // last record so a different shell can still pick the conversation up.
   onClose: (ctx) => {
