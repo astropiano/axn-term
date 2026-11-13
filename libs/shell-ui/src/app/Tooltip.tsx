@@ -1,14 +1,21 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSettings } from '../SettingsProvider';
+import { placeTooltip, type TooltipSide } from './tooltipPlacement';
 
 const SHOW_DELAY_MS = 400;
-const GAP = 6;
-const EDGE = 4;
 
 interface Anchor {
   text: string;
   rect: DOMRect;
+  side: TooltipSide;
+}
+
+/** The strip the macOS overlay title bar occupies (0 without one). */
+function titlebarInset(): number {
+  const value = getComputedStyle(document.documentElement).getPropertyValue('--titlebar-h');
+  const px = parseFloat(value);
+  return Number.isFinite(px) ? px : 0;
 }
 
 /**
@@ -16,6 +23,11 @@ interface Anchor {
  * `data-tip` attribute gets a styled bubble on hover (or focus), rendered in a
  * portal at `position: fixed` so it is never clipped by scroll containers.
  * Disabled controls swallow pointer events, so tip their wrapper instead.
+ *
+ * `data-tip-side="right"` on the same element puts the bubble beside it,
+ * vertically centred — used by the rail, where a bubble above or below
+ * would cover the neighbouring items. Either way the bubble stays inside
+ * the window and out of the title bar strip (see `placeTooltip`).
  */
 export function TooltipHost() {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
@@ -41,7 +53,13 @@ export function TooltipHost() {
       timerRef.current = setTimeout(() => {
         if (targetRef.current !== el || !el.isConnected) return;
         const text = el.getAttribute('data-tip');
-        if (text) setAnchor({ text, rect: el.getBoundingClientRect() });
+        if (text) {
+          setAnchor({
+            text,
+            rect: el.getBoundingClientRect(),
+            side: el.getAttribute('data-tip-side') === 'right' ? 'right' : 'top',
+          });
+        }
       }, SHOW_DELAY_MS);
     };
     const onOver = (e: Event) => {
@@ -75,22 +93,24 @@ export function TooltipHost() {
     };
   }, []);
 
-  // Center on the anchor, place above — flip below when there's no room —
-  // and clamp horizontally into the viewport. Measured in a layout effect so
-  // the bubble never paints at the wrong spot.
+  // Measured in a layout effect so the bubble never paints at the wrong
+  // spot. (getBoundingClientRect reports on-screen coordinates also inside
+  // a CSS-zoomed ancestor such as the rail, so no zoom correction is needed.)
   useLayoutEffect(() => {
     setPos(null);
     if (!anchor || !bubbleRef.current) return;
     const bubble = bubbleRef.current.getBoundingClientRect();
-    const rect = anchor.rect;
-    const above = rect.top - bubble.height - GAP >= EDGE;
-    setPos({
-      top: above ? rect.top - bubble.height - GAP : rect.bottom + GAP,
-      left: Math.max(
-        EDGE,
-        Math.min(rect.left + rect.width / 2 - bubble.width / 2, window.innerWidth - bubble.width - EDGE),
-      ),
-    });
+    setPos(
+      placeTooltip({
+        anchor: anchor.rect,
+        width: bubble.width,
+        height: bubble.height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        side: anchor.side,
+        topInset: titlebarInset(),
+      }),
+    );
   }, [anchor]);
 
   if (!anchor) return null;
@@ -98,7 +118,9 @@ export function TooltipHost() {
     <div
       ref={bubbleRef}
       role="tooltip"
-      className="pointer-events-none fixed z-[70] max-w-64 whitespace-pre-line break-words rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] leading-snug text-[var(--text-primary)] shadow-lg"
+      className={`pointer-events-none fixed z-[70] whitespace-pre-line break-words rounded-[var(--radius-md)] bg-[var(--elevated)] px-2 py-1.5 text-[11.5px] leading-snug text-[var(--text-primary)] shadow-[var(--shadow-pop)] ${
+        anchor.side === 'right' ? 'max-w-56' : 'max-w-72'
+      }`}
       style={pos ? { left: pos.left, top: pos.top } : { left: 0, top: 0, visibility: 'hidden' }}
     >
       <span className="block" style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}>

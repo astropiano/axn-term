@@ -1,10 +1,12 @@
 import { t } from '@lingui/core/macro';
+import { PublishPanelStatus } from '../PanelStatusSection';
 import { i18n } from '../../i18n';
 import { useEffect, useState } from 'react';
 import { load as loadYaml, dump as dumpYaml } from 'js-yaml';
 import { AlertTriangle, ChevronLeft, ChevronRight, Columns3, Loader2, Play, Workflow } from 'lucide-react';
 import type { ShellSession, Workspace } from '../../types';
 import { SessionIcon } from '../SessionPanel';
+import { RailItem } from '../RailItem';
 import { usePluginSettings } from '../PluginSettingsProvider';
 import { WorkspacePicker } from '../../WorkspacePicker';
 import { axnLog } from '../log';
@@ -2416,7 +2418,7 @@ function MrReviewButton({ mr, env }: MrActionProps) {
               setPick({ x: e.clientX, y: e.clientY, def });
             }
           }}
-          className="flex shrink-0 items-center gap-1 rounded border border-[var(--border)] px-1 py-px text-[9px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-wait disabled:opacity-70"
+          className="flex shrink-0 items-center gap-1 rounded border border-[var(--border)] px-1 py-px text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-wait disabled:opacity-70"
         >
           {busy === def.id ? (
             <>
@@ -2463,7 +2465,7 @@ function MrReviewButton({ mr, env }: MrActionProps) {
             </p>
             <p
               role="alert"
-              className="my-3 break-all rounded border border-[var(--border)] bg-[var(--surface)] p-2 font-mono text-xs text-[var(--red)]"
+              className="my-3 break-all rounded border border-[var(--border)] bg-[var(--surface)] p-2 font-mono text-[13px] text-[var(--red)]"
             >
               {err}
             </p>
@@ -2607,7 +2609,7 @@ function CardVarRow({
   const [draft, setDraft] = useState('');
   const empty = !(value ?? '').trim();
   return (
-    <div className="flex items-center gap-1 text-[9px] text-[var(--text-secondary)]">
+    <div className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
       <span className="shrink-0" data-tip={spec.hint ?? spec.key}>
         {spec.label ?? spec.key}
         {spec.required && empty ? <span className="text-[var(--orange)]"> *</span> : ''}:
@@ -2633,7 +2635,7 @@ function CardVarRow({
             onSave(draft);
             setEditing(false);
           }}
-          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-1 py-px font-mono text-[9px] text-[var(--text-primary)]"
+          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-1 py-px font-mono text-[10px] text-[var(--text-primary)]"
         />
       ) : (
         <button
@@ -2686,19 +2688,37 @@ function DevWorkflowRail({
   const liveIds = new Set(sessions.map((s) => s.id));
   const count = Object.keys(instances).filter((id) => liveIds.has(id)).length;
   return (
-    <button
-      type="button"
-      onClick={toggleView}
-      data-tip={`dev workflows — ${count} active`}
-      className={`flex flex-col items-center gap-0.5 rounded px-1 py-0.5 transition ${
-        viewActive
-          ? 'bg-[var(--surface)] text-[var(--accent)]'
-          : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-      }`}
-    >
-      <Columns3 className="h-3.5 w-3.5" />
-      <span className="select-none text-[8px] font-bold leading-none">{count}</span>
-    </button>
+    <>
+      <RailItem
+        title="Dev workflows"
+        onClick={toggleView}
+        active={viewActive}
+        badge={count > 0 ? count : undefined}
+      >
+        <Columns3 />
+      </RailItem>
+      <PublishPanelStatus
+        source={devWorkflowPlugin.id}
+        group={
+          count > 0
+            ? {
+                title: 'Dev workflows',
+                icon: 'Columns3',
+                meters: [
+                  {
+                    label: 'Active',
+                    value: String(count),
+                    detail: sessions
+                      .filter((s) => instances[s.id] !== undefined)
+                      .map((s) => s.name)
+                      .join(', '),
+                  },
+                ],
+              }
+            : null
+        }
+      />
+    </>
   );
 }
 
@@ -2749,7 +2769,7 @@ function DevWorkflowView({
 
   if (defs.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-xs text-[var(--text-secondary)]">
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-[13px] text-[var(--text-secondary)]">
         <p>No workflows defined.</p>
         <p>
           Add <code className="text-[var(--accent)]">dev-workflow.workflows</code> to plugins.yaml —
@@ -2766,7 +2786,7 @@ function DevWorkflowView({
         <button
           type="button"
           onClick={close}
-          className="ml-auto rounded px-2 py-1 text-[10px] text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+          className="ml-auto rounded px-2 py-1 text-[11px] text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
         >
           Close
         </button>
@@ -2781,7 +2801,7 @@ function DevWorkflowView({
           ticketRange(def, t.status, t.statusCategory)?.entry ?? def.start;
         return (
           <div key={def.id} className="mb-6">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+            <div className="mb-2 text-xs font-semibold text-[var(--text-secondary)]">
               {def.title}
             </div>
             <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
@@ -2824,7 +2844,7 @@ function DevWorkflowView({
                   }}
                   className={`flex min-w-[9rem] flex-1 flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2${dropCls}`}
                 >
-                  <div className="text-[10px] font-semibold text-[var(--text-secondary)]">
+                  <div className="text-[11px] font-semibold text-[var(--text-secondary)]">
                     {state}
                   </div>
                   {cards
@@ -2876,7 +2896,7 @@ function DevWorkflowView({
                             setDrag(null);
                             setOver(null);
                           }}
-                          className={`select-none rounded border border-[var(--border)] px-2 py-1.5 text-[11px] ${
+                          className={`select-none rounded border border-[var(--border)] px-2 py-1.5 text-xs ${
                             live
                               ? 'cursor-grab bg-[var(--bg)] active:cursor-grabbing'
                               : 'bg-[var(--bg)] opacity-50'
@@ -2904,7 +2924,7 @@ function DevWorkflowView({
                           </div>
                           {session?.summary && (
                             <div
-                              className="line-clamp-3 whitespace-pre-line break-words text-[10px] text-[var(--text-secondary)]"
+                              className="line-clamp-3 whitespace-pre-line break-words text-[11px] text-[var(--text-secondary)]"
                               data-tip={session.summary}
                             >
                               {session.summary}
@@ -2969,7 +2989,7 @@ function DevWorkflowView({
                                   : 'session closed — remove card'
                               }
                               onClick={remove}
-                              className="text-[10px] text-[var(--text-secondary)] transition hover:text-[var(--red)]"
+                              className="text-[11px] text-[var(--text-secondary)] transition hover:text-[var(--red)]"
                             >
                               remove
                             </button>
@@ -3008,7 +3028,7 @@ function DevWorkflowView({
                                       type="button"
                                       disabled={info.kind === 'blocked'}
                                       onClick={() => runActionOnCard(action)}
-                                      className="flex w-full items-center justify-center gap-1.5 rounded border border-[var(--border)] px-2 py-1 text-[10px] font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] disabled:opacity-40"
+                                      className="flex w-full items-center justify-center gap-1.5 rounded border border-[var(--border)] px-2 py-1 text-[11px] font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] disabled:opacity-40"
                                     >
                                       <Play className="h-3 w-3 shrink-0" />
                                       <span className="truncate">{info.label}</span>
