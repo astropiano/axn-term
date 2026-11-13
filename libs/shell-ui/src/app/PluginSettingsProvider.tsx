@@ -218,6 +218,14 @@ export function PluginSettingsProvider({
   );
 }
 
+/**
+ * Like usePluginSettings, but `undefined` outside a provider — for optional
+ * extras (card enrichment chips) that should render nothing rather than throw.
+ */
+export function useOptionalPluginSettings(): PluginSettingsContextValue | undefined {
+  return useContext(PluginSettingsContext) ?? undefined;
+}
+
 export function usePluginSettings(): PluginSettingsContextValue {
   const ctx = useContext(PluginSettingsContext);
   if (!ctx) throw new Error('usePluginSettings must be used within PluginSettingsProvider');

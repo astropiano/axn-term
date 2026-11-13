@@ -464,25 +464,35 @@ export const worktreesPlugin: SessionViewPlugin = {
     },
   ],
 
-  renderRow: (ctx) => {
-    const wt = stateOf(ctx).worktree;
-    if (!wt) return null;
-    return (
-      <span
-        className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--violet)]"
-        data-tip={`worktree ${wt.branch}\n${wt.path}`}
-      >
-        <GitFork className="h-2.5 w-2.5 shrink-0" />
-        <span className="max-w-16 truncate">{wt.branch.replace(/^wt\//, '')}</span>
-      </span>
-    );
-  },
-
-  rowTip: (ctx) => {
-    const wt = stateOf(ctx).worktree;
-    return wt ? `⎇ ${wt.branch}: linked worktree — ${wt.path}` : null;
-  },
-
+  sessionFields: [
+    {
+      id: 'worktree',
+      label: 'Worktree',
+      kind: 'inline',
+      zone: 'title',
+      search: (ctx) => {
+        const wt = stateOf(ctx).worktree;
+        return wt ? [wt.branch, wt.path.split('/').pop() ?? ''] : null;
+      },
+      value: (ctx) => {
+        const wt = stateOf(ctx).worktree;
+        if (!wt) return null;
+        return (
+          <span
+            className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--violet)]"
+            data-tip={`worktree ${wt.branch}\n${wt.path}`}
+          >
+            <GitFork className="h-2.5 w-2.5 shrink-0" />
+            <span className="max-w-16 truncate">{wt.branch.replace(/^wt\//, '')}</span>
+          </span>
+        );
+      },
+      tip: (ctx) => {
+        const wt = stateOf(ctx).worktree;
+        return wt ? `⎇ ${wt.branch}: linked worktree — ${wt.path}` : null;
+      },
+    },
+  ],
   onClose: (ctx) => {
     kindChecks.delete(ctx.session.id);
     nudged.delete(ctx.session.id);

@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { findSessionField } from './plugin';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -197,36 +198,36 @@ function ctx(
 
 describe('visibility settings', () => {
   it('renders the panel and title indicator by default', () => {
-    expect(ghPrPlugin.render?.(ctx(undefined))).not.toBeNull();
-    expect(ghPrPlugin.render?.(ctx({}))).not.toBeNull();
-    expect(ghPrPlugin.renderRow?.(ctx({}))).not.toBeNull();
+    expect(findSessionField(ghPrPlugin, 'prs')!.value(ctx(undefined))).not.toBeNull();
+    expect(findSessionField(ghPrPlugin, 'prs')!.value(ctx({}))).not.toBeNull();
+    expect(findSessionField(ghPrPlugin, 'pr')!.value(ctx({}))).not.toBeNull();
   });
 
   it('hides the panel when showInPanel is false', () => {
-    expect(ghPrPlugin.render?.(ctx({ showInPanel: false }))).toBeNull();
-    expect(ghPrPlugin.renderRow?.(ctx({ showInPanel: false }))).not.toBeNull();
+    expect(findSessionField(ghPrPlugin, 'prs')!.value(ctx({ showInPanel: false }))).toBeNull();
+    expect(findSessionField(ghPrPlugin, 'pr')!.value(ctx({ showInPanel: false }))).not.toBeNull();
   });
 
   it('keeps the legacy showInHeader key hiding the panel', () => {
-    expect(ghPrPlugin.render?.(ctx({ showInHeader: false }))).toBeNull();
+    expect(findSessionField(ghPrPlugin, 'prs')!.value(ctx({ showInHeader: false }))).toBeNull();
   });
 
   it('hides the title indicator when showInTitle is false', () => {
-    expect(ghPrPlugin.renderRow?.(ctx({ showInTitle: false }))).toBeNull();
-    expect(ghPrPlugin.render?.(ctx({ showInTitle: false }))).not.toBeNull();
+    expect(findSessionField(ghPrPlugin, 'pr')!.value(ctx({ showInTitle: false }))).toBeNull();
+    expect(findSessionField(ghPrPlugin, 'prs')!.value(ctx({ showInTitle: false }))).not.toBeNull();
   });
 });
 
 describe('rowTip', () => {
   it('explains the PR badge', () => {
-    expect(ghPrPlugin.rowTip?.(ctx({}))).toBe(
+    expect(findSessionField(ghPrPlugin, 'pr')!.tip!(ctx({}))).toBe(
       '#1: open pull request on this branch — pr',
     );
   });
 
   it('mirrors the badge visibility gate', () => {
-    expect(ghPrPlugin.rowTip?.(ctx({ showInTitle: false }))).toBeNull();
-    expect(ghPrPlugin.rowTip?.(ctx({}, []))).toBeNull();
+    expect(findSessionField(ghPrPlugin, 'pr')!.tip!(ctx({ showInTitle: false }))).toBeNull();
+    expect(findSessionField(ghPrPlugin, 'pr')!.tip!(ctx({}, []))).toBeNull();
   });
 });
 

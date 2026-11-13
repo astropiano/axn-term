@@ -319,30 +319,59 @@ export const gitStatusPlugin: SessionViewPlugin = {
     refreshTimers.delete(ctx.session.id);
     lastRefresh.delete(ctx.session.id);
   },
-  render: (ctx) => {
-    const settings = ctx.pluginSettings as
-      | { showInPanel?: boolean; showInHeader?: boolean }
-      | undefined;
-    // `showInHeader` is the legacy key so existing plugins.yaml values apply.
-    if ((settings?.showInPanel ?? settings?.showInHeader) === false) return null;
-    const { session } = ctx;
-    if (!session.repo) return null;
-    return <GitStatus ctx={ctx} repo={session.repo} cwd={session.cwd} />;
-  },
-  renderRow: (ctx) => {
-    const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
-    if (settings?.showInTitle === false) return null;
-    const repo = ctx.session.repo;
-    if (!repo) return null;
-    return <GitStatusRow ctx={ctx} repo={repo} cwd={ctx.session.cwd} />;
-  },
-  rowTip: (ctx) => {
-    const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
-    if (settings?.showInTitle === false) return null;
-    const repo = ctx.session.repo;
-    if (!repo) return null;
-    return `⎇ ${repo.name} @ ${repo.branch ?? '(detached)'} — ${repoIndicatorLegend(repo).join(', ')}`;
-  },
+  sessionFields: [
+    {
+      id: 'branch',
+      label: 'Git branch',
+      kind: 'inline',
+      zone: 'title',
+      // Searchable: the branch and repo name the badge shows.
+      search: (ctx) => {
+        const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
+        if (settings?.showInTitle === false) return null;
+        const repo = ctx.session.repo;
+        return repo ? [repo.branch ?? '', repo.name] : null;
+      },
+      value: (ctx) => {
+        const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
+        if (settings?.showInTitle === false) return null;
+        const repo = ctx.session.repo;
+        if (!repo) return null;
+        return <GitStatusRow ctx={ctx} repo={repo} cwd={ctx.session.cwd} />;
+      },
+      tip: (ctx) => {
+        const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
+        if (settings?.showInTitle === false) return null;
+        const repo = ctx.session.repo;
+        if (!repo) return null;
+        return `⎇ ${repo.name} @ ${repo.branch ?? '(detached)'} — ${repoIndicatorLegend(repo).join(', ')}`;
+      },
+    },
+    {
+      id: 'repo',
+      label: 'Git repository',
+      kind: 'block',
+      zone: 'selected',
+      search: (ctx) => {
+        const settings = ctx.pluginSettings as
+          | { showInPanel?: boolean; showInHeader?: boolean }
+          | undefined;
+        if ((settings?.showInPanel ?? settings?.showInHeader) === false) return null;
+        const repo = ctx.session.repo;
+        return repo ? [repo.branch ?? '', repo.name] : null;
+      },
+      value: (ctx) => {
+        const settings = ctx.pluginSettings as
+          | { showInPanel?: boolean; showInHeader?: boolean }
+          | undefined;
+        // `showInHeader` is the legacy key so existing plugins.yaml values apply.
+        if ((settings?.showInPanel ?? settings?.showInHeader) === false) return null;
+        const { session } = ctx;
+        if (!session.repo) return null;
+        return <GitStatus ctx={ctx} repo={session.repo} cwd={session.cwd} />;
+      },
+    },
+  ],
 };
 
 /** The row badge's indicator glyphs decoded into `<marker>: <meaning>` form. */
