@@ -36,7 +36,7 @@ export default defineConfig(() => {
       fs: {
         allow: [
           '../..',
-          // Sibling-repo ramphastos-client sources (dev/libraries mount).
+          // Sibling-repo ramphastos-client sources (sibling checkout next to axn-term).
           fileURLToPath(new URL('../../../ramphastos', import.meta.url)),
         ],
       },
