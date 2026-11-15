@@ -137,7 +137,7 @@ msgstr "Client: {0}"
 msgid "Close"
 msgstr "Chiudi"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2971
+#: libs/shell-ui/src/app/ShellApp.tsx:2970
 msgid "Close tab"
 msgstr "Chiudi scheda"
 
