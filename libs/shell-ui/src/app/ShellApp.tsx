@@ -2582,8 +2582,9 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         padding:
           'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)',
         // Room the session panel's toolbar row leaves for the panel toggle
-        // that floats in the title-bar row.
-        ['--panel-toggle-w' as string]: '2rem',
+        // that floats in the title-bar row — macOS only; elsewhere the
+        // toggle sits in the rail and the row needs no extra space.
+        ['--panel-toggle-w' as string]: isMac ? '2rem' : '0px',
       }}
     >
       {/* Headless status sources: plugins whose meters show in the session
@@ -2607,11 +2608,11 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           floats above the panel's toolbar row (which leaves room for it,
           --panel-toggle-w) and, with the panel closed, above the strip the
           content pane leaves for the traffic lights. Without that strip
-          (no overlay title bar, or fullscreen) and with the panel closed,
-          the copy at the top of the rail takes over. While the panel is
-          closed it carries the number of raised attention flags. */}
+          (no overlay title bar — Linux/Windows — or fullscreen) the copy
+          at the top of the rail takes over. While the panel is closed it
+          carries the number of raised attention flags. */}
       <div
-        className={`absolute z-[45] ${sidebarOpen ? 'flex' : 'axn-titlebar-only'}`}
+        className="axn-titlebar-only absolute z-[45]"
         style={{
           left: `calc(var(--rail-w) * ${uiScale} + var(--titlebar-overhang) + ${8 * uiScale}px)`,
           top: `${6 * uiScale}px`,
@@ -2635,12 +2636,10 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         }}
         data-tauri-drag-region
       >
-        {!sidebarOpen && (
-          <div className="axn-no-titlebar-only mb-1 flex flex-col items-center gap-1.5">
-            {panelToggle}
-            <div className="h-px w-5 bg-[var(--hairline)]" />
-          </div>
-        )}
+        <div className="axn-no-titlebar-only mb-1 flex flex-col items-center gap-1.5">
+          {panelToggle}
+          <div className="h-px w-5 bg-[var(--hairline)]" />
+        </div>
         {pinnedRailPlugins.map((plugin) => (
           <div
             key={plugin.id}
