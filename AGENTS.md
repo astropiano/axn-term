@@ -63,10 +63,16 @@
   `createPty` commands, PTY IO rides server-announced `pty:<id>` duplex streams,
   fs/exec/cwd/fg/tty map to VM commands. Kept behind a subpath export so the
   desktop build doesn't need the ramphastos-client dependency. Selected in
-  `apps/web` via `VITE_RAMPHASTOS_URL` (absent → `WsBackend`). Client dep is a
-  sibling-checkout alias (`ramphastos-client` → `../ramphastos`, a checkout
-  next to axn-term; containers mount or copy it as the repo's sibling); rebuild the client package's `dist/`
-  when its sources change. End-to-end: `tests/ramphastos-e2e.mjs` (raw protocol)
+  `apps/web` via `VITE_RAMPHASTOS_URL` (absent → `WsBackend`). Client dep is
+  the published `ramphastos-client` npm package (unscoped name), and the .NET
+  apps consume the published `Ramphastos.*` NuGet packages — sibling-checkout
+  builds are opt-in via `RAMPHASTOS_LOCAL_DEPS=1`: MSBuild swaps the package
+  refs for ProjectReferences into `../ramphastos` (root overridable
+  via `RamphastosLocalDepsRoot`), the vite/vitest configs alias
+  `ramphastos-client` to the sibling (mounted at `/ramphastos` in containers,
+  `AXN_LIBS_ROOT` points the docker `libraries` context at it), and the node
+  e2e scripts take `RAMPHASTOS_CLIENT_DIST`; rebuild the client package's
+  `dist/` when its sources change. End-to-end: `tests/ramphastos-e2e.mjs` (raw protocol)
   and `tests/remote-backend-e2e.mjs` (backend surface; run with
   `node --experimental-strip-types`), both against a locally running
   session-host (`SESSION_HOST_PORT=7682 dotnet run --project apps/session-host`).
@@ -344,7 +350,11 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   one flag required (usage error otherwise); an empty quoted value clears
   the field (same convention as bare `axn-rename`/`axn-session-summary`).
   Feedback echoes as command output (`renamed to '…'`/`name cleared`,
-  `summary updated`/`summary cleared`).
+  `summary updated`/`summary cleared`). `axn-session select <name|id>`
+  focuses another session ('go to session' — same as the broadcast tile
+  button); `axn-session list` echoes every session in panel order, `*` on
+  the one it ran in and the workspace in parens — the session-addressing
+  counterpart of `axn-workspaces`, so agents can discover peers to message.
 - `axn-session-mv <workspace>` — move the current session to another
   workspace, creating the workspace if it does not exist. The session
   context menu's "Move to workspace…" opens `MoveToWorkspaceModal`: every
@@ -439,8 +449,11 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   session and dismisses a covering plugin view — workflow `command:`
   actions use it as an on-enter "switch the view" (e.g. `axn-focus` on a
   human-gate state).
-- `axn-broadcast <line>` — write the line (with Enter) to every session in
-  the broadcast set, a per-window runtime set of session ids
+- `axn-broadcast [-t|--to <session>] <line>` — write the line (with Enter)
+  to every session in the broadcast set, or to a single named session with
+  `-t`/`--to` (same id/exact-name/prefix resolution as `axn-broadcast-add`;
+  the line goes verbatim — transport, not a message). The set is a
+  per-window runtime set of session ids
   (`app/broadcastSet.ts`): `axn-broadcast-add [name]`/`axn-broadcast-rm
   [name]` mark/unmark (current session with no arg, else name or id —
   prefix match), `axn-broadcast-clear` empties it, `axn-broadcasts`
@@ -460,12 +473,25 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   patterns are skipped with a console warning. The gate only fronts the
   interactive composer; the `axn-broadcast` command path writes
   directly.
+- `axn-tell <session> <message>` — agent↔agent messaging over the same PTY
+  input path: delivers `[axn-tell from "<sender>"] <message>` typed into
+  the target (the sender name comes from the session, not the text, so it
+  can't be spoofed). When the target's foreground is a shell (or the
+  backend reports none) the envelope is prefixed `# ` — it lands in
+  scrollback/history instead of failing as `command not found`; any other
+  foreground gets the raw envelope since typed input is the only universal
+  way into a running agent TUI. Discover peers with `axn-session list`;
+  agents use `"$AXN_TERM_CLI" session command "axn-tell <name> <msg>"`.
 
 The session-level dispatch behind it — built-ins, plugin-owned commands,
 `onCommand` hooks, Tab completion, and the out-of-band entry points
 (`PluginApi.runCommand`, remote-control lines, `axn-term session …`) — is
-`useSessionCommands` (`app/useSessionCommands.ts`), fed by ShellApp; the
-built-in command tables and path helpers sit in `app/shellCommandSupport.ts`.
+`useSessionCommands` (`app/useSessionCommands.ts`), fed by ShellApp. The
+built-ins are the `BUILTIN_COMMANDS` registry in `app/builtinCommands.ts`
+(one entry = name + `run` + optional `takesArg`/`completeArg` — the same
+table drives dispatch and Tab-completion); the shared parsing, session/
+workspace resolution and path-completion helpers sit in
+`app/shellCommandSupport.ts`.
 
 Input interception for all of this lives in `createHiddenCommandInput`
 (`app/hiddenCommands.ts`) — a per-view line-buffer tracker shared by
@@ -1479,10 +1505,16 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
   `createPty` commands, PTY IO rides server-announced `pty:<id>` duplex streams,
   fs/exec/cwd/fg/tty map to VM commands. Kept behind a subpath export so the
   desktop build doesn't need the ramphastos-client dependency. Selected in
-  `apps/web` via `VITE_RAMPHASTOS_URL` (absent → `WsBackend`). Client dep is a
-  sibling-checkout alias (`ramphastos-client` → `../ramphastos`, a checkout
-  next to axn-term; containers mount or copy it as the repo's sibling); rebuild the client package's `dist/`
-  when its sources change. End-to-end: `tests/ramphastos-e2e.mjs` (raw protocol)
+  `apps/web` via `VITE_RAMPHASTOS_URL` (absent → `WsBackend`). Client dep is
+  the published `ramphastos-client` npm package (unscoped name), and the .NET
+  apps consume the published `Ramphastos.*` NuGet packages — sibling-checkout
+  builds are opt-in via `RAMPHASTOS_LOCAL_DEPS=1`: MSBuild swaps the package
+  refs for ProjectReferences into `../ramphastos` (root overridable
+  via `RamphastosLocalDepsRoot`), the vite/vitest configs alias
+  `ramphastos-client` to the sibling (mounted at `/ramphastos` in containers,
+  `AXN_LIBS_ROOT` points the docker `libraries` context at it), and the node
+  e2e scripts take `RAMPHASTOS_CLIENT_DIST`; rebuild the client package's
+  `dist/` when its sources change. End-to-end: `tests/ramphastos-e2e.mjs` (raw protocol)
   and `tests/remote-backend-e2e.mjs` (backend surface; run with
   `node --experimental-strip-types`), both against a locally running
   session-host (`SESSION_HOST_PORT=7682 dotnet run --project apps/session-host`).
@@ -1691,7 +1723,11 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   one flag required (usage error otherwise); an empty quoted value clears
   the field (same convention as bare `axn-rename`/`axn-session-summary`).
   Feedback echoes as command output (`renamed to '…'`/`name cleared`,
-  `summary updated`/`summary cleared`).
+  `summary updated`/`summary cleared`). `axn-session select <name|id>`
+  focuses another session ('go to session' — same as the broadcast tile
+  button); `axn-session list` echoes every session in panel order, `*` on
+  the one it ran in and the workspace in parens — the session-addressing
+  counterpart of `axn-workspaces`, so agents can discover peers to message.
 - `axn-session-mv <workspace>` — move the current session to another
   workspace, creating the workspace if it does not exist. The session
   context menu's "Move to workspace…" opens `MoveToWorkspaceModal`: every
@@ -1786,8 +1822,11 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   session and dismisses a covering plugin view — workflow `command:`
   actions use it as an on-enter "switch the view" (e.g. `axn-focus` on a
   human-gate state).
-- `axn-broadcast <line>` — write the line (with Enter) to every session in
-  the broadcast set, a per-window runtime set of session ids
+- `axn-broadcast [-t|--to <session>] <line>` — write the line (with Enter)
+  to every session in the broadcast set, or to a single named session with
+  `-t`/`--to` (same id/exact-name/prefix resolution as `axn-broadcast-add`;
+  the line goes verbatim — transport, not a message). The set is a
+  per-window runtime set of session ids
   (`app/broadcastSet.ts`): `axn-broadcast-add [name]`/`axn-broadcast-rm
   [name]` mark/unmark (current session with no arg, else name or id —
   prefix match), `axn-broadcast-clear` empties it, `axn-broadcasts`
@@ -1807,12 +1846,25 @@ Built-in hidden session/workspace commands (intercepted before plugins):
   patterns are skipped with a console warning. The gate only fronts the
   interactive composer; the `axn-broadcast` command path writes
   directly.
+- `axn-tell <session> <message>` — agent↔agent messaging over the same PTY
+  input path: delivers `[axn-tell from "<sender>"] <message>` typed into
+  the target (the sender name comes from the session, not the text, so it
+  can't be spoofed). When the target's foreground is a shell (or the
+  backend reports none) the envelope is prefixed `# ` — it lands in
+  scrollback/history instead of failing as `command not found`; any other
+  foreground gets the raw envelope since typed input is the only universal
+  way into a running agent TUI. Discover peers with `axn-session list`;
+  agents use `"$AXN_TERM_CLI" session command "axn-tell <name> <msg>"`.
 
 The session-level dispatch behind it — built-ins, plugin-owned commands,
 `onCommand` hooks, Tab completion, and the out-of-band entry points
 (`PluginApi.runCommand`, remote-control lines, `axn-term session …`) — is
-`useSessionCommands` (`app/useSessionCommands.ts`), fed by ShellApp; the
-built-in command tables and path helpers sit in `app/shellCommandSupport.ts`.
+`useSessionCommands` (`app/useSessionCommands.ts`), fed by ShellApp. The
+built-ins are the `BUILTIN_COMMANDS` registry in `app/builtinCommands.ts`
+(one entry = name + `run` + optional `takesArg`/`completeArg` — the same
+table drives dispatch and Tab-completion); the shared parsing, session/
+workspace resolution and path-completion helpers sit in
+`app/shellCommandSupport.ts`.
 
 Input interception for all of this lives in `createHiddenCommandInput`
 (`app/hiddenCommands.ts`) — a per-view line-buffer tracker shared by

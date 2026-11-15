@@ -4,12 +4,26 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import monacoEditorPlugin from "vite-plugin-monaco-editor-esm";
 
-// @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 // Allow the Docker builder to keep the Vite dep-optimization cache on a
 // persistent volume instead of inside the ephemeral build directory.
-// @ts-expect-error process is a nodejs global
 const cacheDir = process.env.VITE_CACHE_DIR;
+// RAMPHASTOS_LOCAL_DEPS=1 → resolve ramphastos-client from the sibling
+// checkout (../ramphastos next to axn-term; containers mount it as the
+// repo's sibling,
+// same relative depth) instead of the published npm package. Rebuild the
+// client package's dist/ there when its sources change.
+const ramphastosLocalDeps: Record<string, string> = process.env
+  .RAMPHASTOS_LOCAL_DEPS
+  ? {
+      "ramphastos-client": fileURLToPath(
+        new URL(
+          "../../../ramphastos/src/client/ramphastos-client",
+          import.meta.url,
+        ),
+      ),
+    }
+  : {};
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
@@ -48,14 +62,7 @@ export default defineConfig(async () => ({
       "@axn-term/plugin-sdk": fileURLToPath(
         new URL("../../libs/plugin-sdk/src/index.ts", import.meta.url),
       ),
-      // Sibling checkout (../ramphastos next to axn-term); containers mount
-      // it as the repo's sibling, so the relative depth resolves there too.
-      "@ramphastos/ramphastos-client": fileURLToPath(
-        new URL(
-          "../../../ramphastos/src/client/ramphastos-client",
-          import.meta.url,
-        ),
-      ),
+      ...ramphastosLocalDeps,
       // monaco-editor's exports map blocks deep `esm/` imports; resolve them
       // straight to the filesystem so src/app/monaco.main.ts can pick a
       // trimmed language set.

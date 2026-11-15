@@ -1,4 +1,4 @@
-import { RamphastosSession, RamphastosStream } from '@ramphastos/ramphastos-client';
+import { RamphastosSession, RamphastosStream } from 'ramphastos-client';
 import { answerControl } from './types.ts';
 import { listRemoteSessions, scopeSessionId, type RemoteSessionInfo } from './remoteScope.ts';
 import type {

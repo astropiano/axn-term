@@ -7,25 +7,14 @@
 //
 // Needs a session host running (default http://localhost:7682), e.g.
 //   SESSION_HOST_PORT=7682 dotnet run --project apps/session-host -f net10.0
-// '@ramphastos/ramphastos-client' resolves through the node_modules symlink created by
-// remote-backend-e2e.mjs (recreated here if absent).
-
-import { existsSync, mkdirSync, symlinkSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const link = path.join(repoRoot, "node_modules", "@ramphastos", "ramphastos-client");
-const target = path.resolve(repoRoot, "../ramphastos/src/client/ramphastos-client");
-if (!existsSync(link)) {
-  mkdirSync(path.dirname(link), { recursive: true });
-  symlinkSync(target, link, "junction");
-}
+// 'ramphastos-client' resolves from node_modules (the published package);
+// RAMPHASTOS_CLIENT_DIST overrides it with a local build (sibling
+// checkout's src/client/ramphastos-client/dist/index.js).
 
 const { RemoteAuthority } = await import("../libs/session-backend/src/RemoteAuthority.ts");
 const { RemoteBackend } = await import("../libs/session-backend/src/RemoteBackend.ts");
 const { scopeSessionId } = await import("../libs/session-backend/src/remoteScope.ts");
-const { RamphastosSession } = await import("@ramphastos/ramphastos-client");
+const { RamphastosSession } = await import(process.env.RAMPHASTOS_CLIENT_DIST ?? "ramphastos-client");
 
 // Hub URL arg may be a bare base (session-host) or a full endpoint path
 // (gateway /remote). Bare bases get the session-host's /ramphastos appended.

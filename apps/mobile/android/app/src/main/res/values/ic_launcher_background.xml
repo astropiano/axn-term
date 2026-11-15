@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- axn-dark theme background — the same plate as the desktop icons. -->
+    <color name="ic_launcher_background">#141110</color>
+</resources>

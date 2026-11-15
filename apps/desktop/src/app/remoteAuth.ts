@@ -59,18 +59,18 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 async function postForm(url: string, params: Record<string, string>): Promise<TokenResponse> {
-  // Routed through Rust (plugin_exec → curl): the Tauri webview blocks plain
-  // http:// and wss:// to self-signed/unknown origins alike, which makes the
-  // device-flow hop undiagnosable. curl sees the host network stack.
-  const body = new URLSearchParams(params).toString();
-  const cmd = [
-    'curl', '-sS', '--max-time', '15', '-X', 'POST',
-    "-H 'Content-Type: application/x-www-form-urlencoded'",
-    '-d', `'${body.replace(/'/g, `'\\''`)}'`,
-    `'${url.replace(/'/g, `'\\''`)}'`,
-  ].join(' ');
-  const out = await invoke<string>('plugin_exec', { command: cmd });
-  return JSON.parse(out) as TokenResponse;
+  // Routed through Rust (remote_fetch → reqwest + native-tls): the Tauri
+  // webview gives no diagnosable error for TLS/DNS/refused failures and
+  // can't trust user-installed CAs, which would make the device-flow hop
+  // undiagnosable. The command sees the platform network + trust store.
+  const res = await invoke<{ status: number; body: string }>('remote_fetch', {
+    url,
+    method: 'POST',
+    headers: [['Content-Type', 'application/x-www-form-urlencoded']],
+    body: new URLSearchParams(params).toString(),
+    timeoutMs: 15_000,
+  });
+  return JSON.parse(res.body) as TokenResponse;
 }
 
 export type RemoteAuth = {

@@ -23,6 +23,49 @@ pub(crate) fn remote_auth_report(state: State<'_, AppState>, snapshot: String) {
     }
 }
 
+#[derive(serde::Serialize)]
+pub(crate) struct FetchResponse {
+    status: u16,
+    body: String,
+}
+
+/// HTTP(S) request for remote pairing/discovery/status and the OIDC
+/// device-flow form posts. The webview's fetch cannot trust user-installed
+/// CAs and gives no diagnosable error, and shelling out to curl lands on
+/// whatever curl the login shell's PATH picks first (a MacPorts/Homebrew
+/// OpenSSL curl ignores the OS trust store; Windows may have no curl at
+/// all). native-tls goes through the platform TLS — SecureTransport
+/// (login keychain) on macOS, Schannel on Windows, the system OpenSSL
+/// store on Linux.
+#[tauri::command]
+pub(crate) async fn remote_fetch(
+    url: String,
+    method: Option<String>,
+    headers: Vec<(String, String)>,
+    body: Option<String>,
+    timeout_ms: Option<u64>,
+) -> Result<FetchResponse, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(timeout_ms.unwrap_or(5_000)))
+        .build()
+        .map_err(|e| format!("http client: {e}"))?;
+    let method = reqwest::Method::from_bytes(
+        method.unwrap_or_else(|| "GET".to_string()).as_bytes(),
+    )
+    .map_err(|e| format!("http method: {e}"))?;
+    let mut req = client.request(method, &url);
+    for (name, value) in headers {
+        req = req.header(name, value);
+    }
+    if let Some(body) = body {
+        req = req.body(body);
+    }
+    let res = req.send().await.map_err(|e| e.to_string())?;
+    let status = res.status().as_u16();
+    let body = res.text().await.map_err(|e| e.to_string())?;
+    Ok(FetchResponse { status, body })
+}
+
 
 /// The remote-control HTTP server the flow tests drive the app through.
 /// Enabled by `AXN_TERM_REMOTE_CONTROL_PORT` and only together with
@@ -255,7 +298,7 @@ pub(crate) fn handle_remote_control_request(
 
         (Method::Post, "/remote-auth") => {
             // Trigger signIn() inside the webview — the real remoteAuth path
-            // (plugin_exec curl hop), so flow tests exercise the same code
+            // (the remote_fetch hop), so flow tests exercise the same code
             // a user pressing "Sign in…" runs.
             let windows = app_handle.webview_windows();
             match windows.values().next() {

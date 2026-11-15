@@ -2,20 +2,36 @@
 
 # Build the axn-term session host — the .NET WebSocket PTY server that
 # replaced the old node session-server (server.mjs).
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS sessionhost-builder
+
+# Optional sibling ramphastos checkout — see the stage chain below. Must
+# be declared before the first FROM to be usable in a FROM expression.
+ARG RAMPHASTOS_LOCAL_DEPS=""
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dotnet-src
 
 WORKDIR /build
 COPY --from=axn-term Directory.Build.props ./
 COPY --from=axn-term nuget.config ./
 COPY --from=axn-term apps/session-host ./apps/session-host
 
-# Sibling checkout of ramphastos (the `libraries` build context is the
-# directory holding axn-term and its siblings). The ProjectReference
-# ../../../ramphastos resolves to /ramphastos from the build root.
-# Central package versions live at the ramphastos repo root.
-COPY --from=libraries ramphastos/Directory.Packages.props /ramphastos/Directory.Packages.props
-COPY --from=libraries ramphastos/nuget.config /ramphastos/nuget.config
-COPY --from=libraries ramphastos/src /ramphastos/src
+# Optional sibling ramphastos checkout: only with
+#   --build-arg RAMPHASTOS_LOCAL_DEPS=1 --build-context libraries=<dir holding the sibling checkouts>
+# does the tree land at / (siblings of the build root: /ramphastos),
+# where MSBuild swaps the published Ramphastos.* packages for
+# ProjectReferences into it (same env-var mechanism as the ramphastos
+# repo itself; its own totalserializer/reflectiontools siblings land
+# beside it when the context holds them). Default builds restore the
+# published NuGet packages — the empty stage keeps the COPY a no-op and
+# no `libraries` context is needed.
+FROM scratch AS ramphastos-deps
+FROM libraries AS ramphastos-deps-local
+FROM ramphastos-deps${RAMPHASTOS_LOCAL_DEPS:+-local} AS ramphastos-source
+
+FROM dotnet-src AS sessionhost-builder
+ARG RAMPHASTOS_LOCAL_DEPS
+ENV RAMPHASTOS_LOCAL_DEPS=$RAMPHASTOS_LOCAL_DEPS
+# .git must come along: sibling projects use GitVersion during build.
+COPY --from=ramphastos-source --exclude='**/node_modules' . /
 
 RUN dotnet publish apps/session-host/AxnTerm.SessionHost.csproj \
     -c Release \

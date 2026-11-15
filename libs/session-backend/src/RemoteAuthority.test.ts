@@ -54,7 +54,7 @@ class FakeStream {
     this.dataCb?.(d, 0);
   }
 }
-vi.mock('@ramphastos/ramphastos-client', () => ({
+vi.mock('ramphastos-client', () => ({
   RamphastosAuthority: class {
     static connect(url: string, opts: Record<string, unknown>) {
       const a = new FakeAuthority();

@@ -207,6 +207,23 @@ public sealed class SessionHostContainerService : IDisposable
             return null;
         }
 
+        // A host with the same name but on another network belongs to a
+        // different stack (container names are global, networks are
+        // project-scoped): it would stay unreachable from here while
+        // hello-ing the old gateway forever — recreate it on ours.
+        if (inspect.NetworkSettings?.Networks is null ||
+            !inspect.NetworkSettings.Networks.ContainsKey(_network))
+        {
+            _logger.LogWarning(
+                "Session host {ContainerName} is not on network {Network}; recreating it",
+                containerName, _network);
+            await _docker.Containers.RemoveContainerAsync(
+                containerName,
+                new ContainerRemoveParameters { Force = true },
+                cancellationToken);
+            return null;
+        }
+
         var secret = SessionHostSecret.FromEnv(inspect.Config?.Env);
         if (secret is null)
         {

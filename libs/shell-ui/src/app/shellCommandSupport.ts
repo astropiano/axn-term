@@ -2,54 +2,79 @@ import type { SessionBackend } from '@axn-term/session-backend';
 import { expandPathArg, resolvePath } from './fileService';
 import { ptyIdOf, type ShellSession } from '../types';
 
-/** Built-in hidden command tables and helpers behind ShellApp's command dispatch and Tab completion. */
+/** Helpers behind ShellApp's command dispatch and Tab completion. The
+ * session-level built-ins themselves live in `builtinCommands.ts` — this
+ * file holds the shared parsing/resolution/completion pieces. */
 
-export const AXN_BUILTIN_COMMANDS = [
-  'axn-edit',
-  'axn-browse',
-  'axn-preview',
-  'axn-ide',
-  'axn-sh',
-  'axn-rename',
-  'axn-install',
-  'axn-session',
-  'axn-session-mv',
-  'axn-session-window',
-  'axn-session-up',
-  'axn-session-down',
-  'axn-session-summary',
-  'axn-workspaces',
-  'axn-workspace-up',
-  'axn-workspace-down',
-  'axn-focus',
-  'axn-broadcast',
-  'axn-broadcast-add',
-  'axn-broadcast-rm',
-  'axn-broadcast-clear',
-  'axn-broadcasts',
-  'axn-broadcast-deck',
-];
+/**
+ * View-local hidden commands — handled inside `hiddenCommands.ts` with the
+ * view's own callbacks, never reaching the session dispatch (the control
+ * socket can't open editor tabs). Listed for command-word completion.
+ */
+export const AXN_VIEW_COMMANDS = ['axn-edit', 'axn-browse', 'axn-preview', 'axn-ide'] as const;
 
-/** Hidden commands that take an argument (get a trailing space on complete). */
-export const AXN_ARG_COMMANDS = new Set([
-  'axn-edit',
-  'axn-browse',
-  'axn-preview',
-  'axn-ide',
-  'axn-sh',
-  'axn-rename',
-  'axn-install',
-  'axn-session',
-  'axn-session-mv',
-  'axn-session-summary',
-  'axn-focus',
-  'axn-broadcast',
-  'axn-broadcast-add',
-  'axn-broadcast-rm',
-]);
+/** Matches terminalRenderer's SHELL_FOREGROUND_RE — kept local so this
+ * module stays free of the xterm import chain (its tests run in node). */
+export const SHELL_FOREGROUND_RE = /^(ba|z|da|fi)?sh$|^fish$|^nu$|^(pwsh|powershell|cmd)(\.exe)?$/;
 
-export const AXN_BUILTIN_RE =
-  /^\s*(axn-session(?:-mv|-up|-down|-window)?|axn-workspaces|axn-workspace-up|axn-workspace-down|axn-focus|axn-broadcast(?:-(?:add|rm|clear|deck)|s)?)(?:\s+(.*?))?\s*$/;
+/** `axn-broadcast` targeting flags — `-t`/`--to` scope the send to one session. */
+export const AXN_BROADCAST_FLAGS = ['-t', '--to'] as const;
+
+/**
+ * Session resolution shared by the axn-* commands that address a session:
+ * id or exact name, else a case-insensitive name-prefix match.
+ */
+export function findSessionByName<T extends { id: string; name: string }>(
+  sessions: readonly T[],
+  needle: string,
+): T | undefined {
+  return (
+    sessions.find((s) => s.id === needle || s.name === needle) ??
+    sessions.find((s) => s.name.toLowerCase().startsWith(needle.toLowerCase()))
+  );
+}
+
+/**
+ * A leading `-t`/`--to <session>` on an axn-* command line: the (possibly
+ * quoted) target token and the verbatim rest of the line. `undefined` when
+ * the line does not start with the flag; `{ target: undefined }` when the
+ * flag is present without a value.
+ */
+export function parseTargetFlag(arg: string): { target?: string; rest: string } | undefined {
+  const m = /^\s*(-t|--to)(?:\s+("[^"]*"|'[^']*'|\S+))?(?:\s+|$)/.exec(arg);
+  if (!m) return undefined;
+  return { target: m[2]?.replace(/^["']|["']$/g, ''), rest: arg.slice(m[0].length) };
+}
+
+/**
+ * Session-name completion for the session-addressing commands (axn-tell,
+ * axn-broadcast --to, axn-broadcast-add/-rm, axn-session select) — full
+ * replacement lines, quoting names that contain spaces.
+ */
+export function completeSessionName(
+  sessions: readonly { name: string }[],
+  rest: string,
+  lineHead: string,
+): string[] {
+  const prefix = rest.replace(/^["']/, '');
+  return sessions
+    .map((s) => s.name)
+    .filter((n) => n.toLowerCase().startsWith(prefix.toLowerCase()) && n !== prefix)
+    .map((n) => `${lineHead}${n.includes(' ') ? `"${n}"` : n}`);
+}
+
+/** Same shape as completeSessionName for workspace names (axn-session-mv). */
+export function completeWorkspaceName(
+  workspaces: readonly { name: string }[],
+  rest: string,
+  lineHead: string,
+): string[] {
+  const prefix = rest.replace(/^["']/, '');
+  return workspaces
+    .map((w) => w.name)
+    .filter((n) => n.toLowerCase().startsWith(prefix.toLowerCase()) && n !== prefix)
+    .map((n) => `${lineHead}${n.includes(' ') ? `"${n}"` : n}`);
+}
 
 /** Shell-ish tokenizer for command args — honours single/double quotes. */
 export function shellTokens(arg: string): string[] {

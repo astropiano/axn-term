@@ -92,11 +92,22 @@ program use `axn-term session …` above:
 - `axn-install [args]` — runs `axn-term install <args>` (e.g.
   `axn-install --skills --devin`).
 - `axn-workspaces` — list workspaces; the session's own is marked `*`.
-- `axn-broadcast <line>` — write the line (with Enter) to every session in
-  the broadcast set; `axn-broadcast-add [name]`/`axn-broadcast-rm [name]`
+- `axn-session list` — list every session, `*` on the one it ran in, with
+  its workspace. As a running agent this is how you discover peers:
+  `"$AXN_TERM_CLI" session command "axn-session list"`.
+- `axn-broadcast [-t|--to <session>] <line>` — write the line (with Enter)
+  to every session in the broadcast set, or to a single session with
+  `-t`/`--to <name-or-id>`; `axn-broadcast-add [name]`/`axn-broadcast-rm [name]`
   mark/unmark sessions (current session when no name), `axn-broadcast-clear`
   empties the set, `axn-broadcasts` lists it. Broadcast-marked sessions show
-  a radio badge in the panel; the session menu toggles membership.
+  a radio badge in the panel; the session menu toggles membership. The
+  `--to` line goes verbatim — it is a transport, not a message.
+- `axn-tell <session> <message>` — message another session (agent↔agent):
+  delivers `[axn-tell from "<your session name>"] <message>` as input to
+  the target. If the target's foreground is a shell it arrives as a `#`
+  comment (scrollback/history) instead of erroring as a command; an agent
+  TUI gets the plain envelope as its next prompt. From inside a session:
+  `"$AXN_TERM_CLI" session command "axn-tell <name> <message>"`.
 - `axn-session-up/down`, `axn-workspace-up/down` — reorder sessions/workspaces.
 - `axn-focus [tab]` — bring a session view to the front: bare or `shell`
   selects the main terminal; otherwise a sub-view tab matched by index,

@@ -15,7 +15,6 @@ services:
     build:
       context: ../../
       dockerfile: scenarios/axn-term-storybook/Dockerfile
-    container_name: axn-term-storybook
     restart: unless-stopped
     working_dir: /app/apps/desktop
     # Sync deps on start: the anonymous node_modules volumes keep their

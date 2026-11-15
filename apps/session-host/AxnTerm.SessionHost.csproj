@@ -21,9 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Sibling checkout: ../ramphastos next to axn-term.
-         In the session-host Dockerfile it lands at /ramphastos (same depth). -->
-    <ProjectReference Include="../../../ramphastos/src/Ramphastos.Server/Ramphastos.Server.csproj" />
+    <PackageReference Condition="'$(RamphastosLocalDeps)' != 'true'" Include="Ramphastos.Server" Version="0.2.0-alpha.1" />
+    <!-- RAMPHASTOS_LOCAL_DEPS=1 → sibling checkout (../ramphastos next to
+         axn-term, /ramphastos in container builds); see Directory.Build.props. -->
+    <ProjectReference Condition="'$(RamphastosLocalDeps)' == 'true'" Include="$(RamphastosLocalDepsRoot)ramphastos\src\Ramphastos.Server\Ramphastos.Server.csproj" />
   </ItemGroup>
 
 </Project>

@@ -9,16 +9,58 @@
 	default_sni {$AXN_LAN_IP:-localhost}
 }
 
-# Hostname routing for local dev and DNS-based LAN access
-# (axn-term.* / axn-term-gateway.* / axn-term-keycloak.*). Site addresses
+# One origin per network: the web app at /, Keycloak at /auth
+# (KC_HTTP_RELATIVE_PATH), the gateway at /gw — one certificate, no
+# cross-origin requests, one address for clients to remember.
+# args[0]: the X-Forwarded-Proto upstreams see ({http.request.scheme} for
+# Caddy's own TLS sites, https behind tailscale serve).
+(site) {
+	# Discovery document (also under /gw/.well-known/…): clients given
+	# only this address find gateway/issuer/client ids.
+	handle /.well-known/axn-term {
+		reverse_proxy gateway:8080 {
+			header_up X-Forwarded-Proto {args[0]}
+			header_up X-Forwarded-Prefix /gw
+		}
+	}
+	handle_path /gw/* {
+		reverse_proxy gateway:8080 {
+			header_up X-Forwarded-Proto {args[0]}
+			header_up X-Forwarded-Prefix /gw
+		}
+	}
+	handle /auth/* {
+		reverse_proxy keycloak:8082 {
+			header_up Host {http.request.hostport}
+			header_up X-Forwarded-Proto {args[0]}
+		}
+	}
+	# The dev CA (make-dev-certs.sh) for phones to install — public by
+	# nature, it is what devices are asked to trust.
+	handle /axn-term-ca.crt {
+		root * /certs
+		rewrite * /ca.pem
+		header Content-Type application/x-x509-ca-cert
+		file_server
+	}
+	handle {
+		reverse_proxy shell:5176
+	}
+}
+
+# Legacy per-service addresses (axn-term-keycloak.*, :18093) — Keycloak now
+# lives under /auth, so old links get the prefix.
+(legacy_keycloak) {
+	rewrite * /auth{uri}
+	reverse_proxy keycloak:8082 {
+		header_up Host {http.request.hostport}
+	}
+}
+
+# Hostname routing for local dev and DNS-based LAN access. Site addresses
 # carry the names so `tls internal` can provision certs for them.
 axn-term.{$AXN_DOMAIN:localhost}:{$SCENARIO_PORT:8092}, axn-term-gateway.{$AXN_DOMAIN:localhost}:{$SCENARIO_PORT:8092}, axn-term-keycloak.{$AXN_DOMAIN:localhost}:{$SCENARIO_PORT:8092} {
 	tls {$AXN_TLS:-off}
-
-	@shell host axn-term.{$AXN_DOMAIN:localhost}
-	handle @shell {
-		reverse_proxy shell:5176
-	}
 
 	@gateway host axn-term-gateway.{$AXN_DOMAIN:localhost}
 	handle @gateway {
@@ -27,53 +69,32 @@ axn-term.{$AXN_DOMAIN:localhost}:{$SCENARIO_PORT:8092}, axn-term-gateway.{$AXN_D
 
 	@keycloak host axn-term-keycloak.{$AXN_DOMAIN:localhost}
 	handle @keycloak {
-		reverse_proxy keycloak:8082 {
-			header_up Host {http.request.hostport}
-		}
+		import legacy_keycloak
 	}
 
 	handle {
-		reverse_proxy shell:5176
+		import site {http.request.scheme}
 	}
 }
 
-# Raw-IP access: no DNS at all — one port per service on the LAN IP.
-# `tls internal` provisions certs with the IP as SAN, so
-# https://<ip>:<port> is a secure context (PKCE) everywhere.
+# Raw-IP access: no DNS at all. `tls internal` / the dev CA put the IP in
+# the certificate, so https://<ip>:<port> is a secure context (PKCE).
 {$AXN_LAN_IP:-127.0.0.1}:{$SCENARIO_PORT:8092} {
 	tls {$AXN_TLS:-off}
-	reverse_proxy shell:5176
+	import site {http.request.scheme}
 }
 
-{$AXN_LAN_IP:-127.0.0.1}:{$AXN_KC_PORT:-18093} {
-	tls {$AXN_TLS:-off}
-	reverse_proxy keycloak:8082 {
-		header_up Host {http.request.hostport}
-	}
-}
-
-{$AXN_LAN_IP:-127.0.0.1}:{$AXN_GW_PORT:-18094} {
-	tls {$AXN_TLS:-off}
-	reverse_proxy gateway:8080
-}
-
-# mDNS (.local) access — DHCP-proof counterpart of the raw-IP blocks:
-# <hostname>.local resolves via Bonjour on Mac/iOS even when the DHCP lease
-# changes, and the same internal CA signs the name cert (a trusted root
-# stays trusted). SNI disambiguates these from the IP sites on the same ports.
+# mDNS (.local) access — DHCP-proof for clients that resolve .local
+# (macOS/iOS, Linux with nss-mdns; not Android).
 {$AXN_LAN_NAME:-axn-term.local}:{$SCENARIO_PORT:8092} {
 	tls {$AXN_TLS:-off}
-	reverse_proxy shell:5176
+	import site {http.request.scheme}
 }
 
-{$AXN_LAN_NAME:-axn-term.local}:{$AXN_KC_PORT:-18093} {
-	tls {$AXN_TLS:-off}
-	reverse_proxy keycloak:8082 {
-		header_up Host {http.request.hostport}
-	}
-}
-
-{$AXN_LAN_NAME:-axn-term.local}:{$AXN_GW_PORT:-18094} {
-	tls {$AXN_TLS:-off}
-	reverse_proxy gateway:8080
+# Plain HTTP on one multiplexed port — the same (site) block as TLS, so
+# clients that can't trust the dev CA (the Tauri webview, curl probes) get
+# the whole stack on a single port too. Serves tailscale serve's local
+# forward as well; published on 127.0.0.1 by default.
+http://:{$AXN_PLAIN_PORT:18097} {
+	import site https
 }

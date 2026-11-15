@@ -1,3 +1,4 @@
+mod announce;
 pub mod cli;
 #[cfg(unix)]
 pub mod control;
@@ -428,6 +429,8 @@ pub fn run() {
             files::save_dropped_file,
             persist::secure_get,
             remote::remote_auth_report,
+            remote::remote_fetch,
+            announce::remote_announce,
             persist::secure_set,
             logfile::set_log_level,
             logfile::log_dir,

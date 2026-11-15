@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PeerChannel } from '../platform';
 import type { ShellSession } from '../types';
-import { AXN_BUILTIN_RE } from './shellCommandSupport';
+import { BUILTIN_COMMANDS } from './builtinCommands';
 import { requestAdopt, TOPIC_ADOPT, TOPIC_ADOPT_ACK, type AdoptRequest } from './windowPeers';
 import {
   TOPIC_WINDOW_READY,
@@ -202,9 +202,8 @@ describe('dragEndedOutside', () => {
 
 describe('axn-session-window', () => {
   it('is a built-in hidden command', () => {
-    expect(AXN_BUILTIN_RE.exec('axn-session-window')?.[1]).toBe('axn-session-window');
-    expect(AXN_BUILTIN_RE.exec('  axn-session-window  ')?.[1]).toBe('axn-session-window');
-    expect(AXN_BUILTIN_RE.exec('axn-session-windows')).toBeNull();
+    expect(BUILTIN_COMMANDS.some((c) => c.name === 'axn-session-window')).toBe(true);
+    expect(BUILTIN_COMMANDS.some((c) => c.name === 'axn-session-windows')).toBe(false);
   });
 });
 

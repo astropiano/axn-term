@@ -20,14 +20,15 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <!-- net10 only — the Ramphastos.Server project reference targets net10. -->
+    <!-- net10 only — Ramphastos.Server targets net10. -->
     <TargetFrameworks>net10.0</TargetFrameworks>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Sibling checkout: ../ramphastos next to axn-term.
-         In the gateway Dockerfile it lands at /ramphastos (same depth). -->
-    <ProjectReference Include="../../../ramphastos/src/Ramphastos.Server/Ramphastos.Server.csproj" />
+    <PackageReference Condition="'$(RamphastosLocalDeps)' != 'true'" Include="Ramphastos.Server" Version="0.2.0-alpha.1" />
+    <!-- RAMPHASTOS_LOCAL_DEPS=1 → sibling checkout (../ramphastos next to
+         axn-term, /ramphastos in container builds); see Directory.Build.props. -->
+    <ProjectReference Condition="'$(RamphastosLocalDeps)' == 'true'" Include="$(RamphastosLocalDepsRoot)ramphastos\src\Ramphastos.Server\Ramphastos.Server.csproj" />
   </ItemGroup>
 
 </Project>

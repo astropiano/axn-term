@@ -21,9 +21,9 @@ services:
     image: axn-term-desktop-builder:latest
     volumes:
       - .:/src:ro
-      # Sibling ramphastos checkout — the build runs in /build/source, so the
-      # ramphastos-client alias (../../../ramphastos) resolves to /build/ramphastos.
-      - ${AXN_LIBS_ROOT:-..}/ramphastos:/build/ramphastos:ro
+      # Sibling ramphastos checkout at /ramphastos — only needed with
+      # RAMPHASTOS_LOCAL_DEPS=1 (vite alias to the sibling checkout).
+      - ${AXN_LIBS_ROOT:-..}/ramphastos:/ramphastos:ro
       - desktop-cargo-cache:/cache/cargo
       - desktop-pnpm-cache:/cache/pnpm
       - desktop-vite-cache:/cache/vite
@@ -32,6 +32,7 @@ services:
       - CARGO_HOME=/cache/cargo
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
+      - RAMPHASTOS_LOCAL_DEPS=${RAMPHASTOS_LOCAL_DEPS:-}
     command: /src/build/scripts/build-desktop.sh
 
   # Windows desktop app, cross-compiled with cargo-xwin + NSIS.
@@ -42,7 +43,7 @@ services:
     image: axn-term-windows-builder:latest
     volumes:
       - .:/src:ro
-      - ${AXN_LIBS_ROOT:-..}/ramphastos:/build/ramphastos:ro
+      - ${AXN_LIBS_ROOT:-..}/ramphastos:/ramphastos:ro
       - desktop-windows-cargo-cache:/cache/cargo
       - desktop-pnpm-cache:/cache/pnpm
       - desktop-vite-cache:/cache/vite
@@ -52,6 +53,7 @@ services:
       - CARGO_HOME=/cache/cargo
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
+      - RAMPHASTOS_LOCAL_DEPS=${RAMPHASTOS_LOCAL_DEPS:-}
     command: /src/build/scripts/build-desktop-windows.sh
 
   # WebSocket gateway — validates JWTs and spawns per-user session hosts.
@@ -59,6 +61,12 @@ services:
     profiles: [server]
     build:
       context: .
+      args:
+        # RAMPHASTOS_LOCAL_DEPS=1 (+ AXN_LIBS_ROOT=<dir holding the
+        # ramphastos sibling checkout>) builds against it instead of NuGet.
+        - RAMPHASTOS_LOCAL_DEPS=${RAMPHASTOS_LOCAL_DEPS:-}
+      additional_contexts:
+        libraries: ${AXN_LIBS_ROOT:-..}
       dockerfile: apps/gateway/Dockerfile
     image: axn-term-gateway:latest
 
@@ -67,8 +75,11 @@ services:
     profiles: [server]
     build:
       context: ./scenarios/axn-term-online/session-host
+      args:
+        - RAMPHASTOS_LOCAL_DEPS=${RAMPHASTOS_LOCAL_DEPS:-}
       additional_contexts:
         axn-term: .
+        libraries: ${AXN_LIBS_ROOT:-..}
       dockerfile: Dockerfile
     image: axn-term-host:latest
 

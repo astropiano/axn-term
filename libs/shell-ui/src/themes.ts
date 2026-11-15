@@ -1,4 +1,5 @@
 import type { ITheme } from '@xterm/xterm';
+import type { KnownServer } from '@axn-term/session-backend';
 import { load as loadYaml } from 'js-yaml';
 import { shellPlatform } from './platform';
 
@@ -118,6 +119,13 @@ export interface AppSettings {
    * drive them. Applied on app start.
    */
   remoteAuthorityUrl?: string;
+  /**
+   * The server this desktop publishes to, as resolved from its discovery
+   * document (Settings → Remote → Server). When set, hub URL, issuer and
+   * client id below are derived from it and re-checked on network changes;
+   * without it they stay hand-configured as before.
+   */
+  remoteServer?: KnownServer;
   /** Optional user JWT for identity-bound hubs (anonymous dev hubs: unset). */
   remoteAuthorityToken?: string;
   /**

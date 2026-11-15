@@ -17,4 +17,14 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <!-- Local development: set env var RAMPHASTOS_LOCAL_DEPS=1 to build
+         against the sibling ramphastos checkout (../ramphastos next to
+         axn-term) instead of the published NuGet packages — mirrors the
+         mechanism in the ramphastos repo itself. Override the sibling
+         root with the RamphastosLocalDepsRoot env var or /p: property. -->
+    <RamphastosLocalDeps Condition="'$(RAMPHASTOS_LOCAL_DEPS)' != ''">true</RamphastosLocalDeps>
+    <RamphastosLocalDepsRoot Condition="'$(RamphastosLocalDepsRoot)' == ''">$(MSBuildThisFileDirectory)..\</RamphastosLocalDepsRoot>
+  </PropertyGroup>
+
 </Project>

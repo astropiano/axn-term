@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RamphastosSession } from '@ramphastos/ramphastos-client';
+import type { RamphastosSession } from 'ramphastos-client';
 import { createMirrorStateStore } from './MirrorStateStore.ts';
 
 function fakeSession() {

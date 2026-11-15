@@ -42,6 +42,14 @@ so the user can see at a glance what is happening without opening it.
   [--background] [--create-ws] [path]` (the workspace must exist unless
   `--create-ws`; `--background` doesn't take the user's focus). Existing
   workspaces: `session command axn-workspaces` (`*` marks the current one).
+- Message another session: `session command "axn-session list"` lists every
+  session (`*` is yours, with its workspace), then
+  `session command "axn-tell <name-or-id> <message>"` delivers
+  `[axn-tell from "<your name>"] <message>` into that session's input — the
+  receiving agent sees it as its next prompt and can reply the same way.
+  A target sitting at a plain shell gets the text as a `#` comment in its
+  scrollback instead of a `command not found`. `axn-broadcast --to <name>
+  <line>` is the raw variant — the exact line, no attribution.
 
 Exit status: `0` done (a message, if any, is printed), `1` refused or failed
 (the reason goes to stderr), `2` usage error or not inside axn-term

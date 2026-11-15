@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>axn-term</title>
+    <base href="/" />
+
+    <!-- viewport-fit=cover draws edge-to-edge on notched phones;
+         interactive-widget=resizes-content shrinks the layout viewport when
+         the on-screen keyboard opens (Chrome/Android; iOS is handled by the
+         app's visualViewport tracking). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#141110" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="../src/mobile/main.tsx"></script>
+  </body>
+</html>

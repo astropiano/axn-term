@@ -153,13 +153,17 @@ it('axn-session completes flag names on a dash', async () => {
   ]);
 });
 
-it('axn-session completes the create/set subcommands on the first token', async () => {
+it('axn-session completes the subcommands on the first token', async () => {
   await mount([session('s-1')]);
   await expect(commands.handleCompleteInput('s-1', 'axn-session c')).resolves.toContain(
     'axn-session create ',
   );
   await expect(commands.handleCompleteInput('s-1', 'axn-session se')).resolves.toEqual([
     'axn-session set ',
+    'axn-session select ',
+  ]);
+  await expect(commands.handleCompleteInput('s-1', 'axn-session l')).resolves.toEqual([
+    'axn-session list ',
   ]);
 });
 
@@ -256,4 +260,128 @@ it('axn-broadcast with an empty set explains how to mark', async () => {
     'echo "axn-broadcast: broadcast set is empty (axn-broadcast-add marks sessions)"',
   );
   expect(deps.backend.write).not.toHaveBeenCalled();
+});
+
+it('axn-session list shows every session, * on the one that ran it', async () => {
+  await mount([session('s-1'), session('s-2'), { ...session('s-3'), workspaceId: 'ws-2' }]);
+  await expect(dispatch('s-1', 'axn-session list')).resolves.toBe(
+    'echo "* s-1 (api)\\n  s-2 (api)\\n  s-3 (vlavla)"',
+  );
+});
+
+it('axn-session select completes session names', async () => {
+  await mount([session('s-1'), session('s-2'), session('s-3')]);
+  await expect(commands.handleCompleteInput('s-1', 'axn-session select s-')).resolves.toEqual([
+    'axn-session select s-1',
+    'axn-session select s-2',
+    'axn-session select s-3',
+  ]);
+});
+
+it('axn-broadcast --to sends the line verbatim to one named session', async () => {
+  await mount([session('s-1'), session('s-2'), session('s-3')]);
+  await expect(dispatch('s-1', 'axn-broadcast --to s-2 make -j')).resolves.toBe(
+    'echo "axn-broadcast: sent to \'s-2\'"',
+  );
+  const write = deps.backend.write as ReturnType<typeof vi.fn>;
+  expect(write).toHaveBeenCalledWith('s-2', 'make -j\r');
+  expect(write).toHaveBeenCalledTimes(1);
+});
+
+it('axn-broadcast -t is the short flag', async () => {
+  await mount([session('s-1'), session('s-2')]);
+  await dispatch('s-1', 'axn-broadcast -t s-2 ls');
+  expect(deps.backend.write).toHaveBeenCalledWith('s-2', 'ls\r');
+});
+
+it('axn-broadcast --to errors on a missing target or unknown session', async () => {
+  await mount([session('s-1'), session('s-2')]);
+  await expect(dispatch('s-1', 'axn-broadcast --to')).resolves.toBe(
+    'echo "axn-broadcast: --to needs a session (name or id)"',
+  );
+  await expect(dispatch('s-1', 'axn-broadcast --to nobody hi')).resolves.toBe(
+    'echo "axn-broadcast: no such session: nobody"',
+  );
+  expect(deps.backend.write).not.toHaveBeenCalled();
+});
+
+it('axn-broadcast completes the -t/--to flags and session names', async () => {
+  await mount([session('s-1'), session('s-2')]);
+  await expect(commands.handleCompleteInput('s-1', 'axn-broadcast -')).resolves.toEqual([
+    'axn-broadcast -t ',
+    'axn-broadcast --to ',
+  ]);
+  await expect(commands.handleCompleteInput('s-1', 'axn-broadcast --to s-')).resolves.toEqual([
+    'axn-broadcast --to s-1',
+    'axn-broadcast --to s-2',
+  ]);
+});
+
+it('axn-tell wraps the message with the sender session name', async () => {
+  await mount([session('s-1'), session('s-2')]);
+  (deps.backend as { getForegroundProcess?: unknown }).getForegroundProcess = vi.fn(
+    async () => 'claude',
+  );
+  await expect(dispatch('s-1', 'axn-tell s-2 review the diff')).resolves.toBe(
+    'echo "axn-tell: sent to \'s-2\'"',
+  );
+  expect(deps.backend.write).toHaveBeenCalledWith(
+    's-2',
+    '[axn-tell from "s-1"] review the diff\r',
+  );
+});
+
+it('axn-tell comments the envelope when the target is a shell', async () => {
+  await mount([session('s-1'), session('s-2')]);
+  (deps.backend as { getForegroundProcess?: unknown }).getForegroundProcess = vi.fn(
+    async () => 'zsh',
+  );
+  await dispatch('s-1', 'axn-tell s-2 ping me back');
+  // A `#` line lands in scrollback/history instead of failing as a command.
+  expect(deps.backend.write).toHaveBeenCalledWith(
+    's-2',
+    '# [axn-tell from "s-1"] ping me back\r',
+  );
+});
+
+it('axn-tell resolves quoted and prefix session names', async () => {
+  await mount([session('s-1'), { ...session('s-2'), name: 'my bot' }, session('other')]);
+  (deps.backend as { getForegroundProcess?: unknown }).getForegroundProcess = vi.fn(
+    async () => 'claude',
+  );
+  await dispatch('s-1', 'axn-tell "my bot" hi');
+  expect(deps.backend.write).toHaveBeenCalledWith(
+    's-2',
+    '[axn-tell from "s-1"] hi\r',
+  );
+  await dispatch('s-1', 'axn-tell oth yo');
+  expect(deps.backend.write).toHaveBeenCalledWith(
+    'other',
+    '[axn-tell from "s-1"] yo\r',
+  );
+});
+
+it('axn-tell echoes usage/errors without writing', async () => {
+  await mount([session('s-1'), session('s-2')]);
+  await expect(dispatch('s-1', 'axn-tell')).resolves.toBe(
+    'echo "usage: axn-tell <session> <message>"',
+  );
+  await expect(dispatch('s-1', 'axn-tell s-2')).resolves.toBe(
+    'echo "usage: axn-tell <session> <message>"',
+  );
+  await expect(dispatch('s-1', 'axn-tell nobody hi')).resolves.toBe(
+    'echo "axn-tell: no such session: nobody"',
+  );
+  expect(deps.backend.write).not.toHaveBeenCalled();
+});
+
+it('axn-tell completes session names for the target', async () => {
+  await mount([session('s-1'), session('s-2'), session('s-3')]);
+  await expect(commands.handleCompleteInput('s-1', 'axn-tell s-')).resolves.toEqual([
+    'axn-tell s-1',
+    'axn-tell s-2',
+    'axn-tell s-3',
+  ]);
+  // After the target, the message is freeform — no completions.
+  await expect(commands.handleCompleteInput('s-1', 'axn-tell s-2 hi')).resolves.toEqual([]);
 });

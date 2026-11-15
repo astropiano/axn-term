@@ -1,5 +1,6 @@
 import Keycloak from 'keycloak-js';
 import { ConnectionGate } from './ConnectionGate';
+import { serverConfig } from './serverConfig';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 export interface KeycloakContextValue {
@@ -12,9 +13,19 @@ export interface KeycloakContextValue {
    *  panel's sign-out. */
   logout?: () => void;
   updateToken: (minValidity?: number) => Promise<string | undefined>;
+  /** Device-code sign-in in progress (mobile app): show the code and a
+   *  link; `cancelLogin` abandons it. */
+  pending?: { userCode: string; verificationUri: string; open: () => void };
+  cancelLogin?: () => void;
+  /** Why the last sign-in attempt failed, in plain words. */
+  authError?: string | null;
+  /** Login button text (default: "Log in with Keycloak"). */
+  loginLabel?: string;
 }
 
-const KeycloakContext = createContext<KeycloakContextValue>({
+/** Exported so hosts can provide their own sign-in (the mobile app's
+ *  device flow) behind the same interface. */
+export const KeycloakContext = createContext<KeycloakContextValue>({
   authenticated: null,
   token: null,
   username: null,
@@ -22,18 +33,10 @@ const KeycloakContext = createContext<KeycloakContextValue>({
   updateToken: () => Promise.resolve(undefined),
 });
 
-const keycloakUrl = import.meta.env.VITE_KEYCLOAK_URL as string | undefined;
-const keycloakRealm = import.meta.env.VITE_KEYCLOAK_REALM as string | undefined;
-const keycloakClientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID as string | undefined;
+const keycloakConfig = serverConfig().keycloak;
+const keycloakUrl = keycloakConfig?.url;
 
-const keycloak =
-  keycloakUrl && keycloakRealm && keycloakClientId
-    ? new Keycloak({
-        url: keycloakUrl,
-        realm: keycloakRealm,
-        clientId: keycloakClientId,
-      })
-    : null;
+const keycloak = keycloakConfig ? new Keycloak(keycloakConfig) : null;
 
 let keycloakInitPromise: Promise<boolean> | null = null;
 
@@ -115,7 +118,7 @@ function KeycloakProviderInner({ children }: { children: ReactNode }) {
   const logout = keycloak
     // Keep the query string — `?remote` selects mirror mode and must
     // survive the sign-out → sign-in round trip.
-    ? () => keycloak.logout({ redirectUri: window.location.href })
+    ? () => void keycloak.logout({ redirectUri: window.location.href })
     : undefined;
 
   return (

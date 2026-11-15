@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { GitBranch } from 'lucide-react';
 import { useShellServices } from '../../services';
 import { repoInfo } from '../gitClient';
-import type { RepoInfo } from '../../types';
+import { ptyIdOf, type RepoInfo } from '../../types';
 import { ContextMenu } from '../../ContextMenu';
 import { openFolderLabel } from '../../platform';
 import type { PluginApi, RepoMenuItem, SessionViewContext, SessionViewPlugin } from './plugin';
@@ -262,7 +262,9 @@ async function refreshRepo(ctx: SessionViewContext & PluginApi) {
   const cwd = (await ctx.getCwd()) ?? ctx.session.cwd;
   if (!cwd) return;
   try {
-    const repo = await repoInfo(ctx.session.id, cwd);
+    // execGit routes by PTY id — session.id diverges after a sub-shell was
+    // promoted to main, and remote backends key the lookup on it.
+    const repo = await repoInfo(ptyIdOf(ctx.getSession()), cwd);
     if (JSON.stringify(repo) !== JSON.stringify(ctx.getSession().repo)) {
       ctx.updateSession(ctx.session.id, { repo: repo ?? undefined });
     }

@@ -19,6 +19,11 @@ import type { RemoteAuthority } from '@axn-term/session-backend/remote';
 import { desktopPlatform } from './platform';
 import { DevHmrWindow } from './DevHmr';
 import { authorityStatus, createRemoteAuthority, withAuthorityReflect } from './remoteAuthority';
+import { announce, refreshServer } from './remoteServer';
+
+// Publish status is shown even while nothing publishes (not signed in,
+// no server) — that is exactly when the user needs to see why.
+desktopPlatform.remoteAuthorityStatus = authorityStatus;
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
@@ -187,9 +192,62 @@ export default function App() {
     windowRank(liveWindowIds, windowId),
   );
 
+  // A server connected by address is re-resolved at startup, when the
+  // network comes back and periodically: leaving the LAN for a tailnet (or
+  // back) moves hub/issuer to the endpoint that answers — same server id,
+  // same account, same mirrored session names. Only one window needs to do
+  // it (config.yaml is shared): the lead window (rank 0) does.
+  const isLeadWindow = windowRank(liveWindowIds, windowId) === 0;
+  const remoteServerRef = useRef(settings);
+  remoteServerRef.current = settings;
   useEffect(() => {
-    if (settings.remoteEnabled === false) {
+    if (!isLeadWindow || !settings.remoteServer || settings.remoteEnabled === false) return;
+    let alive = true;
+    const check = () =>
+      void refreshServer(remoteServerRef.current)
+        .then((patch) => {
+          if (alive && patch) updateSettings(patch);
+        })
+        .catch(() => {});
+    check();
+    window.addEventListener('online', check);
+    const timer = window.setInterval(check, 60_000);
+    return () => {
+      alive = false;
+      window.removeEventListener('online', check);
+      window.clearInterval(timer);
+    };
+  }, [isLeadWindow, settings.remoteServer?.id, settings.remoteEnabled, updateSettings]);
+
+  // Announce this desktop on the local network while it publishes to a
+  // known server, so a phone on the same Wi-Fi finds it.
+  useEffect(() => {
+    if (!isLeadWindow) return;
+    announce(settings.remoteServer, remoteDevice, settings.remoteEnabled !== false);
+  }, [isLeadWindow, settings.remoteServer, settings.remoteEnabled, remoteDevice]);
+  useEffect(() => () => announce(undefined, remoteDevice, false), [remoteDevice]);
+
+  // Sign-in-bound servers refuse an anonymous hello — connecting before
+  // sign-in only produces a denied-and-retry loop. Wait for the sign-in
+  // (a static dev token still publishes right away).
+  const awaitingSignIn =
+    Boolean(settings.remoteAuthIssuer) &&
+    !settings.remoteAuthorityToken &&
+    Boolean(desktopPlatform.remoteAuth) &&
+    remoteAuthState !== 'signedIn';
+
+  useEffect(() => {
+    const hubConfigured = Boolean(
+      settings.remoteAuthorityUrl || import.meta.env.VITE_REMOTE_AUTHORITY_URL,
+    );
+    if (settings.remoteEnabled === false || !hubConfigured) {
       setAuthority(undefined);
+      authorityStatus.set('idle');
+      return;
+    }
+    if (awaitingSignIn) {
+      setAuthority(undefined);
+      authorityStatus.set('idle', 'Sign in to publish this desktop');
       return;
     }
     // Remote publishing must never take the app down — any failure here
@@ -224,7 +282,7 @@ export default function App() {
     return () => {
       next?.stop().catch(() => {});
     };
-  }, [settings.remoteEnabled, settings.remoteAuthorityUrl, remoteSession, settings.remoteAuthorityToken, remoteAuthState]);
+  }, [settings.remoteEnabled, settings.remoteAuthorityUrl, remoteSession, settings.remoteAuthorityToken, remoteAuthState, awaitingSignIn]);
 
   // Local xterm resizes join the claim set instead of writing the PTY
   // size directly — a viewer's smaller claim still wins, so the mirrored

@@ -85,11 +85,28 @@ public static class GatewayAuth
     /// </summary>
     public static string? ValidateHelloToken(
         JwtSecurityTokenHandler handler, string? token, TokenValidationParameters parameters,
+        IReadOnlyCollection<string> clientIds) =>
+        CheckHelloToken(handler, token, parameters, clientIds).Sub;
+
+    /// <summary>Outcome of a hello/remote token check: the subject, or why not.</summary>
+    public readonly record struct TokenCheck(string? Sub, string? Reason)
+    {
+        public bool Ok => Sub is not null;
+    }
+
+    /// <summary>
+    /// Validate a remote-surface token (hub hello, /remote/*) and say why it
+    /// failed in words a user can act on — the reason is shown back to the
+    /// account's own clients by /remote/status, so a desktop that "just
+    /// doesn't show up" explains itself.
+    /// </summary>
+    public static TokenCheck CheckHelloToken(
+        JwtSecurityTokenHandler handler, string? token, TokenValidationParameters parameters,
         IReadOnlyCollection<string> clientIds)
     {
         if (string.IsNullOrEmpty(token))
         {
-            return null;
+            return new(null, "not signed in (no token)");
         }
         try
         {
@@ -97,11 +114,53 @@ public static class GatewayAuth
             var azp = principal.FindFirst("azp")?.Value;
             if (clientIds.Count > 0 && !clientIds.Any(id => IsAuthorizedParty(azp, id)))
             {
-                return null;
+                return new(null, $"signed in with app '{azp}', which this server does not accept");
             }
-            return principal.FindFirst("sub")?.Value
+            var sub = principal.FindFirst("sub")?.Value
                 ?? principal.FindFirst("preferred_username")?.Value
                 ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return sub is null ? new(null, "token has no subject") : new(sub, null);
+        }
+        catch (SecurityTokenExpiredException)
+        {
+            return new(null, "sign-in expired — sign in again");
+        }
+        catch (SecurityTokenInvalidIssuerException)
+        {
+            return new(null, $"signed in at {UnverifiedClaim(handler, token, "iss") ?? "another server"}, which this server does not accept");
+        }
+        catch (SecurityTokenSignatureKeyNotFoundException)
+        {
+            return new(null, "signature from an unknown login server (Keycloak was reset or replaced) — sign in again");
+        }
+        catch (SecurityTokenInvalidSignatureException)
+        {
+            return new(null, "invalid token signature — sign in again");
+        }
+        catch (SecurityTokenInvalidAudienceException)
+        {
+            return new(null, "token is for a different audience");
+        }
+        catch (ArgumentException)
+        {
+            return new(null, "not a valid token");
+        }
+        catch (Exception e)
+        {
+            return new(null, $"token rejected ({e.GetType().Name})");
+        }
+    }
+
+    /// <summary>A claim read WITHOUT validation — for diagnostics only.</summary>
+    public static string? UnverifiedClaim(JwtSecurityTokenHandler handler, string? token, string claim)
+    {
+        if (string.IsNullOrEmpty(token) || !handler.CanReadToken(token))
+        {
+            return null;
+        }
+        try
+        {
+            return handler.ReadJwtToken(token).Claims.FirstOrDefault(c => c.Type == claim)?.Value;
         }
         catch
         {

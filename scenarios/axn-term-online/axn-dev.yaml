@@ -3,12 +3,11 @@ env:
   SCENARIO_PORT: "18092"
   # bare :26 is not a published tag — pin a real one (26.0 is usually cached)
   KEYCLOAK_IMAGE: "quay.io/keycloak/keycloak:26.0"
-  # LAN serving via raw IP — no DNS involved at all: shell on
-  # https://<host>.local:18092 (mDNS, DHCP-proof) or the LAN IP, keycloak :18093, gateway :18094 (all
-  # self-signed via Caddy internal CA — required because the Keycloak
-  # client enforces PKCE S256, and crypto.subtle only exists in secure
-  # contexts). Clients must accept the cert once (or trust the CA from
-  # `docker exec axn-term-online-caddy cat /data/caddy/pki/authorities/local/root.crt`).
+  # LAN serving via raw IP — no DNS involved at all: everything on
+  # https://<host>.local:18092 (mDNS, DHCP-proof) or the LAN IP (dev CA —
+  # required because the Keycloak client enforces PKCE S256, and
+  # crypto.subtle only exists in secure contexts). Clients must accept the
+  # cert once (or trust certs/ca.pem).
   #
   # Machine identity is local — set AXN_LAN_IP / AXN_LAN_NAME and the
   # derived AXN_KEYCLOAK_URL / AXN_GATEWAY_URL in the gitignored .env
@@ -16,10 +15,14 @@ env:
   # JWT-bound /remote: hellos must carry a keycloak token; sessions bind
   # to the publisher account (set true for anonymous local dev).
   REMOTE_AUTHORITY_ANON: "false"
-  AXN_KC_PORT: "18093"
-  AXN_GW_PORT: "18094"
-  # ramphastos sources for the session-host build + vite alias
-  AXN_LIBS_ROOT: "../../.."
+  # TLS is on below — the shell's URLs must use the secure schemes or the
+  # app builds http://ws:// endpoints against a TLS-only Caddy.
+  AXN_SCHEME: "https"
+  AXN_WS_SCHEME: "wss"
+  # AXN_LIBS_ROOT (the dir holding axn-term's sibling checkouts, for
+  # RAMPHASTOS_LOCAL_DEPS=1 builds) is deliberately NOT defaulted here —
+  # compose falls back to ../../.., the dir containing this repo.
+  # Set it in .env when doing local-deps development; see .env.example.
   # external additional_contexts (sibling checkouts) — grant bake fs access
   BUILDX_BAKE_ENTITLEMENTS_FS: "0"
   # Fixed dev cert pair in ./certs (AXN_CERT_DIR mount) — generated once,
@@ -51,8 +54,9 @@ env:
   # stays writable and files belong to the host user.
   SESSION_HOST_USER: "0:0"
   # per-user named volume at /home/<user> — persistent home, physically on
-  # the extended drive too (docker data-root lives there).
-  SESSION_HOST_HOME_VOLUME: "axn-term-home"
+  # the extended drive too (docker data-root lives there). Unset → the
+  # compose default namespaces it per stack (<project>-home-<user>).
+  SESSION_HOST_HOME_VOLUME: ""
   # disabled: no kata → no per-user nix volume (the multi-GB nixpkgs seed
   # copy also blew the Docker VM's disk budget on this box)
   SESSION_HOST_NIX_VOLUME: ""
@@ -61,7 +65,8 @@ env:
 frontend-services:
   shell: "${AXN_SCHEME:-https}://${AXN_LAN_IP:-axn-term.localhost}:${SCENARIO_PORT:-8092}"
 backend-services:
-  gateway: "${AXN_GATEWAY_URL:-${AXN_WS_SCHEME:-ws}://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}"
-  keycloak: "${AXN_SCHEME:-https}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}"
+  # Single origin: gateway at /gw, Keycloak at /auth on the shell address.
+  gateway: "${AXN_SCHEME:-https}://${AXN_LAN_IP:-axn-term.localhost}:${SCENARIO_PORT:-8092}/gw/healthz"
+  keycloak: "${AXN_SCHEME:-https}://${AXN_LAN_IP:-axn-term.localhost}:${SCENARIO_PORT:-8092}/auth/realms/axn-term"
 frontend:
   - shell
