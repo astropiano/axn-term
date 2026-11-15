@@ -7,7 +7,7 @@
       device_code from the device endpoint, a JWT must be mintable for the
       demo account, and /remote must deny anonymous hellos while accepting
       JWT-bound authority hellos (AllowAnonymous=false).
-      Plain listeners: keycloak :18096, gateway :18095 (no TLS needed).
+      One plain multiplexed port: 127.0.0.1:18097 serves /auth and /gw (no TLS needed).
     </description>
     <scenarios>
       <scenario name="axn-term-online" service="shell" adapter="tsAdapter" />
@@ -17,9 +17,9 @@
         <var name="TEST_USER" value="demo" />
         <var name="TEST_PASSWORD" value="changeme" />
         <var name="REMOTE_CLIENT_ID" value="axn-term-desktop" />
-        <!-- plain (non-TLS) listeners — see compose AXN_*_PLAIN_PORT -->
-        <var name="REMOTE_KC_URL" value="http://127.0.0.1:18096/realms/axn-term" />
-        <var name="REMOTE_GW_URL" value="http://127.0.0.1:18095/remote" />
+        <!-- plain (non-TLS) multiplexed port — see compose AXN_PLAIN_PORT -->
+        <var name="REMOTE_KC_URL" value="http://127.0.0.1:18097/auth/realms/axn-term" />
+        <var name="REMOTE_GW_URL" value="http://127.0.0.1:18097/gw/remote" />
       </env>
     </setup>
     <steps>

@@ -146,6 +146,8 @@ var remoteAllowAnonymous =
 // Authorized parties (azp) for hello tokens — see GatewayAuth.RemoteClientIds.
 var remoteClientIds = GatewayAuth.RemoteClientIds(builder.Configuration["RemoteAuthority:ClientIds"], clientId);
 var jwtHandler = new JwtSecurityTokenHandler();
+var diagnostics = new RemoteDiagnostics();
+builder.Services.AddSingleton(diagnostics);
 // Set after Build() — the hello callback runs long after startup.
 ILogger? remoteLog = null;
 // Keep claim names verbatim — the default inbound mapping renames "sub" to
@@ -167,18 +169,29 @@ builder.Services.AddRamphastos(
             {
                 return true;
             }
-            var sub = ValidateJwt(hello.Auth);
-            if (sub is null)
+            var check = CheckRemoteToken(hello.Auth);
+            // Failed checks are filed under the subject the token CLAIMS —
+            // only that account can read them back (/remote/status).
+            var account = check.Sub ?? GatewayAuth.UnverifiedClaim(jwtHandler, hello.Auth, "sub");
+            if (!check.Ok)
             {
-                remoteLog?.LogWarning("[remote] hello denied: jwt invalid");
+                remoteLog?.LogWarning("[remote] hello denied role={Role}: {Reason}", hello.Role, check.Reason);
+                diagnostics.Record(account, hello.Role.ToString(), hello.Session, false, check.Reason);
                 return false;
             }
             // Tenant isolation is structural: every session id lives in the
             // caller's own namespace '<sub>/<id>' — self-proving on both the
             // publish and the attach path, stateless across restarts, no
             // shared registry to hijack. Unprefixed ids are rejected.
-            return !string.IsNullOrEmpty(hello.Session)
-                && hello.Session.StartsWith(sub + "/", StringComparison.Ordinal);
+            var owned = !string.IsNullOrEmpty(hello.Session)
+                && hello.Session.StartsWith(check.Sub + "/", StringComparison.Ordinal);
+            var reason = owned ? null : "session does not belong to this account";
+            if (!owned)
+            {
+                remoteLog?.LogWarning("[remote] hello denied role={Role}: {Reason}", hello.Role, reason);
+            }
+            diagnostics.Record(account, hello.Role.ToString(), hello.Session, owned, reason);
+            return owned;
         };
     });
 
@@ -220,19 +233,23 @@ app.UseWebSockets(new WebSocketOptions
 // JWT (there is no owner to match otherwise).
 if (builder.Configuration.GetValue("Hub:RemoteEnabled", true))
 {
-    app.MapGet("/remote/sessions", [Microsoft.AspNetCore.Authorization.Authorize] (ClaimsPrincipal user) =>
+    // Remote endpoints take the same tokens as the hub hello (web, desktop
+    // and mobile clients) — the [Authorize] pipeline only admits the web
+    // client's azp, which would lock the apps out of their own discovery.
+    ClientSession[] OwnedMirrors(string sub) =>
+        app.Services.GetRequiredService<RamphastosConnectionHandler>().Manager.Endpoints
+            .OfType<ClientSession>()
+            .Where(s => s.Id.StartsWith(sub + "/", StringComparison.Ordinal))
+            .ToArray();
+
+    app.MapGet("/remote/sessions", (HttpRequest request) =>
     {
-        var sub = user.FindFirst("sub")?.Value
-            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        // Live mirrored sessions in this caller's namespace — the same
-        // '<sub>/' rule AuthorizeHello enforces.
-        var manager = app.Services.GetRequiredService<RamphastosConnectionHandler>().Manager;
-        var mirrors = sub is null
-            ? Array.Empty<ClientSession>()
-            : manager.Endpoints
-                .OfType<ClientSession>()
-                .Where(s => s.Id.StartsWith(sub + "/", StringComparison.Ordinal))
-                .ToArray();
+        var check = CheckRemoteToken(BearerToken(request));
+        if (!check.Ok)
+        {
+            return Results.Json(new { error = check.Reason }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+        var mirrors = OwnedMirrors(check.Sub!);
         return Results.Ok(new
         {
             // Bare ids — the original shape; older clients String() every
@@ -246,7 +263,49 @@ if (builder.Configuration.GetValue("Hub:RemoteEnabled", true))
                 .ToArray(),
         });
     });
+
+    // "Why doesn't my desktop show up?" — this account's mirrored sessions
+    // plus its recent hub hello attempts with the reason each was denied.
+    // Clients show it on the empty/waiting state instead of spinning.
+    app.MapGet("/remote/status", (HttpRequest request) =>
+    {
+        var token = BearerToken(request);
+        var check = CheckRemoteToken(token);
+        if (!check.Ok)
+        {
+            return Results.Json(new { error = check.Reason }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+        var mirrors = OwnedMirrors(check.Sub!);
+        return Results.Json(new
+        {
+            account = new
+            {
+                sub = check.Sub,
+                user = GatewayAuth.UnverifiedClaim(jwtHandler, token, "preferred_username"),
+            },
+            sessions = mirrors.Select(s => new { id = s.Id, online = s.AuthorityOnline }).ToArray(),
+            attempts = diagnostics.For(check.Sub!).Select(a => new
+            {
+                at = a.At,
+                role = a.Role,
+                session = a.Session,
+                accepted = a.Accepted,
+                reason = a.Reason,
+            }).ToArray(),
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    });
 }
+
+// Server discovery: clients are configured with nothing but this server's
+// address and read gateway/issuer/client ids from here. Public by design —
+// it holds no secrets, only what a login page would reveal anyway.
+var serverId = ServerDiscovery.ResolveServerId(
+    app.Configuration,
+    app.Configuration["Discovery:StateDir"] ?? app.Configuration["AXN_STATE_DIR"] ?? "/tmp/axn-term");
+app.MapGet(ServerDiscovery.Path, (HttpRequest request) =>
+    Results.Json(
+        ServerDiscovery.Build(app.Configuration, serverId, ServerDiscovery.RequestOrigin(request)),
+        new JsonSerializerOptions(JsonSerializerDefaults.Web)));
 
 app.MapGet("/", () => "axn-term session gateway");
 app.MapGet("/healthz", () => Results.Ok());
@@ -380,15 +439,15 @@ app.Map("/tasks", [Microsoft.AspNetCore.Authorization.Authorize] (
 
 app.Run();
 /// <summary>
-/// Validate a hello-carried JWT against the same JWKS/parameters and azp
-/// rule as the HTTP routes; returns the stable subject (sub, falling back
-/// to preferred_username / nameidentifier) or null when invalid.
+/// Validate a remote-surface JWT (hub hello, /remote/*) against the same
+/// JWKS/parameters as the HTTP routes and the remote client list; the
+/// reason says why when it fails.
 /// </summary>
-string? ValidateJwt(string? token)
+GatewayAuth.TokenCheck CheckRemoteToken(string? token)
 {
     if (string.IsNullOrEmpty(token))
     {
-        return null;
+        return new(null, "not signed in (no token)");
     }
     try
     {
@@ -399,12 +458,23 @@ string? ValidateJwt(string? token)
         // hellos.
         var parms = tokenValidationParameters.Clone();
         parms.IssuerSigningKeys = oidc.SigningKeys;
-        return GatewayAuth.ValidateHelloToken(jwtHandler, token, parms, remoteClientIds);
+        return GatewayAuth.CheckHelloToken(jwtHandler, token, parms, remoteClientIds);
     }
-    catch
+    catch (Exception e)
     {
-        return null;
+        remoteLog?.LogWarning(e, "[remote] cannot load signing keys");
+        return new(null, "server cannot reach its login server (signing keys)");
     }
+}
+
+static string? BearerToken(HttpRequest request)
+{
+    var header = request.Headers.Authorization.FirstOrDefault();
+    if (header?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true)
+    {
+        return header["Bearer ".Length..].Trim();
+    }
+    return request.Query["access_token"].FirstOrDefault();
 }
 
 /// <summary>

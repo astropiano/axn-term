@@ -14,6 +14,12 @@ function acceptUrl(url: string): string {
   return url.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
 }
 
+/** Hub/socket paths answer plain GETs with 400 (console noise that looks
+ *  like a failure) — probe the gateway's /healthz on the same origin. */
+function probeUrl(url: string): string {
+  return acceptUrl(url).replace(/\/(remote|ws|cloud|ramphastos)\/?$/, '/healthz');
+}
+
 async function reachable(url: string, timeoutMs = 5000): Promise<boolean> {
   try {
     const ctrl = new AbortController();
@@ -21,7 +27,7 @@ async function reachable(url: string, timeoutMs = 5000): Promise<boolean> {
     // no-cors: the gateway doesn't emit CORS headers and doesn't need to —
     // WebSocket has no same-origin rule. An opaque response means the
     // endpoint is reachable; cert errors and dead hosts still reject.
-    await fetch(acceptUrl(url), { signal: ctrl.signal, cache: 'no-store', mode: 'no-cors' });
+    await fetch(probeUrl(url), { signal: ctrl.signal, cache: 'no-store', mode: 'no-cors' });
     clearTimeout(timer);
     return true;
   } catch {

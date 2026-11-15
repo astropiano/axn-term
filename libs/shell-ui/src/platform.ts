@@ -1,4 +1,6 @@
-import type { ControlReply, RemoteConsole, Unsubscribe } from '@axn-term/session-backend';
+import type { ControlReply, KnownServer, RemoteConsole, Unsubscribe } from '@axn-term/session-backend';
+import type { RemoteStatus } from '@axn-term/session-backend/remote';
+import type { AppSettings } from './themes';
 import type { WindowBootIntent } from './app/sessionTearOff';
 
 export const isMac =
@@ -224,6 +226,19 @@ export interface ShellPlatform {
     signOut(): Promise<void>;
     /** Fresh access token for the authority hello; undefined when signed out. */
     getAccessToken?(): Promise<string | undefined>;
+  };
+  /**
+   * Connect-by-address for remote publishing — desktop only. `connect`
+   * resolves a typed server address through its discovery document and
+   * returns the settings to apply (server, hub, issuer, client id);
+   * `pairingLink` is what the "Connect a phone" QR code carries.
+   */
+  remoteServer?: {
+    connect(input: string): Promise<Partial<AppSettings>>;
+    pairingLink(server: KnownServer): string | null;
+    /** The server's view of this account: mirrored sessions + recent
+     *  hello attempts with denial reasons (GET <hub>/status). */
+    status?(hubUrl: string): Promise<RemoteStatus>;
   };
   /**
    * Close the window when the last session is closed. True on desktop;

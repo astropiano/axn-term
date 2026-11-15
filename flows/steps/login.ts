@@ -46,7 +46,9 @@ export default async function login(page: Page, baseUrl: string) {
   if (needsLogin) {
     await loginButton.click();
 
-    await page.waitForURL(/keycloak/, { timeout: 15000 });
+    // Keycloak lives under /auth (single origin) or on its own host — the
+    // realm path is common to both.
+    await page.waitForURL(/\/realms\//, { timeout: 15000 });
 
     await page.locator('input[name="username"]').fill(TEST_USER);
     await page.locator('input[name="password"]').fill(TEST_PASSWORD);
@@ -56,16 +58,26 @@ export default async function login(page: Page, baseUrl: string) {
     await page.waitForURL((url) => url.host === appHost, { timeout: 15000 });
   }
 
-  // The shell UI: a workspace in the sidebar and a session row named after the
-  // shell title (e.g. "demo@axn-machine: ~").
+  // Two deployments land differently after sign-in:
+  //  - cloud (hosted sessions): the shell UI with a workspace sidebar
+  //  - remote-only (AXN_REMOTE_ONLY): the "no desktop is publishing"
+  //    waiting screen — cloud is disabled server-side, so a shell can
+  //    never appear here.
+  const workspace = page.locator('[data-tip="New workspace"]');
+  // The remote viewer's waiting screen — its title varies with state
+  // (waiting / offline / refused), the poll hint is constant.
+  const waiting = page.locator('text=/checking every few seconds/i');
   try {
-    await page.locator('[data-tip="New workspace"]').waitFor({ state: 'visible', timeout: 15000 });
+    await workspace.or(waiting).first().waitFor({ state: 'visible', timeout: 15000 });
   } catch (e) {
     await page.screenshot({ path: '/tmp/login-debug.png', fullPage: true });
     console.log('DEBUG landed at:', page.url());
     console.log('DEBUG title:', await page.title());
     console.log('DEBUG body:', (await page.locator('body').innerText()).slice(0, 500));
     throw e;
+  }
+  if (await waiting.isVisible().catch(() => false)) {
+    return 'Shell login verified — remote-only deployment, waiting screen shown';
   }
   await page
     .locator(`[data-tip^="workspace-"]`)

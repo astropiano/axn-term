@@ -1,0 +1,4 @@
+/* Storybook only: the web viewer's stories (apps/web) use utilities the
+   desktop stylesheet never scans — generate them too. */
+@import "tailwindcss";
+@source "../../web/src/**/*.{ts,tsx}";

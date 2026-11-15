@@ -101,12 +101,31 @@ async function writeWindowState(store: ShellStateStore, windowId: string, state:
 }
 
 /**
+ * Session fields only this device produces — the remote model never
+ * carries them (retained PTY output, agent task/progress parses, summary
+ * and topic annotations, agent-input detection, the device-local active
+ * tab). A mirror reload synthesizes them empty, so they must be carried
+ * over by id or every upstream patch blanks the card.
+ */
+const LOCAL_SESSION_FIELDS: (keyof ShellSession)[] = [
+  'output',
+  'tasks',
+  'progress',
+  'summary',
+  'topic',
+  'agentInput',
+  'activeTab',
+];
+
+/**
  * Merge a mirror reload into the live sessions: the remote model doesn't
  * carry locally-derived fields — `repo` is probed by the git-status plugin
  * on each device — so they're carried over by id. Otherwise every upstream
  * patch blanks them and the panel entry flickers (folder appearing and
  * disappearing). A repo is only kept while the session's cwd is unchanged
- * (a moved session re-probes).
+ * (a moved session re-probes). `pluginState` merges per key — the remote
+ * plane wins each shared plugin slice while device-local keys (and slices
+ * still in flight to `/vm/setPluginState`) survive.
  */
 export function mergeMirrorSessions(
   prev: ShellSession[],
@@ -115,9 +134,26 @@ export function mergeMirrorSessions(
   const byId = new Map(prev.map((s) => [s.id, s]));
   return fresh.map((s) => {
     const old = byId.get(s.id);
-    return s.repo === undefined && old?.repo !== undefined && old.cwd === s.cwd
-      ? { ...s, repo: old.repo }
-      : s;
+    if (!old) return s;
+    const patch: Partial<ShellSession> = {};
+    for (const key of LOCAL_SESSION_FIELDS) {
+      if (old[key] !== undefined) (patch as Record<string, unknown>)[key] = old[key];
+    }
+    if (s.repo === undefined && old.repo !== undefined && old.cwd === s.cwd) {
+      patch.repo = old.repo;
+    }
+    if (old.pluginState) {
+      const pluginState: Record<string, unknown> = { ...old.pluginState };
+      for (const [pid, slice] of Object.entries(s.pluginState ?? {})) {
+        const local = pluginState[pid];
+        pluginState[pid] =
+          local && typeof local === 'object' && slice && typeof slice === 'object'
+            ? { ...local, ...slice }
+            : slice;
+      }
+      patch.pluginState = pluginState;
+    }
+    return Object.keys(patch).length ? { ...s, ...patch } : s;
   });
 }
 

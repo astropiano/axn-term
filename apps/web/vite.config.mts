@@ -7,16 +7,22 @@ import monacoEditorPlugin from 'vite-plugin-monaco-editor-esm';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  // `--mode mobile`: the Android/iOS app's frontend — same sources, its own
+  // entry (mobile/index.html → src/mobile/main.tsx) and output dir, so the
+  // Capacitor app in apps/mobile gets a plain index.html.
+  const mobile = mode === 'mobile';
   const proxyTarget = process.env.VITE_AXN_BACKEND_URL
     ?? `http://localhost:${process.env.AXN_BACKEND_PORT ?? '8083'}`;
 
   return ({
-    root: import.meta.dirname,
-    cacheDir: '../../node_modules/.vite/apps/web',
+    root: mobile ? fileURLToPath(new URL('./mobile', import.meta.url)) : import.meta.dirname,
+    publicDir: fileURLToPath(new URL('./public', import.meta.url)),
+    cacheDir: fileURLToPath(new URL(`../../node_modules/.vite/apps/${mobile ? 'mobile' : 'web'}`, import.meta.url)),
     server: {
-      port: Number(process.env.VITE_PORT ?? 5175),
-      host: 'localhost',
+      port: mobile ? 5916 : Number(process.env.VITE_PORT ?? 5175),
+      // The phone/emulator loads the dev server over the LAN.
+      host: mobile ? (process.env.TAURI_DEV_HOST ?? '0.0.0.0') : 'localhost',
       // LAN scenarios front this dev server through a reverse proxy whose
       // Host header carries the deployment domain (e.g.
       // axn-term.192.168.x.x.nip.io); vite's DNS-rebinding check 403s it.
@@ -35,8 +41,10 @@ export default defineConfig(() => {
       })(),
       fs: {
         allow: [
-          '../..',
-          // Sibling-repo ramphastos-client sources (sibling checkout next to axn-term).
+          // Repo root — relative to this config file, not the (mobile) root.
+          fileURLToPath(new URL('../..', import.meta.url)),
+          // Sibling ramphastos checkout (../ramphastos next to axn-term),
+          // served when RAMPHASTOS_LOCAL_DEPS=1 aliases the package there.
           fileURLToPath(new URL('../../../ramphastos', import.meta.url)),
         ],
       },
@@ -86,6 +94,20 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
+        // RAMPHASTOS_LOCAL_DEPS=1 → resolve ramphastos-client from the
+        // sibling checkout (../ramphastos next to axn-term; containers
+        // mount it as the repo's sibling) instead of the published npm
+        // package. Rebuild the client package's dist/ when it changes.
+        ...((process.env.RAMPHASTOS_LOCAL_DEPS
+          ? {
+              'ramphastos-client': fileURLToPath(
+                new URL(
+                  '../../../ramphastos/src/client/ramphastos-client',
+                  import.meta.url,
+                ),
+              ),
+            }
+          : {}) as Record<string, string>),
         // monaco-editor's exports map blocks deep `esm/` imports; resolve them
         // straight to the filesystem so monaco.main.ts can pick a trimmed
         // language set.
@@ -95,7 +117,7 @@ export default defineConfig(() => {
       },
     },
     build: {
-      outDir: '../../dist/apps/web',
+      outDir: fileURLToPath(new URL(`../../dist/apps/${mobile ? 'mobile' : 'web'}`, import.meta.url)),
       emptyOutDir: true,
       reportCompressedSize: true,
       commonjsOptions: {

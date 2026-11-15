@@ -218,6 +218,20 @@ function stateOf(ctx: Ctx): WorktreeState {
   return (ctx.pluginState ?? {}) as WorktreeState;
 }
 
+/**
+ * The branch the worktree badge shows: the probed repo branch when `repo`
+ * describes this worktree (git-status keeps it live — `git checkout` moves
+ * it), else the branch recorded when the session opened.
+ */
+function worktreeBranch(ctx: Ctx): string {
+  const wt = stateOf(ctx).worktree;
+  const repo = ctx.session.repo;
+  if (wt && repo && normPath(repo.root) === normPath(wt.path)) {
+    return repo.branch ?? '(detached)';
+  }
+  return wt?.branch ?? '';
+}
+
 function worktreeItems(ctx: Ctx, sourceDir?: string): RepoMenuItem[] {
   const agent = settingsOf(ctx).defaultAgent?.trim() || 'claude';
   const items: RepoMenuItem[] = [
@@ -472,24 +486,26 @@ export const worktreesPlugin: SessionViewPlugin = {
       zone: 'title',
       search: (ctx) => {
         const wt = stateOf(ctx).worktree;
-        return wt ? [wt.branch, wt.path.split('/').pop() ?? ''] : null;
+        if (!wt) return null;
+        return [wt.branch, worktreeBranch(ctx), wt.path.split('/').pop() ?? ''];
       },
       value: (ctx) => {
         const wt = stateOf(ctx).worktree;
         if (!wt) return null;
+        const branch = worktreeBranch(ctx);
         return (
           <span
             className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--violet)]"
-            data-tip={`worktree ${wt.branch}\n${wt.path}`}
+            data-tip={`worktree ${branch}\n${wt.path}`}
           >
             <GitFork className="h-2.5 w-2.5 shrink-0" />
-            <span className="max-w-16 truncate">{wt.branch.replace(/^wt\//, '')}</span>
+            <span className="max-w-16 truncate">{branch.replace(/^wt\//, '')}</span>
           </span>
         );
       },
       tip: (ctx) => {
         const wt = stateOf(ctx).worktree;
-        return wt ? `⎇ ${wt.branch}: linked worktree — ${wt.path}` : null;
+        return wt ? `⎇ ${worktreeBranch(ctx)}: linked worktree — ${wt.path}` : null;
       },
     },
   ],

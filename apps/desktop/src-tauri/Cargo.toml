@@ -31,6 +31,8 @@ dirs = "6"
 log = { version = "0.4", features = ["std"] }
 tauri-plugin-dialog = "2"
 tiny_http = "0.12"
+mdns-sd = "0.13"
+reqwest = { version = "0.13.5", default-features = false, features = ["native-tls"] }
 
 [target.'cfg(unix)'.dependencies]
 # termios (VERASE) and process-group kill — Unix only.

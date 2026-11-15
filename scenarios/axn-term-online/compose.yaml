@@ -10,12 +10,13 @@ name: axn-term-online
 #     not started — the gateway starts it via docker.sock). It runs the .NET
 #     apps/session-host SessionHost. podman-compose skips building scale-0
 #     services: run ./build-session-host.sh once on a fresh machine.
-#   - caddy fronts everything on a single host port using subdomains.
+#   - caddy fronts everything on TWO host ports: TLS single origin
+#     (web /, Keycloak /auth, gateway /gw — subdomains for legacy names)
+#     plus one plain multiplexed port for CA-less clients.
 #
 # Access (defaults):
-#   http://axn-term.localhost:8092          - axn-term web UI
-#   http://axn-term-gateway.localhost:8092  - WebSocket gateway
-#   http://axn-term-keycloak.localhost:8092 - Keycloak
+#   https://axn-term.localhost:8092          - axn-term web UI (single origin)
+#   http://127.0.0.1:18097                   - same routes over plain HTTP
 #
 # DATA_MOUNT: host directory bind-mounted into every agent container at the
 # same path (writable). When set, shells land there by default and task state
@@ -24,16 +25,22 @@ name: axn-term-online
 services:
   keycloak:
     image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26}
-    container_name: axn-term-online-keycloak
     restart: unless-stopped
-    ports:
-      # plain HTTP for clients that can't trust the internal CA (e.g. the
-      # Tauri webview) — LAN/dev only; TLS stays on the Caddy route.
-      - ${AXN_KC_PLAIN_PORT:-18096}:8082
     command: ["start-dev", "--http-port", "8082", "--import-realm"]
     environment:
-      KC_HOSTNAME: ${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}
+      # Single origin: Keycloak lives under /auth on the public address
+      # (AXN_PUBLIC_URL — the address every client can reach; the login
+      # page and the token issuer use it).
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME: ${AXN_PUBLIC_URL:-${AXN_SCHEME:-http}://axn-term.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/auth
       KC_HTTP_ENABLED: "true"
+      # Token/refresh calls work on any address (LAN, tailnet) while the
+      # issuer stays KC_HOSTNAME — one session for every network.
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # Caddy (and tailscale serve) terminate TLS and forward plain HTTP;
+      # without trusting X-Forwarded-Proto Keycloak treats every request as
+      # insecure and its login cookies get dropped → redirect loop.
+      KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: "true"
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
@@ -48,15 +55,35 @@ services:
       # restart mints new signing keys and every client token dies
       - axn-term-online-keycloak-data:/opt/keycloak/data/h2
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
       interval: 10s
       timeout: 5s
       retries: 20
       start_period: 30s
 
+  # One-shot: allow this deployment's own origins (LAN name/IP, tailnet
+  # name) on the web client — the realm file stays generic.
+  keycloak-init:
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26}
+    restart: "no"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/init/allow-origins.sh"]
+    environment:
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8082/auth
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-axn-term}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-axn-term}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # The mobile app's own origin (Capacitor serves its frontend from
+      # https://localhost) signs in with the same client.
+      AXN_ALLOWED_ORIGINS: ${AXN_PUBLIC_URL:-${AXN_SCHEME:-http}://axn-term.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}},https://${AXN_LAN_NAME:-axn-term.local}:${SCENARIO_PORT:-8092},https://${AXN_LAN_IP:-localhost}:${SCENARIO_PORT:-8092},${AXN_TAILNET_URL:-},https://localhost,${AXN_EXTRA_ORIGINS:-}
+    volumes:
+      - ./keycloak-init:/init:ro
+
   shell:
     image: node:22-alpine
-    container_name: axn-term-online-shell
     working_dir: /app
     user: "0:0"
     # The nx dev server dies when a host nx command touches the shared .nx
@@ -72,7 +99,8 @@ services:
       - ${AXN_TERM_ROOT:-../..}:/app
       - axn-term-online-node_modules:/app/node_modules
       # Sibling ramphastos checkout at /ramphastos — next to /app, so the
-      # ramphastos-client alias (../ramphastos) resolves there.
+      # ramphastos-client vite alias (../ramphastos) resolves there. Only
+      # needed with RAMPHASTOS_LOCAL_DEPS=1.
       - ${AXN_LIBS_ROOT:-../../..}/ramphastos:/ramphastos:ro
       # plugins.yaml seed for first load (VITE_PLUGINS_YAML_SEED, web platform.ts).
       # Nested over the /app bind — apps/web/public/plugins.seed.yaml must exist
@@ -88,8 +116,8 @@ services:
       - AXN_LAN_IP=${AXN_LAN_IP:-localhost}
       - AXN_LAN_NAME=${AXN_LAN_NAME:-}
       - VITE_PLUGINS_YAML_SEED=/plugins.seed.yaml
-      - VITE_SHELL_WS_URL=${AXN_GATEWAY_URL:-${AXN_WS_SCHEME:-ws}://axn-term-gateway.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/ws
-      - VITE_KEYCLOAK_URL=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}
+      - VITE_SHELL_WS_URL=${AXN_WS_SCHEME:-ws}://axn-term.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}/gw/ws
+      - VITE_KEYCLOAK_URL=${AXN_PUBLIC_URL:-${AXN_SCHEME:-http}://axn-term.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/auth
       # "cloud" mode: run terminals over the hosted session-host hub
       # (multiplexed streams) instead of per-PTY /ws sockets.
       - VITE_REMOTE_ONLY=${AXN_REMOTE_ONLY:-}
@@ -99,6 +127,9 @@ services:
       - VITE_REMOTE_URL=${VITE_REMOTE_URL:-}
       - VITE_KEYCLOAK_REALM=${KEYCLOAK_REALM:-axn-term}
       - VITE_KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-axn-term}
+      # RAMPHASTOS_LOCAL_DEPS=1 → vite serves ramphastos-client from the
+      # sibling checkout mounted at /ramphastos instead of node_modules.
+      - RAMPHASTOS_LOCAL_DEPS=${RAMPHASTOS_LOCAL_DEPS:-}
     depends_on:
       - gateway
       - keycloak
@@ -106,25 +137,31 @@ services:
   gateway:
     build:
       context: ${AXN_TERM_ROOT:-../..}
+      args:
+        # RAMPHASTOS_LOCAL_DEPS=1 → build against the sibling checkout in
+        # the `libraries` context (the dir holding axn-term + siblings —
+        # ramphastos lands at /ramphastos) instead of the published NuGet
+        # packages. Default: published.
+        - RAMPHASTOS_LOCAL_DEPS=${RAMPHASTOS_LOCAL_DEPS:-}
       additional_contexts:
-        # Directory holding axn-term and its sibling checkouts — ramphastos
-        # lands at /ramphastos inside the build (the ProjectReference depth).
+        # Only consumed with RAMPHASTOS_LOCAL_DEPS=1; the default (this
+        # dir) just keeps the context valid for published builds.
         libraries: ${AXN_LIBS_ROOT:-../../..}
       dockerfile: apps/gateway/Dockerfile
     image: axn-term-gateway:latest
-    ports:
-      # plain ws:// for clients that can't trust the internal CA (e.g. the
-      # Tauri webview) — LAN/dev only; TLS stays on the Caddy route.
-      - ${AXN_GW_PLAIN_PORT:-18095}:8080
-    container_name: axn-term-online-gateway
     user: "0:0"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://0.0.0.0:8080
-      - Authentication__Authority=http://keycloak:8082/realms/${KEYCLOAK_REALM:-axn-term}
-      - Authentication__ValidIssuer=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/realms/${KEYCLOAK_REALM:-axn-term}
-      - Authentication__ValidIssuers=${AXN_KEYCLOAK_URL:-${AXN_SCHEME:-http}://axn-term-keycloak.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/realms/${KEYCLOAK_REALM:-axn-term},http://keycloak.localhost:8082/realms/${KEYCLOAK_REALM:-axn-term},http://localhost:${AXN_KC_PLAIN_PORT:-18096}/realms/${KEYCLOAK_REALM:-axn-term}
-      - Authentication__JwksUri=http://keycloak:8082/realms/${KEYCLOAK_REALM:-axn-term}/protocol/openid-connect/certs
+      - Authentication__Authority=http://keycloak:8082/auth/realms/${KEYCLOAK_REALM:-axn-term}
+      - Authentication__ValidIssuer=${AXN_PUBLIC_URL:-${AXN_SCHEME:-http}://axn-term.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/auth/realms/${KEYCLOAK_REALM:-axn-term}
+      # Every endpoint issuer advertised below must also be accepted — a
+      # phone signing in via the LAN IP gets iss=https://<lan-ip>/…, and a
+      # client switching endpoints keeps its token (Keycloak derives iss
+      # from the request host). `${VAR:+,issuer}` adds each only when its
+      # address is configured, same as the discovery endpoints.
+      - Authentication__ValidIssuers=http://localhost:${AXN_PLAIN_PORT:-18097}/auth/realms/${KEYCLOAK_REALM:-axn-term}${AXN_LAN_NAME:+,https://${AXN_LAN_NAME}:${SCENARIO_PORT:-8092}/auth/realms/${KEYCLOAK_REALM:-axn-term}}${AXN_LAN_IP:+,https://${AXN_LAN_IP}:${SCENARIO_PORT:-8092}/auth/realms/${KEYCLOAK_REALM:-axn-term}}${AXN_TAILNET_URL:+,${AXN_TAILNET_URL}/auth/realms/${KEYCLOAK_REALM:-axn-term}}
+      - Authentication__JwksUri=http://keycloak:8082/auth/realms/${KEYCLOAK_REALM:-axn-term}/protocol/openid-connect/certs
       # Only tokens issued to the web client (azp) open shells.
       - Authentication__ClientId=${KEYCLOAK_CLIENT_ID:-axn-term}
       - SESSION_HOST_IMAGE=axn-term-host
@@ -137,13 +174,35 @@ services:
       # same sub on another device can attach). AllowAnonymous lets anyone
       # claim any session — set REMOTE_AUTHORITY_ANON=true only for local dev.
       - RemoteAuthority__AllowAnonymous=${REMOTE_AUTHORITY_ANON:-false}
-      # Clients whose tokens may say hello (azp): the web viewer and the
+      # Clients whose tokens may say hello (azp): the web viewer, the mobile app and the
       # desktop's device-flow client.
-      - RemoteAuthority__ClientIds=${KEYCLOAK_CLIENT_ID:-axn-term},${REMOTE_AUTH_CLIENT_ID:-axn-term-desktop}
+      - RemoteAuthority__ClientIds=${KEYCLOAK_CLIENT_ID:-axn-term},${REMOTE_AUTH_CLIENT_ID:-axn-term-desktop},${MOBILE_AUTH_CLIENT_ID:-axn-term-mobile}
       # Hub surfaces — "remote" = desktop mirror (authority/viewers),
       # "cloud" = hosted session-host hub. Each independently togglable.
       - Hub__RemoteEnabled=${HUB_REMOTE_ENABLED:-true}
       - Hub__CloudEnabled=${HUB_CLOUD_ENABLED:-true}
+      # Server discovery (/.well-known/axn-term, also routed on the shell
+      # origin by Caddy): clients only need this server's address and read
+      # gateway, issuer and client ids from here.
+      - Discovery__Name=${AXN_LAN_NAME:-axn-term}
+      - Discovery__StateDir=/var/lib/axn-term-gateway
+      # One origin per network (gateway at /gw, Keycloak at /auth):
+      # the public address, the LAN name, the LAN IP (phones can't resolve
+      # .local) and the tailnet. Entries without a host are skipped.
+      - Discovery__Endpoints__0__Label=public
+      - Discovery__Endpoints__0__Gateway=${AXN_PUBLIC_URL:-${AXN_SCHEME:-http}://axn-term.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/gw
+      - Discovery__Endpoints__0__Issuer=${AXN_PUBLIC_URL:-${AXN_SCHEME:-http}://axn-term.${AXN_DOMAIN:-localhost}:${SCENARIO_PORT:-8092}}/auth/realms/${KEYCLOAK_REALM:-axn-term}
+      - Discovery__Endpoints__1__Label=lan
+      - Discovery__Endpoints__1__Gateway=https://${AXN_LAN_NAME:-}:${SCENARIO_PORT:-8092}/gw
+      - Discovery__Endpoints__1__Issuer=https://${AXN_LAN_NAME:-}:${SCENARIO_PORT:-8092}/auth/realms/${KEYCLOAK_REALM:-axn-term}
+      - Discovery__Endpoints__2__Label=lan-ip
+      - Discovery__Endpoints__2__Gateway=https://${AXN_LAN_IP:-}:${SCENARIO_PORT:-8092}/gw
+      - Discovery__Endpoints__2__Issuer=https://${AXN_LAN_IP:-}:${SCENARIO_PORT:-8092}/auth/realms/${KEYCLOAK_REALM:-axn-term}
+      - Discovery__Endpoints__3__Label=tailnet
+      - Discovery__Endpoints__3__Gateway=${AXN_TAILNET_URL:-}/gw
+      - Discovery__Endpoints__3__Issuer=${AXN_TAILNET_URL:-}/auth/realms/${KEYCLOAK_REALM:-axn-term}
+      - Discovery__Clients__Desktop=${REMOTE_AUTH_CLIENT_ID:-axn-term-desktop}
+      - Discovery__Clients__Mobile=${MOBILE_AUTH_CLIENT_ID:-axn-term-mobile}
       - DEFAULT_USER=dev
       - DATA_MOUNT=${DATA_MOUNT:-}
       - PUID=${PUID:-1000}
@@ -170,15 +229,18 @@ services:
       - SESSION_HOST_PIDS=${SESSION_HOST_PIDS:-}
       - SESSION_HOST_CPUS=${SESSION_HOST_CPUS:-}
       # SESSION_HOST_PREFIX overrides the session-host container name prefix
-      # (default axn-term-host) — e.g. to isolate a second scenario's hosts.
-      # A single line only: a second SESSION_HOST_PREFIX entry would win and
-      # resolve to "", producing invalid container names like "-<user>".
-      - SESSION_HOST_PREFIX=${SESSION_HOST_PREFIX:-axn-term-host}
+      # (default <compose project>-host, so each stack's hosts are unique —
+      # container names are global). A single line only: a second
+      # SESSION_HOST_PREFIX entry would win and resolve to "", producing
+      # invalid container names like "-<user>".
+      - SESSION_HOST_PREFIX=${SESSION_HOST_PREFIX:-${COMPOSE_PROJECT_NAME:-axn-term}-host}
       # SESSION_HOST_HOME_VOLUME names a per-user volume prefix: the gateway
       # mounts "<prefix>-<user>" at /home/<user>, so everything under $HOME
-      # survives session-host recreation. Requires SESSION_HOST_USER=0:0 (the
-      # entrypoint must own the mount point before handing it to the user).
-      - SESSION_HOST_HOME_VOLUME=${SESSION_HOST_HOME_VOLUME:-}
+      # survives session-host recreation. Default is project-scoped so a
+      # second checkout doesn't share its homes. Requires
+      # SESSION_HOST_USER=0:0 (the entrypoint must own the mount point
+      # before handing it to the user).
+      - SESSION_HOST_HOME_VOLUME=${SESSION_HOST_HOME_VOLUME:-${COMPOSE_PROJECT_NAME:-axn-term}-home}
       # SESSION_HOST_NIX_VOLUME does the same for the nix store at /nix —
       # each user gets a private, persistent store seeded from the image.
       - SESSION_HOST_NIX_VOLUME=${SESSION_HOST_NIX_VOLUME:-}
@@ -188,6 +250,9 @@ services:
     volumes:
       # Rootless podman: point DOCKER_SOCK at the user socket (see .env.example).
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      # Server identity (discovery id) — must survive container recreation,
+      # or every paired phone sees a new server.
+      - axn-term-online-gateway-data:/var/lib/axn-term-gateway
     # SELinux denies container_t access to the docker/podman socket.
     security_opt:
       - label=disable
@@ -198,10 +263,14 @@ services:
   session-host:
     build:
       context: ./session-host
+      args:
+        # See the gateway service — RAMPHASTOS_LOCAL_DEPS=1 builds against
+        # the sibling checkout in `libraries` instead of published NuGet.
+        - RAMPHASTOS_LOCAL_DEPS=${RAMPHASTOS_LOCAL_DEPS:-}
       additional_contexts:
         axn-term: ${AXN_TERM_ROOT:-../..}
-        # Directory holding axn-term and its sibling checkouts — ramphastos
-        # lands at /ramphastos inside the build (the ProjectReference depth).
+        # Only consumed with RAMPHASTOS_LOCAL_DEPS=1; the default (this
+        # dir) just keeps the context valid for published builds.
         libraries: ${AXN_LIBS_ROOT:-../../..}
       dockerfile: Dockerfile
     image: axn-term-host
@@ -209,12 +278,12 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: axn-term-online-caddy
     ports:
+      # TLS single origin: web /, Keycloak /auth, gateway /gw.
       - ${SCENARIO_PORT:-8092}:${SCENARIO_PORT:-8092}
-      # raw-IP LAN routes (no DNS): keycloak + gateway get their own ports
-      - ${AXN_KC_PORT:-18093}:${AXN_KC_PORT:-18093}
-      - ${AXN_GW_PORT:-18094}:${AXN_GW_PORT:-18094}
+      # Plain HTTP, same multiplexed routes — clients that can't trust the
+      # dev CA (Tauri webview, curl probes) and tailscale serve's forward.
+      - 127.0.0.1:${AXN_PLAIN_PORT:-18097}:${AXN_PLAIN_PORT:-18097}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # fixed dev certs — `tls {$AXN_TLS}` points here, so the chain never
@@ -230,14 +299,14 @@ services:
       - AXN_AUTO_HTTPS=${AXN_AUTO_HTTPS:-off}
       - AXN_LAN_IP=${AXN_LAN_IP:-localhost}
       - AXN_LAN_NAME=${AXN_LAN_NAME:-axn-term.local}
-      - AXN_KC_PORT=${AXN_KC_PORT:-18093}
-      - AXN_GW_PORT=${AXN_GW_PORT:-18094}
+      - AXN_PLAIN_PORT=${AXN_PLAIN_PORT:-18097}
     depends_on:
       - shell
       - gateway
       - keycloak
 
 volumes:
+  axn-term-online-gateway-data:
   axn-term-online-node_modules:
   axn-term-online-caddy-data:
   axn-term-online-keycloak-data:

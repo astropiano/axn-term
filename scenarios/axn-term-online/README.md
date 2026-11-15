@@ -9,16 +9,70 @@ axn-dev flow -f flows/axn-term-login.xml  # flow tests against it
 axn-dev stop -s axn-term-online -p 18092
 ```
 
+## Remote: desktop, browsers and phones
+
+One address per network serves everything: the web viewer at `/`,
+Keycloak at `/auth`, the gateway at `/gw` (discovery document at
+`/.well-known/axn-term`). Clients only ever need that address.
+
+1. **`.env`** (next to compose.yaml): `AXN_LAN_IP`, `AXN_LAN_NAME`, and
+   `AXN_PUBLIC_URL` — the address every client can reach; Keycloak's login
+   page and token issuer live under it. LAN only: `https://<lan-ip>:18092`.
+   With Tailscale: the tailnet URL (see 4).
+2. **Certificates:** `./make-dev-certs.sh` creates a local CA and a server
+   certificate for those names. Trust `certs/ca.pem` on every device:
+   `sudo trust anchor certs/ca.pem` (Fedora), Android: download
+   `https://<lan-ip>:18092/axn-term-ca.crt` → Settings → Security → Install
+   a certificate → CA certificate. Tailscale (`*.ts.net`) needs none of this.
+3. **Desktop:** axn-term → Remote (globe) → Server: the address → Connect →
+   Sign in. The panel's checklist shows server / signed in / publishing and
+   why the server refused it, if it did.
+4. **Away from home:** `./tailscale-serve.sh` publishes the stack on the
+   tailnet (first run may print an approval link) and prints
+   `AXN_TAILNET_URL` / `AXN_PUBLIC_URL` for `.env`; restart the stack.
+5. **Phone:** the axn-term app finds the desktop on the Wi-Fi, by its QR
+   code (Remote → Connect a phone) or by the typed address, and signs in
+   with a device code — the same account as the desktop.
+
+Changing `AXN_PUBLIC_URL` changes the token issuer: every client signs in
+again once.
+
+**Check the whole path** (discovery, sign-in, a desktop publishing, a viewer
+driving its terminals):
+
+```bash
+NODE_EXTRA_CA_CERTS=scenarios/axn-term-online/certs/ca.pem \
+  node --experimental-strip-types tests/remote-stack-smoke.mjs https://<lan-ip>:18092
+```
+
+**Stuck on "loading sessions" / desktop not showing up:** the viewer and the
+desktop panel both show the reason now (from the gateway's
+`/gw/remote/status`). Keep `../ramphastos` current — a
+stale checkout builds a hub with old protocol bugs (the Android build warns).
+Changes to compose/Keycloak settings need a full `axn-dev stop` + `start`;
+`axn-dev patch` does not always recreate the container.
+
 ## Troubleshooting — read this before debugging
 
-### `ramphastos` sibling not found at build time
+### Building against a sibling ramphastos checkout
 
-`AXN_LIBS_ROOT` must point at the directory **containing axn-term and its
-sibling `ramphastos` checkout** (by default the parent of the axn-term repo)
-— it feeds `additional_contexts: libraries` and the sibling bind-mount. The
-compose default already resolves it relative to this file; only override if
-ramphastos lives elsewhere. Never point it at a container path like
-`/ramphastos` — that only exists inside images, not on the host.
+The stack builds against the published `Ramphastos.*` NuGet packages and
+the `ramphastos-client` npm package by default — no sibling checkouts
+needed. To develop against a local ramphastos checkout instead:
+
+```bash
+RAMPHASTOS_LOCAL_DEPS=1 axn-dev start -s axn-term-online   # siblings = ../ramphastos
+```
+
+`AXN_LIBS_ROOT` (default `../../..` = the dir containing this repo)
+must point at the directory **containing the sibling checkouts**
+(`ramphastos`, and `totalserializer`/`reflectiontools` — the env var
+propagates into the ramphastos build, which swaps those to project refs
+too). It feeds `additional_contexts: libraries`, the sibling bind-mount
+at `/ramphastos`, and the vite alias. Never point it at a container path
+like `/ramphastos` — that only exists inside images. If the checkout is
+missing with the toggle on, the .NET build fails on missing
+`/ramphastos/...` project refs — that's the signal to fix it.
 
 ### `additional privileges requested: pass --allow=fs.read=/`
 
@@ -47,8 +101,8 @@ Almost always means the service's URL in `frontend-services:`/
 
 Two separate causes seen:
 
-1. **Caddy container not running** — `docker ps` missing
-   `axn-term-online-caddy`; check `docker logs axn-term-online-caddy`.
+1. **Caddy container not running** — `docker ps` shows no
+   `<project>-caddy-1`; check `docker logs "$(docker ps -qf name=-caddy-)"`.
    Both env-crash bugs seen here were *empty injected values*: compose
    injected `AXN_LAN_IP=` into the caddy container, so
    `default_sni {$AXN_LAN_IP:-localhost}` parsed as no argument. The
@@ -62,7 +116,7 @@ Two separate causes seen:
    at the caddy CA:
 
    ```bash
-   docker exec axn-term-online-caddy cat \
+   docker exec "$(docker ps -qf name=-caddy-)" cat \
      /data/caddy/pki/authorities/local/root.crt > /tmp/axn-caddy-ca.crt
    NODE_EXTRA_CA_CERTS=/tmp/axn-caddy-ca.crt axn-dev flow -f flows/axn-term-login.xml
    ```
@@ -110,16 +164,17 @@ Fix once: open `https://axn-term-gateway.localhost:18092/` in a tab and
 accept, or better — trust the caddy internal CA in the OS keychain:
 
 ```bash
-docker exec axn-term-online-caddy cat \
+docker exec "$(docker ps -qf name=-caddy-)" cat \
   /data/caddy/pki/authorities/local/root.crt
 ```
 
 Other causes seen:
 
 - **Stale per-user session-host container.** The gateway spawns
-  `axn-term-host-<user>` via docker.sock; a leftover container with the
-  same name (e.g. from an older run) makes the spawn fail silently.
-  `docker rm -f axn-term-host-<user>` and retry.
+  `<project>-host-<user>` via docker.sock; it recreates any leftover that
+  isn't on this stack's network, but a same-name foreign container that
+  *is* (older run of the same stack) can still make the spawn fail —
+  `docker rm -f "$(docker ps -aqf name=-host-<user>)"` and retry.
 - **Mixed http/https env.** `KC_HOSTNAME`, `VITE_KEYCLOAK_URL` and
   `VITE_SHELL_WS_URL` must all use `https`/`wss` under TLS internal —
   `AXN_SCHEME`/`AXN_WS_SCHEME` in axn-dev.yaml drive them. Watch for

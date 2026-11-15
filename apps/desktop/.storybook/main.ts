@@ -11,7 +11,11 @@ const tauriAliases: Record<string, string> = {
 };
 
 const config: StorybookConfig = {
-  stories: ['../src/**/*.stories.@(ts|tsx)', '../../../libs/shell-ui/src/**/*.stories.@(ts|tsx)'],
+  stories: [
+    '../src/**/*.stories.@(ts|tsx)',
+    '../../../libs/shell-ui/src/**/*.stories.@(ts|tsx)',
+    '../../web/src/**/*.stories.@(ts|tsx)',
+  ],
   addons: ['@storybook/addon-docs'],
   framework: '@storybook/react-vite',
   viteFinal: (config) => {

@@ -32,10 +32,20 @@ else
 fi
 
 echo "==> Building $IMAGE with $ENGINE (repo: $REPO_ROOT)"
-LIBS_ROOT="${AXN_LIBS_ROOT:-$(cd "$REPO_ROOT/.." 2>/dev/null && pwd || echo "$REPO_ROOT/..")}"
+
+# Default: published Ramphastos.* NuGet packages. RAMPHASTOS_LOCAL_DEPS=1
+# builds against the sibling checkout — the `libraries` context must then
+# point at the dir containing it (../ramphastos next to axn-term).
+ARGS=()
+if [ -n "${RAMPHASTOS_LOCAL_DEPS:-}" ]; then
+  LIBS_ROOT="${AXN_LIBS_ROOT:-$(cd "$REPO_ROOT/.." 2>/dev/null && pwd || echo "$REPO_ROOT/..")}"
+  ARGS+=(--build-context "libraries=$LIBS_ROOT" --build-arg "RAMPHASTOS_LOCAL_DEPS=$RAMPHASTOS_LOCAL_DEPS")
+  echo "==> RAMPHASTOS_LOCAL_DEPS: sibling checkout at $LIBS_ROOT"
+fi
+
 "$ENGINE" build \
   --build-context "axn-term=$REPO_ROOT" \
-  --build-context "libraries=$LIBS_ROOT" \
+  ${ARGS[@]+"${ARGS[@]}"} \
   -t "$IMAGE" \
   -f "$SCRIPT_DIR/session-host/Dockerfile" \
   "$SCRIPT_DIR/session-host"

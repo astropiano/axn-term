@@ -1,4 +1,4 @@
-import { RamphastosAuthority, RamphastosStream } from '@ramphastos/ramphastos-client';
+import { RamphastosAuthority, RamphastosStream } from 'ramphastos-client';
 import type { RemoteConsole, RemoteConsoleSnapshot, SessionBackend, Unsubscribe } from './types';
 import { scopeSessionId } from './remoteScope.ts';
 

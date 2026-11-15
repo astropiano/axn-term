@@ -5,13 +5,13 @@
       End-to-end through the REAL desktop app: the axn-term adapter launches
       the built binary with a temp state dir, seeds remote settings into its
       config.yaml, triggers remoteAuth.signIn() via the remote-control
-      server (the same code path the "Sign in…" button runs — plugin_exec →
-      curl), then Playwright approves the device grant in a real browser,
+      server (the same code path the "Sign in…" button runs — remote_fetch →
+      native-tls), then Playwright approves the device grant in a real browser,
       and the app must reach signedIn. This is the faithful reproduction of
       the invalid_client regression — remote-auth.ts stubs the client, this
       drives it.
-      Plain listeners: keycloak :18096, gateway :18095 (127.0.0.1 — app runs
-      on the same host as the scenario).
+      One plain multiplexed port: 127.0.0.1:18097 serves /auth and /gw
+      (app runs on the same host as the scenario).
     </description>
     <scenarios>
       <scenario name="axn-term-online" service="shell" adapter="tsAdapter" />
@@ -20,9 +20,9 @@
       <env>
         <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
         <var name="AXN_TERM_TEST_VARIANT" value="single" />
-        <var name="AXN_TERM_REMOTE_ISSUER" value="http://192.168.1.202:18096/realms/axn-term" />
+        <var name="AXN_TERM_REMOTE_ISSUER" value="http://127.0.0.1:18097/auth/realms/axn-term" />
         <var name="AXN_TERM_REMOTE_CLIENT_ID" value="axn-term-desktop" />
-        <var name="AXN_TERM_REMOTE_HUB" value="ws://192.168.1.202:18095/remote" />
+        <var name="AXN_TERM_REMOTE_HUB" value="ws://127.0.0.1:18097/gw/remote" />
         <var name="AXN_TERM_REMOTE_SESSION" value="flow-desktop" />
         <var name="TEST_USER" value="demo" />
         <var name="TEST_PASSWORD" value="changeme" />

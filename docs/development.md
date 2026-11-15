@@ -124,6 +124,45 @@ its state. `AXN_TERM_HMR=1` exercises the same code path under a plain
 - You are verifying the production frontend bundle or packaging: build
   and test the real `pnpm build:desktop` artifact.
 
+## Developing against local ramphastos checkouts
+
+By default everything builds against **published packages** — the
+`ramphastos-client` npm package for the web/mobile frontends and the
+`Ramphastos.*` NuGet packages for the .NET gateway/session host. No
+sibling checkouts are needed.
+
+To develop against freshly built local checkouts instead (e.g. a
+ramphastos protocol change that has to land here and there together), set
+`RAMPHASTOS_LOCAL_DEPS=1` and point `AXN_LIBS_ROOT` at the directory
+**containing** the sibling checkouts (default `..` — the ramphastos
+checkout sits next to axn-term):
+
+```bash
+RAMPHASTOS_LOCAL_DEPS=1 axn-dev start -s axn-term-online   # containers
+RAMPHASTOS_LOCAL_DEPS=1 pnpm dev:desktop                  # vite dev server
+RAMPHASTOS_LOCAL_DEPS=1 apps/mobile/build/android/build.sh # Android APK
+```
+
+With the flag on:
+
+- MSBuild swaps `Ramphastos.*` package refs for `ProjectReference`s into
+  `../ramphastos` (root overridable via `RamphastosLocalDepsRoot`;
+  `totalserializer`/`reflectiontools` swap transitively through the
+  ramphastos build).
+- vite/vitest alias `ramphastos-client` to the sibling package —
+  **rebuild its `dist/` when the client sources change**, the alias
+  resolves to the built package, not the sources.
+- The `axn-term-online` compose feeds `AXN_LIBS_ROOT` into the
+  `libraries` build context and mounts the checkout at `/ramphastos`
+  inside the shell container (see the scenario README for the plumbing
+  detail and the buildx `fs.read` entitlement gotcha).
+- The Android container build mounts it the same way and warns when the
+  checkout is behind its upstream — a stale client ships old
+  hub-protocol bugs.
+
+The flag is deliberately opt-in: without it nothing reads, mounts, or
+stats a sibling path, so worktrees and CI need no neighbouring checkouts.
+
 ## More docs
 
 - [docs/architecture.md](architecture.md) — component map and data flow.

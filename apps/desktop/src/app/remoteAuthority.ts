@@ -13,28 +13,29 @@ const authorityToken = import.meta.env.VITE_REMOTE_TOKEN as string | undefined;
 
 export type AuthorityStatus = { state: 'idle' | 'connecting' | 'connected' | 'failed'; error?: string };
 
-/** Module-level publish-status store — surfaces connect failures the console hides. */
-export const authorityStatus = {
-  _state: 'idle' as AuthorityStatus['state'],
-  _error: undefined as string | undefined,
+/** Module-level publish-status store — surfaces connect failures the console hides.
+ *  Closures, not `this`: React and the platform seam pass `get`/`subscribe`
+ *  around as plain functions (useSyncExternalStore(store.subscribe, store.get)). */
+export const authorityStatus = (() => {
   // useSyncExternalStore requires a STABLE snapshot — a fresh object per
-  // get() makes React re-render forever, so set() rebuilds _snapshot.
-  _snapshot: { state: 'idle', error: undefined } as AuthorityStatus,
-  _cbs: new Set<() => void>(),
-  get(): AuthorityStatus {
-    return this._snapshot;
-  },
-  set(state: AuthorityStatus['state'], error?: string) {
-    this._state = state;
-    this._error = error;
-    this._snapshot = { state, error };
-    this._cbs.forEach((cb) => cb());
-  },
-  subscribe(cb: () => void): () => void {
-    this._cbs.add(cb);
-    return () => this._cbs.delete(cb);
-  },
-};
+  // get() makes React re-render forever, so set() rebuilds it.
+  let snapshot: AuthorityStatus = { state: 'idle', error: undefined };
+  const cbs = new Set<() => void>();
+  return {
+    get(): AuthorityStatus {
+      return snapshot;
+    },
+    set(state: AuthorityStatus['state'], error?: string) {
+      if (snapshot.state === state && snapshot.error === error) return;
+      snapshot = { state, error };
+      cbs.forEach((cb) => cb());
+    },
+    subscribe(cb: () => void): () => void {
+      cbs.add(cb);
+      return () => cbs.delete(cb);
+    },
+  };
+})();
 const authorityWsOnly = import.meta.env.VITE_REMOTE_WS_ONLY === 'true';
 
 /**

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- axn-dark — status bar and launch surfaces match the app. -->
+    <color name="colorPrimary">#141110</color>
+    <color name="colorPrimaryDark">#141110</color>
+</resources>

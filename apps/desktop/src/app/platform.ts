@@ -15,6 +15,7 @@ import {
 import type { Unsubscribe } from '@axn-term/session-backend';
 import { createRemoteAuth } from './remoteAuth';
 import { desktopWorkspaceSetStorage } from './workspaceSetStorage';
+import { connectServer, pairingLink, serverStatus } from './remoteServer';
 
 const appWindow = getCurrentWindow();
 
@@ -197,6 +198,16 @@ export const desktopPlatform: ShellPlatform = {
       readFile: (dir, name) =>
         invoke<string>('read_external_plugin_file', { dir, name }),
     }),
+};
+
+// Connect-by-address: discovery fills hub/issuer/client from one URL.
+desktopPlatform.remoteServer = {
+  connect: connectServer,
+  pairingLink,
+  status: (hubUrl) =>
+    serverStatus(hubUrl, async () =>
+      (await desktopPlatform.remoteAuth?.getAccessToken?.().catch(() => undefined)) ?? undefined,
+    ),
 };
 
 // OIDC device-flow sign-in for remote publishing — issuer/client come from

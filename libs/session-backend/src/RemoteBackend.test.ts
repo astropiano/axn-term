@@ -34,7 +34,7 @@ class FakeStream {
     this.closeCb?.(r);
   }
 }
-vi.mock('@ramphastos/ramphastos-client', () => ({
+vi.mock('ramphastos-client', () => ({
   RamphastosSession: { connect: connectMock },
   RamphastosStream: FakeStream,
 }));

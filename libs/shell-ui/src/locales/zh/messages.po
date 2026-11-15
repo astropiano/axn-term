@@ -2,13 +2,19 @@ msgid ""
 msgstr ""
 "Language: zh\n"
 
+#. placeholder {0}: server.name
+#. placeholder {1}: endpoint.label
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:410
+msgid "{0} · via {1}"
+msgstr "{0} · 通过 {1}"
+
 #. placeholder {0}: running.length
 #. placeholder {1}: running.length === 1 ? 'process' : 'processes'
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:59
 msgid "{0} running {1} will be terminated"
 msgstr "将终止 {0} 个运行中的{1}"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:521
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:537
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} 正在主检出中运行 — 要隔离到 worktree 吗？"
 
@@ -25,6 +31,10 @@ msgstr "一个 Lucide 图标名称（如 <0>GitFork</0>）或内联 SVG 标签�
 msgid "Add icon"
 msgstr "添加图标"
 
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:681
+msgid "Advanced"
+msgstr "高级"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:976
 msgid "Also used as the session icon while this process is foreground."
 msgstr "此进程位于前台时也用作会话图标。"
@@ -40,6 +50,10 @@ msgstr "自动"
 #: libs/shell-ui/src/app/SettingsModal.tsx:602
 msgid "Auto (WebGL → canvas → DOM)"
 msgstr "自动（WebGL → canvas → DOM）"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:624
+msgid "Away from home? Put the phone and this computer on the same Tailscale network — the app switches between Wi-Fi and Tailscale and stays the same device."
+msgstr "不在家？让手机和这台电脑加入同一个 Tailscale 网络——应用会在 Wi-Fi 和 Tailscale 之间切换，并保持为同一台设备。"
 
 #: libs/shell-ui/src/app/ErrorBoundary.tsx:61
 msgid "axn-term hit an unexpected error"
@@ -61,7 +75,7 @@ msgstr "两者"
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:116
 #: libs/shell-ui/src/app/FilePickerModal.tsx:232
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:113
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:118
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
 #: libs/shell-ui/src/app/SettingsModal.tsx:1158
 msgid "Cancel"
@@ -81,7 +95,7 @@ msgstr "终端的单元格渲染器。“自动”使用 GPU（WebGL）并自动
 #~ msgstr " ({0}{1})"
 
 #. placeholder {0}: viewers.length
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:438
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:792
 msgid "Clients: {0}"
 msgstr "：{0}"
 
@@ -97,24 +111,44 @@ msgstr "折叠"
 msgid "Config file"
 msgstr "配置文件"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:470
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:94
+msgid "Confirm this code in the browser to finish signing in:"
+msgstr "在浏览器中确认此代码以完成登录："
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:402
+msgid "Connect"
+msgstr "连接"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:604
+msgid "Connect a phone"
+msgstr "连接手机"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:824
 msgid "Connected to"
 msgstr "已连接到"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1245
-#~ msgid "Connecting…"
-#~ msgstr "正在连接…"
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:532
+msgid "connecting…"
+msgstr "连接中…"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:402
+msgid "Connecting…"
+msgstr "正在连接…"
 
 #~ msgid "Connecting\\u2026"
 #~ msgstr "\\u6b63\\u5728\\u8fde\\u63a5\\u2026"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:323
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:670
 msgid "Connection"
 msgstr "连接"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:199
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:204
 msgid "Connection lost"
 msgstr "连接已断开"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:634
+msgid "Copied"
+msgstr "已复制"
 
 #: libs/shell-ui/src/app/AppContextMenu.tsx:162
 #: libs/shell-ui/src/app/AppContextMenu.tsx:184
@@ -129,6 +163,10 @@ msgstr "复制"
 #: libs/shell-ui/src/PathActionMenu.tsx:300
 msgid "Copy image to clipboard"
 msgstr "复制图像到剪贴板"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:634
+msgid "Copy link"
+msgstr "复制链接"
 
 #: libs/shell-ui/src/PathActionMenu.tsx:284
 #: libs/shell-ui/src/PathActionMenu.tsx:288
@@ -181,7 +219,7 @@ msgid "Default shell"
 msgstr "默认 Shell"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:547
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:563
 msgid "Delete {0}"
 msgstr "删除 {0}"
 
@@ -203,9 +241,13 @@ msgstr "目录"
 msgid "disabled"
 msgstr "已禁用"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:523
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:539
 msgid "Don't ask again"
 msgstr "不再询问"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:332
+msgid "done"
+msgstr "已完成"
 
 #: libs/shell-ui/src/PathActionMenu.tsx:256
 msgid "Edit"
@@ -241,9 +283,9 @@ msgid "End of session list"
 msgstr "会话列表末尾"
 
 #. placeholder {0}: auth.userCode ?? ''
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:92
-msgid "Enter code {0} in the browser to finish sign-in."
-msgstr "在浏览器中输入代码 {0} 以完成登录。"
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:94
+#~ msgid "Enter code {0} in the browser to finish sign-in."
+#~ msgstr "在浏览器中输入代码 {0} 以完成登录。"
 
 #: libs/shell-ui/src/app/SessionPanel.tsx:484
 msgid "Expand"
@@ -260,6 +302,10 @@ msgstr "导出…"
 #: libs/shell-ui/src/app/SettingsModal.tsx:348
 msgid "Exported."
 msgstr "已导出。"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:533
+msgid "failed"
+msgstr "失败"
 
 #. placeholder {0}: s.error ?? ''
 #: libs/shell-ui/src/app/SettingsModal.tsx:1247
@@ -302,9 +348,13 @@ msgstr "字体未安装 — 保留之前的字体。"
 msgid "Font size (px)"
 msgstr "字号（px）"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:538
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:554
 msgid "Force remove"
 msgstr "强制移除"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:424
+msgid "Forget"
+msgstr "忘记"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:111
 msgid "General"
@@ -314,7 +364,7 @@ msgstr "常规"
 #~ msgid "host — this machine"
 #~ msgstr " — "
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:327
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:685
 msgid "Hub URL"
 msgstr "Hub \\u5730\\u5740"
 
@@ -329,6 +379,10 @@ msgstr "导入…"
 #: libs/shell-ui/src/app/SettingsModal.tsx:337
 msgid "Imported."
 msgstr "已导入。"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:332
+msgid "in progress"
+msgstr "进行中"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:250
 msgid "Increase font size"
@@ -406,6 +460,10 @@ msgstr "移到新窗口"
 msgid "Move to workspace…"
 msgstr "移到工作区…"
 
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:332
+msgid "needs attention"
+msgstr "需要处理"
+
 #: libs/shell-ui/src/app/SessionPanel.tsx:2025
 msgid "New session"
 msgstr "新建会话"
@@ -443,11 +501,11 @@ msgstr "此窗口中的新工作区“{name}”"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "此窗口中的新工作区“{trimmed}”"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:522
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:538
 msgid "New worktree session"
 msgstr "新建 worktree 会话"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:460
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:814
 msgid "no clients"
 msgstr "无客户端"
 
@@ -478,23 +536,35 @@ msgstr "无工作区"
 msgid "Not a valid config.yaml — expected a YAML mapping."
 msgstr "不是有效的 config.yaml — 应为 YAML 映射。"
 
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:542
+msgid "not connected — enter the server address above"
+msgstr "未连接——请在上方输入服务器地址"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:1248
 #~ msgid "Not publishing"
 #~ msgstr "\\u672a\\u53d1\\u5e03"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:132
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:137
 msgid "Not signed in"
 msgstr "未登录"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:363
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:533
+msgid "not yet"
+msgstr "尚未"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:721
 msgid "OIDC client"
 msgstr "OIDC 客户端"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:351
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:709
 msgid "OIDC issuer"
 msgstr "OIDC "
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:460
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:618
+msgid "On the same Wi-Fi, the axn-term app finds this desktop by itself. Anywhere else, scan this code in the app."
+msgstr "在同一 Wi-Fi 下，axn-term 应用会自动找到这台电脑。在其他地方，请在应用中扫描此二维码。"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:814
 msgid "only this device, not viewing a session"
 msgstr "，"
 
@@ -550,6 +620,10 @@ msgstr "打开…"
 msgid "Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size."
 msgstr "整体界面缩放百分比 — 面板、标签页、横幅、菜单。终端使用自己的字号。"
 
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:610
+msgid "Pairing code for the axn-term app"
+msgstr "axn-term 应用的配对码"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:503
 msgid "Panel font"
 msgstr "面板字体"
@@ -559,13 +633,17 @@ msgstr "面板字体"
 msgid "Paste"
 msgstr "粘贴"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:406
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:760
 msgid "Pause viewport"
 msgstr "暂停视口"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:866
 msgid "permissions:"
 msgstr "权限："
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:530
+msgid "phones and browsers signed in as the same account can attach"
+msgstr "使用同一账号登录的手机和浏览器可以连接"
 
 #: libs/shell-ui/src/app/SessionPanel.tsx:2093
 msgid "Pick a folder — the new session starts in it"
@@ -594,6 +672,10 @@ msgstr "进程"
 #~ msgid "Publish this window's terminals to a /remote hub \\u2014 other devices attach via the web app with ?remote=<session>."
 #~ msgstr "\\u5c06\\u6b64\\u7a97\\u53e3\\u7684\\u7ec8\\u7aef\\u53d1\\u5e03\\u5230 /remote \\u4e2d\\u5fc3 \\u2014 \\u5176\\u4ed6\\u8bbe\\u5907\\u901a\\u8fc7 Web \\u5e94\\u7528\\u4ee5 ?remote=<session> \\u8fde\\u63a5\\u3002"
 
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:560
+msgid "Publishing"
+msgstr "发布"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:1243
 #~ msgid "Publishing — connected"
 #~ msgstr "发布中 — 已连接"
@@ -616,15 +698,15 @@ msgstr "重新加载窗口"
 
 #. placeholder {0}: snap.role === 'authority' ? 'host' : `viewing ${snap.hostName ?? 'host'}`
 #. placeholder {1}: stateLabel(snap)
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:273
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:278
 msgid "Remote — {0} · {1} · {count} client(s)"
 msgstr " — {0} · {1} · {count} "
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:392
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:746
 msgid "Remote — this machine is the host"
 msgstr " — "
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:392
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:746
 msgid "Remote — viewing"
 msgstr " — "
 
@@ -632,7 +714,7 @@ msgstr " — "
 msgid "Remote access"
 msgstr "远程访问"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:274
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:279
 msgid "Remote console"
 msgstr "远程控制台"
 
@@ -644,7 +726,7 @@ msgstr "远程控制台"
 msgid "Remove icon"
 msgstr "移除图标"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:441
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:455
 msgid "Remove worktree"
 msgstr "移除 worktree"
 
@@ -671,19 +753,19 @@ msgstr "重置为进程名"
 msgid "Resume {agent} session{0}"
 msgstr "恢复 {agent} 会话{0}"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:406
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:760
 msgid "Resume viewport"
 msgstr "恢复视口"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:215
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:220
 msgid "Retry now"
 msgstr "立即重试"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:206
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:211
 msgid "Retrying…"
 msgstr "…"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:437
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:451
 msgid "Review worktree changes"
 msgstr "检查 worktree 更改"
 
@@ -722,6 +804,14 @@ msgstr "选择文件夹"
 msgid "Select this folder"
 msgstr "选择此文件夹"
 
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:537
+msgid "Server"
+msgstr "服务器"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:399
+msgid "Server address"
+msgstr "服务器地址"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:650
 #: libs/shell-ui/src/app/SettingsModal.tsx:658
 #~ msgid "Server URL"
@@ -751,12 +841,12 @@ msgid "Session summary"
 msgstr "会话摘要"
 
 #. placeholder {0}: snap.sessionId.includes('/') ? snap.sessionId.slice(snap.sessionId.indexOf('/') + 1) : snap.sessionId
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:483
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:837
 msgid "Session: {0}"
 msgstr "会话：{0}"
 
 #. placeholder {0}: snap.sessions.length
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:416
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:770
 msgid "Sessions ({0})"
 msgstr " ({0})"
 
@@ -780,19 +870,23 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell 字体"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:106
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:127
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:111
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:132
 msgid "Sign in…"
 msgstr "登录…"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:83
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:224
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:493
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:85
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:229
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:847
 msgid "Sign out"
 msgstr "退出登录"
 
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:552
+msgid "Signed in"
+msgstr "已登录"
+
 #. placeholder {0}: auth.user ?? ''
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:76
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:78
 msgid "Signed in as {0}"
 msgstr "已登录为 {0}"
 
@@ -839,13 +933,21 @@ msgstr "终端渲染器"
 msgid "The default folder of “{0}” does not exist:"
 msgstr "“{0}”的默认文件夹不存在："
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:187
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:192
 msgid "The remote host is unreachable — is it running?"
 msgstr " — ？"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:189
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:547
+msgid "The saved server is not answering — connect again"
+msgstr ""
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:194
 msgid "The server is reachable, but the remote channel failed."
 msgstr "，。"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:565
+msgid "The server refused this desktop: {lastDenied}"
+msgstr "服务器拒绝了这台电脑：{lastDenied}"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:387
 msgid "Theme"
@@ -857,7 +959,7 @@ msgstr "主题"
 msgid "This closes {0} {1} inside it."
 msgstr "将关闭其中的 {0} 个{1}。"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:443
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:797
 msgid "This machine is the host"
 msgstr "本机是主机"
 
@@ -877,6 +979,10 @@ msgstr "此视图遇到了意外错误"
 msgid "This window"
 msgstr "此窗口"
 
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:332
+msgid "to do"
+msgstr "待完成"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:524
 msgid "UI zoom"
 msgstr "界面缩放"
@@ -894,16 +1000,20 @@ msgstr "未满足，插件已禁用"
 msgid "Use system default"
 msgstr "使用系统默认"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:339
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:697
 msgid "User token"
 msgstr "\\u7528\\u6237\\u4ee4\\u724c"
 
 #~ msgid "User token (optional)"
 #~ msgstr "\\u7528\\u6237\\u4ee4\\u724c\\uff08\\u53ef\\u9009\\uff09"
 
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:440
+#~ msgid "waiting for the browser sign-in…"
+#~ msgstr "等待浏览器登录…"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:582
 msgid "Where the \"+\" for a new session appears: a ghost row at the end of each workspace's session list, the workspace header, or both."
-msgstr "新建会话的“+”显示位置：每个工作区会话列表末尾的占位行、工作区标题，或两者。"
+msgstr "新建会话的 \"+\" 显示位置：每个工作区会话列表末尾的占位行、工作区标题，或两者。"
 
 #. placeholder {0}: k.n
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
@@ -915,11 +1025,11 @@ msgid "Workspace header"
 msgstr "工作区标题"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:537
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:553
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "worktree 移除失败（有未提交更改？）：{0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:562
 msgid "worktree removed — branch {0} kept"
 msgstr "worktree 已移除 — 分支 {0} 已保留"

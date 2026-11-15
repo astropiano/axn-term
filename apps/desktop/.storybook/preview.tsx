@@ -1,4 +1,5 @@
 import '../src/styles.css';
+import './web-sources.css';
 import { useEffect } from 'react';
 import type { Preview } from '@storybook/react-vite';
 import {

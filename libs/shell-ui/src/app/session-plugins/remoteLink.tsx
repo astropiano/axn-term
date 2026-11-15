@@ -1,13 +1,15 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { renderSVG } from 'uqr';
 import { createPortal } from 'react-dom';
 import { shellPlatform } from '../../platform';
 import { useShellPlatform } from '../../services';
 import { useSettings } from '../../SettingsProvider';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ChevronsLeftRightEllipsis } from 'lucide-react';
+import { ChevronsLeftRightEllipsis, Circle, CircleCheck, CircleX, LoaderCircle } from 'lucide-react';
 import { RemoteIcon } from './remoteIcon';
 import type { RemoteConsoleSnapshot } from '@axn-term/session-backend';
 import type { SessionViewPlugin } from './plugin';
+import type { AppSettings } from '../../themes';
 
 /**
  * Remote console: rail entry + full view over the shared viewport claims.
@@ -63,11 +65,11 @@ const authBtnCls =
 export function RemoteAuthRow({
   auth,
   remoteAuth,
-  issuerConfigured,
+  canSignIn,
 }: {
   auth: RemoteAuthSnap;
   remoteAuth: RemoteAuthActions;
-  issuerConfigured: boolean;
+  canSignIn: boolean;
 }) {
   if (auth.state === 'signedIn') {
     return (
@@ -87,10 +89,13 @@ export function RemoteAuthRow({
   }
   if (auth.state === 'pending') {
     return (
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         <span className="text-xs text-[var(--text-secondary)]">
-          <Trans>Enter code {auth.userCode ?? ''} in the browser to finish sign-in.</Trans>
+          <Trans>Confirm this code in the browser to finish signing in:</Trans>
         </span>
+        <code className="self-start select-all rounded border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 font-mono text-base tracking-widest text-[var(--text-primary)]">
+          {auth.userCode ?? ''}
+        </code>
         {auth.verificationUri ? (
           <span className="select-all break-all text-[10px] text-[var(--text-secondary)]">
             {auth.verificationUri}
@@ -100,7 +105,7 @@ export function RemoteAuthRow({
           <button
             type="button"
             className={authBtnCls}
-            disabled={!issuerConfigured}
+            disabled={!canSignIn}
             onClick={() => void remoteAuth.signIn()}
           >
             <Trans>Sign in…</Trans>
@@ -121,14 +126,14 @@ export function RemoteAuthRow({
       <button
         type="button"
         className={authBtnCls}
-        disabled={!issuerConfigured}
+        disabled={!canSignIn}
         onClick={() => void remoteAuth.signIn()}
       >
         <Trans>Sign in…</Trans>
       </button>
       {auth.state === 'error' ? (
         <span className="text-xs text-[var(--error,#e05)]">{auth.error}</span>
-      ) : issuerConfigured ? (
+      ) : canSignIn ? (
         <span className="text-xs text-[var(--text-secondary)]"><Trans>Not signed in</Trans></span>
       ) : null}
     </div>
@@ -294,6 +299,347 @@ function RemoteRailItem({
   );
 }
 
+type StepState = 'done' | 'busy' | 'failed' | 'todo';
+
+/** Status mark for a setup step — drawn icons, colored by meaning only. */
+function StepIcon({ state }: { state: StepState }) {
+  const cls = 'h-4 w-4 shrink-0';
+  if (state === 'done') return <CircleCheck aria-hidden className={`${cls} text-[var(--accent)]`} />;
+  if (state === 'failed') return <CircleX aria-hidden className={`${cls} text-[var(--error,#e5534b)]`} />;
+  if (state === 'busy')
+    return <LoaderCircle aria-hidden className={`${cls} animate-spin text-[var(--text-secondary)]`} />;
+  return <Circle aria-hidden className={`${cls} text-[var(--text-secondary)] opacity-60`} />;
+}
+
+/**
+ * One setup step: status mark and a hairline to the next step on the left,
+ * title and controls stacked on the right — stacked so long labels and
+ * narrow panels never clip the controls.
+ */
+function Step({
+  state,
+  title,
+  last,
+  children,
+}: {
+  state: StepState;
+  title: string;
+  last?: boolean;
+  children: React.ReactNode;
+}) {
+  const { t } = useLingui();
+  const stateText =
+    state === 'done' ? t`done` : state === 'busy' ? t`in progress` : state === 'failed' ? t`needs attention` : t`to do`;
+  return (
+    <li className="flex gap-3">
+      <div className="flex flex-col items-center pt-px">
+        <StepIcon state={state} />
+        {last ? null : <span aria-hidden className="mt-1 w-px flex-1 bg-[var(--border)]" />}
+      </div>
+      <div className={`flex min-w-0 flex-1 flex-col gap-1.5 ${last ? '' : 'pb-4'}`}>
+        <span className="text-xs font-medium text-[var(--text-primary)]">
+          {title}
+          <span className="sr-only"> — {stateText}</span>
+        </span>
+        {children}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * One address in, everything else from the server's discovery document.
+ * Shows which server/network is in use so a LAN → tailnet switch is
+ * visible rather than magic.
+ */
+function ServerConnectRow({
+  connect,
+  inputCls,
+}: {
+  connect: (input: string) => Promise<Partial<AppSettings>>;
+  inputCls: string;
+}) {
+  const { t } = useLingui();
+  const { settings, updateSettings } = useSettings();
+  const server = settings.remoteServer;
+  const [draft, setDraft] = useState(server?.url ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (server?.url) setDraft(server.url);
+  }, [server?.url]);
+
+  const submit = () => {
+    setBusy(true);
+    setError(null);
+    connect(draft)
+      .then((patch) => updateSettings(patch))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false));
+  };
+  const endpoint = server?.endpoints.find((e) => e.gateway === server.lastGateway);
+
+  return (
+    <>
+      <form
+        className="flex min-w-0 items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (draft.trim() && !busy) submit();
+        }}
+      >
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.currentTarget.value)}
+          placeholder="https://term.example.com"
+          spellCheck={false}
+          autoCapitalize="none"
+          className={`${inputCls} min-w-0`}
+          aria-label={t`Server address`}
+        />
+        <button type="submit" className={`${authBtnCls} shrink-0`} disabled={!draft.trim() || busy}>
+          {busy ? <Trans>Connecting…</Trans> : <Trans>Connect</Trans>}
+        </button>
+      </form>
+      {error ? (
+        <p role="alert" className="text-xs text-[var(--error,#e5534b)]">{error}</p>
+      ) : server ? (
+        <p className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-xs text-[var(--text-secondary)]">
+          <span className="min-w-0 break-words">
+            {endpoint ? t`${server.name} · via ${endpoint.label}` : server.name}
+          </span>
+          <button
+            type="button"
+            className="underline decoration-dotted underline-offset-2 hover:text-[var(--text-primary)] hover:decoration-solid"
+            onClick={() =>
+              updateSettings({
+                remoteServer: undefined,
+                remoteAuthorityUrl: undefined,
+                remoteAuthIssuer: undefined,
+                remoteAuthClientId: undefined,
+              })
+            }
+          >
+            <Trans>Forget</Trans>
+          </button>
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Server → account → publishing as one list of steps, each with its state
+ * and the control that moves it forward; the publishing step carries the
+ * server's own reason when it refused this desktop.
+ */
+function SetupSteps({
+  auth,
+  remoteAuth,
+  inputCls,
+}: {
+  auth: RemoteAuthSnap;
+  remoteAuth?: RemoteAuthActions;
+  inputCls: string;
+}) {
+  const { t } = useLingui();
+  const { settings } = useSettings();
+  const platform = useShellPlatform();
+  const statusStore = platform.remoteAuthorityStatus;
+  // Call through the store — its methods must not be detached from it.
+  const subscribePublish = useCallback(
+    (cb: () => void) => statusStore?.subscribe(cb) ?? (() => {}),
+    [statusStore],
+  );
+  const getPublish = useCallback(() => statusStore?.get() ?? IDLE_PUBLISH, [statusStore]);
+  const publish = useSyncExternalStore(subscribePublish, getPublish);
+  const server = settings.remoteServer;
+  const hub = settings.remoteAuthorityUrl;
+  const signedIn = auth.state === 'signedIn';
+  const [lastDenied, setLastDenied] = useState<string | null>(null);
+
+  // Ask the server about this account while signed in but not publishing:
+  // a refused hello carries its reason there (issuer, expiry, client…).
+  const statusFn = platform.remoteServer?.status;
+  useEffect(() => {
+    if (!statusFn || !hub || !signedIn || publish.state === 'connected') {
+      setLastDenied(null);
+      return;
+    }
+    let alive = true;
+    const poll = () =>
+      statusFn(hub)
+        .then((s) => {
+          const last = s.attempts.find((a) => a.role.toLowerCase() === 'authority');
+          if (alive) setLastDenied(last && !last.accepted ? (last.reason ?? null) : null);
+        })
+        .catch((e: unknown) => {
+          if (alive) setLastDenied(e instanceof Error ? e.message : String(e));
+        });
+    poll();
+    const timer = window.setInterval(poll, 10_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [statusFn, hub, signedIn, publish.state]);
+
+  // Is the configured hub address real? The status endpoint doubles as the
+  // probe: any HTTP answer (401 while signed out counts) means it answers;
+  // a transport failure means the saved address is stale/garbage — gate the
+  // sign-in on that so credentials can't be run against nonsense.
+  const [hubReachable, setHubReachable] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!statusFn || !hub) {
+      setHubReachable(null);
+      return;
+    }
+    let alive = true;
+    const probe = () =>
+      statusFn(hub)
+        .then(() => {
+          if (alive) setHubReachable(true);
+        })
+        .catch((e: unknown) => {
+          if (alive) setHubReachable(typeof (e as { status?: number }).status === 'number');
+        });
+    probe();
+    const timer = window.setInterval(probe, 10_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [statusFn, hub]);
+
+  const connect = platform.remoteServer?.connect;
+  const serverState: StepState =
+    !(server || hub) ? 'todo' : hubReachable === false ? 'failed' : 'done';
+  const authState: StepState =
+    auth.state === 'signedIn' ? 'done' : auth.state === 'pending' ? 'busy' : auth.state === 'error' ? 'failed' : 'todo';
+  const publishState: StepState =
+    publish.state === 'connected'
+      ? 'done'
+      : publish.state === 'connecting'
+        ? 'busy'
+        : publish.state === 'failed' || lastDenied
+          ? 'failed'
+          : 'todo';
+  const publishDetail =
+    publish.state === 'connected'
+      ? t`phones and browsers signed in as the same account can attach`
+      : publish.state === 'connecting'
+        ? t`connecting…`
+        : (publish.error ?? (publish.state === 'failed' ? t`failed` : t`not yet`));
+
+  return (
+    <ol className="flex flex-col">
+      <Step state={serverState} title={t`Server`}>
+        {connect ? (
+          <ServerConnectRow connect={connect} inputCls={inputCls} />
+        ) : (
+          <p className="break-all text-xs text-[var(--text-secondary)]">
+            {hub ?? t`not connected — enter the server address above`}
+          </p>
+        )}
+        {hubReachable === false ? (
+          <p role="alert" className="text-xs text-[var(--error,#e5534b)]">
+            <Trans>The saved server is not answering — connect again</Trans>
+          </p>
+        ) : null}
+      </Step>
+      {remoteAuth ? (
+        <Step state={authState} title={t`Signed in`}>
+          <RemoteAuthRow
+            auth={auth}
+            remoteAuth={remoteAuth}
+            canSignIn={Boolean(settings.remoteAuthIssuer) && hubReachable !== false}
+          />
+        </Step>
+      ) : null}
+      <Step state={publishState} title={t`Publishing`} last>
+        {/* The server's reason replaces the client's generic error. */}
+        {lastDenied ? null : <p className="break-words text-xs text-[var(--text-secondary)]">{publishDetail}</p>}
+        {lastDenied ? (
+          <p role="alert" className="break-words text-xs text-[var(--error,#e5534b)]">
+            <Trans>The server refused this desktop: {lastDenied}</Trans>
+          </p>
+        ) : null}
+      </Step>
+    </ol>
+  );
+}
+
+const IDLE_PUBLISH: { state: 'idle' | 'connecting' | 'connected' | 'failed'; error?: string } = { state: 'idle' };
+
+/**
+ * QR + wording for the phone. The code carries only the server address
+ * and id — never a token — so it is safe to show on screen.
+ */
+function PhonePairing({ link }: { link: string | null }) {
+  const { t } = useLingui();
+  const [copied, setCopied] = useState(false);
+  const svg = useMemo(() => {
+    if (!link) return null;
+    try {
+      return renderSVG(link, { border: 2, whiteColor: '#ffffff', blackColor: '#000000' });
+    } catch {
+      return null;
+    }
+  }, [link]);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  if (!link) return null;
+  const copy = () =>
+    void navigator.clipboard?.writeText(link).then(
+      () => setCopied(true),
+      () => {},
+    );
+  return (
+    <div className="mt-6">
+      <div className="mb-3 text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+        <Trans>Connect a phone</Trans>
+      </div>
+      <div className="flex flex-wrap items-start gap-4">
+        {svg ? (
+          <div
+            role="img"
+            aria-label={t`Pairing code for the axn-term app`}
+            className="h-32 w-32 shrink-0 overflow-hidden rounded bg-white p-1"
+            // uqr returns a self-contained <svg>; the link is the only input.
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+        ) : null}
+        <div className="flex min-w-[12rem] flex-1 flex-col gap-2 text-xs leading-relaxed text-[var(--text-secondary)]">
+          <p>
+            <Trans>
+              On the same Wi-Fi, the axn-term app finds this desktop by itself. Anywhere else,
+              scan this code in the app.
+            </Trans>
+          </p>
+          <p>
+            <Trans>
+              Away from home? Put the phone and this computer on the same Tailscale network —
+              the app switches between Wi-Fi and Tailscale and stays the same device.
+            </Trans>
+          </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <code title={link} className="min-w-0 flex-1 truncate text-[10px] opacity-70">
+              {link}
+            </code>
+            <button type="button" className={`${authBtnCls} shrink-0`} onClick={copy}>
+              {copied ? <Trans>Copied</Trans> : <Trans>Copy link</Trans>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RemoteConsoleView() {
   const console_ = shellPlatform()?.remoteConsole;
   const snap = useSyncExternalStore(
@@ -317,70 +663,78 @@ function RemoteConsoleView() {
   const rowCls = 'flex items-center gap-2';
   const labelCls = 'w-28 shrink-0 text-xs text-[var(--text-secondary)]';
 
+  const remoteServer = platform.remoteServer;
   const configSection = (
     <div className="mt-5">
-      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+      <div className="mb-3 text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
         <Trans>Connection</Trans>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <div className={rowCls}>
-          <span className={labelCls}><Trans>Hub URL</Trans></span>
-          <input
-            type="text"
-            value={settings.remoteAuthorityUrl ?? ''}
-            onChange={(e) =>
-              updateSettings({ remoteAuthorityUrl: e.currentTarget.value || undefined })
-            }
-            placeholder="ws://<gateway>:<port>/remote"
-            className={inputCls}
-          />
-        </div>
-        <div className={rowCls}>
-          <span className={labelCls}><Trans>User token</Trans></span>
-          <input
-            type="text"
-            value={settings.remoteAuthorityToken ?? ''}
-            onChange={(e) =>
-              updateSettings({ remoteAuthorityToken: e.currentTarget.value || undefined })
-            }
-            placeholder="optional"
-            className={inputCls}
-          />
-        </div>
-        <div className={rowCls}>
-          <span className={labelCls}><Trans>OIDC issuer</Trans></span>
-          <input
-            type="text"
-            value={settings.remoteAuthIssuer ?? ''}
-            onChange={(e) =>
-              updateSettings({ remoteAuthIssuer: e.currentTarget.value || undefined })
-            }
-            placeholder="https://<host>:<port>/realms/axn-term"
-            className={inputCls}
-          />
-        </div>
-        <div className={rowCls}>
-          <span className={labelCls}><Trans>OIDC client</Trans></span>
-          <input
-            type="text"
-            value={settings.remoteAuthClientId ?? ''}
-            onChange={(e) =>
-              updateSettings({ remoteAuthClientId: e.currentTarget.value || undefined })
-            }
-            placeholder="axn-term-desktop (default)"
-            className={inputCls}
-          />
-        </div>
-        {remoteAuth ? (
-          <div className="mt-1">
-            <RemoteAuthRow
-              auth={auth}
-              remoteAuth={remoteAuth}
-              issuerConfigured={Boolean(settings.remoteAuthIssuer)}
-            />
+      <SetupSteps auth={auth} remoteAuth={remoteAuth} inputCls={inputCls} />
+      <div className="mt-4 flex flex-col gap-1.5">
+        <details
+          className="mt-1"
+          // Hand-configured setups (no discovery server) keep their fields
+          // in view; with a server they are derived and tucked away.
+          open={!remoteServer || (!settings.remoteServer && Boolean(settings.remoteAuthorityUrl))}
+        >
+          <summary className="cursor-pointer select-none text-xs text-[var(--text-secondary)]">
+            <Trans>Advanced</Trans>
+          </summary>
+          <div className="mt-1.5 flex flex-col gap-1.5">
+            <div className={rowCls}>
+              <span className={labelCls}><Trans>Hub URL</Trans></span>
+              <input
+                type="text"
+                value={settings.remoteAuthorityUrl ?? ''}
+                onChange={(e) =>
+                  updateSettings({ remoteAuthorityUrl: e.currentTarget.value || undefined })
+                }
+                placeholder="ws://<gateway>:<port>/remote"
+                className={inputCls}
+              />
+            </div>
+            <div className={rowCls}>
+              <span className={labelCls}><Trans>User token</Trans></span>
+              <input
+                type="text"
+                value={settings.remoteAuthorityToken ?? ''}
+                onChange={(e) =>
+                  updateSettings({ remoteAuthorityToken: e.currentTarget.value || undefined })
+                }
+                placeholder="optional"
+                className={inputCls}
+              />
+            </div>
+            <div className={rowCls}>
+              <span className={labelCls}><Trans>OIDC issuer</Trans></span>
+              <input
+                type="text"
+                value={settings.remoteAuthIssuer ?? ''}
+                onChange={(e) =>
+                  updateSettings({ remoteAuthIssuer: e.currentTarget.value || undefined })
+                }
+                placeholder="https://<host>:<port>/realms/axn-term"
+                className={inputCls}
+              />
+            </div>
+            <div className={rowCls}>
+              <span className={labelCls}><Trans>OIDC client</Trans></span>
+              <input
+                type="text"
+                value={settings.remoteAuthClientId ?? ''}
+                onChange={(e) =>
+                  updateSettings({ remoteAuthClientId: e.currentTarget.value || undefined })
+                }
+                placeholder="axn-term-desktop (default)"
+                className={inputCls}
+              />
+            </div>
           </div>
-        ) : null}
+        </details>
       </div>
+      {remoteServer && settings.remoteServer ? (
+        <PhonePairing link={remoteServer.pairingLink(settings.remoteServer)} />
+      ) : null}
     </div>
   );
 

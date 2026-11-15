@@ -10,17 +10,6 @@
 // Needs a session host (default http://localhost:7682) with bash + curl, e.g.
 //   SESSION_HOST_PORT=7682 AXN_SESSION_HOST_INSECURE=1 dotnet run --project apps/session-host -f net10.0
 
-import { existsSync, mkdirSync, symlinkSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const link = path.join(repoRoot, "node_modules", "@ramphastos", "ramphastos-client");
-const target = path.resolve(repoRoot, "../ramphastos/src/client/ramphastos-client");
-if (!existsSync(link)) {
-  mkdirSync(path.dirname(link), { recursive: true });
-  symlinkSync(target, link, "junction");
-}
 const { RemoteBackend } = await import("../libs/session-backend/src/RemoteBackend.ts");
 
 const BASE = process.argv[2] ?? "http://localhost:7682";

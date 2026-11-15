@@ -1,32 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ShellApp } from '@axn-term/shell-ui';
 import type { FileReader } from '@axn-term/session-backend';
 import { browserServices, WsBackend } from '@axn-term/session-backend';
 import { RemoteBackend, createMirrorStateStore, listRemoteSessions } from '@axn-term/session-backend/remote';
 import { KeycloakProvider, useKeycloak } from './KeycloakContext';
 import { ConnectionGate } from './ConnectionGate';
+import { RemoteWaiting } from './RemoteWaiting';
+import { LoginScreen } from './LoginScreen';
 import { browserPlatform } from './platform';
+import { serverConfig } from './serverConfig';
 
-const wsUrlBase = import.meta.env.VITE_SHELL_WS_URL as string | undefined;
+// Server addresses come from the server's discovery document (or the
+// VITE_* build env as fallback) — see serverConfig.ts.
+const config = serverConfig();
+const wsUrlBase = config.shellWsUrl;
 // "cloud" mode — drive terminals through the hosted session-host hub
 // instead of per-PTY /ws sockets — e.g. wss://<gateway>/cloud (WS-only
 // proxy) or http://<host>:7682/ramphastos (direct session host).
-// VITE_RAMPHASTOS_URL kept as a deprecated alias.
-// `||` not `??`: compose injects these as empty strings when unset, and ''
-// must not win over a real fallback (or produce a falsy hub that silently
-// lands on the local /ws backend).
-const cloudUrl = ((import.meta.env.VITE_CLOUD_URL ||
-  import.meta.env.VITE_RAMPHASTOS_URL) || undefined) as string | undefined;
+const cloudUrl = config.cloudUrl;
 // Client-authoritative mirror: attach to a desktop's mirrored session on the
-// /remote hub. ?remote=<session-id> in the URL wins over the env so a mobile
-// browser can pick a desktop without a rebuild.
-const remoteHubUrl =
-  new URLSearchParams(window.location.search).get('hub') ||
-  (import.meta.env.VITE_REMOTE_URL as string | undefined) ||
-  // Default: the mirror hub on the same gateway that serves /ws — /remote is
-  // the authority/viewer endpoint, NOT /ramphastos (the hosted session host,
-  // which would silently create a fresh container session).
-  (wsUrlBase ? wsUrlBase.replace(/\/ws\/?$/, '/remote') : undefined);
+// /remote hub. ?hub= in the URL wins so a mobile browser can pick a hub
+// without a rebuild.
+const remoteHubUrl = new URLSearchParams(window.location.search).get('hub') || config.remoteHubUrl;
 const remoteParam = new URLSearchParams(window.location.search).get('remote');
 const remoteSessionId =
   remoteParam || (import.meta.env.VITE_REMOTE_SESSION as string | undefined);
@@ -37,13 +32,12 @@ const remoteSessionId =
 // path does not exist for this build — the account's mirrored desktops
 // are the only sessions. Backend retries keep rediscovering, so a
 // desktop appearing later attaches on its own.
-const remoteOnly = /^(1|true|yes)$/i.test(
-  String(import.meta.env.VITE_REMOTE_ONLY ?? ''),
-);
+const remoteOnly = config.remoteOnly;
 const mirrorModeParam = remoteParam !== null || remoteSessionId !== undefined;
 
 function AppContent() {
-  const { authenticated, login, logout, updateToken, username } = useKeycloak();
+  const { authenticated, login, logout, updateToken, username, pending, cancelLogin, authError, loginLabel } =
+    useKeycloak();
 
   // Mode is account state, not a URL: when the signed-in account owns a
   // mirrored desktop session (gateway /remote/sessions), this device is a
@@ -154,14 +148,18 @@ function AppContent() {
 
   // The /tasks stream needs a bearer token too (gateway authenticates it).
   const tasksWsUrl = useCallback(async () => {
-    const base =
-      (import.meta.env.VITE_TASKS_WS_URL as string | undefined) ??
-      wsUrlBase?.replace(/\/ws$/, '');
+    const base = config.tasksWsBase;
     if (!base) return null;
     const token = await updateToken(30);
     const url = `${base}/tasks`;
     return token ? `${url}?access_token=${encodeURIComponent(token)}` : url;
   }, [updateToken]);
+
+  const tokenForStatus = useCallback(() => updateToken(30), [updateToken]);
+  // A desktop just came online: attach now instead of after the backoff.
+  const retryAttach = useCallback(() => {
+    if (backend instanceof RemoteBackend) backend.remoteConsole?.retryNow?.();
+  }, [backend]);
 
   if (authenticated === null) {
     return (
@@ -173,21 +171,28 @@ function AppContent() {
 
   if (!authenticated) {
     return (
-      <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-[var(--bg)] text-[var(--text-primary)]">
-        <h1 className="text-xl font-semibold">Axn Term</h1>
-        <button
-          type="button"
-          onClick={login}
-          className="rounded bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-        >
-          Log in with Keycloak
-        </button>
-      </div>
+      <LoginScreen
+        onLogin={login}
+        loginLabel={loginLabel}
+        pending={pending}
+        onCancel={cancelLogin}
+        authError={authError}
+        serverName={config.serverName}
+        onChangeServer={config.changeServer}
+      />
     );
   }
 
   return (
     <ConnectionGate endpoints={[hubUrl ?? wsUrlBase]}>
+      {mirrorMode && hubUrl ? (
+        <RemoteWaiting
+          hubUrl={hubUrl}
+          getToken={tokenForStatus}
+          onDesktopOnline={retryAttach}
+          onSignOut={logout}
+        />
+      ) : null}
       <ShellApp
         backend={backend}
         services={browserServices}
@@ -199,10 +204,16 @@ function AppContent() {
   );
 }
 
-export default function App() {
+/** `AuthProvider` swaps the sign-in (the mobile app passes its device-code
+ *  provider); the browser uses Keycloak's redirect login. */
+export default function App({
+  AuthProvider = KeycloakProvider,
+}: {
+  AuthProvider?: (props: { children: ReactNode }) => ReactNode;
+}) {
   return (
-    <KeycloakProvider>
+    <AuthProvider>
       <AppContent />
-    </KeycloakProvider>
+    </AuthProvider>
   );
 }

@@ -6,21 +6,10 @@
 //
 // Needs a session host running (default http://localhost:7682), e.g.
 //   SESSION_HOST_PORT=7682 dotnet run --project apps/session-host -f net10.0
-// '@ramphastos/ramphastos-client' resolves through a node_modules symlink into the
-// sibling checkout (../ramphastos next to axn-term) — created on demand below;
-// rebuild the package when its sources change.
-
-import { existsSync, mkdirSync, symlinkSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const link = path.join(repoRoot, "node_modules", "@ramphastos", "ramphastos-client");
-const target = path.resolve(repoRoot, "../ramphastos/src/client/ramphastos-client");
-if (!existsSync(link)) {
-  mkdirSync(path.dirname(link), { recursive: true });
-  symlinkSync(target, link, "junction");
-}
+// 'ramphastos-client' resolves from node_modules (the published package)
+// — RemoteBackend.ts finds it through libs/session-backend's own
+// dependency. Scripts importing the client directly take
+// RAMPHASTOS_CLIENT_DIST for a local build.
 
 const { RemoteBackend } = await import("../libs/session-backend/src/RemoteBackend.ts");
 

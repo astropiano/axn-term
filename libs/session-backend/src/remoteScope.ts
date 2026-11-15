@@ -81,3 +81,97 @@ export async function listRemoteSessions(
         },
   );
 }
+
+/* ── "Why doesn't my desktop show up?" ─────────────────────────────────
+ * GET <hub>/status — the account's mirrored sessions plus its recent hub
+ * hello attempts (with the reason each denied one was refused). Viewers
+ * show it while they wait, desktops next to their publish state.
+ */
+
+export interface RemoteHelloAttempt {
+  at: string;
+  /** 'Authority' (a desktop publishing) | 'Controller' | 'Viewer'. */
+  role: string;
+  session?: string | null;
+  accepted: boolean;
+  reason?: string | null;
+}
+
+export interface RemoteStatus {
+  account: { sub: string; user?: string | null };
+  sessions: RemoteSessionInfo[];
+  attempts: RemoteHelloAttempt[];
+}
+
+// Plain fields, no parameter properties: the e2e scripts load these
+// sources with `node --experimental-strip-types`, which can't parse them.
+export class RemoteStatusError extends Error {
+  readonly status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export async function fetchRemoteStatus(
+  url: string,
+  token: string | undefined,
+  fetchImpl: typeof fetch = fetch,
+): Promise<RemoteStatus> {
+  const http = url.replace(/^ws/, 'http').replace(/\/+$/, '');
+  const res = await fetchImpl(`${http}/status`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    signal: AbortSignal.timeout(5_000),
+  });
+  const body = (await res.json().catch(() => null)) as (Partial<RemoteStatus> & { error?: string }) | null;
+  if (!res.ok) throw new RemoteStatusError(body?.error ?? `HTTP ${res.status}`, res.status);
+  return {
+    account: body?.account ?? { sub: '' },
+    sessions: Array.isArray(body?.sessions) ? body.sessions : [],
+    attempts: Array.isArray(body?.attempts) ? body.attempts : [],
+  };
+}
+
+export interface RemoteStatusSummary {
+  /** waiting = nothing yet; denied = the desktop tried and was refused;
+   *  offline = it was here and went away; online = attachable. */
+  kind: 'waiting' | 'denied' | 'offline' | 'online';
+  title: string;
+  detail: string;
+}
+
+function ago(iso: string, now: number): string {
+  const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));
+  if (!Number.isFinite(s)) return 'recently';
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  return `${Math.round(s / 3600)} h ago`;
+}
+
+/** Plain-language state for the viewer's waiting screen. */
+export function describeRemoteStatus(status: RemoteStatus, now = Date.now()): RemoteStatusSummary {
+  const who = status.account.user ? ` for ${status.account.user}` : '';
+  if (status.sessions.some((s) => s.online))
+    return { kind: 'online', title: 'Desktop online', detail: 'Connecting to it…' };
+  const lastDesktop = status.attempts.find((a) => a.role.toLowerCase() === 'authority');
+  if (lastDesktop && !lastDesktop.accepted)
+    return {
+      kind: 'denied',
+      title: 'Your desktop was refused',
+      detail: `It tried to connect ${ago(lastDesktop.at, now)}: ${lastDesktop.reason ?? 'refused'}. ` +
+        'In axn-term on the computer, open Remote and sign in again with this same account.',
+    };
+  if (status.sessions.length)
+    return {
+      kind: 'offline',
+      title: 'Your desktop is offline',
+      detail: 'It was connected before. Check that axn-term is running on the computer and has network.',
+    };
+  return {
+    kind: 'waiting',
+    title: `No desktop is publishing${who} yet`,
+    detail:
+      'On your computer, open axn-term → Remote (globe icon) → enter this server under Server → Connect, ' +
+      'then Sign in with the same account you used here.',
+  };
+}

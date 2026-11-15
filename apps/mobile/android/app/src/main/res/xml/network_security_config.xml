@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Self-hosted servers on a home network often use their own certificate
+  authority (scenarios/axn-term-online/make-dev-certs.sh, Caddy's internal
+  CA). Trusting user-installed CAs lets the app reach them once the owner
+  installs that CA on the phone (Settings → Security → Install a
+  certificate → CA certificate). Public servers and Tailscale (*.ts.net,
+  Let's Encrypt) need nothing extra.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
