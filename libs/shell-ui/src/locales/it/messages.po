@@ -12,8 +12,7 @@ msgstr "{0} {1} in esecuzione verranno terminati"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} è in esecuzione nel checkout principale — isolarlo in un worktree?"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1147
-#: libs/shell-ui/src/app/SessionPanel.tsx:2044
+#: libs/shell-ui/src/app/SessionPanel.tsx:2181
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} in attesa"
 
@@ -21,6 +20,7 @@ msgstr "{attentionCount} in attesa"
 msgid "{cli} is installed"
 msgstr "{cli} è installato"
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:1164
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "Un nome di icona Lucide (es. <0>GitFork</0>) o un tag SVG inline, es. <1>{SVG_HINT_EXAMPLE}</1>"
 
@@ -28,8 +28,8 @@ msgstr "Un nome di icona Lucide (es. <0>GitFork</0>) o un tag SVG inline, es. <1
 #~ msgid "Account"
 #~ msgstr "Account"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1172
-#: libs/shell-ui/src/app/SettingsModal.tsx:1174
+#: libs/shell-ui/src/app/SettingsModal.tsx:1189
+#: libs/shell-ui/src/app/SettingsModal.tsx:1191
 msgid "Add icon"
 msgstr "Aggiungi icona"
 
@@ -83,7 +83,7 @@ msgstr "Font integrato"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:115
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1158
+#: libs/shell-ui/src/app/SettingsModal.tsx:1175
 msgid "Cancel"
 msgstr "Annulla"
 
@@ -127,7 +127,7 @@ msgstr "Chiudi"
 msgid "Close tab"
 msgstr "Chiudi scheda"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:484
+#: libs/shell-ui/src/app/SessionPanel.tsx:544
 msgid "Collapse"
 msgstr "Comprimi"
 
@@ -231,7 +231,7 @@ msgid "Delete {0}"
 msgstr "Elimina {0}"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:527
+#: libs/shell-ui/src/app/SessionPanel.tsx:587
 msgid "Delete workspace"
 msgstr "Elimina workspace"
 
@@ -256,11 +256,11 @@ msgstr "Non chiedere più"
 msgid "Edit"
 msgstr "Modifica"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1101
+#: libs/shell-ui/src/app/SettingsModal.tsx:1118
 msgid "Edit icon"
 msgstr "Modifica icona"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:753
+#: libs/shell-ui/src/app/SessionPanel.tsx:819
 msgid "Edit summary…"
 msgstr "Modifica riepilogo…"
 
@@ -290,7 +290,7 @@ msgstr "Fine dell’elenco delle sessioni"
 msgid "Enter code {0} in the browser to finish sign-in."
 msgstr "Inserisci il codice {0} nel browser per completare l'accesso."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:484
+#: libs/shell-ui/src/app/SessionPanel.tsx:544
 msgid "Expand"
 msgstr "Espandi"
 
@@ -306,7 +306,7 @@ msgstr "Esporta…"
 msgid "Exported."
 msgstr "Esportato."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:801
+#: libs/shell-ui/src/app/SessionPanel.tsx:803
 msgid "F2 · double-click"
 msgstr "F2 · doppio clic"
 
@@ -315,7 +315,7 @@ msgstr "F2 · doppio clic"
 #~ msgid "Failed: {0}"
 #~ msgstr "Fallito: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:799
+#: libs/shell-ui/src/app/SessionPanel.tsx:801
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "Più veloce: F2 sulla sessione selezionata o doppio clic sul nome"
 
@@ -331,7 +331,7 @@ msgstr "Anteprime file"
 msgid "Filter plugins…"
 msgstr "Filtra plugin…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:194
+#: libs/shell-ui/src/app/SessionPanel.tsx:254
 msgid "Filter sessions…"
 msgstr "Filtra sessioni…"
 
@@ -351,7 +351,7 @@ msgstr "Font per la barra laterale, il pannello delle sessioni, le schede e le f
 msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
 msgstr "Font del pannello sessioni/workspace. La dimensione è relativa al valore predefinito di 12px."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1261
+#: libs/shell-ui/src/app/FontPicker.tsx:252
 msgid "Font not installed — keeping the previous font."
 msgstr "Font non installato — viene mantenuto il font precedente."
 
@@ -468,19 +468,19 @@ msgstr "Associa i nomi degli eseguibili o gli ID dei plugin a un'icona Lucide (e
 msgid "Move “{sessionName}” to workspace"
 msgstr "Sposta «{sessionName}» nel workspace"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:885
+#: libs/shell-ui/src/app/SessionPanel.tsx:951
 msgid "Move to new window"
 msgstr "Sposta in una nuova finestra"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:869
+#: libs/shell-ui/src/app/SessionPanel.tsx:935
 msgid "Move to workspace…"
 msgstr "Sposta nel workspace…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2025
-#: libs/shell-ui/src/app/SessionPanel.tsx:1402
+#: libs/shell-ui/src/app/SessionPanel.tsx:1568
 msgid "Needs you"
 msgstr "Ti aspetta"
 
+#: libs/shell-ui/src/app/SessionPanel.tsx:2351
 msgid "New session"
 msgstr "Nuova sessione"
 
@@ -488,11 +488,11 @@ msgstr "Nuova sessione"
 msgid "New session button"
 msgstr "Pulsante \"Nuova sessione\""
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2098
+#: libs/shell-ui/src/app/SessionPanel.tsx:2470
 msgid "New session in folder…"
 msgstr "Nuova sessione nella cartella…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:513
+#: libs/shell-ui/src/app/SessionPanel.tsx:573
 msgid "New session in workspace"
 msgstr "Nuova sessione nel workspace"
 
@@ -506,7 +506,7 @@ msgstr "Nuova sessione con agente…"
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "Le nuove sessioni in «{0}» partono in questa cartella. Lascia vuoto per la home."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:214
+#: libs/shell-ui/src/app/SessionPanel.tsx:274
 msgid "New workspace"
 msgstr "Nuovo workspace"
 
@@ -525,7 +525,7 @@ msgstr "Nuova sessione worktree"
 msgid "no clients"
 msgstr "nessun client"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1111
+#: libs/shell-ui/src/app/SettingsModal.tsx:1128
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "Nessuna icona configurata — ogni sessione mostra l'icona di terminale predefinita."
 
@@ -583,7 +583,7 @@ msgstr "solo questo dispositivo, nessuna sessione aperta"
 msgid "Open"
 msgstr "Apri"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2078
+#: libs/shell-ui/src/app/SessionPanel.tsx:2450
 msgid "Open a saved workspace set file"
 msgstr "Apri un file di set di workspace salvato"
 
@@ -611,11 +611,11 @@ msgstr "Apri cartella dei log…"
 msgid "Open preview in a tab"
 msgstr "Apri l'anteprima in una scheda"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2086
+#: libs/shell-ui/src/app/SessionPanel.tsx:2458
 msgid "Open workspace set from file…"
 msgstr "Apri set di workspace da file…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1857
+#: libs/shell-ui/src/app/SessionPanel.tsx:2146
 msgid "Open…"
 msgstr "Apri…"
 
@@ -645,7 +645,7 @@ msgstr "Metti in pausa la vista"
 msgid "permissions:"
 msgstr "permessi:"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2093
+#: libs/shell-ui/src/app/SessionPanel.tsx:2465
 msgid "Pick a folder — the new session starts in it"
 msgstr "Scegli una cartella — la nuova sessione si avvia lì"
 
@@ -662,7 +662,7 @@ msgstr "Anteprima"
 msgid "Preview unavailable"
 msgstr "Anteprima non disponibile"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1120
+#: libs/shell-ui/src/app/SettingsModal.tsx:1137
 msgid "Process"
 msgstr "Processo"
 
@@ -719,7 +719,7 @@ msgstr "Accesso remoto"
 #~ msgid "Remote control"
 #~ msgstr "Controllo remoto"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1104
+#: libs/shell-ui/src/app/SettingsModal.tsx:1121
 msgid "Remove icon"
 msgstr "Rimuovi icona"
 
@@ -727,7 +727,7 @@ msgstr "Rimuovi icona"
 msgid "Remove worktree"
 msgstr "Rimuovi worktree"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1342
+#: libs/shell-ui/src/app/SessionPanel.tsx:1508
 msgid "Rename session"
 msgstr "Rinomina sessione"
 
@@ -741,7 +741,7 @@ msgstr "Mostra i riepiloghi delle sessioni (via axn-session-summary)"
 msgid "requires {0}{1}"
 msgstr "richiede {0}{1}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:706
+#: libs/shell-ui/src/app/SessionPanel.tsx:766
 msgid "Reset to process name"
 msgstr "Ripristina il nome del processo"
 
@@ -778,7 +778,7 @@ msgstr "Esegui in una scheda shell"
 msgid "Run the login in a shell, then check again."
 msgstr "Esegui l'accesso in una shell, poi controlla di nuovo."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2272
+#: libs/shell-ui/src/app/SessionPanel.tsx:2409
 msgid "Running"
 msgstr "Attive"
 
@@ -788,11 +788,11 @@ msgstr "in sandbox — nessun permesso (nessun accesso a shell, file o terminale
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1166
+#: libs/shell-ui/src/app/SettingsModal.tsx:1183
 msgid "Save"
 msgstr "Salva"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1853
+#: libs/shell-ui/src/app/SessionPanel.tsx:2142
 msgid "Save workspace set"
 msgstr "Salva set di workspace"
 
@@ -822,8 +822,8 @@ msgstr "Seleziona questa cartella"
 #~ msgid "Server URL"
 #~ msgstr "URL del server"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1378
-#: libs/shell-ui/src/app/SessionPanel.tsx:1380
+#: libs/shell-ui/src/app/SessionPanel.tsx:1544
+#: libs/shell-ui/src/app/SessionPanel.tsx:1546
 msgid "Session actions"
 msgstr "Azioni sessione"
 
@@ -855,7 +855,7 @@ msgstr "Riepilogo della sessione"
 msgid "Session: {0}"
 msgstr "Sessione: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2267
+#: libs/shell-ui/src/app/SessionPanel.tsx:2404
 msgid "Sessions"
 msgstr "Sessioni"
 
@@ -885,11 +885,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Font della shell"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2037
+#: libs/shell-ui/src/app/SessionPanel.tsx:2174
 msgid "Show all sessions"
 msgstr "Mostra tutte le sessioni"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2037
+#: libs/shell-ui/src/app/SessionPanel.tsx:2174
 msgid "Show only sessions that need you"
 msgstr "Mostra solo le sessioni che ti aspettano"
 
@@ -913,7 +913,7 @@ msgstr "Esci"
 msgid "Signed in as {0}"
 msgstr "Accesso effettuato come {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3311
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3331
 msgid "Start workflow…"
 msgstr "Avvia workflow…"
 
