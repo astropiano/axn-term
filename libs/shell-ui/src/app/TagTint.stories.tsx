@@ -5,7 +5,7 @@ import { SessionPanel } from './SessionPanel';
 import { PluginSettingsProvider } from './PluginSettingsProvider';
 import { StoryShellProviders } from './storyMocks';
 import { ShellServicesProvider } from '../services';
-import { TAG_SLOTS } from '../themes';
+import { TAG_SLOTS, defaultThemeId, getTheme } from '../themes';
 import type { ShellSession, Workspace } from '../types';
 import { taggingPlugin } from './session-plugins/tagging';
 import { TINT_INTENSITY } from './session-plugins/tint';
@@ -63,13 +63,24 @@ interface Args {
 const pluginsYaml = (a: Args) =>
   dump({ tagging: { enabled: true, colors: { backend: a.workspaceTag, 'load-test': a.loadTestTag, urgent: a.urgentTag } } });
 
-const configYaml = (a: Args) =>
-  dump(
-    a.showTagNames
-      ? { sessionCard: { ...DEFAULT_SESSION_CARD, title: ['core.name', 'tagging.tags', 'core.status'] } }
-      : {},
+/**
+ * The story's SettingsProvider applies the configured theme on mount, so the
+ * toolbar theme goes in here — otherwise it would be overridden, and the tag
+ * slots would resolve through the wrong theme.
+ */
+const configYaml = (a: Args, themeId: string) => {
+  const theme = getTheme(themeId);
+  return dump(
+    {
+      theme: theme.mode,
+      [theme.mode === 'light' ? 'lightTheme' : 'darkTheme']: theme.id,
+      ...(a.showTagNames
+        ? { sessionCard: { ...DEFAULT_SESSION_CARD, title: ['core.name', 'tagging.tags', 'core.status'] } }
+        : {}),
+    },
     { sortKeys: false },
   );
+};
 
 function Panel(args: Args) {
   const [selected, setSelected] = useState(args.selected);
@@ -132,11 +143,14 @@ const meta = {
   title: 'app/Tag tints',
   component: Panel,
   decorators: [
-    (Story, ctx) => (
-      <StoryShellProviders configYaml={configYaml(ctx.args as Args)}>
-        <Story />
-      </StoryShellProviders>
-    ),
+    (Story, ctx) => {
+      const themeId = (ctx.globals.theme as string | undefined) ?? defaultThemeId;
+      return (
+        <StoryShellProviders key={themeId} configYaml={configYaml(ctx.args as Args, themeId)}>
+          <Story />
+        </StoryShellProviders>
+      );
+    },
   ],
   argTypes: {
     workspace: percent,
