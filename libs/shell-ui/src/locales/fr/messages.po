@@ -138,7 +138,7 @@ msgstr "Clients : {0}"
 msgid "Close"
 msgstr "Fermer"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2996
+#: libs/shell-ui/src/app/ShellApp.tsx:2997
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
@@ -892,6 +892,14 @@ msgstr "Enregistrer"
 msgid "Save workspace set"
 msgstr "Enregistrer le jeu de workspaces"
 
+#: libs/shell-ui/src/app/TabStrip.tsx:73
+msgid "Scroll tabs left"
+msgstr "Faire défiler les onglets vers la gauche"
+
+#: libs/shell-ui/src/app/TabStrip.tsx:95
+msgid "Scroll tabs right"
+msgstr "Faire défiler les onglets vers la droite"
+
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:59
 msgid "Search workspaces or windows…"
 msgstr "Rechercher des workspaces ou fenêtres…"
@@ -980,8 +988,8 @@ msgstr "Réglages"
 #~ msgid "shell"
 #~ msgstr "shell"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:43
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:49
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:44
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:50
 msgid "Shell"
 msgstr "Shell"
 

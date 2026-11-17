@@ -113,7 +113,8 @@ import { CloseConfirmModal } from './CloseConfirmModal';
 import { TabContextMenu } from './TabContextMenu';
 import { useSessionCommands } from './useSessionCommands';
 import { SessionTabStrip } from './SessionTabStrip';
-import { tabStripClasses, tabStripTabClasses } from './tabStyles';
+import { tabStripTabClasses } from './tabStyles';
+import { TabStrip } from './TabStrip';
 import { browserTabPatch, ideTabPatch, resolveSessionPath } from './shellCommandSupport';
 import { BroadcastDeck } from './BroadcastDeck';
 import { broadcastSet, useBroadcastSet } from './broadcastSet';
@@ -3019,9 +3020,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           return (
             <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
               {tabSet && (
-                <div
-                  className={tabStripClasses}
-                  data-tauri-drag-region
+                <TabStrip
+                  activeTab={viewTab}
                   onTouchStart={handleTabStripTouchStart}
                   onTouchMove={handleTabStripTouchMove}
                   onTouchEnd={handleTabStripTouchEnd}
@@ -3030,6 +3030,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 >
                   <button
                     type="button"
+                    data-tab-id="view"
                     onClick={() => updatePluginTabs(viewPlugin.id, { activeTab: 'view' })}
                     data-tip={viewPlugin.title}
                     className={`relative flex shrink-0 items-center gap-1.5 px-2.5 text-xs transition-colors duration-[var(--dur-1)] ${tabStripTabClasses(
@@ -3087,7 +3088,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                       </button>
                     </div>
                   ))}
-                </div>
+                </TabStrip>
               )}
               <div className="min-h-0 flex-1">
                 <div
