@@ -70,3 +70,22 @@ describe('parseCardLayout', () => {
     expect(parseCardLayout('nope')).toBeUndefined();
   });
 });
+
+describe('optIn fields', () => {
+  const fields: FieldMeta[] = [
+    ...CORE_FIELDS,
+    { id: 'a.chip', label: 'Chip', kind: 'inline', zone: 'title', optIn: true },
+    { id: 'b.row', label: 'Row', kind: 'inline', zone: 'always' },
+  ];
+  const flat = (l: ReturnType<typeof resolveCardLayout>) => [...l.title, ...l.always.flat(), ...l.selected.flat()];
+
+  it('are absent unless placed, while other plugin fields keep their default', () => {
+    expect(flat(resolveCardLayout(undefined, fields))).not.toContain('a.chip');
+    expect(flat(resolveCardLayout(undefined, fields))).toContain('b.row');
+    expect(flat(defaultCardLayout(fields))).not.toContain('a.chip');
+  });
+
+  it('appear where the layout places them', () => {
+    expect(resolveCardLayout({ title: ['core.name', 'a.chip'] }, fields).title).toContain('a.chip');
+  });
+});

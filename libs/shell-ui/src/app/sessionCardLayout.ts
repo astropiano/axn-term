@@ -25,6 +25,8 @@ export interface FieldMeta {
   kind: 'inline' | 'block';
   /** Where the default layout puts it. */
   zone: SessionZone;
+  /** Shown only where the `sessionCard` setting places it — never by default. */
+  optIn?: boolean;
 }
 
 /** The `sessionCard` setting (config.yaml). Every member optional. */
@@ -59,7 +61,7 @@ export const CORE_FIELDS: FieldMeta[] = [
  * `fields` lists plugin fields in plugin order.
  */
 export function defaultCardLayout(fields: FieldMeta[]): ResolvedCardLayout {
-  const plugin = fields.filter((f) => !f.id.startsWith('core.'));
+  const plugin = fields.filter((f) => !f.id.startsWith('core.') && !f.optIn);
   const inZone = (zone: SessionZone) => plugin.filter((f) => f.zone === zone);
   return {
     title: ['core.name', ...inZone('title').filter((f) => f.kind === 'inline').map((f) => f.id), 'core.status'],
@@ -104,7 +106,7 @@ export function parseCardLayout(raw: unknown): SessionCardLayout | undefined {
  * explicitly anywhere is left out of zones still on their default; ids naming no
  * available field are skipped (a disabled plugin's fields simply vanish);
  * a block field configured into the title row moves to the selected zone.
- * Every available field placed nowhere and not `hidden` is appended to its
+ * Every available field placed nowhere and not `hidden` (or `optIn`) is appended to its
  * default zone, so a newly enabled plugin is never invisible. `core.name`
  * is always in the title row.
  */
@@ -148,7 +150,7 @@ export function resolveCardLayout(
   const selected = [...zoneRows(layout?.selected, defaults.selected), ...demoted];
   // Unplaced fields fall back to their default zone.
   for (const f of fields) {
-    if (placed.has(f.id) || hidden.has(f.id)) continue;
+    if (placed.has(f.id) || hidden.has(f.id) || f.optIn) continue;
     placed.add(f.id);
     if (f.zone === 'title' && f.kind === 'inline') {
       // Before core.status when it sits at the end of the title row.

@@ -201,3 +201,5 @@ to right.
   add one), not every tag in use.
 - The workspace tint paints the whole workspace block (header and sessions) with rounded corners,
   bleeding 6px past the list gutter so the container is visible.
+- The `tagging.tags` field is opt-in (`SessionField.optIn`): absent from the default layout and
+  shown only where `sessionCard` places it. The colour tint is independent of it.

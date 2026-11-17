@@ -279,8 +279,8 @@ derived from the string (`tagColor`) unless overridden in the plugin's
 `colors` map in plugins.yaml (edited in Settings → Plugins → Tags,
 `TagColorSettings`); a workspace's tint paints the whole workspace block; picked/created through `TagModal`
 (`openTagModal` in `app/tagHost.tsx`, mounted as `TagHost` in `ShellApp`); the
-`tagging.tags` card field is placed or hidden through `sessionCard` like any
-other. Design: `docs/superpowers/specs/2026-11-17-tagging-plugin-design.md`.
+`tagging.tags` card field is `optIn`: it shows only where `sessionCard` places it
+(default layout shows no tag name, the tint stays). Design: `docs/superpowers/specs/2026-11-17-tagging-plugin-design.md`.
 
 Plugins can declare hidden commands via `commands?: (string | PluginCommand)[]`
 — they join the built-in `axn-*` names for Tab completion. A plain string is

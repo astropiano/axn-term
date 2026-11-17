@@ -79,15 +79,17 @@ it('uses a configured colour over the derived one for sessions and workspaces', 
   expect(taggingPlugin.workspaceColors!({ workspace: ws('w', ['X']), pluginSettings })).toEqual(['#123456']);
 });
 
-it('shows the tag name only where the sessionCard layout places it, and nowhere when hidden', () => {
+it('shows the tag name only where the sessionCard layout places it', () => {
   const meta: FieldMeta[] = taggingPlugin.sessionFields!.map((f) => ({
     id: `tagging.${f.id}`,
     label: f.label,
     kind: f.kind,
     zone: f.zone,
+    optIn: f.optIn,
   }));
-  expect(resolveCardLayout(undefined, meta).title).toContain('tagging.tags');
+  const all = (l: ReturnType<typeof resolveCardLayout>) => [...l.title, ...l.always.flat(), ...l.selected.flat()];
+  expect(all(resolveCardLayout(undefined, meta))).not.toContain('tagging.tags');
+  expect(resolveCardLayout({ title: ['core.name', 'tagging.tags'] }, meta).title).toContain('tagging.tags');
   expect(resolveCardLayout({ always: [['tagging.tags']] }, meta).always).toEqual([['tagging.tags']]);
-  const hidden = resolveCardLayout({ hidden: ['tagging.tags'] }, meta);
-  expect([...hidden.title, ...hidden.always.flat(), ...hidden.selected.flat()]).not.toContain('tagging.tags');
+  expect(all(resolveCardLayout({ hidden: ['tagging.tags'], title: ['tagging.tags'] }, meta))).not.toContain('tagging.tags');
 });
