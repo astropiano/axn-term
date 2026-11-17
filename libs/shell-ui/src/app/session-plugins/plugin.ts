@@ -842,15 +842,18 @@ export interface SessionViewPlugin {
    */
   workspaceActions?: (ctx: WorkspaceActionContext) => RepoMenuItem[];
   /**
-   * Colours (hex) this plugin gives the session's card. The panel combines
-   * every plugin's colours into equal left-to-right bands and decides the
-   * intensity (stronger when selected). Synchronous and cheap — called per
-   * render; a throwing hook contributes nothing.
+   * Colours this plugin gives the session's card: a hex value, or a theme
+   * tag slot name (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`,
+   * `violet`, `magenta`) drawn in the active theme's shade. The panel
+   * combines every plugin's colours into equal left-to-right bands and
+   * decides the shades. Synchronous and cheap — called per render; a
+   * throwing hook contributes nothing.
    */
   sessionColors?: (ctx: SessionViewContext & PluginApi) => string[];
   /**
-   * Colours (hex) this plugin gives a workspace header, always at the faint
-   * intensity. Needs no session, so empty workspaces can be coloured.
+   * Colours (hex or theme tag slot, as `sessionColors`) this plugin gives a
+   * workspace block, at the faintest shade. Needs no session, so empty
+   * workspaces can be coloured.
    */
   workspaceColors?: (ctx: { workspace: Workspace; pluginSettings: unknown }) => string[];
   /**

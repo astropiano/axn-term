@@ -13,7 +13,8 @@ import { useSettings } from '../SettingsProvider';
 import { fontStackAvailable } from '../themes';
 import { usePluginSettings } from './PluginSettingsProvider';
 import { createPluginApi } from './session-plugins/plugin';
-import { TINT_CLASS, TINT_HOVER_CLASS, resolveTint, tintStyle, tintTextVars } from './session-plugins/tint';
+import { TINT_CLASS, TINT_HOVER_CLASS, resolveColour, resolveTint, tintStyle, tintTextVars } from './session-plugins/tint';
+import { themeTagPalette } from '../themes';
 import { AttentionDot } from './AttentionDot';
 import { sessionAttention, summarizeAttention } from './attention';
 import { IconButton } from './IconButton';
@@ -1245,7 +1246,8 @@ export function SessionItem({
   const taskListRef = useRef<HTMLUListElement | null>(null);
   const [taskListMaxHeight, setTaskListMaxHeight] = useState<number | undefined>(undefined);
   const { pluginSettings } = usePluginSettings();
-  const { settings } = useSettings();
+  const { settings, activeTheme } = useSettings();
+  const tagPalette = themeTagPalette(activeTheme);
   const attention = summarizeAttention(sessionAttention(session, plugins));
   const attentionColor = attention?.level === 'warning' ? 'var(--orange)' : 'var(--attention)';
   const metaLine = sessionMetaLine(session, attention?.title);
@@ -1282,13 +1284,15 @@ export function SessionItem({
       pluginData,
       mergePluginData,
     });
-  const colours = plugins.flatMap((plugin) => {
-    try {
-      return plugin.sessionColors?.(apiFor(plugin)) ?? [];
-    } catch {
-      return [];
-    }
-  });
+  const colours = plugins
+    .flatMap((plugin) => {
+      try {
+        return plugin.sessionColors?.(apiFor(plugin)) ?? [];
+      } catch {
+        return [];
+      }
+    })
+    .flatMap((token) => resolveColour(token, tagPalette) ?? []);
   // Selected: solid title row on a lighter expanded body.
   const tint = resolveTint(colours, isSelected ? 'selectedCard' : 'card');
   const titleTint = isSelected ? resolveTint(colours, 'selectedTitle') : undefined;
@@ -1791,7 +1795,7 @@ export function SessionPanel({
   onOpenPluginView,
 }: SessionPanelProps) {
   const { t } = useLingui();
-  const { settings } = useSettings();
+  const { settings, activeTheme } = useSettings();
   const [dragSessionId, setDragSessionId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{
     workspaceId: string;
@@ -1959,7 +1963,7 @@ export function SessionPanel({
               workspace,
               pluginSettings: pluginSettings[plugin.settingsKey ?? plugin.id],
             }) ?? []
-          );
+          ).flatMap((token) => resolveColour(token, themeTagPalette(activeTheme)) ?? []);
         } catch {
           return [];
         }

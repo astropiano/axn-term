@@ -5,6 +5,7 @@ import type { ShellSession, Workspace } from '../../types';
 import { openTagModal } from '../tagHost';
 import type { SessionViewPlugin } from './plugin';
 import { TAGGING, tagColor, tagColorOverrides } from './taggingModel';
+import { cssColour } from './tint';
 import { TagColorSettings } from './TagColorSettings';
 
 const tagsOf = (state: unknown): string[] => {
@@ -49,8 +50,8 @@ export const taggingPlugin: SessionViewPlugin = {
                 key={tag}
                 className="inline-flex items-center gap-0.5 truncate rounded-full px-1.5 text-[10px] leading-[16px]"
                 style={{
-                  color: `color-mix(in srgb, ${tagColor(tag, colors)} 80%, var(--text-primary))`,
-                  backgroundColor: `color-mix(in srgb, ${tagColor(tag, colors)} 18%, transparent)`,
+                  color: `color-mix(in srgb, ${cssColour(tagColor(tag, colors))} 80%, var(--text-primary))`,
+                  backgroundColor: `color-mix(in srgb, ${cssColour(tagColor(tag, colors))} 18%, transparent)`,
                 }}
               >
                 <Tag className="h-2.5 w-2.5 shrink-0" />

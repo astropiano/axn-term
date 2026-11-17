@@ -59,7 +59,9 @@ it('lists every tag in use on sessions and workspaces, plus colour-only entries,
   await open({ colors: { legacy: '#111111' } }, [session('a', ['Urgent', 'x']), session('b', ['urgent'])], [workspace('w', ['Team'])]);
   const names = [...container.querySelectorAll('span.truncate')].map((s) => s.textContent);
   expect(names).toEqual(['legacy', 'Team', 'Urgent', 'x']);
-  expect(byLabel('Colour of Urgent (hex)')!.value).toBe(tagColor('Urgent'));
+  // a derived colour is a theme slot: its swatch is pressed and the hex box is empty
+  expect(byLabel(`Colour of Urgent: theme ${tagColor('Urgent')}`)!.getAttribute('aria-pressed')).toBe('true');
+  expect(byLabel('Colour of Urgent (hex)')!.value).toBe('');
   expect(byLabel('Colour of legacy (hex)')!.value).toBe('#111111');
 });
 
@@ -104,4 +106,11 @@ it('colours a tag not in use yet by name', async () => {
   await type(hex, '#222222');
   await enter(hex);
   expect(update).toHaveBeenCalledWith({ colors: { later: '#222222' } });
+});
+
+it('picks a theme colour by slot name, so it follows the theme', async () => {
+  const update = await open({}, [session('a', ['x'])]);
+  const other = tagColor('x') === 'violet' ? 'green' : 'violet';
+  await act(async () => (byLabel(`Colour of x: theme ${other}`) as unknown as HTMLButtonElement).click());
+  expect(update).toHaveBeenCalledWith({ colors: { x: other } });
 });

@@ -216,3 +216,13 @@ selected session card 40%, its title row 100% with dark or light text chosen by 
 (averaged over bands). Decided with the user; percentages tunable in `TINT_INTENSITY`. Known
 trade-off: hover and the multi-select accent fill are background colours under the opaque tint,
 so on a tinted card only the multi-select ring and the selected edge mark remain visible.
+
+## Amendment: theme tag colours
+
+Themes ship eight tag colours (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `violet`,
+`magenta`): an optional `tagColors:` block in the theme file, else the theme's terminal colours
+(orange and violet mixed from neighbours when the theme lacks them). A tag's configured colour
+is either a slot name — stored as the name, drawn in the active theme's shade, so it changes with
+the theme — or a raw hex, fixed. An unconfigured tag hashes to a slot, so it follows the theme
+too; the old fixed palette is gone. The picker shows the eight theme swatches plus the native
+picker and a hex box (typed or pasted). Plugin colour hooks accept both forms.

@@ -141,7 +141,7 @@ it('combines colours of several plugins in plugin order', async () => {
   expect(css.indexOf('#ff0000')).toBeLessThan(css.indexOf('#00ff00'));
 });
 
-it('ignores a throwing hook and non-hex colours', async () => {
+it('ignores a throwing hook and colours that are neither hex nor a theme slot', async () => {
   await render({
     plugins: [
       colourPlugin('a', {
@@ -152,7 +152,7 @@ it('ignores a throwing hook and non-hex colours', async () => {
           throw new Error('boom');
         },
       }),
-      colourPlugin('b', { sessionColors: () => ['red', 'url(x)'] }),
+      colourPlugin('b', { sessionColors: () => ['nope', 'url(x)'] }),
     ],
   });
   expect(cards()).toHaveLength(2);
@@ -164,4 +164,11 @@ it('adds no background-image without colour hooks', async () => {
   await render({ plugins: [] });
   for (const card of cards()) expect(card.style.getPropertyValue('--tint')).toBe('');
   expect(header().style.getPropertyValue('--tint')).toBe('');
+});
+
+it('draws a theme slot colour in the active theme\'s shade', async () => {
+  await render({ plugins: [colourPlugin('c', { sessionColors: () => ['blue'] })] });
+  const css = cards()[1].style.getPropertyValue('--tint');
+  expect(css).toMatch(/color-mix\(in srgb, #[0-9a-f]{3,8} 22%/i);
+  expect(css).not.toContain('blue');
 });

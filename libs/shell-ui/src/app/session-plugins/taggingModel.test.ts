@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  TAG_PALETTE,
   addTag,
   derivedTags,
   normalizeTag,
@@ -15,6 +14,7 @@ import {
   toggleTag,
 } from './taggingModel';
 import { isHexColor } from './tint';
+import { TAG_SLOTS } from '../../themes';
 
 describe('normalizeTag', () => {
   it('trims and rejects blank', () => {
@@ -29,9 +29,8 @@ describe('tagColor', () => {
     expect(tagColor('Foo')).toBe(tagColor(' foo '));
     expect(tagColor('foo')).toBe(tagColor('foo'));
   });
-  it('always lands in the palette, and the palette is valid hex', () => {
-    expect(TAG_PALETTE.every(isHexColor)).toBe(true);
-    for (let i = 0; i < 200; i++) expect(TAG_PALETTE).toContain(tagColor(`tag-${i}`));
+  it('without a configured colour, always lands on a theme slot (so it follows the theme)', () => {
+    for (let i = 0; i < 200; i++) expect(TAG_SLOTS).toContain(tagColor(`tag-${i}`));
   });
   it('spreads different names over more than one colour', () => {
     expect(new Set(Array.from({ length: 50 }, (_, i) => tagColor(`t${i}`))).size).toBeGreaterThan(1);
@@ -86,8 +85,9 @@ describe('tag colour overrides', () => {
   });
 
   it('reads only valid hex entries from the plugin settings section', () => {
-    expect(tagColorOverrides({ colors: { Foo: '#123456', bad: 'red', Url: 'url(x)', ' ': '#fff' } })).toEqual({
+    expect(tagColorOverrides({ colors: { Foo: '#123456', slot: 'blue', bad: 'nope', Url: 'url(x)', ' ': '#fff' } })).toEqual({
       foo: '#123456',
+      slot: 'blue',
     });
     expect(tagColorOverrides(undefined)).toEqual({});
     expect(tagColorOverrides({ colors: ['#fff'] })).toEqual({});
@@ -96,7 +96,8 @@ describe('tag colour overrides', () => {
   it('sets and clears by normalised name and rejects invalid input', () => {
     const set = setTagColor({}, ' Foo ', '#abcdef');
     expect(set).toEqual({ foo: '#abcdef' });
-    expect(setTagColor(set, 'x', 'red')).toBe(set);
+    expect(setTagColor(set, 'x', 'nope')).toBe(set);
+    expect(setTagColor(set, 'X', 'violet')).toEqual({ foo: '#abcdef', x: 'violet' });
     expect(setTagColor(set, '  ', '#fff')).toBe(set);
     expect(clearTagColor(set, 'FOO')).toEqual({});
   });
