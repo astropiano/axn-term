@@ -195,7 +195,7 @@ const STORY_GH_GQL = JSON.stringify({
 });
 
 export const storySessions: ShellSession[] = [
-  { id: 'sess-1', workspaceId: 'w1', name: 'axn-term · zsh', topic: '', summary: '', tasks: [], progress: 0, output: '' },
+  { id: 'sess-1', workspaceId: 'w1', name: 'axn-term · zsh', topic: '', summary: 'Rebasing the UI redesign onto main', tasks: [], progress: 0, output: '' },
   { id: 'sess-2', workspaceId: 'w1', name: 'gateway · devin', topic: '', summary: '', tasks: [], progress: 0, output: '' },
   { id: 'sess-3', workspaceId: 'w2', name: 'docs · claude', topic: '', summary: '', tasks: [], progress: 0, output: '' },
   // No memory entry, no plugin data — the selected card's field zones
