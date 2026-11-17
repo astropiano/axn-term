@@ -186,6 +186,29 @@ cited files at `2acacde`.
 - The selected session stays set while a view covers it (existing behaviour) and is reported
   separately.
 
+
+### F. Opening sessions from outside (dashboard "Open in terminal")
+
+Decided 2026-11-17 with the user: follow agterm's model (`agtermctl session new --command`, any
+local process may start a command in a new session; the hub's action table is what keeps the
+commands sane), but behind a setting.
+
+- `axn-session create` is reachable app-level (`axn-term command axn-session create <dir> [-n
+  <name>] [-w <workspace>] [--command "<line>" | --command-b64 <base64>]`), running in the window's
+  selected session for its defaults (workspace). Other `axn-session` subcommands stay
+  session-only.
+- Without a command it opens a plain shell in `<dir>` — always allowed.
+- With a command it opens the session, waits for the shell's first output and types the line plus
+  Enter (the session stays open afterwards). Refused unless the app setting
+  `allowExternalCommands` is on (default off; Settings → General). The setting gates only the
+  app-level path — typed `axn-session` lines and PTY-authenticated `axn-term session command`
+  are unchanged.
+- `--command-b64` exists because `shellTokens` has no escapes: a hub command line mixes quote
+  types.
+- mr-dashboard: a built-in `axn-term` terminal (`detect`: the axn-term CLI is reachable; `open`:
+  `axn-term command axn-session create {cwd} -n {label} --command-b64 <base64 of commandLine>`),
+  chosen with `defaults.terminal: "axn-term"`.
+
 ## Gating spike (last task)
 
 Moved to the end: the axn-term half is useful for any frameable page whatever the hub outcome,

@@ -4,6 +4,7 @@ import type { ShellPlatform } from '../platform';
 import { activeTabAcceptsInput, ptyIdOf, type ShellSession, type Workspace } from '../types';
 import { parseSessionSummary, SESSION_SUMMARY_MAX, type SessionCommandResult } from './hiddenCommands';
 import { broadcastSet } from './broadcastSet';
+import { createWaitForSessionOutput } from './session-plugins/plugin';
 import {
   AXN_BROADCAST_FLAGS,
   AXN_SESSION_FLAGS,
@@ -95,6 +96,13 @@ async function completePath(
 }
 
 /** Fan out a line to sessions — the write path both broadcast modes and axn-tell share. */
+/** `axn-session create --command`: typed once the new shell has printed something (its prompt). */
+function typeWhenStarted(deps: BuiltinDeps, sessionId: string, command: string): void {
+  void createWaitForSessionOutput(deps.backend, sessionId)(15_000).then(() =>
+    deps.backend.write(sessionId, `${command}\r`),
+  );
+}
+
 function sendLine(deps: BuiltinDeps, targets: ShellSession[], text: string): SessionCommandResult {
   const blocked = targets.filter((t) => !activeTabAcceptsInput(t));
   if (blocked.length) {
@@ -247,6 +255,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
           opts.name,
           opts.background,
         );
+        if (id && opts.command) typeWhenStarted(deps, id, opts.command);
         if (id && opts.summary) {
           deps.updateSession(id, { summary: opts.summary.slice(0, SESSION_SUMMARY_MAX) });
         }
@@ -258,6 +267,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
           .catch(() => null)) ?? null;
       if (stat?.isDir) {
         const id = deps.openSession(workspaceId, stat.path, opts.name, opts.background);
+        if (id && opts.command) typeWhenStarted(deps, id, opts.command);
         if (id && opts.summary) {
           deps.updateSession(id, { summary: opts.summary.slice(0, SESSION_SUMMARY_MAX) });
         }

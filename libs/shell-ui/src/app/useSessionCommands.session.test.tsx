@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SessionBackend } from '@axn-term/session-backend';
 import type { ShellPlatform } from '../platform';
 import type { ShellSession, Workspace } from '../types';
@@ -150,6 +150,7 @@ it('axn-session completes flag names on a dash', async () => {
     'axn-session --background ',
     'axn-session --create-ws ',
     'axn-session --summary ',
+    'axn-session --command ',
   ]);
 });
 
@@ -413,4 +414,65 @@ it('app-level control lines reach only appRun commands', async () => {
   await act(async () => root!.render(<Harness />));
   await expect(answer!({ line: 'axn-app' })).resolves.toEqual({ ok: true });
   await expect(answer!({ line: 'axn-sess' })).resolves.toMatchObject({ ok: false });
+});
+
+describe('app-level axn-session create', () => {
+  const b64 = (text: string) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+  let answer: ((cmd: { line: string }) => Promise<{ ok: boolean; error?: string; message?: string }>) | undefined;
+  let allow = false;
+  let output: ((bytes: Uint8Array) => void) | undefined;
+
+  async function mountAppLevel() {
+    await mount([session('s-1')]);
+    await act(async () => root?.unmount());
+    deps.platform = { onAppCommand: (cb: typeof answer) => ((answer = cb), () => {}) } as unknown as ShellPlatform;
+    deps.selectedSessionId = () => 's-1';
+    deps.allowExternalCommands = () => allow;
+    (deps.openSession as ReturnType<typeof vi.fn>).mockReturnValue('new-1');
+    (deps.backend as unknown as { onOutput: unknown }).onOutput = vi.fn((_id: string, cb: (b: Uint8Array) => void) => {
+      output = cb;
+      return () => {};
+    });
+    function Harness() {
+      commands = useSessionCommands(deps);
+      return null;
+    }
+    root = createRoot(document.createElement('div'));
+    await act(async () => root!.render(<Harness />));
+  }
+
+  it('opens a plain shell in a folder without the setting', async () => {
+    allow = false;
+    await mountAppLevel();
+    await expect(answer!({ line: 'axn-session create src -n "MR !7"' })).resolves.toMatchObject({ ok: true });
+    expect(deps.openSession).toHaveBeenCalledWith('ws-1', '/home/u/proj/src', 'MR !7', undefined);
+    expect(deps.backend.write).not.toHaveBeenCalled();
+  });
+
+  it('refuses a command while allowExternalCommands is off', async () => {
+    allow = false;
+    await mountAppLevel();
+    const reply = await answer!({ line: `axn-session create src --command-b64 ${b64('echo hi')}` });
+    expect(reply.ok).toBe(false);
+    expect(reply.error).toContain('allowExternalCommands');
+    expect(deps.openSession).not.toHaveBeenCalled();
+  });
+
+  it('types the command once the new shell has started, when allowed', async () => {
+    allow = true;
+    await mountAppLevel();
+    const line = `zsh -lic 'claude "review it"'`;
+    await expect(answer!({ line: `axn-session create src --command-b64 ${b64(line)}` })).resolves.toMatchObject({ ok: true });
+    expect(deps.backend.write).not.toHaveBeenCalled();
+    await act(async () => output?.(new Uint8Array([36, 32])));
+    expect(deps.backend.write).toHaveBeenCalledWith('new-1', `${line}\r`);
+  });
+
+  it('keeps every other axn-session subcommand session-only', async () => {
+    allow = true;
+    await mountAppLevel();
+    for (const line of ['axn-session set --name x', 'axn-session select s-1', 'axn-session list', 'axn-rename x']) {
+      expect((await answer!({ line })).ok).toBe(false);
+    }
+  });
 });

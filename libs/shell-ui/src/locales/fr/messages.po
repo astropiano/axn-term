@@ -26,7 +26,7 @@ msgstr "{attentionCount} en attente"
 msgid "{cli} is installed"
 msgstr "{cli} est installé"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1187
+#: libs/shell-ui/src/app/SettingsModal.tsx:1208
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "Un nom d'icône Lucide (p. ex. <0>GitFork</0>) ou une balise SVG en ligne, p. ex. <1>{SVG_HINT_EXAMPLE}</1>"
 
@@ -34,8 +34,8 @@ msgstr "Un nom d'icône Lucide (p. ex. <0>GitFork</0>) ou une balise SVG en lign
 #~ msgid "Account"
 #~ msgstr "Compte"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1212
-#: libs/shell-ui/src/app/SettingsModal.tsx:1214
+#: libs/shell-ui/src/app/SettingsModal.tsx:1233
+#: libs/shell-ui/src/app/SettingsModal.tsx:1235
 msgid "Add icon"
 msgstr "Ajouter une icône"
 
@@ -47,11 +47,11 @@ msgstr "Ajouter une vue"
 msgid "Advanced"
 msgstr "Avancé"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1016
+#: libs/shell-ui/src/app/SettingsModal.tsx:1037
 msgid "Also used as the session icon while this process is foreground."
 msgstr "Également utilisé comme icône de session lorsque ce processus est au premier plan."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:726
+#: libs/shell-ui/src/app/SettingsModal.tsx:747
 msgid "Applies immediately to the running app. Logs rotate in the OS log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides."
 msgstr "S'applique immédiatement à l'application en cours. Les journaux tournent dans le dossier des journaux du système (~/Library/Logs/axn-term) ; la variable d'environnement LOG_LEVEL est prioritaire."
 
@@ -64,11 +64,11 @@ msgid "Asking <0>{asked}</0>."
 msgstr "Hôte interrogé : <0>{asked}</0>."
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:62
-#: libs/shell-ui/src/app/SettingsModal.tsx:931
+#: libs/shell-ui/src/app/SettingsModal.tsx:952
 msgid "Auto"
 msgstr "Auto"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:619
+#: libs/shell-ui/src/app/SettingsModal.tsx:640
 msgid "Auto (WebGL → canvas → DOM)"
 msgstr "Auto (WebGL → canvas → DOM)"
 
@@ -93,7 +93,7 @@ msgstr "Retour à la session"
 msgid "Binary file"
 msgstr "Fichier binaire"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:594
+#: libs/shell-ui/src/app/SettingsModal.tsx:615
 msgid "Both"
 msgstr "Les deux"
 
@@ -107,11 +107,11 @@ msgstr "Police intégrée"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1198
+#: libs/shell-ui/src/app/SettingsModal.tsx:1219
 msgid "Cancel"
 msgstr "Annuler"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:625
+#: libs/shell-ui/src/app/SettingsModal.tsx:646
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "Moteur de rendu cellulaire des terminaux. Auto utilise le GPU (WebGL) avec repli automatique. Forcez canvas/DOM en cas d'artefacts."
 
@@ -147,7 +147,7 @@ msgstr "Clients : {0}"
 msgid "Close"
 msgstr "Fermer"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3119
+#: libs/shell-ui/src/app/ShellApp.tsx:3123
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
@@ -160,7 +160,7 @@ msgstr "Fermer cette vue"
 msgid "Collapse"
 msgstr "Replier"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:664
+#: libs/shell-ui/src/app/SettingsModal.tsx:685
 msgid "Config file"
 msgstr "Fichier de configuration"
 
@@ -302,7 +302,7 @@ msgstr "Supprimer le workspace « {0} » ?"
 msgid "Directory"
 msgstr "Répertoire"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:840
+#: libs/shell-ui/src/app/SettingsModal.tsx:861
 msgid "disabled"
 msgstr "désactivé"
 
@@ -322,7 +322,7 @@ msgstr "Chaque vue a son propre élément dans la barre. Indiquez une URL, ou un
 msgid "Edit"
 msgstr "Modifier"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1141
+#: libs/shell-ui/src/app/SettingsModal.tsx:1162
 msgid "Edit icon"
 msgstr "Modifier l'icône"
 
@@ -338,16 +338,16 @@ msgstr "vide"
 msgid "Enable devin task parser"
 msgstr "Activer l'analyseur de tâches devin"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:744
+#: libs/shell-ui/src/app/SettingsModal.tsx:765
 msgid "Enable remote — show the Remote console in the rail"
 msgstr "Activer le remote — afficher la console Remote dans la barre"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:840
-#: libs/shell-ui/src/app/SettingsModal.tsx:903
+#: libs/shell-ui/src/app/SettingsModal.tsx:861
+#: libs/shell-ui/src/app/SettingsModal.tsx:924
 msgid "enabled"
 msgstr "activé"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:595
+#: libs/shell-ui/src/app/SettingsModal.tsx:616
 msgid "End of session list"
 msgstr "Fin de la liste des sessions"
 
@@ -364,7 +364,7 @@ msgstr "Déplier"
 msgid "Export failed."
 msgstr "Échec de l'export."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:679
+#: libs/shell-ui/src/app/SettingsModal.tsx:700
 msgid "Export…"
 msgstr "Exporter…"
 
@@ -389,15 +389,15 @@ msgstr "échec"
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "Plus rapide : F2 sur la session sélectionnée ou double-clic sur son nom"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:859
+#: libs/shell-ui/src/app/SettingsModal.tsx:880
 msgid "file preview"
 msgstr "aperçu du fichier"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:769
+#: libs/shell-ui/src/app/SettingsModal.tsx:790
 msgid "File previews"
 msgstr "Aperçus de fichiers"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:811
+#: libs/shell-ui/src/app/SettingsModal.tsx:832
 msgid "Filter plugins…"
 msgstr "Filtrer les plugins…"
 
@@ -429,6 +429,10 @@ msgstr "Police non installée — la police précédente est conservée."
 msgid "Font size (px)"
 msgstr "Taille de police (px)"
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:595
+msgid "For launchers such as the MR dashboard: `axn-term command axn-session create … --command`. Any program running as you can then start a command here, as with agterm."
+msgstr "Pour les lanceurs comme le tableau de bord des MR : `axn-term command axn-session create … --command`. Tout programme lancé sous votre compte peut alors démarrer une commande ici, comme avec agterm."
+
 #: libs/shell-ui/src/app/session-plugins/worktrees.tsx:554
 msgid "Force remove"
 msgstr "Forcer la suppression"
@@ -457,11 +461,11 @@ msgstr "URL du hub"
 msgid "Icon"
 msgstr "Icône"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:687
+#: libs/shell-ui/src/app/SettingsModal.tsx:708
 msgid "Import replaces all settings with the picked config.yaml."
 msgstr "L'import remplace tous les réglages par le config.yaml choisi."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:672
+#: libs/shell-ui/src/app/SettingsModal.tsx:693
 msgid "Import…"
 msgstr "Importer…"
 
@@ -502,6 +506,10 @@ msgstr "Langue"
 msgid "Leave empty to use the system $SHELL."
 msgstr "Laisser vide pour utiliser le $SHELL du système."
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:591
+msgid "Let other programs start commands in new sessions"
+msgstr "Autoriser d’autres programmes à lancer des commandes dans de nouvelles sessions"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:60
 msgid "Light"
 msgstr "Clair"
@@ -526,11 +534,11 @@ msgstr "chargement…"
 msgid "Loading…"
 msgstr "Chargement…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:699
+#: libs/shell-ui/src/app/SettingsModal.tsx:720
 msgid "Log level"
 msgstr "Niveau de journalisation"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:996
+#: libs/shell-ui/src/app/SettingsModal.tsx:1017
 msgid "Logo"
 msgstr "Logo"
 
@@ -538,7 +546,7 @@ msgstr "Logo"
 msgid "Main window"
 msgstr "Fenêtre principale"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:655
+#: libs/shell-ui/src/app/SettingsModal.tsx:676
 msgid "Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
 msgstr "Associez les noms d'exécutables ou les identifiants de plugins à une icône Lucide (p. ex. Bot, SquareTerminal) ou une balise SVG."
 
@@ -570,7 +578,7 @@ msgstr "Vous attend"
 msgid "New session"
 msgstr "Nouvelle session"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:583
+#: libs/shell-ui/src/app/SettingsModal.tsx:604
 msgid "New session button"
 msgstr "Bouton nouvelle session"
 
@@ -611,7 +619,7 @@ msgstr "Nouvelle session worktree"
 msgid "no clients"
 msgstr "aucun client"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1151
+#: libs/shell-ui/src/app/SettingsModal.tsx:1172
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "Aucune icône configurée — chaque session affiche l'icône de terminal par défaut."
 
@@ -717,7 +725,7 @@ msgstr "Ouvrir dans le workspace"
 msgid "Open link"
 msgstr "Ouvrir le lien"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:722
+#: libs/shell-ui/src/app/SettingsModal.tsx:743
 msgid "Open log folder…"
 msgstr "Ouvrir le dossier des journaux…"
 
@@ -750,7 +758,7 @@ msgstr "Échelle globale de l'interface en pourcent — panneau, onglets, banni�
 msgid "Pairing code for the axn-term app"
 msgstr "Code d'appairage pour l'app axn-term"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:932
+#: libs/shell-ui/src/app/SettingsModal.tsx:953
 msgid "Panel accordion"
 msgstr "Accordéon du panneau"
 
@@ -767,7 +775,7 @@ msgstr "Coller"
 msgid "Pause viewport"
 msgstr "Mettre la vue en pause"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:883
+#: libs/shell-ui/src/app/SettingsModal.tsx:904
 msgid "permissions:"
 msgstr "permissions :"
 
@@ -792,7 +800,7 @@ msgstr "Aperçu"
 msgid "Preview unavailable"
 msgstr "Aperçu indisponible"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1160
+#: libs/shell-ui/src/app/SettingsModal.tsx:1181
 msgid "Process"
 msgstr "Processus"
 
@@ -814,7 +822,7 @@ msgstr "Publication"
 #~ msgid "Publishing \\u2014 connected"
 #~ msgstr "Publi\\u00e9 \\u2014 connect\\u00e9"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:933
+#: libs/shell-ui/src/app/SettingsModal.tsx:954
 msgid "Rail item"
 msgstr "Élément de la barre"
 
@@ -850,7 +858,7 @@ msgstr "Remote — cette machine est l'hôte"
 msgid "Remote — viewing"
 msgstr "Remote — affichage"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:735
+#: libs/shell-ui/src/app/SettingsModal.tsx:756
 msgid "Remote access"
 msgstr "Accès distant"
 
@@ -867,7 +875,7 @@ msgstr "Accès distant"
 msgid "Remove"
 msgstr "Supprimer"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1144
+#: libs/shell-ui/src/app/SettingsModal.tsx:1165
 msgid "Remove icon"
 msgstr "Supprimer l'icône"
 
@@ -885,7 +893,7 @@ msgstr "Afficher les résumés de session (via axn-session-summary)"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
-#: libs/shell-ui/src/app/SettingsModal.tsx:875
+#: libs/shell-ui/src/app/SettingsModal.tsx:896
 msgid "requires {0}{1}"
 msgstr "nécessite {0}{1}"
 
@@ -934,13 +942,13 @@ msgstr "Lancez la connexion dans un shell, puis vérifiez à nouveau."
 msgid "Running"
 msgstr "Actives"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:889
+#: libs/shell-ui/src/app/SettingsModal.tsx:910
 msgid "sandboxed — no permissions (no shell, files or terminal access)"
 msgstr "sandboxé — aucune permission (pas d'accès shell, fichiers ou terminal)"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1206
+#: libs/shell-ui/src/app/SettingsModal.tsx:1227
 msgid "Save"
 msgstr "Enregistrer"
 
@@ -987,7 +995,7 @@ msgstr "Adresse du serveur"
 msgid "Session actions"
 msgstr "Actions de la session"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:634
+#: libs/shell-ui/src/app/SettingsModal.tsx:655
 msgid "Session icons"
 msgstr "Icônes de session"
 
@@ -998,11 +1006,11 @@ msgstr "Icônes de session"
 #~ msgid "Session name on the hub (optional)"
 #~ msgstr "Nom de session sur le hub (facultatif)"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:859
+#: libs/shell-ui/src/app/SettingsModal.tsx:880
 msgid "session plugin"
 msgstr "plugin de session"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:763
+#: libs/shell-ui/src/app/SettingsModal.tsx:784
 msgid "Session plugins"
 msgstr "Plugins de session"
 
@@ -1081,19 +1089,19 @@ msgstr "Connecté en tant que {0}"
 msgid "Start workflow…"
 msgstr "Démarrer le workflow…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:926
+#: libs/shell-ui/src/app/SettingsModal.tsx:947
 msgid "Status display"
 msgstr "Affichage du statut"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:691
+#: libs/shell-ui/src/app/SettingsModal.tsx:712
 msgid "Stored in ~/.axn-term/config.yaml"
 msgstr "Stocké dans ~/.axn-term/config.yaml"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:957
+#: libs/shell-ui/src/app/SettingsModal.tsx:978
 msgid "Stored in ~/.axn-term/plugins.yaml"
 msgstr "Stocké dans ~/.axn-term/plugins.yaml"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:692
+#: libs/shell-ui/src/app/SettingsModal.tsx:713
 msgid "Stored in browser localStorage"
 msgstr "Stocké dans le localStorage du navigateur"
 
@@ -1121,7 +1129,7 @@ msgstr "Police du système"
 msgid "Terminal font family, size in px, and line height. Empty uses the built-in monospace stack at 14px."
 msgstr "Police du terminal, taille en px et hauteur de ligne. Vide utilise la pile monospace intégrée en 14px."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:608
+#: libs/shell-ui/src/app/SettingsModal.tsx:629
 msgid "Terminal renderer"
 msgstr "Moteur de rendu du terminal"
 
@@ -1164,7 +1172,7 @@ msgstr "Cela ferme les {0} {1} qu'il contient."
 msgid "This machine is the host"
 msgstr "Cette machine est l'hôte"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:952
+#: libs/shell-ui/src/app/SettingsModal.tsx:973
 msgid "This plugin declares no settings."
 msgstr "Ce plugin ne déclare aucun réglage."
 
@@ -1201,7 +1209,7 @@ msgstr "Zoom de l'UI"
 msgid "Unable to read file"
 msgstr "Impossible de lire le fichier"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:876
+#: libs/shell-ui/src/app/SettingsModal.tsx:897
 msgid "unmet, plugin disabled"
 msgstr "non satisfait, plugin désactivé"
 
@@ -1224,11 +1232,11 @@ msgstr "Jeton utilisateur"
 #~ msgid "waiting for the browser sign-in…"
 #~ msgstr "en attente de la connexion dans le navigateur…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:599
+#: libs/shell-ui/src/app/SettingsModal.tsx:620
 msgid "Where the \"+\" for a new session appears: a ghost row at the end of each workspace's session list, the workspace header, or both."
 msgstr "Où apparaît le \"+\" de nouvelle session : une ligne fantôme à la fin de la liste des sessions de chaque espace de travail, l'en-tête de l'espace de travail, ou les deux."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:927
+#: libs/shell-ui/src/app/SettingsModal.tsx:948
 msgid "Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise."
 msgstr "Où les indicateurs d'état de ce plugin apparaissent. « Auto » utilise la barre latérale sur les appareils tactiles et le panneau de session sinon."
 
@@ -1237,7 +1245,7 @@ msgstr "Où les indicateurs d'état de ce plugin apparaissent. « Auto » utilis
 msgid "Window {0}"
 msgstr "Fenêtre {0}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:596
+#: libs/shell-ui/src/app/SettingsModal.tsx:617
 msgid "Workspace header"
 msgstr "En-tête de l'espace de travail"
 

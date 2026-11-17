@@ -63,6 +63,11 @@ over a local socket and acts on the terminal it runs in:
   `axn-term command axn-views open http://127.0.0.1:37778/d/mr/ "MR dashboard"`
   (opens a page as a rail view; `axn-views current` prints the selected view
   as JSON). No secret: the socket is the user's own (0600). Desktop only.
+  `axn-term command axn-session create <dir> [-n <name>]` opens a session
+  there; adding `--command "<line>"` (or `--command-b64 <base64>` for lines
+  mixing quote types) types the line into it once the shell starts — only
+  when Settings → General → "Let other programs start commands in new
+  sessions" is on.
 - Web terminals work the same: the session host writes a small `sh` + `curl`
   client to `$AXN_STATE_DIR/bin/axn-term` and points `AXN_TERM_CLI` at it;
   it authenticates with `AXN_SESSION_ID` + `AXN_TERM_PTY_SECRET` against

@@ -751,8 +751,13 @@ prints usage and exits 2. `axn-term command [--window <label>] <axn-…>` runs a
 app-level line from any local process — the socket's secret-free `app` message
 (like `activate`), delivered as `control-app-command` to the named window or the
 focused one (`window::app_command_window`); only plugin commands declaring
-`appRun` (e.g. `axn-views open|select|close|current`) run, everything else is
-refused (`dispatchAppCommand` in `app/controlCommands.ts`). `axn-term session summary|rename|focus|command …`
+`appRun` (e.g. `axn-views open|select|close|current`) run, plus the built-in
+`axn-session create` (in the window's selected session's context); everything else
+is refused (`dispatchAppCommand` in `app/controlCommands.ts`, `appSessionCreate` in
+`app/useSessionCommands.ts`). `axn-session create --command <line>` /
+`--command-b64 <base64>` types the line into the new session once its shell has
+printed; on the app-level path that needs the `allowExternalCommands` setting
+(default off) — agterm's `session new --command` model behind a switch. `axn-term session summary|rename|focus|command …`
 runs an `axn-*` command for the terminal it is invoked from — over the
 control socket (`src-tauri/src/control.rs`, `$AXN_TERM_STATE_DIR/control.sock`,
 0600): every PTY gets `AXN_TERM_PTY_ID` + a random `AXN_TERM_PTY_SECRET` +
@@ -2131,8 +2136,13 @@ prints usage and exits 2. `axn-term command [--window <label>] <axn-…>` runs a
 app-level line from any local process — the socket's secret-free `app` message
 (like `activate`), delivered as `control-app-command` to the named window or the
 focused one (`window::app_command_window`); only plugin commands declaring
-`appRun` (e.g. `axn-views open|select|close|current`) run, everything else is
-refused (`dispatchAppCommand` in `app/controlCommands.ts`). `axn-term session summary|rename|focus|command …`
+`appRun` (e.g. `axn-views open|select|close|current`) run, plus the built-in
+`axn-session create` (in the window's selected session's context); everything else
+is refused (`dispatchAppCommand` in `app/controlCommands.ts`, `appSessionCreate` in
+`app/useSessionCommands.ts`). `axn-session create --command <line>` /
+`--command-b64 <base64>` types the line into the new session once its shell has
+printed; on the app-level path that needs the `allowExternalCommands` setting
+(default off) — agterm's `session new --command` model behind a switch. `axn-term session summary|rename|focus|command …`
 runs an `axn-*` command for the terminal it is invoked from — over the
 control socket (`src-tauri/src/control.rs`, `$AXN_TERM_STATE_DIR/control.sock`,
 0600): every PTY gets `AXN_TERM_PTY_ID` + a random `AXN_TERM_PTY_SECRET` +

@@ -277,6 +277,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       bootIntent?.kind === 'tear-off' ? { workspaceName: bootIntent.workspaceName } : undefined,
   });
   const { settings, updateSettings } = useSettings();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const pathDeps = useMemo(
     () => ({
       listDir: (dir: string) =>
@@ -1558,6 +1560,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     workspacesRef,
     enabledPluginsRef,
     buildPluginApi,
+    selectedSessionId: () => selectedSessionRef.current?.id,
+    allowExternalCommands: () => settingsRef.current.allowExternalCommands === true,
     pluginSettingsOf: (plugin) =>
       pluginSettingsRef.current[(plugin.settingsKey ?? plugin.id) as keyof typeof pluginSettings],
     openSession,
