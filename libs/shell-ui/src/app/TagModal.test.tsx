@@ -17,9 +17,10 @@ afterEach(async () => {
   container?.remove();
 });
 
-async function open(over: Partial<TagRequest> = {}) {
+async function open(over: Partial<TagRequest> = {}, colors: Record<string, string> = {}) {
   const onApply = vi.fn();
   const onClose = vi.fn();
+  const onColor = vi.fn();
   const request: TagRequest = { title: 't', targets: [['x', 'y'], ['x'], []], others: [['z']], onApply: () => {}, ...over };
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -27,11 +28,11 @@ async function open(over: Partial<TagRequest> = {}) {
   await act(async () =>
     root!.render(
       <StoryShellProviders>
-        <TagModal request={request} onApply={onApply} onClose={onClose} />
+        <TagModal request={request} colors={colors} onColor={onColor} onApply={onApply} onClose={onClose} />
       </StoryShellProviders>,
     ),
   );
-  return { onApply, onClose };
+  return { onApply, onClose, onColor };
 }
 
 const box = (name: string) => container.querySelector<HTMLInputElement>(`input[type="checkbox"][aria-label="${name}"]`)!;
@@ -100,4 +101,26 @@ it('closes without applying on Cancel', async () => {
   await act(async () => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cancel')!.click());
   expect(onClose).toHaveBeenCalled();
   expect(onApply).not.toHaveBeenCalled();
+});
+
+it('clicking a tag colour opens a hex editor that saves the colour right away, without applying', async () => {
+  const { onColor, onApply } = await open({}, { x: '#112233' });
+  const dot = button('Change colour of x');
+  expect(dot.style.backgroundColor).toBeTruthy();
+  await act(async () => dot.click());
+  const hex = container.querySelector<HTMLInputElement>('input[aria-label="Colour of x (hex)"]')!;
+  expect(hex.value).toBe('#112233');
+  await type(hex, 'ABCDEF');
+  await enter(hex);
+  expect(onColor).toHaveBeenCalledWith('x', '#abcdef');
+  expect(onApply).not.toHaveBeenCalled();
+});
+
+it('does not save an invalid hex colour', async () => {
+  const { onColor } = await open();
+  await act(async () => button('Change colour of x').click());
+  const hex = container.querySelector<HTMLInputElement>('input[aria-label="Colour of x (hex)"]')!;
+  await type(hex, 'nope');
+  await enter(hex);
+  expect(onColor).not.toHaveBeenCalled();
 });

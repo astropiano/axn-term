@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { TagModal } from './TagModal';
-import type { TagColorOverrides } from './session-plugins/taggingModel';
+import { usePluginSettings } from './PluginSettingsProvider';
+import { TAGGING, setTagColor, tagColorOverrides } from './session-plugins/taggingModel';
 
 /**
  * App-wide "edit tags" prompt for in-process plugins, mirroring `pickerHost`:
@@ -13,8 +14,6 @@ export interface TagRequest {
   targets: string[][];
   /** Tags of every other carrier in the window — they feed the shared tag list. */
   others: string[][];
-  /** Configured colour overrides (plugins.yaml); unset names fall back to the hash. */
-  colors?: TagColorOverrides;
   /** Called once with the final tags per target, in `targets` order. */
   onApply: (next: string[][]) => void;
 }
@@ -32,6 +31,8 @@ export function openTagModal(request: TagRequest): void {
 }
 
 export function TagHost() {
+  const { pluginSettings, updatePluginSection } = usePluginSettings();
+  const colors = tagColorOverrides(pluginSettings[TAGGING.id]);
   const request = useSyncExternalStore(
     (listener) => {
       listeners.add(listener);
@@ -43,6 +44,8 @@ export function TagHost() {
   return (
     <TagModal
       request={request}
+      colors={colors}
+      onColor={(name, hex) => updatePluginSection(TAGGING.id, { colors: setTagColor(colors, name, hex) })}
       onApply={(next) => {
         set(null);
         request.onApply(next);

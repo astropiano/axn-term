@@ -48,6 +48,12 @@ export function tagColor(name: string, overrides: TagColorOverrides = {}): strin
   return TAG_PALETTE[hash % TAG_PALETTE.length];
 }
 
+/** A typed or pasted hex colour (`#abc`, `abc`, `#aabbcc`, `#aabbccdd`), lower-cased with `#`; null when invalid. */
+export function parseHexColor(raw: string): string | null {
+  const value = `#${raw.trim().replace(/^#/, '')}`.toLowerCase();
+  return isHexColor(value) ? value : null;
+}
+
 export function setTagColor(overrides: TagColorOverrides, raw: string, colour: string): TagColorOverrides {
   const name = normalizeTag(raw);
   if (!name || !isHexColor(colour)) return overrides;
