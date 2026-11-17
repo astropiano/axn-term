@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { msg } from '@lingui/core/macro';
 import type { MessageDescriptor } from '@lingui/core';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { Sun, Moon, Monitor, Pencil, Plus, Minus, Trash2 } from 'lucide-react';
+import { Sun, Moon, Monitor, Pencil, Plus, Minus, Trash2, X } from 'lucide-react';
 import { IconButton } from './IconButton';
+import { FontPicker } from './FontPicker';
 import { SessionIconGlyph } from './SessionPanel';
 import { useSettings, settingsFromYaml, settingsToYaml } from '../SettingsProvider';
 import { usePluginSettings } from './PluginSettingsProvider';
 import type { AppSettings, ThemeMode } from '../themes';
-import { defaultShellLineHeight, fontFamilyExists, themeDefinitions } from '../themes';
+import { defaultShellLineHeight, themeDefinitions } from '../themes';
 import { useSessionBackend, useShellPlatform } from '../services';
 import { availableLocales, localeNames } from '../i18n';
 import { getSessionViewPlugins, isPluginEnabled, pluginDependencies } from './session-plugins';
@@ -83,11 +84,11 @@ function ThemeSelect({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-xs text-[var(--text-secondary)]">{label}</label>
+      <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">{label}</label>
       <select
         value={value ?? themes[0]?.id ?? ''}
         onChange={(e) => onChange(e.currentTarget.value)}
-        className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+        className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
       >
         {themes.map((t) => (
           <option key={t.id} value={t.id}>
@@ -132,25 +133,25 @@ export function SettingsModal({ open, onClose, embedded }: SettingsModalProps) {
         className={
           embedded
             ? 'flex h-full w-full flex-col bg-[var(--surface)]'
-            : 'flex h-[480px] w-[620px] max-w-[92vw] max-h-[calc(100dvh-2rem)] flex-col rounded border border-[var(--border)] bg-[var(--surface)] shadow-lg'
+            : 'flex h-[560px] w-[700px] max-w-[92vw] max-h-[calc(100dvh-2rem)] flex-col overflow-hidden rounded-[var(--radius-xl)] bg-[var(--elevated)] shadow-[var(--shadow-pop)]'
         }
         onClick={embedded ? undefined : (e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 pt-3">
-          <div className="flex items-end gap-3">
-            <h2 className="pb-2 text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)]">
+        <div className="flex h-12 shrink-0 items-center justify-between gap-3 pl-5 pr-3 shadow-[inset_0_-1px_0_var(--hairline)]">
+          <div className="flex items-center gap-4">
+            <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">
               <Trans>Settings</Trans>
             </h2>
-            <div className="flex gap-1">
+            <div className="flex gap-0.5">
               {tabs.map((tabItem) => (
                 <button
                   key={tabItem.id}
                   type="button"
                   onClick={() => setTab(tabItem.id)}
-                  className={`rounded-t px-3 py-2 text-xs transition ${
+                  className={`h-7 rounded-[var(--radius-md)] px-3 text-[13px] transition-colors duration-[var(--dur-1)] ${
                     tab === tabItem.id
-                      ? 'bg-[var(--bg)] font-semibold text-[var(--accent)]'
-                      : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                      ? 'bg-[var(--fill-2)] font-medium text-[var(--text-primary)]'
+                      : 'text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   {t(tabItem.label)}
@@ -159,13 +160,9 @@ export function SettingsModal({ open, onClose, embedded }: SettingsModalProps) {
             </div>
           </div>
           {!embedded && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="pb-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-            >
-              esc
-            </button>
+            <IconButton title={t`Close`} onClick={onClose}>
+              <X className="h-4 w-4" />
+            </IconButton>
           )}
         </div>
 
@@ -240,7 +237,7 @@ function FontSizeInput({
           )
         }
         placeholder={String(fallback)}
-        className="w-10 rounded border border-[var(--border)] bg-[var(--bg)] px-1 py-1 text-center text-xs text-[var(--text-primary)] outline-none [appearance:textfield] focus:border-[var(--accent)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="w-10 rounded border border-[var(--border)] bg-[var(--bg)] px-1 py-1 text-center text-[13px] text-[var(--text-primary)] outline-none [appearance:textfield] focus:border-[var(--accent)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
       <button
         type="button"
@@ -297,7 +294,7 @@ function LineHeightInput({
           )
         }
         placeholder={String(defaultShellLineHeight)}
-        className="w-10 rounded border border-[var(--border)] bg-[var(--bg)] px-1 py-1 text-center text-xs text-[var(--text-primary)] outline-none [appearance:textfield] focus:border-[var(--accent)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="w-10 rounded border border-[var(--border)] bg-[var(--bg)] px-1 py-1 text-center text-[13px] text-[var(--text-primary)] outline-none [appearance:textfield] focus:border-[var(--accent)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
       <button
         type="button"
@@ -384,7 +381,7 @@ function GeneralTab() {
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
       <div className="mb-4" hidden={!matchSetting(query, 'theme light dark appearance color scheme')}>
         <div className="mb-1 flex items-center justify-between">
-          <label className="text-xs text-[var(--text-secondary)]"><Trans>Theme</Trans></label>
+          <label className="text-[13px] text-[var(--text-secondary)]"><Trans>Theme</Trans></label>
           <ThemeToggle />
         </div>
         <div className="flex gap-1">
@@ -393,7 +390,7 @@ function GeneralTab() {
               key={opt.value}
               type="button"
               onClick={() => setTheme(opt.value)}
-              className={`rounded px-2 py-1.5 text-left text-xs transition ${
+              className={`rounded px-2 py-1.5 text-left text-[13px] transition ${
                 settings.theme === opt.value
                   ? 'bg-[var(--accent)] text-[var(--text-inverted)]'
                   : 'hover:bg-[var(--surface-hover)] text-[var(--text-primary)]'
@@ -426,7 +423,7 @@ function GeneralTab() {
       </div>
 
       <div className="mb-4" hidden={!matchSetting(query, 'language locale translation')}>
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
           <Trans>Language</Trans>
         </label>
         <select
@@ -434,7 +431,7 @@ function GeneralTab() {
           onChange={(e) =>
             updateSettings({ language: e.currentTarget.value as AppSettings['language'] })
           }
-          className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
         >
           <option value="system">{t`System`}</option>
           {availableLocales.map((loc) => (
@@ -446,7 +443,7 @@ function GeneralTab() {
       </div>
 
       <div className="mb-4" hidden={!matchSetting(query, 'default shell bash zsh fish')}>
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
           <Trans>Default shell</Trans>
         </label>
         <div className="flex gap-2">
@@ -458,29 +455,47 @@ function GeneralTab() {
               updateSettings({ defaultShell: e.currentTarget.value });
             }}
             placeholder="/bin/bash"
-            className="flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            className="flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
           />
           <button
             type="button"
             onClick={setSystemShell}
             data-tip={t`Use system default`}
-            className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+            className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[13px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
           >
             auto
           </button>
         </div>
-        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
           <Trans>Leave empty to use the system $SHELL.</Trans>
         </p>
       </div>
 
-      <div className="mb-4" hidden={!matchSetting(query, 'shell font terminal font family size line height')}>
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Shell font</Trans></label>
-        <div className="flex gap-2">
-          <FontFamilyInput
+      <div className="mb-4" hidden={!matchSetting(query, 'interface font ui font family chrome system')}>
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]"><Trans>Interface font</Trans></label>
+        <div className="flex items-start gap-2">
+          <FontPicker
+            kind="ui"
+            value={settings.uiFontFamily ?? ''}
+            onCommit={(v) => updateSettings({ uiFontFamily: v })}
+            placeholder={t`System font`}
+            defaultLabel={t`System font`}
+          />
+        </div>
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+          <Trans>Font for the rail, session panel, tabs and dialogs. Empty uses the system font.</Trans>
+        </p>
+      </div>
+
+      <div className="mb-4" hidden={!matchSetting(query, 'shell font terminal font family size line height nerd')}>
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]"><Trans>Shell font</Trans></label>
+        <div className="flex items-start gap-2">
+          <FontPicker
+            kind="mono"
             value={settings.shellFontFamily ?? ''}
             onCommit={(v) => updateSettings({ shellFontFamily: v })}
             placeholder="Monaspace Neon, Fira Code, …"
+            defaultLabel={t`Built-in font`}
           />
           <FontSizeInput
             value={settings.shellFontSize}
@@ -494,18 +509,20 @@ function GeneralTab() {
             onChange={(shellLineHeight) => updateSettings({ shellLineHeight })}
           />
         </div>
-        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
           <Trans>Terminal font family, size in px, and line height. Empty uses the built-in monospace stack at 14px.</Trans>
         </p>
       </div>
 
       <div className="mb-4" hidden={!matchSetting(query, 'panel font size')}>
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Panel font</Trans></label>
-        <div className="flex gap-2">
-          <FontFamilyInput
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]"><Trans>Panel font</Trans></label>
+        <div className="flex items-start gap-2">
+          <FontPicker
+            kind="ui"
             value={settings.panelFontFamily ?? ''}
             onCommit={(v) => updateSettings({ panelFontFamily: v })}
             placeholder="Monaspace Neon, Inter, …"
+            defaultLabel={t`Interface font`}
           />
           <FontSizeInput
             value={settings.panelFontSize}
@@ -515,13 +532,13 @@ function GeneralTab() {
             onChange={(panelFontSize) => updateSettings({ panelFontSize })}
           />
         </div>
-        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
           <Trans>Font for the session/workspace panel. Size scales it relative to the 12px default.</Trans>
         </p>
       </div>
 
       <div className="mb-4" hidden={!matchSetting(query, 'ui zoom scale percent')}>
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>UI zoom</Trans></label>
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]"><Trans>UI zoom</Trans></label>
         <FontSizeInput
           value={settings.uiZoom}
           fallback={100}
@@ -530,7 +547,7 @@ function GeneralTab() {
           stepSize={10}
           onChange={(uiZoom) => updateSettings({ uiZoom })}
         />
-        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
           <Trans>Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size.</Trans>
         </p>
       </div>
@@ -543,7 +560,7 @@ function GeneralTab() {
           onChange={(e) => updateSettings({ devinTaskParserEnabled: e.currentTarget.checked })}
           className="h-4 w-4 accent-[var(--accent)]"
         />
-        <label htmlFor="devin-task-parser" className="text-xs text-[var(--text-primary)]">
+        <label htmlFor="devin-task-parser" className="text-[13px] text-[var(--text-primary)]">
           <Trans>Enable devin task parser</Trans>
         </label>
       </div>
@@ -556,13 +573,13 @@ function GeneralTab() {
           onChange={(e) => updateSettings({ sessionSummaries: e.currentTarget.checked })}
           className="h-4 w-4 accent-[var(--accent)]"
         />
-        <label htmlFor="session-summaries" className="text-xs text-[var(--text-primary)]">
+        <label htmlFor="session-summaries" className="text-[13px] text-[var(--text-primary)]">
           <Trans>Render session summaries (set via axn-session-summary)</Trans>
         </label>
       </div>
 
       <div className="mb-4" hidden={!matchSetting(query, 'new session button placement workspace header list both')}>
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
           <Trans>New session button</Trans>
         </label>
         <select
@@ -572,13 +589,13 @@ function GeneralTab() {
               newSessionButton: e.currentTarget.value as AppSettings['newSessionButton'],
             })
           }
-          className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
         >
           <option value="both">{t`Both`}</option>
           <option value="list">{t`End of session list`}</option>
           <option value="header">{t`Workspace header`}</option>
         </select>
-        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
           <Trans>
             Where the "+" for a new session appears: a ghost row at the end of
             each workspace's session list, the workspace header, or both.
@@ -587,7 +604,7 @@ function GeneralTab() {
       </div>
 
       <div className="mb-4" hidden={!matchSetting(query, 'terminal renderer webgl canvas dom auto')}>
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
           <Trans>Terminal renderer</Trans>
         </label>
         <select
@@ -597,14 +614,14 @@ function GeneralTab() {
               terminalRenderer: e.currentTarget.value as AppSettings['terminalRenderer'],
             })
           }
-          className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
         >
           <option value="auto">{t`Auto (WebGL → canvas → DOM)`}</option>
           <option value="webgl">WebGL</option>
           <option value="canvas">Canvas</option>
           <option value="dom">DOM</option>
         </select>
-        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
           <Trans>
             Cell renderer for terminals. Auto uses GPU (WebGL) and falls back
             automatically. Force canvas/DOM if you hit rendering glitches.
@@ -613,7 +630,7 @@ function GeneralTab() {
       </div>
 
       <div className="mb-4" hidden={!matchSetting(query, 'session icons lucide svg executable mapping')}>
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
           <Trans>Session icons</Trans>
         </label>
         <SessionIconEditor
@@ -634,7 +651,7 @@ function GeneralTab() {
             updateSettings({ customIcons, sessionIcons, pluginIcons });
           }}
         />
-        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
           <Trans>
             Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG
             tag.
@@ -643,33 +660,33 @@ function GeneralTab() {
       </div>
 
       <div className="mb-4" hidden={!matchSetting(query, 'config file import export yaml')}>
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
           <Trans>Config file</Trans>
         </label>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => void importConfig()}
-            className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+            className="rounded border border-[var(--border)] px-2 py-1 text-[13px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
           >
             <Trans>Import…</Trans>
           </button>
           <button
             type="button"
             onClick={() => void exportConfig()}
-            className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+            className="rounded border border-[var(--border)] px-2 py-1 text-[13px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
           >
             <Trans>Export…</Trans>
           </button>
           {configNote && (
-            <span className="text-[10px] text-[var(--text-secondary)]">{configNote}</span>
+            <span className="text-[11px] text-[var(--text-secondary)]">{configNote}</span>
           )}
         </div>
-        {configError && <p className="mt-1 text-[10px] text-[var(--red)]">{configError}</p>}
-        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+        {configError && <p className="mt-1 text-[11px] text-[var(--red)]">{configError}</p>}
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
           <Trans>Import replaces all settings with the picked config.yaml.</Trans>
         </p>
-        <p className="mt-1 font-mono text-[10px] text-[var(--text-secondary)]">
+        <p className="mt-1 font-mono text-[11px] text-[var(--text-secondary)]">
           {platform.configStore
             ? t`Stored in ~/.axn-term/config.yaml`
             : t`Stored in browser localStorage`}
@@ -678,7 +695,7 @@ function GeneralTab() {
 
       {platform.openLogDir && (
         <div className="mb-4" hidden={!matchSetting(query, 'log level logging debug trace diagnostics folder')}>
-          <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+          <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
             <Trans>Log level</Trans>
           </label>
           <select
@@ -688,7 +705,7 @@ function GeneralTab() {
                 logLevel: e.currentTarget.value as AppSettings['logLevel'],
               })
             }
-            className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
           >
             <option value="error">error</option>
             <option value="warn">warn</option>
@@ -700,12 +717,12 @@ function GeneralTab() {
             <button
               type="button"
               onClick={() => platform.openLogDir?.()}
-              className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+              className="rounded border border-[var(--border)] px-2 py-1 text-[13px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
             >
               <Trans>Open log folder…</Trans>
             </button>
           </div>
-          <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
+          <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
             <Trans>
               Applies immediately to the running app. Logs rotate in the OS
               log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides.
@@ -715,7 +732,7 @@ function GeneralTab() {
       )}
 
       <div className="mb-4" hidden={!matchSetting(query, 'remote access ramphastos authority session token url')}>
-        <label className="mb-1 block text-xs text-[var(--text-secondary)]"><Trans>Remote access</Trans></label>
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]"><Trans>Remote access</Trans></label>
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -723,7 +740,7 @@ function GeneralTab() {
             onChange={(e) => updateSettings({ remoteEnabled: e.currentTarget.checked })}
             className="h-3.5 w-3.5 accent-[var(--accent)]"
           />
-          <span className="text-xs text-[var(--text-primary)]">
+          <span className="text-[13px] text-[var(--text-primary)]">
             <Trans>Enable remote — show the Remote console in the rail</Trans>
           </span>
         </label>
@@ -796,7 +813,7 @@ function PluginsTab() {
         <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {filtered.map((group) => (
           <div key={group.label}>
-            <div className="px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+            <div className="px-3 pb-0.5 pt-2 text-[11px] font-semibold text-[var(--text-secondary)]">
               {group.label}
             </div>
             {group.entries.map((entry) => {
@@ -806,7 +823,7 @@ function PluginsTab() {
                   key={`${entry.kind}:${entry.plugin.id}`}
                   type="button"
                   onClick={() => setSelectedId(entry.plugin.id)}
-                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition ${
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition ${
                     isSelected
                       ? 'bg-[var(--bg)] text-[var(--accent)]'
                       : 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
@@ -834,11 +851,11 @@ function PluginsTab() {
         <div className="min-w-0 flex-1 overflow-y-auto p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
+              <div className="flex items-center gap-1.5 text-[13px] font-semibold text-[var(--text-primary)]">
                 <PluginIcon plugin={selected.plugin} className="h-4 w-4 shrink-0" />
                 {selected.plugin.title}
               </div>
-              <div className="text-[10px] text-[var(--text-secondary)]">
+              <div className="text-[11px] text-[var(--text-secondary)]">
                 {selected.kind === 'session' ? t`session plugin` : t`file preview`} ·{' '}
                 <span className="font-mono">{settingsKey}</span>
                 {selected.plugin.version && (
@@ -851,7 +868,7 @@ function PluginsTab() {
               {deps.map(({ dep, met }) => (
                 <div
                   key={dep.id}
-                  className={`text-[10px] ${
+                  className={`text-[11px] ${
                     met ? 'text-[var(--text-secondary)]' : 'text-[var(--orange)]'
                   }`}
                 >
@@ -860,7 +877,7 @@ function PluginsTab() {
                 </div>
               ))}
               {selected.kind === 'session' && isSandboxedPlugin(selected.plugin) && (
-                <div className="text-[10px] text-[var(--text-secondary)]">
+                <div className="text-[11px] text-[var(--text-secondary)]">
                   {selected.plugin.sandbox.manifest.permissions?.length ? (
                     <>
                       <Trans>permissions:</Trans>{' '}
@@ -874,7 +891,7 @@ function PluginsTab() {
                 </div>
               )}
             </div>
-            <label className="flex shrink-0 items-center gap-2 text-xs text-[var(--text-primary)]">
+            <label className="flex shrink-0 items-center gap-2 text-[13px] text-[var(--text-primary)]">
               <input
                 type="checkbox"
                 checked={enabled(selected)}
@@ -899,6 +916,28 @@ function PluginsTab() {
               />
             ))}
 
+          {/* Standard choice for plugins with a heavier rail form — where
+              their status meters live. Unset ('auto') means the rail on
+              touch devices and the panel's status accordion elsewhere. */}
+          {selected.kind === 'session' && selected.plugin.renderRailDetail && (
+            <PluginSettingRow
+              field={{
+                key: 'statusDisplay',
+                label: t`Status display`,
+                description: t`Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise.`,
+                type: 'string',
+                default: 'auto',
+                options: [
+                  { value: 'auto', label: t`Auto` },
+                  { value: 'panel', label: t`Panel accordion` },
+                  { value: 'rail', label: t`Rail item` },
+                ],
+              }}
+              section={section}
+              onChange={(value) => updatePluginSection(settingsKey, { statusDisplay: value })}
+            />
+          )}
+
           {selected.kind === 'session' &&
             selected.plugin.renderSettings?.({
               settings: section,
@@ -907,13 +946,14 @@ function PluginsTab() {
 
           {selected.kind === 'session' &&
             !selected.plugin.settings?.length &&
-            !selected.plugin.renderSettings && (
-              <p className="text-[10px] text-[var(--text-secondary)]">
+            !selected.plugin.renderSettings &&
+            !selected.plugin.renderRailDetail && (
+              <p className="text-[11px] text-[var(--text-secondary)]">
                 <Trans>This plugin declares no settings.</Trans>
               </p>
             )}
 
-          <p className="mt-4 text-[10px] text-[var(--text-secondary)]">
+          <p className="mt-4 text-[11px] text-[var(--text-secondary)]">
             <Trans>Stored in ~/.axn-term/plugins.yaml</Trans>
           </p>
         </div>
@@ -952,7 +992,7 @@ function PluginLogoField({ plugin }: { plugin: { id: string; logo?: string; proc
   return (
     <div className="mb-3">
       <div className="flex items-center gap-2">
-        <label className="w-14 shrink-0 text-[10px] text-[var(--text-secondary)]">
+        <label className="w-14 shrink-0 text-[11px] text-[var(--text-secondary)]">
           <Trans>Logo</Trans>
         </label>
         <SessionIconGlyph
@@ -968,11 +1008,11 @@ function PluginLogoField({ plugin }: { plugin: { id: string; logo?: string; proc
             if (e.key === 'Escape') setDraft(null);
           }}
           placeholder={plugin.logo ?? 'Puzzle'}
-          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
         />
       </div>
       {plugin.processPattern && (
-        <p className="mt-0.5 text-[10px] text-[var(--text-secondary)]">
+        <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
           <Trans>Also used as the session icon while this process is foreground.</Trans>
         </p>
       )}
@@ -994,7 +1034,7 @@ function PluginSettingRow({
   return (
     <div className="mb-3">
       {field.type === 'boolean' ? (
-        <label className="flex items-center gap-2 text-xs text-[var(--text-primary)]">
+        <label className="flex items-center gap-2 text-[13px] text-[var(--text-primary)]">
           <input
             type="checkbox"
             checked={value !== false}
@@ -1005,14 +1045,14 @@ function PluginSettingRow({
         </label>
       ) : (
         <>
-          <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+          <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
             {field.label}
           </label>
           {field.options ? (
             <select
               value={typeof value === 'string' ? value : ''}
               onChange={(e) => onChange(e.currentTarget.value)}
-              className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+              className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
             >
               {field.options.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -1032,13 +1072,13 @@ function PluginSettingRow({
                     : e.currentTarget.value,
                 )
               }
-              className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+              className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
             />
           )}
         </>
       )}
       {field.description && (
-        <p className="mt-0.5 text-[10px] text-[var(--text-secondary)]">{field.description}</p>
+        <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">{field.description}</p>
       )}
     </div>
   );
@@ -1095,7 +1135,7 @@ function SessionIconEditor({
             className="flex items-center gap-2 border-b border-[var(--border)] px-2 py-1 last:border-b-0"
           >
             <SessionIconGlyph value={icons[key]} className="h-4 w-4 shrink-0" />
-            <span className="flex-1 truncate font-mono text-xs text-[var(--text-primary)]" data-tip={key}>
+            <span className="flex-1 truncate font-mono text-[13px] text-[var(--text-primary)]" data-tip={key}>
               {key}
             </span>
             <IconButton title={t`Edit icon`} size="sm" onClick={() => openEdit(key)}>
@@ -1107,7 +1147,7 @@ function SessionIconEditor({
           </div>
         ))}
         {keys.length === 0 && (
-          <div className="px-2 py-1.5 text-[10px] text-[var(--text-secondary)]">
+          <div className="px-2 py-1.5 text-[11px] text-[var(--text-secondary)]">
             <Trans>No icons configured — every session shows the default terminal icon.</Trans>
           </div>
         )}
@@ -1116,7 +1156,7 @@ function SessionIconEditor({
       {editing ? (
         <div className="mt-2 space-y-1.5 rounded border border-[var(--border)] p-2">
           <div className="flex items-center gap-2">
-            <label className="w-14 shrink-0 text-[10px] text-[var(--text-secondary)]">
+            <label className="w-14 shrink-0 text-[11px] text-[var(--text-secondary)]">
               <Trans>Process</Trans>
             </label>
             <input
@@ -1124,7 +1164,7 @@ function SessionIconEditor({
               onChange={(e) => setDraftKey(e.currentTarget.value)}
               placeholder="e.g. claude"
               autoFocus={editing.isNew}
-              className="flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+              className="flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
             />
           </div>
           <div className="flex gap-2">
@@ -1134,7 +1174,7 @@ function SessionIconEditor({
               rows={3}
               placeholder="GitFork"
               autoFocus={!editing.isNew}
-              className="flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-[10px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+              className="flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
             />
             <div className="flex w-14 shrink-0 flex-col items-center justify-center gap-1 rounded border border-[var(--border)] bg-[var(--bg)]">
               <SessionIconGlyph
@@ -1143,7 +1183,7 @@ function SessionIconEditor({
               />
             </div>
           </div>
-          <p className="text-[10px] text-[var(--text-secondary)]">
+          <p className="text-[11px] text-[var(--text-secondary)]">
             <Trans>
               A Lucide icon name (e.g. <code>GitFork</code>) or an inline SVG
               tag, e.g. <code className="break-all">{SVG_HINT_EXAMPLE}</code>
@@ -1153,7 +1193,7 @@ function SessionIconEditor({
             <button
               type="button"
               onClick={() => setEditing(null)}
-              className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+              className="rounded border border-[var(--border)] px-2 py-1 text-[13px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
             >
               <Trans>Cancel</Trans>
             </button>
@@ -1161,7 +1201,7 @@ function SessionIconEditor({
               type="button"
               onClick={save}
               disabled={!draftKey.trim()}
-              className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--accent)] transition hover:bg-[var(--surface-hover)] disabled:opacity-40"
+              className="rounded border border-[var(--border)] px-2 py-1 text-[13px] text-[var(--accent)] transition hover:bg-[var(--surface-hover)] disabled:opacity-40"
             >
               <Trans>Save</Trans>
             </button>
@@ -1171,97 +1211,10 @@ function SessionIconEditor({
         <div className="mt-2">
           <IconButton title={t`Add icon`} size="auto" onClick={openAdd}>
             <Plus className="h-3 w-3" />
-            <span className="ml-1 text-[10px]"><Trans>Add icon</Trans></span>
+            <span className="ml-1 text-[11px]"><Trans>Add icon</Trans></span>
           </IconButton>
         </div>
       )}
     </div>
   );
 }
-
-/**
- * Font family field: commits only a name that resolves to an installed (or
- * bundled) font — while typing, invalid names show a hint and keep the last
- * valid setting. When the platform can enumerate fonts (desktop font dirs,
- * Chromium queryLocalFonts) it also offers datalist suggestions.
- */
-function FontFamilyInput({
-  value,
-  onCommit,
-  placeholder,
-}: {
-  value: string;
-  onCommit: (family: string) => void;
-  placeholder: string;
-}) {
-  const platform = useShellPlatform();
-  const [text, setText] = useState(value);
-  const [missing, setMissing] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const listId = useRef(`axn-fonts-${Math.random().toString(36).slice(2, 8)}`);
-
-  // External value changes (config file edits, other tabs) update the field.
-  useEffect(() => setText(value), [value]);
-
-  const evaluate = (raw: string) => {
-    const family = raw.trim();
-    if (!family) {
-      setMissing(false);
-      onCommit('');
-      return;
-    }
-    if (fontFamilyExists(family)) {
-      setMissing(false);
-      onCommit(family);
-    } else {
-      // Not installed — keep showing what the user typed but do NOT write it
-      // into settings (the renderer keeps the last valid font).
-      setMissing(true);
-    }
-  };
-
-  const loadSuggestions = () => {
-    if (suggestions.length || !platform.listFonts) return;
-    platform
-      .listFonts()
-      .then(setSuggestions)
-      .catch(() => {});
-  };
-
-  return (
-    <div className="min-w-0 flex-1">
-      <input
-        type="text"
-        list={listId.current}
-        value={text}
-        onFocus={loadSuggestions}
-        onChange={(e) => {
-          const v = e.currentTarget.value;
-          setText(v);
-          clearTimeout(debounceRef.current);
-          debounceRef.current = setTimeout(() => evaluate(v), 400);
-        }}
-        onBlur={(e) => {
-          clearTimeout(debounceRef.current);
-          evaluate(e.currentTarget.value);
-        }}
-        placeholder={placeholder}
-        className={`w-full rounded border bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)] ${
-          missing ? 'border-[var(--orange)]' : 'border-[var(--border)]'
-        }`}
-      />
-      <datalist id={listId.current}>
-        {suggestions.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
-      {missing && (
-        <p className="mt-0.5 text-[10px] text-[var(--orange)]">
-          <Trans>Font not installed — keeping the previous font.</Trans>
-        </p>
-      )}
-    </div>
-  );
-}
-

@@ -69,13 +69,13 @@ export function PreviewView({ path, cwd, isVisible, sessionId: sessionIdProp }: 
     <div className="flex h-full w-full flex-col bg-[var(--terminal-bg)]">
       <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
         <span
-          className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--text-secondary)]"
+          className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--text-secondary)]"
           data-tip={resolvedPath}
         >
           {resolvedPath}
         </span>
         {plugin && (
-          <span className="shrink-0 text-[10px] uppercase tracking-wide text-[var(--text-secondary)]">
+          <span className="shrink-0 text-[11px] text-[var(--text-secondary)]">
             {plugin.title}
           </span>
         )}
@@ -95,7 +95,7 @@ export function PreviewView({ path, cwd, isVisible, sessionId: sessionIdProp }: 
             {typeof body === 'string' ? <HtmlPreview html={body} ctx={ctx} /> : body}
           </div>
         ) : (
-          <div className="p-4 text-[11px] text-[var(--text-secondary)]">
+          <div className="p-4 text-xs text-[var(--text-secondary)]">
             No preview available for this file.
           </div>
         )}

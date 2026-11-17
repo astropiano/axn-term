@@ -1,3 +1,4 @@
+import { dump } from 'js-yaml';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SessionItem } from './SessionPanel';
 import { PluginSettingsProvider } from './PluginSettingsProvider';
@@ -192,6 +193,26 @@ const SESSIONS: ShellSession[] = [
   }),
   // Nothing to show beyond the name.
   base('plain', 'scratch shell', { process: 'zsh' }),
+  // Needs you: a critical attention flag via the workflow plugin's stateKey.
+  base('attn', 'axn-term · devin', {
+    process: 'devin',
+    status: 'running',
+    pluginState: {
+      'dev-workflow': {
+        attention: { level: 'critical', message: 'quiet for 45s — likely waiting for input' },
+      },
+    },
+  }),
+  // Same, only a warning — the orange ring, no badge.
+  base('warn', 'axn-term · tests', {
+    process: 'vitest',
+    status: 'running',
+    pluginState: {
+      'dev-workflow': {
+        attention: { level: 'warning', message: 'quiet for 45s — possibly finished' },
+      },
+    },
+  }),
 ];
 
 const PLUGINS: SessionViewPlugin[] = [
@@ -203,6 +224,12 @@ const PLUGINS: SessionViewPlugin[] = [
   devWorkflowPlugin,
   jiraPlugin,
 ];
+
+/** `plugins` control — `none` is the card with every plugin off. */
+const PLUGIN_SETS: Record<string, SessionViewPlugin[]> = {
+  all: PLUGINS,
+  none: [],
+};
 
 // --- Layout presets (the `sessionCard` setting) -----------------------------
 const LAYOUTS: Record<string, SessionCardLayout | undefined> = {
@@ -240,85 +267,74 @@ const taskSnapshot = (s: ShellSession): TaskStateSnapshot => ({
 function Panel({
   layout,
   selected,
-  theme,
   colors,
+  plugins,
 }: {
   layout: keyof typeof LAYOUTS;
   selected: string;
-  theme: 'dark' | 'light';
   colors: keyof typeof COLORS;
+  plugins: keyof typeof PLUGIN_SETS;
 }) {
-  // Layout + theme are seeded by the decorator (the app settings provider
-  // reads localStorage once, on mount); `theme`/`layout` key the remount.
-  void layout;
-  void theme;
   return (
-    <>
-      <PluginSettingsProvider
-        key={colors}
-        store={{ read: () => Promise.resolve(pluginsYaml(colors)), write: () => Promise.resolve() }}
-      >
-        <div className="w-80 bg-[var(--bg)] p-2">
-          {SESSIONS.map((s) => (
-            <SessionItem
-              key={s.id}
-              session={s}
-              workspaces={[{ id: 'w1', name: 'ai-accelerator' }]}
-              isSelected={s.id === selected}
-              taskState={s.id === selected && s.tasks.length ? taskSnapshot(s) : null}
-              onSelect={() => {}}
-              onOpenIde={() => {}}
-              onAddSession={() => {}}
-              onRename={() => {}}
-              onDuplicate={() => {}}
-              onCloseSession={() => {}}
-              onOpenSubShell={() => undefined}
-              onTurnIntoWorkspace={() => {}}
-              updateSession={() => {}}
-              mergePluginState={() => {}}
-              plugins={PLUGINS}
-              onOpenBrowser={() => {}}
-              onOpenTab={() => {}}
-              pluginData={{}}
-              mergePluginData={() => {}}
-              isDragging={false}
-              dropBefore={false}
-              onDragStart={() => {}}
-              onDragEnd={() => {}}
-              onDragOver={() => {}}
-              onDrop={() => {}}
-            />
-          ))}
-        </div>
-      </PluginSettingsProvider>
-    </>
+    <PluginSettingsProvider
+      key={colors}
+      store={{ read: () => Promise.resolve(pluginsYaml(colors)), write: () => Promise.resolve() }}
+    >
+      <div className="w-80 bg-[var(--bg)] p-2">
+        {SESSIONS.map((s) => (
+          <SessionItem
+            key={s.id}
+            session={s}
+            workspaces={[{ id: 'w1', name: 'ai-accelerator' }]}
+            isSelected={s.id === selected}
+            taskState={s.id === selected && s.tasks.length ? taskSnapshot(s) : null}
+            onSelect={() => {}}
+            onOpenIde={() => {}}
+            onAddSession={() => {}}
+            onRename={() => {}}
+            onDuplicate={() => {}}
+            onCloseSession={() => {}}
+            onOpenSubShell={() => undefined}
+            onTurnIntoWorkspace={() => {}}
+            updateSession={() => {}}
+            mergePluginState={() => {}}
+            plugins={PLUGIN_SETS[plugins]}
+            onOpenBrowser={() => {}}
+            onOpenTab={() => {}}
+            pluginData={{}}
+            mergePluginData={() => {}}
+            isDragging={false}
+            dropBefore={false}
+            onDragStart={() => {}}
+            onDragEnd={() => {}}
+            onDragOver={() => {}}
+            onDrop={() => {}}
+          />
+        ))}
+      </div>
+    </PluginSettingsProvider>
   );
 }
 
 /**
- * Seed the app settings (layout + theme) before the providers mount —
- * stories have no config store, and SettingsProvider reads localStorage
- * only at mount. Keyed by the args so a control change remounts them.
+ * Seed the `sessionCard` layout through the real seam — config.yaml via
+ * `configYaml`. The theme comes from the Storybook toolbar's global
+ * (the app's real theme picker), not from a settings hack.
  */
-function seedSettings(args: { layout: keyof typeof LAYOUTS; theme: 'dark' | 'light' }): string {
-  const card = LAYOUTS[args.layout];
-  try {
-    localStorage.setItem(
-      'axn-term:settings',
-      JSON.stringify({ theme: args.theme, ...(card ? { sessionCard: card } : {}) }),
-    );
-  } catch {
-    // storage unavailable — the default layout and theme render
-  }
-  return `${args.layout}|${args.theme}`;
-}
+const configYaml = (layout: keyof typeof LAYOUTS): string =>
+  dump(
+    { ...(LAYOUTS[layout] ? { sessionCard: LAYOUTS[layout] } : {}) },
+    { sortKeys: false },
+  );
 
 const meta = {
   title: 'app/Session card',
   component: Panel,
   decorators: [
     (Story, ctx) => (
-      <StoryShellProviders key={seedSettings(ctx.args as { layout: keyof typeof LAYOUTS; theme: 'dark' | 'light' })}>
+      <StoryShellProviders
+        configYaml={configYaml((ctx.args as { layout: keyof typeof LAYOUTS }).layout)}
+      >
         <Story />
       </StoryShellProviders>
     ),
@@ -326,10 +342,10 @@ const meta = {
   argTypes: {
     layout: { control: 'inline-radio', options: Object.keys(LAYOUTS) },
     selected: { control: 'select', options: SESSIONS.map((s) => s.id) },
-    theme: { control: 'inline-radio', options: ['dark', 'light'] },
     colors: { control: 'inline-radio', options: Object.keys(COLORS) },
+    plugins: { control: 'inline-radio', options: Object.keys(PLUGIN_SETS) },
   },
-  args: { layout: 'default', selected: 'mr', theme: 'dark', colors: 'default' },
+  args: { layout: 'default', selected: 'mr', colors: 'default', plugins: 'all' },
 } satisfies Meta<typeof Panel>;
 
 export default meta;
@@ -358,3 +374,11 @@ export const LightTheme: Story = { globals: { theme: 'axn-light' } };
 
 /** `jira.status-colors` with a named color and hex values. */
 export const CustomStatusColors: Story = { args: { colors: 'custom' }, globals: { theme: 'axn-light' } };
+
+/**
+ * Every plugin off: the card falls back to its core fields — name, status,
+ * summary/process/tasks/progress — and leaves no phantom zones.
+ */
+export const NoPlugins: Story = {
+  args: { plugins: 'none' },
+};

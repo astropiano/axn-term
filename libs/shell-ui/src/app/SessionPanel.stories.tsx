@@ -1,11 +1,14 @@
+import { useEffect, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SessionItem, SessionPanel } from './SessionPanel';
+import { publishPanelStatus } from './panelStatus';
+import { SessionPanel } from './SessionPanel';
 import { StoryShellProviders } from './storyMocks';
 import type { SessionAttention, ShellSession } from '../types';
 import type { SessionViewPlugin } from './session-plugins/plugin';
 
-// Stub plugin objects — SessionItem only needs id/stateKey to read attention
-// flags (and session fields if provided) from session.pluginState.
+// Stub plugin objects — the panel only needs id/stateKey to read attention
+// flags and banners from session.pluginState. (Real plugin fields live in
+// the `app/Session card` stories.)
 const devinStub: SessionViewPlugin = { id: 'devin', title: 'devin', stateKey: 'devin' };
 const gitStub: SessionViewPlugin = { id: 'git-status', title: 'git', stateKey: 'gitStatus' };
 
@@ -16,42 +19,8 @@ function attentionPluginState(
   return { [key]: { attention } };
 }
 
-function Row({ session, plugins = [] }: { session: ShellSession; plugins?: SessionViewPlugin[] }) {
-  return (
-    <div className="w-64">
-      <SessionItem
-        session={session}
-        workspaces={[{ id: 'w1', name: 'main' }]}
-        isSelected={false}
-        taskState={null}
-        onSelect={() => {}}
-        onMove={() => {}}
-        onRename={() => {}}
-        onDuplicate={() => {}}
-        onCloseSession={() => {}}
-        onOpenSubShell={() => {}}
-        onTurnIntoWorkspace={() => {}}
-        updateSession={() => {}}
-        mergePluginState={() => {}}
-        plugins={plugins}
-        onOpenBrowser={() => {}}
-        onOpenTab={() => {}}
-        pluginData={{}}
-        mergePluginData={() => {}}
-        isDragging={false}
-        dropBefore={false}
-        onDragStart={() => {}}
-        onDragEnd={() => {}}
-        onDragOver={() => {}}
-        onDrop={() => {}}
-      />
-    </div>
-  );
-}
-
 const meta = {
-  title: 'app/SessionItem',
-  component: Row,
+  title: 'app/Session panel',
   decorators: [
     (Story) => (
       <StoryShellProviders>
@@ -59,7 +28,7 @@ const meta = {
       </StoryShellProviders>
     ),
   ],
-} satisfies Meta<typeof Row>;
+} satisfies Meta;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -77,62 +46,11 @@ const baseSession: ShellSession = {
   status: 'running',
 };
 
-export const Plain: Story = {
-  args: { session: baseSession },
-};
-
-export const WarningAttention: Story = {
-  args: {
-    session: {
-      ...baseSession,
-      pluginState: attentionPluginState('devin', {
-        level: 'warning',
-        message: 'quiet for 45s — possibly finished',
-      }),
-    },
-    plugins: [devinStub],
-  },
-};
-
-export const CriticalAttention: Story = {
-  args: {
-    session: {
-      ...baseSession,
-      pluginState: attentionPluginState('devin', {
-        level: 'critical',
-        message: 'quiet for 45s — likely waiting for input',
-      }),
-    },
-    plugins: [devinStub],
-  },
-};
-
-/** Two plugins flagging the same session — worst level wins in the tooltip. */
-export const MultipleSources: Story = {
-  args: {
-    session: {
-      ...baseSession,
-      pluginState: {
-        devin: { attention: { level: 'warning', message: 'quiet for 45s' } },
-        gitStatus: { attention: { level: 'critical', message: 'rebase conflict' } },
-      },
-    },
-    plugins: [devinStub, gitStub],
-  },
-};
-
-export const IdleSession: Story = {
-  args: {
-    session: { ...baseSession, process: undefined, status: 'idle', name: 'scratch shell' },
-  },
-};
-
 /**
  * The whole panel including the header row (new workspace / save / load
  * workspace set buttons) — same h-8 height as the shell tab strip.
  */
 export const Panel: Story = {
-  args: { session: baseSession }, // required by the Row meta; render ignores it
   render: () => (
     <div className="h-96 w-64 overflow-hidden border border-[var(--border)]">
       <SessionPanel
@@ -193,7 +111,6 @@ export const Panel: Story = {
  * mid-list so the selection styling is visible next to plain rows.
  */
 export const PanelWithSelection: Story = {
-  args: { session: baseSession },
   render: () => (
     <div className="h-[480px] w-64 overflow-hidden border border-[var(--border)]">
       <SessionPanel
@@ -284,5 +201,54 @@ export const PanelWithSelection: Story = {
         onTurnIntoWorkspace={() => {}}
       />
     </div>
+  ),
+};
+
+/** Publishes sample meters to the panel's status slot while mounted. */
+function WithSystemMeters({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    publishPanelStatus('story-ram', {
+      title: 'Memory',
+      system: true,
+      meters: [
+        { label: 'RAM', value: '55%', pct: 55, level: 0, color: 'var(--green)', detail: '17.6 GB of 32.0 GB · axn-term 1.5 GB' },
+        { label: 'Swap', value: '1.2 GB', pct: 30, level: 1, color: 'var(--yellow)', detail: '1.2 GB of 4.0 GB' },
+      ],
+    });
+    publishPanelStatus('story-docker', {
+      title: 'Docker',
+      icon: 'Container',
+      meters: [
+        { label: 'Containers', summaryLabel: 'Running', value: '5', detail: '5 running · 2 stopped' },
+        { label: 'CPU', value: '12%', pct: 12, level: 0, color: 'var(--green)', detail: 'containers 1.2 of 8 cores' },
+        { label: 'Memory', summaryLabel: 'Mem', value: '85%', pct: 85, level: 2, color: 'var(--orange)', detail: '10.2 GB of 12.0 GB' },
+        { label: 'Disk', value: '40%', pct: 40, level: 0, color: 'var(--green)', detail: '40.0 GB docker objects · 60.0 GB free' },
+      ],
+    });
+    publishPanelStatus('story-mr', {
+      title: 'Merge requests',
+      icon: 'GitMerge',
+      meters: [
+        { label: 'Mine', value: '2/7', detail: 'assigned or authored, need action', level: 2, color: 'var(--orange)' },
+        { label: 'Reviews', value: '1/3', detail: 'review requests waiting for you' },
+      ],
+    });
+    return () => {
+      publishPanelStatus('story-ram', null);
+      publishPanelStatus('story-docker', null);
+      publishPanelStatus('story-mr', null);
+    };
+  }, []);
+  return <>{children}</>;
+}
+
+/**
+ * The panel with its status stack above the footer — one accordion per
+ * tool (collapsed: one line) and System last — and the "N waiting" filter
+ * in the toolbar.
+ */
+export const PanelWithSystem: Story = {
+  render: (args, context) => (
+    <WithSystemMeters>{PanelWithSelection.render!(args, context)}</WithSystemMeters>
   ),
 };

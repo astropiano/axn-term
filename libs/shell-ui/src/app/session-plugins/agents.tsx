@@ -1,4 +1,5 @@
 import { t } from '@lingui/core/macro';
+import { PublishPanelStatus } from '../PanelStatusSection';
 import { i18n } from '../../i18n';
 import { Bot, Play } from 'lucide-react';
 import type { ShellSession, Workspace } from '../../types';
@@ -6,6 +7,7 @@ import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin'
 import { axnLog } from '../log';
 import { pickFromList } from '../pickerHost';
 import { SessionIconGlyph } from '../SessionPanel';
+import { RailItem } from '../RailItem';
 import { useIconBag, resolveProcessIcon } from '../iconModel';
 import { agentLaunchLine } from './devWorkflow';
 import {
@@ -139,23 +141,23 @@ function PersonaCard({
     <div className="flex flex-col gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
       <div className="flex items-center gap-1.5">
         <AgentIcon cli={persona.cli} className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[var(--text-primary)]">
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--text-primary)]">
           {persona.name}
         </span>
       </div>
-      <div className="truncate text-[10px] text-[var(--text-secondary)]" data-tip={spec}>
+      <div className="truncate text-[11px] text-[var(--text-secondary)]" data-tip={spec}>
         {spec}
       </div>
       {persona.description && (
         <div
-          className="line-clamp-2 text-[10px] text-[var(--text-secondary)]"
+          className="line-clamp-2 text-[11px] text-[var(--text-secondary)]"
           data-tip={persona.description}
         >
           {persona.description}
         </div>
       )}
       <div className="mt-1 flex items-center justify-between">
-        <span className="text-[9px] text-[var(--text-secondary)]">
+        <span className="text-[10px] text-[var(--text-secondary)]">
           {running.length > 0 ? `${running.length} session${running.length === 1 ? '' : 's'}` : ''}
         </span>
         <span data-tip={api ? `open a session running ${persona.name}` : 'no session to launch from'}>
@@ -163,7 +165,7 @@ function PersonaCard({
             type="button"
             disabled={!api}
             onClick={() => onLaunch(persona)}
-            className="flex items-center gap-1 rounded border border-[var(--border)] px-2 py-1 text-[10px] font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] disabled:opacity-40"
+            className="flex items-center gap-1 rounded border border-[var(--border)] px-2 py-1 text-[11px] font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] disabled:opacity-40"
           >
             <Play className="h-3 w-3" />
             Launch
@@ -198,7 +200,7 @@ function AgentsView({
       <div className="flex items-center gap-2">
         <Bot className="h-4 w-4 text-[var(--accent)]" />
         <span className="text-[12px] font-semibold text-[var(--text-primary)]">agents</span>
-        <span className="text-[10px] text-[var(--text-secondary)]">
+        <span className="text-[11px] text-[var(--text-secondary)]">
           {personas.length > 0
             ? `${personas.length} persona${personas.length === 1 ? '' : 's'} — declare more under agents.personas in plugins.yaml`
             : 'no personas — declare them under agents.personas in plugins.yaml'}
@@ -238,11 +240,11 @@ function RunningSessionRow({
     <button
       type="button"
       onClick={onSelect}
-      className="flex items-center gap-2 rounded border border-[var(--border)] px-2 py-1 text-left text-[10px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+      className="flex items-center gap-2 rounded border border-[var(--border)] px-2 py-1 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
     >
       <AgentIcon cli={session.process} className="h-3 w-3 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{session.name ?? session.id}</span>
-      <span className="shrink-0 text-[9px] text-[var(--text-secondary)]">
+      <span className="shrink-0 text-[10px] text-[var(--text-secondary)]">
         {personaOf(session) ?? session.process}
       </span>
     </button>
@@ -279,11 +281,11 @@ function runningSection(
     ));
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-[10px] font-semibold text-[var(--text-secondary)]">running</div>
+      <div className="text-[11px] font-semibold text-[var(--text-secondary)]">running</div>
       {groups.map(({ ws, sessions: wsSessions }) => (
         <div key={ws.id} className="flex flex-col gap-1">
           <div
-            className="px-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]"
+            className="px-1 text-[11px] font-semibold text-[var(--text-secondary)]"
             data-tip={ws.defaultFolder}
           >
             {ws.name}
@@ -417,23 +419,34 @@ export const agentsPlugin: SessionViewPlugin = {
   renderRail: ({ pluginSettings, appState, viewActive, toggleView }) => {
     const personas = resolvePersonas(pluginSettings, appState);
     return (
-      <button
-        type="button"
-        onClick={toggleView}
-        data-tip={`agents — ${personas.length} persona${personas.length === 1 ? '' : 's'}`}
-        className={`flex flex-col items-center gap-0.5 rounded px-1 py-0.5 transition ${
-          viewActive
-            ? 'bg-[var(--surface)] text-[var(--accent)]'
-            : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-        }`}
-      >
-        <Bot className="h-3.5 w-3.5" />
-        {personas.length > 0 && (
-          <span className="select-none text-[8px] font-bold leading-none">
-            {personas.length}
-          </span>
-        )}
-      </button>
+      <>
+        <RailItem
+          title="Agents"
+          onClick={toggleView}
+          active={viewActive}
+          badge={personas.length > 0 ? personas.length : undefined}
+        >
+          <Bot />
+        </RailItem>
+        <PublishPanelStatus
+          source={agentsPlugin.id}
+          group={
+            personas.length > 0
+              ? {
+                  title: 'Agents',
+                  icon: 'Bot',
+                  meters: [
+                    {
+                      label: 'Personas',
+                      value: String(personas.length),
+                      detail: personas.map((p) => p.name).join(', '),
+                    },
+                  ],
+                }
+              : null
+          }
+        />
+      </>
     );
   },
 

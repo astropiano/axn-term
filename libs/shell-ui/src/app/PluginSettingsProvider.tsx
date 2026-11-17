@@ -226,6 +226,15 @@ export function useOptionalPluginSettings(): PluginSettingsContextValue | undefi
   return useContext(PluginSettingsContext) ?? undefined;
 }
 
+/**
+ * Like `usePluginSettings`, but `null` outside a provider — for plugin views
+ * that offer a settings shortcut yet must also render standalone (tests,
+ * Storybook).
+ */
+export function usePluginSettingsOptional(): PluginSettingsContextValue | null {
+  return useContext(PluginSettingsContext);
+}
+
 export function usePluginSettings(): PluginSettingsContextValue {
   const ctx = useContext(PluginSettingsContext);
   if (!ctx) throw new Error('usePluginSettings must be used within PluginSettingsProvider');

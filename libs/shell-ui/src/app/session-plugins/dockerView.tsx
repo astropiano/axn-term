@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { ghostButtonClass } from '../chromeStyles';
+import { PanelHeader } from '../PanelHeader';
 import {
   ChevronDown,
   ChevronRight,
@@ -276,22 +278,22 @@ export function DockerView({
     const op = data.ops[c.id];
     const pending = op !== undefined && !op.error;
     return (
-      <div className="px-3 py-1 text-[11px] hover:bg-[var(--surface)]">
+      <div className="px-3 py-1 text-xs hover:bg-[var(--surface)]">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: stateColor(c.state) }}
             data-tip={c.status || c.state} />
           <span className="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]" data-tip={c.name}>
             {c.service ?? c.name}
             {c.service && (
-              <span className="ml-1.5 font-mono text-[10px] font-normal text-[var(--text-secondary)]">
+              <span className="ml-1.5 font-mono text-[11px] font-normal text-[var(--text-secondary)]">
                 {c.name}
               </span>
             )}
           </span>
           <span className="hidden w-32 shrink-0 truncate text-[var(--text-secondary)] sm:block" data-tip={c.image}>{c.image}</span>
-          {c.ports && <span className="hidden w-24 shrink-0 truncate text-[10px] text-[var(--text-secondary)] md:block" data-tip={c.ports}>{c.ports}</span>}
-          <span className="w-14 shrink-0 text-right font-mono text-[10px] text-[var(--text-secondary)]">{running ? c.cpu ?? '—' : ''}</span>
-          <span className="w-16 shrink-0 text-right font-mono text-[10px] text-[var(--text-secondary)]">{running ? c.mem ?? '—' : ''}</span>
+          {c.ports && <span className="hidden w-24 shrink-0 truncate text-[11px] text-[var(--text-secondary)] md:block" data-tip={c.ports}>{c.ports}</span>}
+          <span className="w-14 shrink-0 text-right font-mono text-[11px] text-[var(--text-secondary)]">{running ? c.cpu ?? '—' : ''}</span>
+          <span className="w-16 shrink-0 text-right font-mono text-[11px] text-[var(--text-secondary)]">{running ? c.mem ?? '—' : ''}</span>
           <span className="flex shrink-0 items-center gap-0.5">
             <button type="button" aria-label={`logs ${c.name}`}
               data-tip={sessions.length ? `docker logs -f ${c.name} (new tab)` : 'no session for logs'}
@@ -322,7 +324,7 @@ export function DockerView({
           </span>
         </div>
         {op?.error && (
-          <div className="ml-4 break-words text-[10px] text-[var(--red)]">
+          <div className="ml-4 break-words text-[11px] text-[var(--red)]">
             {op.op} failed: {op.error}
           </div>
         )}
@@ -334,9 +336,7 @@ export function DockerView({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)]">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-3">
-        <PluginIcon plugin={dockerPlugin} className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-primary)]">docker</span>
+      <PanelHeader icon={<PluginIcon plugin={dockerPlugin} />} title="Docker">
         <div className="min-w-0 flex-1">
           <PanelSearch
             value={query}
@@ -348,67 +348,67 @@ export function DockerView({
           type="button"
           onClick={() => updateAppState({ runningOnly: !runningOnly })}
           data-tip="Only list running containers"
-          className={`flex h-6 items-center rounded px-2 text-[10px] transition ${
+          className={`flex h-7 shrink-0 items-center rounded-[var(--radius-md)] px-2.5 text-xs transition-colors duration-[var(--dur-1)] ${
             runningOnly
-              ? 'bg-[var(--surface)] text-[var(--accent)]'
-              : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+              ? 'bg-[var(--fill-accent)] text-[var(--accent)]'
+              : 'text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]'
           }`}
         >
-          running only
+          Running only
         </button>
         <span
-          className={`text-[10px] ${running > 0 ? 'font-semibold text-[var(--green)]' : 'text-[var(--text-secondary)]'}`}
+          className={`text-[11px] ${running > 0 ? 'font-semibold text-[var(--green)]' : 'text-[var(--text-secondary)]'}`}
           data-tip="running / total containers"
         >
           {running}/{data.containers.length}
         </span>
         {data.fetchedAt && (
-          <span className="text-[10px] text-[var(--text-secondary)]">
+          <span className="text-[11px] text-[var(--text-secondary)]">
             updated {Math.max(0, Math.round((Date.now() - data.fetchedAt) / 1000))}s ago
           </span>
         )}
         <button type="button" onClick={() => void refreshContainers(exec)} data-tip="Refresh"
           aria-label="Refresh"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]">
+          className={ghostButtonClass}>
           <RefreshCw className={`h-3.5 w-3.5 ${data.status === 'loading' ? 'animate-spin' : ''}`} />
         </button>
         <button type="button" onClick={close} aria-label="Close" data-tip="Close"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]">
+          className={ghostButtonClass}>
           <X className="h-3.5 w-3.5" />
         </button>
-      </div>
+      </PanelHeader>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {data.status === 'error' ? (
-          <div className="m-3 rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
-            <div className="mb-1 font-semibold text-[var(--red)]">failed to list containers</div>
+          <div className="m-3 rounded-[var(--radius-lg)] bg-[var(--raised)] p-3.5 text-xs leading-relaxed text-[var(--text-primary)] shadow-[0_0_0_1px_var(--hairline)]">
+            <div className="mb-1 font-semibold text-[var(--red)]">Failed to list containers</div>
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
             <div className="text-[var(--text-secondary)]">
               Check <code className="text-[var(--accent)]">docker ps</code> in a shell.
             </div>
           </div>
         ) : data.availability === 'daemon-down' ? (
-          <div className="m-3 rounded border border-[var(--border)] bg-[var(--surface)] p-3 text-[11px] text-[var(--text-primary)]">
-            <div className="mb-1 font-semibold text-[var(--yellow)]">docker daemon is not running</div>
+          <div className="m-3 rounded-[var(--radius-lg)] bg-[var(--raised)] p-3.5 text-xs leading-relaxed text-[var(--text-primary)] shadow-[0_0_0_1px_var(--hairline)]">
+            <div className="mb-1 font-semibold text-[var(--yellow)]">Docker daemon is not running</div>
             <div className="text-[var(--text-secondary)]">
               Start colima or Docker Desktop, then refresh.
             </div>
           </div>
         ) : data.availability === 'no-cli' ? (
-          <div className="p-4 text-[11px] text-[var(--text-secondary)]">
+          <div className="p-4 text-xs text-[var(--text-secondary)]">
             No docker CLI on this host.
           </div>
         ) : data.containers.length === 0 ? (
-          <div className="p-4 text-[11px] text-[var(--text-secondary)]">
-            {data.status === 'loading' ? 'loading…' : 'No containers.'}
+          <div className="p-4 text-xs text-[var(--text-secondary)]">
+            {data.status === 'loading' ? 'Loading…' : 'No containers.'}
           </div>
         ) : groups.visible.length === 0 ? (
-          <div className="p-4 text-[11px] italic text-[var(--text-secondary)]">
-            {query ? 'no matches' : 'no running containers'}
+          <div className="p-4 text-xs italic text-[var(--text-secondary)]">
+            {query ? 'No matches' : 'No running containers'}
           </div>
         ) : (
           <>
             {groups.projects.length > 0 && (
-              <SectionHeader label="compose projects" count={groups.projects.length}
+              <SectionHeader label="Compose projects" count={groups.projects.length}
                 tip="containers grouped by their docker compose project" />
             )}
             {groups.projects.map(([project, members]) => (
@@ -416,13 +416,13 @@ export function DockerView({
             ))}
             {groups.standalone.length > 0 && (
               <div>
-                <SectionHeader label="standalone containers" count={groups.standalone.length}
+                <SectionHeader label="Standalone containers" count={groups.standalone.length}
                   tip="not managed by a docker compose project" />
                 {groups.standalone.map((c) => <Row key={c.id} c={c} />)}
               </div>
             )}
             {data.status === 'loading' && (
-              <div className="px-3 text-[10px] italic text-[var(--text-secondary)]">refreshing…</div>
+              <div className="px-3 text-[11px] italic text-[var(--text-secondary)]">refreshing…</div>
             )}
           </>
         )}
@@ -433,7 +433,7 @@ export function DockerView({
 
 function SectionHeader({ label, count, tip }: { label: string; count: number; tip: string }) {
   return (
-    <div className="flex items-baseline gap-2 px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]"
+    <div className="flex items-baseline gap-2 px-3 pb-0.5 pt-2 text-[11px] font-semibold text-[var(--text-secondary)]"
       data-tip={tip}>
       <span>{label}</span>
       <span className="font-normal">{count}</span>
@@ -454,7 +454,7 @@ function ProjectGroup({
     <div>
       <button type="button"
         onClick={() => toggleCollapsed(project)}
-        className="flex w-full items-center gap-1 px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+        className="flex w-full items-center gap-1 px-2 pb-0.5 pt-1 text-[11px] font-semibold text-[var(--text-secondary)]">
         {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
         <Layers className="h-3 w-3" data-tip="docker compose project" />
         {project}

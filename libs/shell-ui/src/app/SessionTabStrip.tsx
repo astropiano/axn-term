@@ -4,7 +4,7 @@ import { Eye, FileText, Folder, GitBranch, Radio, SquareTerminal, Terminal, X , 
 import type { EditorTab } from '../types';
 import { defaultTabLabel } from './subshellPromote';
 import { useSettings } from '../SettingsProvider';
-import { tabStripTabClasses } from './tabStyles';
+import { tabStripClasses, tabStripTabClasses } from './tabStyles';
 
 /**
  * A session's tab strip: `shell` pinned leftmost, then its sub-view tabs —
@@ -33,7 +33,7 @@ export function SessionTabStrip({
   const { settings } = useSettings();
   return (
     <div
-      className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto bg-[var(--bg-secondary)] px-1 shadow-[inset_0_-1px_0_var(--border)]"
+      className={tabStripClasses}
       style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
       data-tauri-drag-region
     >
@@ -41,12 +41,12 @@ export function SessionTabStrip({
         type="button"
         onClick={() => onSelect('shell')}
         data-tip={t`Shell`}
-        className={`relative flex shrink-0 items-center gap-1.5 px-2 text-[11px] transition ${tabStripTabClasses(
+        className={`relative flex shrink-0 items-center gap-1.5 px-2.5 text-xs transition-colors duration-[var(--dur-1)] ${tabStripTabClasses(
           activeTab === 'shell',
         )}`}
       >
         <SquareTerminal className="h-3.5 w-3.5" />
-        {t`shell`}
+        {t`Shell`}
       </button>
       {editors.map((ed) => (
         <div
@@ -79,7 +79,7 @@ export function SessionTabStrip({
             setTabDragId(null);
             setTabDropId(null);
           }}
-          className={`relative flex shrink-0 items-center pl-2 pr-1 text-[11px] transition ${tabStripTabClasses(
+          className={`relative flex shrink-0 items-center pl-2.5 pr-1 text-xs transition-colors duration-[var(--dur-1)] ${tabStripTabClasses(
             activeTab === ed.id,
           )}${tabDragId === ed.id ? ' opacity-40' : ''}${
             tabDropId === ed.id && tabDragId !== ed.id
@@ -123,7 +123,7 @@ export function SessionTabStrip({
             {ed.kind === 'shell' && (ed.tasks?.length ?? 0) > 0 && (
             <span
               data-tip={ed.tasks!.map((t) => `${t.done ? '✓' : '•'} ${t.title}`).join('\n')}
-              className="font-mono text-[10px] text-[var(--text-secondary)]"
+              className="text-[11px] tabular-nums text-[var(--text-secondary)]"
             >
               {ed.tasks!.filter((t) => t.done).length}/{ed.tasks!.length}
             </span>
@@ -146,7 +146,7 @@ export function SessionTabStrip({
             onClick={() => onCloseTab(ed.id)}
             data-tip="Close tab"
             aria-label="Close tab"
-            className="ml-0.5 flex h-4 w-4 items-center justify-center rounded text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--red)]"
+            className="ml-1 flex h-[18px] w-[18px] items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-tertiary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-2)] hover:text-[var(--text-primary)]"
           >
             <X className="h-3 w-3" />
           </button>

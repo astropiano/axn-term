@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { defaultSettings, resolveTheme, themeDefinitions, themeMap } from './themes';
+import { defaultSettings, mixHex, resolveTheme, resolveUiFont, themeDefinitions, themeMap } from './themes';
 
 describe('themes', () => {
   it('defaults to the axn dark theme', () => {
@@ -71,5 +71,43 @@ describe('bundled themes credit their source palette', () => {
     for (const [path, text] of ported) {
       expect(text, path).toMatch(/^# Palette: .+ <https?:\/\/[^>]+>, .+\.$/m);
     }
+  });
+});
+
+// The chrome tokens in styles.css are derived with color-mix, so no theme
+// file lists them — these floors keep every bundled theme usable with them.
+describe('derived chrome tokens', () => {
+  it('mixHex matches CSS color-mix(in srgb)', () => {
+    expect(mixHex('#141110', '#E9E5E2', 0.94)).toBe('#211e1d');
+    expect(mixHex('#000000', '#ffffff', 0.5)).toBe('#808080');
+    expect(mixHex('rgb(0 0 0)', '#ffffff', 0.5)).toBeUndefined();
+    expect(mixHex(undefined, '#ffffff', 0.5)).toBeUndefined();
+  });
+
+  for (const t of themeDefinitions) {
+    it(`${t.id}: text stays readable on the derived chrome`, () => {
+      const ui = t.ui!;
+      // Same shares as styles.css: --chrome, --text-tertiary.
+      const chrome = ui.chrome ?? mixHex(ui.bg, ui.text, 0.94)!;
+      const tertiary = mixHex(ui.textSecondary, ui.bg, 0.86)!;
+      expect(contrast(ui.text!, chrome), `${t.id} text on chrome`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(ui.textSecondary!, chrome), `${t.id} secondary on chrome`).toBeGreaterThanOrEqual(3.9);
+      // Tertiary only carries decoration (counts, placeholders) — large-text floor.
+      expect(contrast(tertiary, chrome), `${t.id} tertiary on chrome`).toBeGreaterThanOrEqual(3);
+      expect(contrast(ui.accent!, chrome), `${t.id} accent on chrome`).toBeGreaterThanOrEqual(3.5);
+    });
+  }
+});
+
+describe('interface font', () => {
+  it('is unset by default — the stylesheet system stack applies', () => {
+    expect(resolveUiFont(defaultSettings)).toBeUndefined();
+    expect(resolveUiFont({ ...defaultSettings, uiFontFamily: '   ' })).toBeUndefined();
+  });
+
+  it('appends a generic fallback to a configured family', () => {
+    // No layout engine here: the probe stays permissive, the stack is kept.
+    expect(resolveUiFont({ ...defaultSettings, uiFontFamily: 'Inter' })).toBe('Inter, system-ui, sans-serif');
+    expect(resolveUiFont({ ...defaultSettings, uiFontFamily: 'Inter, sans-serif' })).toBe('Inter, sans-serif');
   });
 });

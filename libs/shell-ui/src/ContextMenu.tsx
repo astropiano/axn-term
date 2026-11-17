@@ -5,10 +5,10 @@ import { useSettings } from './SettingsProvider';
 
 /** Row style for context-menu items. */
 export const menuItemClass =
-  'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]';
+  'flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-xs text-[var(--text-primary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-2)]';
 
 /** Horizontal rule between context-menu item groups. */
-export const menuDividerClass = 'my-1 h-px bg-[var(--border)]';
+export const menuDividerClass = 'my-1 h-px bg-[var(--hairline)]';
 
 /** Distance kept between a menu and the window edges. */
 const EDGE = 4;
@@ -51,7 +51,7 @@ export function ContextMenu({
   onClose,
   children,
   widthClass = 'w-56',
-  className = 'rounded border border-[var(--border)] bg-[var(--surface)] shadow-lg',
+  className = 'rounded-[var(--radius-lg)] bg-[var(--elevated)] shadow-[var(--shadow-pop)]',
 }: {
   /** Client coordinates of the triggering contextmenu event. */
   x: number;

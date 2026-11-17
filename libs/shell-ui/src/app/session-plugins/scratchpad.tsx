@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ghostButtonClass } from '../chromeStyles';
+import { PanelHeader, PanelHeaderSpacer } from '../PanelHeader';
+import { RailItem } from '../RailItem';
 import {
   ClipboardCopy,
   FileText,
@@ -523,22 +526,18 @@ function ScratchpadView({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)]">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-3">
-        <NotebookPen className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-primary)]">
-          scratchpad
-        </span>
-        <span className="text-[10px] text-[var(--text-secondary)]">
+      <PanelHeader icon={<NotebookPen />} title="Scratchpad">
+        <span className="text-[11px] text-[var(--text-secondary)]">
           {total} draft{total === 1 ? '' : 's'} · {groups?.length ?? 0} repo
           {groups?.length === 1 ? '' : 's'}
         </span>
-        <div className="flex-1" />
+        <PanelHeaderSpacer />
         <button
           type="button"
           onClick={() => void load()}
           data-tip="Refresh"
           aria-label="Refresh"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+          className={ghostButtonClass}
         >
           <RefreshCw className="h-3.5 w-3.5" />
         </button>
@@ -547,19 +546,19 @@ function ScratchpadView({
           onClick={close}
           data-tip="Close"
           aria-label="Close"
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+          className={ghostButtonClass}
         >
           <X className="h-3.5 w-3.5" />
         </button>
-      </div>
+      </PanelHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {groups === null ? (
-          <div className="px-2 py-3 text-[11px] italic text-[var(--text-secondary)]">
+          <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
             Scanning session repos…
           </div>
         ) : groups.length === 0 ? (
-          <div className="px-2 py-3 text-[11px] italic text-[var(--text-secondary)]">
+          <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
             No drafts — create one from a session's menu or with `axn-scratch new &lt;name&gt;`.
           </div>
         ) : (
@@ -567,10 +566,10 @@ function ScratchpadView({
             {groups.map((g) => (
               <div key={g.loc.repoRoot}>
                 <div className="mb-1 flex items-center gap-2 px-2">
-                  <span className="text-[11px] font-semibold text-[var(--text-primary)]">
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">
                     {g.loc.repoName}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--text-secondary)]">
                     {g.loc.repoRoot}
                   </span>
                   <button
@@ -600,11 +599,11 @@ function ScratchpadView({
                         data-tip={exists ? `${g.loc.repoRoot}/${dir}` : `${dir}/ — not created yet`}
                       >
                         <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                        <span className="font-mono text-[11px] text-[var(--text-primary)]">
+                        <span className="font-mono text-xs text-[var(--text-primary)]">
                           {dir}/
                         </span>
                         {!exists && (
-                          <span className="rounded bg-[var(--orange)]/15 px-1 text-[9px] text-[var(--orange)]">
+                          <span className="rounded bg-[var(--orange)]/15 px-1 text-[10px] text-[var(--orange)]">
                             not created
                           </span>
                         )}
@@ -618,7 +617,7 @@ function ScratchpadView({
                           className="flex w-full items-center gap-2 rounded py-1 pl-7 pr-2 text-left transition hover:bg-[var(--surface)]"
                         >
                           <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                          <span className="min-w-0 truncate font-mono text-[11px] text-[var(--text-primary)]">
+                          <span className="min-w-0 truncate font-mono text-xs text-[var(--text-primary)]">
                             {f.name}
                           </span>
                         </button>
@@ -720,18 +719,9 @@ export const scratchpadPlugin: SessionViewPlugin = {
     refreshTimers.delete(ctx.session.id);
   },
   renderRail: ({ viewActive, toggleView }) => (
-    <button
-      type="button"
-      onClick={toggleView}
-      data-tip="scratchpad — repo drafts & notes"
-      className={`flex flex-col items-center gap-0.5 rounded px-1 py-0.5 transition ${
-        viewActive
-          ? 'bg-[var(--surface)] text-[var(--accent)]'
-          : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-      }`}
-    >
-      <NotebookPen className="h-3.5 w-3.5" />
-    </button>
+    <RailItem title="Scratchpad" onClick={toggleView} active={viewActive}>
+      <NotebookPen />
+    </RailItem>
   ),
   renderView: ({ sessions, sessionApi, openTab, close }) => (
     <ScratchpadView

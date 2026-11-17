@@ -3,8 +3,10 @@ import type { SessionViewPlugin } from './plugin';
 import type { SessionAttention, ShellSession } from '../../types';
 import { ptyIdOf } from '../../types';
 import { useSessionBackend } from '../../services';
-import { BarStrip, pressureColor } from './ram';
+import { BarStrip, pressureColor, pressureLevel } from './ram';
 import { PluginIcon } from '../SessionPanel';
+import { RailItem } from '../RailItem';
+import { publishPanelStatus, type StatusGroup } from '../panelStatus';
 import { DockerView } from './dockerView';
 
 
@@ -305,14 +307,114 @@ function pressureAttention(kind: string, usedPct: number): SessionAttention | nu
   return null;
 }
 
+/** CPU tooltip: VM/host busy share when the VM probe works, else the containers' share. */
+function cpuTipOf(live: DockerLiveStats, cpuPct: number | null): string {
+  const containerCores = live.cpuPercent != null ? (live.cpuPercent / 100).toFixed(1) : null;
+  return live.vmCpuPct != null
+    ? `${live.vmBacked ? 'VM' : 'host'} cpu — ${live.vmCpuPct}% busy${
+        containerCores != null ? ` · containers ${containerCores} cores` : ''
+      }`
+    : `container cpu — ${cpuPct}% of ${live.cpuCount} cores`;
+}
+
+/** Memory tooltip: real VM/host pressure when known, else the containers' working set. */
+function memTipOf(live: DockerLiveStats, memPct: number | null, vmMemPct: number | null): string {
+  return vmMemPct != null
+    ? `${live.vmBacked ? 'VM' : 'host'} memory — ${formatBytes(live.memTotalBytes! - live.memAvailBytes!)} of ${formatBytes(
+        live.memTotalBytes!,
+      )} used (${vmMemPct}%)${
+        live.memUsedBytes != null ? ` · containers ${formatBytes(live.memUsedBytes)}` : ''
+      }`
+    : `container memory — ${formatBytes(live.memUsedBytes!)} of ${formatBytes(
+        live.memTotalBytes!,
+      )} (${memPct}%)`;
+}
+
+/**
+ * Docker's accordion in the session panel's status stack — what the rail
+ * tooltip used to list: the containers (running, stopped) and CPU, memory
+ * and disk of the docker VM (the host on native Linux) with absolute
+ * numbers. `null` when nothing is known.
+ */
+export function dockerStatusGroup(
+  live: DockerLiveStats | null,
+  disk: DockerDiskStats | null,
+  pct: { cpu: number | null; mem: number | null; vmMem: number | null; disk: number },
+): StatusGroup | null {
+  if (!live) return null;
+  // Summary labels stay short: the accordion is named Docker, so "CPU" and
+  // "Mem" need no "VM" in front, and three pairs fit beside the name.
+  const meters: StatusGroup['meters'] = [
+    {
+      label: 'Containers',
+      summaryLabel: 'Running',
+      value: String(live.running),
+      detail: `${live.running} running · ${live.stopped} stopped`,
+    },
+  ];
+  if (pct.cpu != null) {
+    const containerCores = live.cpuPercent != null ? (live.cpuPercent / 100).toFixed(1) : null;
+    meters.push({
+      label: 'CPU',
+      value: `${pct.cpu}%`,
+      detail:
+        live.cpuCount != null
+          ? containerCores != null
+            ? `containers ${containerCores} of ${live.cpuCount} cores`
+            : `${live.cpuCount} cores`
+          : undefined,
+      pct: pct.cpu,
+      color: pressureColor(pct.cpu, 0),
+      level: pressureLevel(pct.cpu, 0),
+      tip: cpuTipOf(live, pct.cpu),
+    });
+  }
+  if (pct.mem != null && live.memTotalBytes != null) {
+    const usedBytes =
+      pct.vmMem != null && live.memAvailBytes != null
+        ? live.memTotalBytes - live.memAvailBytes
+        : live.memUsedBytes;
+    meters.push({
+      label: 'Memory',
+      summaryLabel: 'Mem',
+      value: `${pct.mem}%`,
+      detail:
+        usedBytes != null ? `${formatBytes(usedBytes)} of ${formatBytes(live.memTotalBytes)}` : undefined,
+      pct: pct.mem,
+      color: pressureColor(pct.mem, 0),
+      level: pressureLevel(pct.mem, 0),
+      tip: memTipOf(live, pct.mem, pct.vmMem),
+    });
+  }
+  if (disk?.freeBytes != null) {
+    meters.push({
+      label: 'Disk',
+      value: `${pct.disk}%`,
+      detail: `${formatBytes(disk.usedBytes)} docker objects · ${formatBytes(disk.freeBytes)} free`,
+      pct: pct.disk,
+      color: pressureColor(pct.disk, 0),
+      level: pressureLevel(pct.disk, 0),
+      tip: `docker objects — ${formatBytes(disk.usedBytes)} of the backing filesystem (${pct.disk}%)`,
+    });
+  }
+  return { title: 'Docker', meters };
+}
+
 function DockerRail({
   sessions,
   pluginSettings,
   setAppAttention,
+  viewActive,
+  toggleView,
+  detailed,
 }: {
   sessions: ShellSession[];
   pluginSettings: unknown;
   setAppAttention: (attention: SessionAttention | null) => void;
+  viewActive: boolean;
+  toggleView: () => void;
+  /** The heavier rail form: container counts and CPU/mem/disk strips. */
+  detailed?: boolean;
 }) {
   const backend = useSessionBackend();
   const [live, setLive] = useState<DockerLiveStats | null>(null);
@@ -323,6 +425,8 @@ function DockerRail({
   const intervalSec =
     (pluginSettings as { refreshIntervalSeconds?: number } | undefined)
       ?.refreshIntervalSeconds ?? 15;
+  const showMeters =
+    (pluginSettings as { systemMeters?: boolean } | undefined)?.systemMeters !== false;
   // The rail is session-less: on desktop `plugin_exec` ignores the id and runs
   // on the host; over WS the probe runs in the first session's host. With no
   // sessions, desktop still works (empty id) while web execs reject → hidden.
@@ -429,59 +533,83 @@ function DockerRail({
     setAppAttention(flags.find((a) => a.level === 'critical') ?? flags[0] ?? null);
   }, [setAppAttention, disk, usedPct, memPct]);
 
+  // Container counts and CPU / memory / disk live in docker's accordion at
+  // the bottom of the session panel, not in the rail or its tooltip: they
+  // are numbers to read, not something to click. The VM's numbers belong to
+  // docker, not to "System" (that is the host).
+  const statusGroup: StatusGroup | null = !showMeters
+    ? null
+    : live
+      ? dockerStatusGroup(live, disk, { cpu: cpuPct, mem: memPct, vmMem: vmMemPct, disk: usedPct })
+      : avail === 'daemon-down'
+        ? {
+            title: 'Docker',
+            meters: [
+              {
+                label: 'Daemon',
+                value: 'not running',
+                detail: 'start colima or Docker Desktop',
+                level: 1,
+              },
+            ],
+          }
+        : null;
+  const statusJson = JSON.stringify(statusGroup);
+  useEffect(() => {
+    publishPanelStatus(dockerPlugin.id, statusGroup);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusJson]);
+  useEffect(() => () => publishPanelStatus(dockerPlugin.id, null), []);
+
   if (!live) {
     // CLI present but the daemon is unreachable — say so instead of
     // vanishing, so a stopped colima/Desktop doesn't look like "no docker".
     if (avail !== 'daemon-down') return null;
     return (
-      <div
-        data-tip="docker daemon is not running — start colima or Docker Desktop"
-        className="flex flex-col items-center gap-0.5"
+      <RailItem
+        title="Docker"
+        status="daemon not running"
+        onClick={toggleView}
+        active={viewActive}
+        muted
+        pip="warning"
       >
-        <PluginIcon
-          plugin={dockerPlugin}
-          className="h-3.5 w-3.5 text-[var(--text-secondary)]"
-        />
-        <span
-          className="select-none text-[8px] font-bold leading-none text-[var(--yellow)]"
-          data-tip="docker daemon unreachable"
-        >
-          down
-        </span>
-      </div>
+        <PluginIcon plugin={dockerPlugin} />
+      </RailItem>
     );
   }
-  const containerCores = live.cpuPercent != null ? (live.cpuPercent / 100).toFixed(1) : null;
-  const cpuTip =
-    live.vmCpuPct != null
-      ? `${live.vmBacked ? 'VM' : 'host'} cpu — ${live.vmCpuPct}% busy${
-          containerCores != null ? ` · containers ${containerCores} cores` : ''
-        }`
-      : `container cpu — ${cpuPct}% of ${live.cpuCount} cores`;
-  const memTip =
-    vmMemPct != null
-      ? `${live.vmBacked ? 'VM' : 'host'} memory — ${formatBytes(live.memTotalBytes! - live.memAvailBytes!)} of ${formatBytes(
-          live.memTotalBytes!,
-        )} used (${vmMemPct}%)${
-          live.memUsedBytes != null ? ` · containers ${formatBytes(live.memUsedBytes)}` : ''
-        }`
-      : `container memory — ${formatBytes(live.memUsedBytes!)} of ${formatBytes(
-          live.memTotalBytes!,
-        )} (${memPct}%)`;
+  if (!detailed) {
+    return (
+      // Running containers as the badge; everything else is in docker's accordion.
+      <RailItem
+        title="Docker"
+        onClick={toggleView}
+        active={viewActive}
+        badge={live.running > 0 ? live.running : undefined}
+        badgeTone="success"
+      >
+        <PluginIcon plugin={dockerPlugin} />
+      </RailItem>
+    );
+  }
   const title = [
-    `docker — ${live.running} running, ${live.stopped} stopped`,
-    cpuPct != null ? cpuTip : null,
-    memPct != null ? memTip : null,
-    disk
-      ? disk.freeBytes != null
-        ? `disk ${formatBytes(disk.usedBytes)} used · ${formatBytes(disk.freeBytes)} free`
-        : `disk ${formatBytes(disk.usedBytes)} used`
-      : null,
+    `${live.running} running · ${live.stopped} stopped`,
+    cpuTipOf(live, cpuPct),
+    live.memTotalBytes != null ? memTipOf(live, memPct, vmMemPct) : null,
   ]
-    .filter((l) => l != null)
+    .filter(Boolean)
     .join('\n');
   return (
-    <div data-tip={title} className="flex flex-col items-center gap-0.5">
+    // The heavier rail item: running/stopped counts and CPU / MEM / disk
+    // strips, like the pre-redesign rail — opens the docker view on click.
+    <button
+      type="button"
+      onClick={toggleView}
+      data-tip={title}
+      className={`flex flex-col items-center gap-0.5 rounded-[9px] p-1 transition-colors duration-[var(--dur-1)] ${
+        viewActive ? 'bg-[var(--fill-accent)]' : 'hover:bg-[var(--fill-1)]'
+      }`}
+    >
       <div className="flex items-center gap-0.5">
         <div className="flex flex-col items-center gap-0.5">
           <span
@@ -499,19 +627,15 @@ function DockerRail({
             {live.stopped}
           </span>
         </div>
-        <PluginIcon
-            plugin={dockerPlugin}
-            className="h-3.5 w-3.5 text-[var(--text-secondary)]"
-          />
+        <PluginIcon plugin={dockerPlugin} className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
       </div>
-      {/* One rounded bar, three strips — CPU / MEM / disk top to bottom. */}
       {(cpuPct != null || memPct != null || disk?.freeBytes != null) && (
         <div className="mt-0.5 flex w-7 flex-col divide-y divide-[var(--border)] overflow-hidden rounded-sm border border-[var(--border)]">
           {cpuPct != null && (
-            <BarStrip pct={cpuPct} color={pressureColor(cpuPct, 0)} tip={cpuTip} />
+            <BarStrip pct={cpuPct} color={pressureColor(cpuPct, 0)} tip={cpuTipOf(live, cpuPct)} />
           )}
           {memPct != null && (
-            <BarStrip pct={memPct} color={pressureColor(memPct, 0)} tip={memTip} />
+            <BarStrip pct={memPct} color={pressureColor(memPct, 0)} tip={memTipOf(live, memPct, vmMemPct)} />
           )}
           {disk?.freeBytes != null && (
             <BarStrip
@@ -522,7 +646,7 @@ function DockerRail({
           )}
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -539,15 +663,33 @@ export const dockerPlugin: SessionViewPlugin = {
       type: 'number',
       default: 15,
     },
+    {
+      key: 'systemMeters',
+      label: 'Show in the session panel',
+      description:
+        'Containers and CPU, memory and disk of the docker VM as a Docker section at the bottom of the session panel.',
+      type: 'boolean',
+      default: true,
+    },
   ],
-  renderRail: ({ sessions, pluginSettings, setAppAttention, toggleView }) => (
-    <div onClick={toggleView} className="cursor-pointer">
-      <DockerRail
-        sessions={sessions}
-        pluginSettings={pluginSettings}
-        setAppAttention={setAppAttention}
-      />
-    </div>
+  renderRail: ({ sessions, pluginSettings, setAppAttention, viewActive, toggleView }) => (
+    <DockerRail
+      sessions={sessions}
+      pluginSettings={pluginSettings}
+      setAppAttention={setAppAttention}
+      viewActive={viewActive}
+      toggleView={toggleView}
+    />
+  ),
+  renderRailDetail: ({ sessions, pluginSettings, setAppAttention, viewActive, toggleView }) => (
+    <DockerRail
+      sessions={sessions}
+      pluginSettings={pluginSettings}
+      setAppAttention={setAppAttention}
+      viewActive={viewActive}
+      toggleView={toggleView}
+      detailed
+    />
   ),
   renderView: ({ close, sessions, pluginSettings, selectSession, sessionApi, appState, updateAppState }) => (
     <DockerView

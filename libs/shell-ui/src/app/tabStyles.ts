@@ -1,35 +1,41 @@
 /**
- * Class names for one tab on the h-8 tab strips (SessionTabStrip and the
+ * Class names for one tab on the tab strips (SessionTabStrip and the
  * plugin-view strip in ShellApp), shared so every strip looks identical.
  *
- * Every item is a real tab, selected or not: all tabs self-stretch to the
- * strip's full height (reaching the top edge), so their labels always sit
- * at the same centered position — selection changes styling, never
- * geometry. Inactive tabs are transparent with a softened outline so the
- * strip's divider line runs under them (brightens on hover).
+ * 'pill' (the default) is the quiet one: every tab is a 28px rounded pill
+ * centred in the 40px strip. The active tab gets a neutral fill, medium
+ * weight and a 2px accent band on its left edge — the same mark the
+ * selected session card wears; inactive tabs are plain secondary text
+ * that fills on hover. Selection changes the fill, never the geometry,
+ * so labels do not move.
+ *
+ * The earlier looks are kept for the Storybook comparison: 'tab' draws the
+ * active tab as the connected one (content background, rounded top corners,
+ * accent band on its top edge, riding 1px over the strip's divider),
+ * 'underline' is an accent-tint pill with an underline, 'trapezoid' slants
+ * the sides via clip-path. Their inactive tabs are transparent with a
+ * softened outline.
  *
  * The strips draw their bottom divider as an inset shadow, not a border —
  * a real border shrinks the strip's content box, and a full-height tab
- * plus the -mb-px merge trick then overflows one pixel, which
- * overflow-x-auto turns into a vertical scrollbar.
- *
- * 'tab' (the default) draws the ACTIVE tab as the connected one: it takes
- * the content background (--bg — the same fill the workspaces panel and
- * the views below the strip use), rounds its top corners, and rides 1px
- * over the strip's bottom border so it visually connects to the view
- * below. An accent band on its top edge marks it as the selection — drawn
- * as an inset shadow (top border traded for 1px padding, like the
- * selected session row's left band) so its ends curve along the rounded
- * corners instead of stopping flat at the side borders. 'underline' is
- * the previous accent-tint pill, 'trapezoid' slants the sides via
- * clip-path — both kept for the Storybook comparison.
+ * then overflows one pixel, which overflow-x-auto turns into a vertical
+ * scrollbar.
  */
-export type TabStripTabVariant = 'tab' | 'underline' | 'trapezoid';
+export type TabStripTabVariant = 'pill' | 'tab' | 'underline' | 'trapezoid';
+
+/** The strip itself — pair with `tabStripTabClasses` for its tabs. */
+export const tabStripClasses =
+  'flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto px-2 shadow-[inset_0_-1px_0_var(--hairline)]';
 
 export function tabStripTabClasses(
   active: boolean,
-  variant: TabStripTabVariant = 'tab',
+  variant: TabStripTabVariant = 'pill',
 ): string {
+  if (variant === 'pill') {
+    return active
+      ? 'h-7 self-center rounded-[var(--radius-md)] bg-[var(--fill-2)] font-medium text-[var(--text-primary)] shadow-[inset_2px_0_0_0_var(--accent)]'
+      : 'h-7 self-center rounded-[var(--radius-md)] text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]';
+  }
   if (!active) {
     return 'self-stretch rounded-t-md border border-b-0 border-[var(--border)]/60 bg-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]';
   }

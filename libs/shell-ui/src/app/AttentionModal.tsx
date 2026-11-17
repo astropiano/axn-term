@@ -13,8 +13,9 @@ interface AttentionModalProps {
 }
 
 /**
- * Modal listing every raised "needs attention" flag — opened by clicking the
- * pulsing indicator in the left rail. Esc or clicking the backdrop closes it.
+ * Modal listing every raised "needs attention" flag — opened from the
+ * warning button in the session panel's toolbar. Esc or clicking the
+ * backdrop closes it.
  * Session-bound flags are clickable and jump to that session.
  */
 export function AttentionModal({ flags, onClose, onNavigate, onAction }: AttentionModalProps) {
@@ -32,11 +33,11 @@ export function AttentionModal({ flags, onClose, onNavigate, onAction }: Attenti
       onClick={onClose}
     >
       <div
-        className="w-96 max-w-[90vw] rounded border border-[var(--border)] bg-[var(--surface)] p-4 shadow-lg"
+        className="w-96 max-w-[90vw] rounded-[var(--radius-xl)] bg-[var(--elevated)] p-5 shadow-[var(--shadow-pop)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)]">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">
             Needs attention
           </h2>
           <button
@@ -88,7 +89,7 @@ export function AttentionModal({ flags, onClose, onNavigate, onAction }: Attenti
             }
             return (
               <li key={flag.source}>
-                <div className="flex items-start gap-2 px-1.5 py-1 text-xs">
+                <div className="flex items-start gap-2 px-1.5 py-1 text-[13px]">
                   {body}
                 </div>
                 {buttons.length > 0 && (
@@ -101,7 +102,7 @@ export function AttentionModal({ flags, onClose, onNavigate, onAction }: Attenti
                           b.run();
                           onClose();
                         }}
-                        className="flex items-center gap-1 rounded border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--accent)] transition hover:bg-[var(--surface-hover)]"
+                        className="flex items-center gap-1 rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--accent)] transition hover:bg-[var(--surface-hover)]"
                       >
                         {b.label}
                         <ChevronRight className="h-3 w-3" />

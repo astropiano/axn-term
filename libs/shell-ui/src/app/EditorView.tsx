@@ -174,12 +174,12 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
       }}
     >
       <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
-        <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--text-secondary)]">
           {path}
         </span>
         {dirty && <span className="h-2 w-2 rounded-full bg-[var(--orange)]" data-tip="Unsaved" />}
         {error && (
-          <span className="truncate text-[10px] text-[var(--red)]" data-tip={error}>
+          <span className="truncate text-[11px] text-[var(--red)]" data-tip={error}>
             {error}
           </span>
         )}

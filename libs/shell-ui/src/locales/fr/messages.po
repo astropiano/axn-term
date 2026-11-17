@@ -4,7 +4,7 @@ msgstr ""
 
 #. placeholder {0}: server.name
 #. placeholder {1}: endpoint.label
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:410
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:416
 msgid "{0} · via {1}"
 msgstr "{0} · via {1}"
 
@@ -18,7 +18,15 @@ msgstr "{0} {1} en cours seront terminés"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} s'exécute dans le checkout principal — l'isoler dans un worktree ?"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1147
+#: libs/shell-ui/src/app/SessionPanel.tsx:2196
+msgid "{attentionCount} waiting"
+msgstr "{attentionCount} en attente"
+
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:126
+msgid "{cli} is installed"
+msgstr "{cli} est installé"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:1187
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "Un nom d'icône Lucide (p. ex. <0>GitFork</0>) ou une balise SVG en ligne, p. ex. <1>{SVG_HINT_EXAMPLE}</1>"
 
@@ -26,32 +34,41 @@ msgstr "Un nom d'icône Lucide (p. ex. <0>GitFork</0>) ou une balise SVG en lign
 #~ msgid "Account"
 #~ msgstr "Compte"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1172
-#: libs/shell-ui/src/app/SettingsModal.tsx:1174
+#: libs/shell-ui/src/app/SettingsModal.tsx:1212
+#: libs/shell-ui/src/app/SettingsModal.tsx:1214
 msgid "Add icon"
 msgstr "Ajouter une icône"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:681
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:687
 msgid "Advanced"
 msgstr "Avancé"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:976
+#: libs/shell-ui/src/app/SettingsModal.tsx:1016
 msgid "Also used as the session icon while this process is foreground."
 msgstr "Également utilisé comme icône de session lorsque ce processus est au premier plan."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:709
+#: libs/shell-ui/src/app/SettingsModal.tsx:726
 msgid "Applies immediately to the running app. Logs rotate in the OS log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides."
 msgstr "S'applique immédiatement à l'application en cours. Les journaux tournent dans le dossier des journaux du système (~/Library/Logs/axn-term) ; la variable d'environnement LOG_LEVEL est prioritaire."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:61
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:150
+msgid "Asking <0>{asked}</0>, the default. Enter another host if yours is self-hosted."
+msgstr "Hôte interrogé : <0>{asked}</0>, la valeur par défaut. Saisissez un autre hôte si votre instance est auto-hébergée."
+
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:146
+msgid "Asking <0>{asked}</0>."
+msgstr "Hôte interrogé : <0>{asked}</0>."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:62
+#: libs/shell-ui/src/app/SettingsModal.tsx:931
 msgid "Auto"
 msgstr "Auto"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:602
+#: libs/shell-ui/src/app/SettingsModal.tsx:619
 msgid "Auto (WebGL → canvas → DOM)"
 msgstr "Auto (WebGL → canvas → DOM)"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:624
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:630
 msgid "Away from home? Put the phone and this computer on the same Tailscale network — the app switches between Wi-Fi and Tailscale and stays the same device."
 msgstr "Pas chez vous ? Mettez le téléphone et cet ordinateur sur le même réseau Tailscale — l'app bascule entre Wi-Fi et Tailscale et reste le même appareil."
 
@@ -67,26 +84,44 @@ msgstr "axn-term a rencontré une erreur inattendue"
 msgid "Binary file"
 msgstr "Fichier binaire"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:577
+#: libs/shell-ui/src/app/SettingsModal.tsx:594
 msgid "Both"
 msgstr "Les deux"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:498
+msgid "Built-in font"
+msgstr "Police intégrée"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:77
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:116
 #: libs/shell-ui/src/app/FilePickerModal.tsx:232
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:118
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1158
+#: libs/shell-ui/src/app/SettingsModal.tsx:1198
 msgid "Cancel"
 msgstr "Annuler"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:608
+#: libs/shell-ui/src/app/SettingsModal.tsx:625
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "Moteur de rendu cellulaire des terminaux. Auto utilise le GPU (WebGL) avec repli automatique. Forcez canvas/DOM en cas d'artefacts."
 
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:137
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:230
+msgid "Check again"
+msgstr "Vérifier à nouveau"
+
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:144
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:174
+msgid "Choose your {forgeName} host"
+msgstr "Choisissez votre hôte {forgeName}"
+
 #~ msgid "Client ID"
 #~ msgstr "ID client"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:300
+msgid "Clients"
+msgstr "Clients"
 
 #. placeholder {0}: viewers.length
 #. placeholder {1}: snap.role === 'authority' ? ' + host' : ''
@@ -95,58 +130,67 @@ msgstr "Moteur de rendu cellulaire des terminaux. Auto utilise le GPU (WebGL) av
 #~ msgstr "Clients ({0}{1})"
 
 #. placeholder {0}: viewers.length
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:792
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:798
 msgid "Clients: {0}"
 msgstr "Clients : {0}"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2796
+#: libs/shell-ui/src/app/SettingsModal.tsx:163
+msgid "Close"
+msgstr "Fermer"
+
+#: libs/shell-ui/src/app/ShellApp.tsx:2996
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:484
+#: libs/shell-ui/src/app/SessionPanel.tsx:555
 msgid "Collapse"
 msgstr "Replier"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:647
+#: libs/shell-ui/src/app/SettingsModal.tsx:664
 msgid "Config file"
 msgstr "Fichier de configuration"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:94
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:96
 msgid "Confirm this code in the browser to finish signing in:"
 msgstr "Confirmez ce code dans le navigateur pour terminer la connexion :"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:402
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:408
 msgid "Connect"
 msgstr "Connecter"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:604
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:114
+msgid "Connect {forgeName}"
+msgstr "Connecter {forgeName}"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:610
 msgid "Connect a phone"
 msgstr "Connecter un téléphone"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:824
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:830
 msgid "Connected to"
 msgstr "Connecté à"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:532
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:538
 msgid "connecting…"
 msgstr "connexion…"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:402
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:408
 msgid "Connecting…"
 msgstr "Connexion…"
 
 #~ msgid "Connecting\\u2026"
 #~ msgstr "Connexion\\u2026"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:670
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:294
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:676
 msgid "Connection"
 msgstr "Connexion"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:204
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:206
 msgid "Connection lost"
 msgstr "Connexion perdue"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:634
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:640
 msgid "Copied"
 msgstr "Copié"
 
@@ -154,6 +198,8 @@ msgstr "Copié"
 #: libs/shell-ui/src/app/AppContextMenu.tsx:184
 #: libs/shell-ui/src/app/AppContextMenu.tsx:198
 #: libs/shell-ui/src/app/preview-plugins/image.tsx:65
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:206
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:207
 #: libs/shell-ui/src/PathActionMenu.tsx:215
 #: libs/shell-ui/src/PathActionMenu.tsx:304
 msgid "Copy"
@@ -164,7 +210,7 @@ msgstr "Copier"
 msgid "Copy image to clipboard"
 msgstr "Copier l'image dans le presse-papiers"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:634
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:640
 msgid "Copy link"
 msgstr "Copier le lien"
 
@@ -182,7 +228,7 @@ msgstr "Copier la sélection"
 msgid "Copy URL"
 msgstr "Copier l'URL"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:339
+#: libs/shell-ui/src/app/SettingsModal.tsx:336
 msgid "Could not parse the file as YAML."
 msgstr "Impossible de lire le fichier en YAML."
 
@@ -194,19 +240,19 @@ msgstr "actuel"
 msgid "Cut"
 msgstr "Couper"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:60
+#: libs/shell-ui/src/app/SettingsModal.tsx:61
 msgid "Dark"
 msgstr "Sombre"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:418
+#: libs/shell-ui/src/app/SettingsModal.tsx:415
 msgid "Dark theme"
 msgstr "Thème sombre"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:225
+#: libs/shell-ui/src/app/SettingsModal.tsx:222
 msgid "Decrease font size"
 msgstr "Réduire la taille de police"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:284
+#: libs/shell-ui/src/app/SettingsModal.tsx:281
 msgid "Decrease line height"
 msgstr "Réduire la hauteur de ligne"
 
@@ -214,7 +260,7 @@ msgstr "Réduire la hauteur de ligne"
 msgid "Default folder"
 msgstr "Dossier par défaut"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:450
+#: libs/shell-ui/src/app/SettingsModal.tsx:447
 msgid "Default shell"
 msgstr "Shell par défaut"
 
@@ -224,7 +270,7 @@ msgid "Delete {0}"
 msgstr "Supprimer {0}"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:527
+#: libs/shell-ui/src/app/SessionPanel.tsx:598
 msgid "Delete workspace"
 msgstr "Supprimer le workspace"
 
@@ -237,7 +283,7 @@ msgstr "Supprimer le workspace « {0} » ?"
 msgid "Directory"
 msgstr "Répertoire"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:823
+#: libs/shell-ui/src/app/SettingsModal.tsx:840
 msgid "disabled"
 msgstr "désactivé"
 
@@ -245,7 +291,7 @@ msgstr "désactivé"
 msgid "Don't ask again"
 msgstr "Ne plus demander"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:332
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:338
 msgid "done"
 msgstr "terminé"
 
@@ -253,11 +299,11 @@ msgstr "terminé"
 msgid "Edit"
 msgstr "Modifier"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1101
+#: libs/shell-ui/src/app/SettingsModal.tsx:1141
 msgid "Edit icon"
 msgstr "Modifier l'icône"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:753
+#: libs/shell-ui/src/app/SessionPanel.tsx:830
 msgid "Edit summary…"
 msgstr "Modifier le résumé…"
 
@@ -265,20 +311,20 @@ msgstr "Modifier le résumé…"
 msgid "empty"
 msgstr "vide"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:547
+#: libs/shell-ui/src/app/SettingsModal.tsx:564
 msgid "Enable devin task parser"
 msgstr "Activer l'analyseur de tâches devin"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:727
+#: libs/shell-ui/src/app/SettingsModal.tsx:744
 msgid "Enable remote — show the Remote console in the rail"
 msgstr "Activer le remote — afficher la console Remote dans la barre"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:823
-#: libs/shell-ui/src/app/SettingsModal.tsx:886
+#: libs/shell-ui/src/app/SettingsModal.tsx:840
+#: libs/shell-ui/src/app/SettingsModal.tsx:903
 msgid "enabled"
 msgstr "activé"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:578
+#: libs/shell-ui/src/app/SettingsModal.tsx:595
 msgid "End of session list"
 msgstr "Fin de la liste des sessions"
 
@@ -287,23 +333,27 @@ msgstr "Fin de la liste des sessions"
 #~ msgid "Enter code {0} in the browser to finish sign-in."
 #~ msgstr "Saisissez le code {0} dans le navigateur pour terminer la connexion."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:484
+#: libs/shell-ui/src/app/SessionPanel.tsx:555
 msgid "Expand"
 msgstr "Déplier"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:350
+#: libs/shell-ui/src/app/SettingsModal.tsx:347
 msgid "Export failed."
 msgstr "Échec de l'export."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:662
+#: libs/shell-ui/src/app/SettingsModal.tsx:679
 msgid "Export…"
 msgstr "Exporter…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:348
+#: libs/shell-ui/src/app/SettingsModal.tsx:345
 msgid "Exported."
 msgstr "Exporté."
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:533
+#: libs/shell-ui/src/app/SessionPanel.tsx:814
+msgid "F2 · double-click"
+msgstr "F2 · double-clic"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:539
 msgid "failed"
 msgstr "échec"
 
@@ -312,23 +362,27 @@ msgstr "échec"
 #~ msgid "Failed: {0}"
 #~ msgstr "\\u00c9chec : {0}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:842
+#: libs/shell-ui/src/app/SessionPanel.tsx:812
+msgid "Faster: F2 on the selected session, or double-click its name"
+msgstr "Plus rapide : F2 sur la session sélectionnée ou double-clic sur son nom"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:859
 msgid "file preview"
 msgstr "aperçu du fichier"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:752
+#: libs/shell-ui/src/app/SettingsModal.tsx:769
 msgid "File previews"
 msgstr "Aperçus de fichiers"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:794
+#: libs/shell-ui/src/app/SettingsModal.tsx:811
 msgid "Filter plugins…"
 msgstr "Filtrer les plugins…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:194
+#: libs/shell-ui/src/app/SessionPanel.tsx:265
 msgid "Filter sessions…"
 msgstr "Filtrer les sessions…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:382
+#: libs/shell-ui/src/app/SettingsModal.tsx:379
 msgid "Filter settings…"
 msgstr "Filtrer les réglages…"
 
@@ -336,15 +390,19 @@ msgstr "Filtrer les réglages…"
 msgid "Fix the path or open the session in your home folder."
 msgstr "Corrigez le chemin ou ouvrez la session dans votre dossier personnel."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:519
+#: libs/shell-ui/src/app/SettingsModal.tsx:486
+msgid "Font for the rail, session panel, tabs and dialogs. Empty uses the system font."
+msgstr "Police de la barre latérale, du panneau des sessions, des onglets et des dialogues. Vide : police du système."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:536
 msgid "Font for the session/workspace panel. Size scales it relative to the 12px default."
 msgstr "Police du panneau sessions/workspaces. La taille est relative au 12px par défaut."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1261
+#: libs/shell-ui/src/app/FontPicker.tsx:252
 msgid "Font not installed — keeping the previous font."
 msgstr "Police non installée — la police précédente est conservée."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:219
+#: libs/shell-ui/src/app/SettingsModal.tsx:216
 msgid "Font size (px)"
 msgstr "Taille de police (px)"
 
@@ -352,11 +410,15 @@ msgstr "Taille de police (px)"
 msgid "Force remove"
 msgstr "Forcer la suppression"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:424
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:430
 msgid "Forget"
 msgstr "Oublier"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:111
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:189
+msgid "Found in the remote of an open session"
+msgstr "Trouvé dans le dépôt distant d'une session ouverte"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:112
 msgid "General"
 msgstr "Général"
 
@@ -364,55 +426,64 @@ msgstr "Général"
 #~ msgid "host — this machine"
 #~ msgstr "hôte — cette machine"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:685
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:691
 msgid "Hub URL"
 msgstr "URL du hub"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:670
+#: libs/shell-ui/src/app/SettingsModal.tsx:687
 msgid "Import replaces all settings with the picked config.yaml."
 msgstr "L'import remplace tous les réglages par le config.yaml choisi."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:655
+#: libs/shell-ui/src/app/SettingsModal.tsx:672
 msgid "Import…"
 msgstr "Importer…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:337
+#: libs/shell-ui/src/app/SettingsModal.tsx:334
 msgid "Imported."
 msgstr "Importé."
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:332
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:338
 msgid "in progress"
 msgstr "en cours"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:250
+#: libs/shell-ui/src/app/SettingsModal.tsx:247
 msgid "Increase font size"
 msgstr "Augmenter la taille de police"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:307
+#: libs/shell-ui/src/app/SettingsModal.tsx:304
 msgid "Increase line height"
 msgstr "Augmenter la hauteur de ligne"
+
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:126
+msgid "Install {cli}"
+msgstr "Installer {cli}"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:475
+#: libs/shell-ui/src/app/SettingsModal.tsx:525
+msgid "Interface font"
+msgstr "Police de l'interface"
 
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:35
 msgid "Invalid default folder"
 msgstr "Dossier par défaut invalide"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:430
+#: libs/shell-ui/src/app/SettingsModal.tsx:427
 msgid "Language"
 msgstr "Langue"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:473
+#: libs/shell-ui/src/app/SettingsModal.tsx:470
 msgid "Leave empty to use the system $SHELL."
 msgstr "Laisser vide pour utiliser le $SHELL du système."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:59
+#: libs/shell-ui/src/app/SettingsModal.tsx:60
 msgid "Light"
 msgstr "Clair"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:410
+#: libs/shell-ui/src/app/SettingsModal.tsx:407
 msgid "Light theme"
 msgstr "Thème clair"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:278
+#: libs/shell-ui/src/app/SettingsModal.tsx:275
 msgid "Line height"
 msgstr "Hauteur de ligne"
 
@@ -428,11 +499,11 @@ msgstr "chargement…"
 msgid "Loading…"
 msgstr "Chargement…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:682
+#: libs/shell-ui/src/app/SettingsModal.tsx:699
 msgid "Log level"
 msgstr "Niveau de journalisation"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:956
+#: libs/shell-ui/src/app/SettingsModal.tsx:996
 msgid "Logo"
 msgstr "Logo"
 
@@ -440,7 +511,7 @@ msgstr "Logo"
 msgid "Main window"
 msgstr "Fenêtre principale"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:638
+#: libs/shell-ui/src/app/SettingsModal.tsx:655
 msgid "Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
 msgstr "Associez les noms d'exécutables ou les identifiants de plugins à une icône Lucide (p. ex. Bot, SquareTerminal) ou une balise SVG."
 
@@ -452,36 +523,40 @@ msgstr "Associez les noms d'exécutables ou les identifiants de plugins à une i
 msgid "Move “{sessionName}” to workspace"
 msgstr "Déplacer « {sessionName} » vers le workspace"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:885
+#: libs/shell-ui/src/app/SessionPanel.tsx:962
 msgid "Move to new window"
 msgstr "Déplacer vers une nouvelle fenêtre"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:869
+#: libs/shell-ui/src/app/SessionPanel.tsx:946
 msgid "Move to workspace…"
 msgstr "Déplacer vers le workspace…"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:332
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:338
 msgid "needs attention"
 msgstr "à vérifier"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2025
+#: libs/shell-ui/src/app/SessionPanel.tsx:1579
+msgid "Needs you"
+msgstr "Vous attend"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:2366
 msgid "New session"
 msgstr "Nouvelle session"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:566
+#: libs/shell-ui/src/app/SettingsModal.tsx:583
 msgid "New session button"
 msgstr "Bouton nouvelle session"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2098
+#: libs/shell-ui/src/app/SessionPanel.tsx:2490
 msgid "New session in folder…"
 msgstr "Nouvelle session dans un dossier…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:513
+#: libs/shell-ui/src/app/SessionPanel.tsx:584
 msgid "New session in workspace"
 msgstr "Nouvelle session dans le workspace"
 
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:396
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:408
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:398
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:410
 msgid "New session with agent…"
 msgstr "Nouvelle session avec agent…"
 
@@ -490,7 +565,7 @@ msgstr "Nouvelle session avec agent…"
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "Les nouvelles sessions dans « {0} » démarrent dans ce dossier. Laissez vide pour votre dossier personnel."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:214
+#: libs/shell-ui/src/app/SessionPanel.tsx:285
 msgid "New workspace"
 msgstr "Nouveau workspace"
 
@@ -505,17 +580,21 @@ msgstr "Nouveau workspace « {name} » dans cette fenêtre"
 msgid "New worktree session"
 msgstr "Nouvelle session worktree"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:814
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:820
 msgid "no clients"
 msgstr "aucun client"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1111
+#: libs/shell-ui/src/app/SettingsModal.tsx:1151
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "Aucune icône configurée — chaque session affiche l'icône de terminal par défaut."
 
 #: libs/shell-ui/src/app/SearchPickerModal.tsx:118
 msgid "No matches."
 msgstr "Aucun résultat."
+
+#: libs/shell-ui/src/app/FontPicker.tsx:233
+msgid "No matching font"
+msgstr "Aucune police correspondante"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:49
 msgid "No sessions inside."
@@ -532,11 +611,11 @@ msgstr "aucun workspace"
 #~ msgid "No workspaces match."
 #~ msgstr "Aucun workspace ne correspond."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:333
+#: libs/shell-ui/src/app/SettingsModal.tsx:330
 msgid "Not a valid config.yaml — expected a YAML mapping."
 msgstr "config.yaml invalide — un mapping YAML est attendu."
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:542
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:548
 msgid "not connected — enter the server address above"
 msgstr "non connecté — saisissez l'adresse du serveur ci-dessus"
 
@@ -544,27 +623,27 @@ msgstr "non connecté — saisissez l'adresse du serveur ci-dessus"
 #~ msgid "Not publishing"
 #~ msgstr "Non publi\\u00e9"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:137
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:139
 msgid "Not signed in"
 msgstr "Non connecté"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:533
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:539
 msgid "not yet"
 msgstr "pas encore"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:721
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:727
 msgid "OIDC client"
 msgstr "Client OIDC"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:709
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:715
 msgid "OIDC issuer"
 msgstr "Émetteur OIDC"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:618
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:624
 msgid "On the same Wi-Fi, the axn-term app finds this desktop by itself. Anywhere else, scan this code in the app."
 msgstr "Sur le même Wi-Fi, l'app axn-term trouve ce bureau toute seule. Ailleurs, scannez ce code dans l'app."
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:814
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:820
 msgid "only this device, not viewing a session"
 msgstr "uniquement cet appareil, aucune session affichée"
 
@@ -575,7 +654,12 @@ msgstr "uniquement cet appareil, aucune session affichée"
 msgid "Open"
 msgstr "Ouvrir"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2078
+#: libs/shell-ui/src/app/PanelStatusSection.tsx:165
+#: libs/shell-ui/src/app/PanelStatusSection.tsx:166
+msgid "Open {title}"
+msgstr "Ouvrir {title}"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:2470
 msgid "Open a saved workspace set file"
 msgstr "Ouvrir un fichier de jeu de workspaces enregistré"
 
@@ -595,7 +679,7 @@ msgstr "Ouvrir dans le workspace"
 msgid "Open link"
 msgstr "Ouvrir le lien"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:705
+#: libs/shell-ui/src/app/SettingsModal.tsx:722
 msgid "Open log folder…"
 msgstr "Ouvrir le dossier des journaux…"
 
@@ -603,11 +687,11 @@ msgstr "Ouvrir le dossier des journaux…"
 msgid "Open preview in a tab"
 msgstr "Ouvrir l'aperçu dans un onglet"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2086
+#: libs/shell-ui/src/app/SessionPanel.tsx:2478
 msgid "Open workspace set from file…"
 msgstr "Ouvrir un jeu de workspaces depuis un fichier…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1857
+#: libs/shell-ui/src/app/SessionPanel.tsx:2161
 msgid "Open…"
 msgstr "Ouvrir…"
 
@@ -616,15 +700,19 @@ msgstr "Ouvrir…"
 #~ msgid "optional"
 #~ msgstr "facultatif"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:534
+#: libs/shell-ui/src/app/SettingsModal.tsx:551
 msgid "Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size."
 msgstr "Échelle globale de l'interface en pourcent — panneau, onglets, bannières, menus. Le terminal utilise sa propre taille de police."
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:610
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:616
 msgid "Pairing code for the axn-term app"
 msgstr "Code d'appairage pour l'app axn-term"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:503
+#: libs/shell-ui/src/app/SettingsModal.tsx:932
+msgid "Panel accordion"
+msgstr "Accordéon du panneau"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:518
 msgid "Panel font"
 msgstr "Police du panneau"
 
@@ -633,26 +721,27 @@ msgstr "Police du panneau"
 msgid "Paste"
 msgstr "Coller"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:760
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:766
 msgid "Pause viewport"
 msgstr "Mettre la vue en pause"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:866
+#: libs/shell-ui/src/app/SettingsModal.tsx:883
 msgid "permissions:"
 msgstr "permissions :"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:530
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:536
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "les téléphones et navigateurs connectés au même compte peuvent s'y joindre"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2093
+#: libs/shell-ui/src/app/SessionPanel.tsx:2485
 msgid "Pick a folder — the new session starts in it"
 msgstr "Choisir un dossier — la nouvelle session y démarre"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:112
+#: libs/shell-ui/src/app/SettingsModal.tsx:113
 msgid "Plugins"
 msgstr "Plugins"
 
+#: libs/shell-ui/src/app/FontPicker.tsx:246
 #: libs/shell-ui/src/PathActionMenu.tsx:263
 msgid "Preview"
 msgstr "Aperçu"
@@ -661,7 +750,7 @@ msgstr "Aperçu"
 msgid "Preview unavailable"
 msgstr "Aperçu indisponible"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1120
+#: libs/shell-ui/src/app/SettingsModal.tsx:1160
 msgid "Process"
 msgstr "Processus"
 
@@ -672,7 +761,7 @@ msgstr "Processus"
 #~ msgid "Publish this window's terminals to a /remote hub \\u2014 other devices attach via the web app with ?remote=<session>."
 #~ msgstr "Publie les terminaux de cette fen\\u00eatre sur un hub /remote \\u2014 les autres appareils s'y connectent via l'app web avec ?remote=<session>."
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:560
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:566
 msgid "Publishing"
 msgstr "Publication"
 
@@ -682,6 +771,10 @@ msgstr "Publication"
 
 #~ msgid "Publishing \\u2014 connected"
 #~ msgstr "Publi\\u00e9 \\u2014 connect\\u00e9"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:933
+msgid "Rail item"
+msgstr "Élément de la barre"
 
 #: libs/shell-ui/src/app/ErrorBoundary.tsx:72
 msgid "Reload view"
@@ -699,30 +792,30 @@ msgstr "Recharger la fenêtre"
 #. placeholder {0}: snap.role === 'authority' ? 'host' : `viewing ${snap.hostName ?? 'host'}`
 #. placeholder {1}: stateLabel(snap)
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:278
-msgid "Remote — {0} · {1} · {count} client(s)"
-msgstr "Remote — {0} · {1} · {count} client(s)"
+#~ msgid "Remote — {0} · {1} · {count} client(s)"
+#~ msgstr "Remote — {0} · {1} · {count} client(s)"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:746
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:752
 msgid "Remote — this machine is the host"
 msgstr "Remote — cette machine est l'hôte"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:746
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:752
 msgid "Remote — viewing"
 msgstr "Remote — affichage"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:718
+#: libs/shell-ui/src/app/SettingsModal.tsx:735
 msgid "Remote access"
 msgstr "Accès distant"
 
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:279
-msgid "Remote console"
-msgstr "Console Remote"
+#~ msgid "Remote console"
+#~ msgstr "Console Remote"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:720
 #~ msgid "Remote control"
 #~ msgstr "Contr\\u00f4le \\u00e0 distance"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1104
+#: libs/shell-ui/src/app/SettingsModal.tsx:1144
 msgid "Remove icon"
 msgstr "Supprimer l'icône"
 
@@ -730,17 +823,21 @@ msgstr "Supprimer l'icône"
 msgid "Remove worktree"
 msgstr "Supprimer le worktree"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:560
+#: libs/shell-ui/src/app/SessionPanel.tsx:1519
+msgid "Rename session"
+msgstr "Renommer la session"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:577
 msgid "Render session summaries (set via axn-session-summary)"
 msgstr "Afficher les résumés de session (via axn-session-summary)"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
-#: libs/shell-ui/src/app/SettingsModal.tsx:858
+#: libs/shell-ui/src/app/SettingsModal.tsx:875
 msgid "requires {0}{1}"
 msgstr "nécessite {0}{1}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:706
+#: libs/shell-ui/src/app/SessionPanel.tsx:777
 msgid "Reset to process name"
 msgstr "Rétablir le nom du processus"
 
@@ -753,15 +850,15 @@ msgstr "Rétablir le nom du processus"
 msgid "Resume {agent} session{0}"
 msgstr "Reprendre la session {agent}{0}"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:760
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:766
 msgid "Resume viewport"
 msgstr "Reprendre la vue"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:220
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:222
 msgid "Retry now"
 msgstr "Réessayer"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:211
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:213
 msgid "Retrying…"
 msgstr "Nouvelle tentative…"
 
@@ -769,17 +866,29 @@ msgstr "Nouvelle tentative…"
 msgid "Review worktree changes"
 msgstr "Vérifier les changements du worktree"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:872
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:226
+msgid "Run in a shell tab"
+msgstr "Exécuter dans un onglet shell"
+
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:197
+msgid "Run the login in a shell, then check again."
+msgstr "Lancez la connexion dans un shell, puis vérifiez à nouveau."
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:2429
+msgid "Running"
+msgstr "Actives"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:889
 msgid "sandboxed — no permissions (no shell, files or terminal access)"
 msgstr "sandboxé — aucune permission (pas d'accès shell, fichiers ou terminal)"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1166
+#: libs/shell-ui/src/app/SettingsModal.tsx:1206
 msgid "Save"
 msgstr "Enregistrer"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1853
+#: libs/shell-ui/src/app/SessionPanel.tsx:2157
 msgid "Save workspace set"
 msgstr "Enregistrer le jeu de workspaces"
 
@@ -804,11 +913,11 @@ msgstr "Sélectionner un dossier"
 msgid "Select this folder"
 msgstr "Sélectionner ce dossier"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:537
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:543
 msgid "Server"
 msgstr "Serveur"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:399
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:405
 msgid "Server address"
 msgstr "Adresse du serveur"
 
@@ -817,7 +926,12 @@ msgstr "Adresse du serveur"
 #~ msgid "Server URL"
 #~ msgstr "URL du serveur"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:617
+#: libs/shell-ui/src/app/SessionPanel.tsx:1555
+#: libs/shell-ui/src/app/SessionPanel.tsx:1557
+msgid "Session actions"
+msgstr "Actions de la session"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:634
 msgid "Session icons"
 msgstr "Icônes de session"
 
@@ -828,11 +942,11 @@ msgstr "Icônes de session"
 #~ msgid "Session name on the hub (optional)"
 #~ msgstr "Nom de session sur le hub (facultatif)"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:842
+#: libs/shell-ui/src/app/SettingsModal.tsx:859
 msgid "session plugin"
 msgstr "plugin de session"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:746
+#: libs/shell-ui/src/app/SettingsModal.tsx:763
 msgid "Session plugins"
 msgstr "Plugins de session"
 
@@ -841,12 +955,16 @@ msgid "Session summary"
 msgstr "Résumé de la session"
 
 #. placeholder {0}: snap.sessionId.includes('/') ? snap.sessionId.slice(snap.sessionId.indexOf('/') + 1) : snap.sessionId
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:837
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:843
 msgid "Session: {0}"
 msgstr "Session : {0}"
 
+#: libs/shell-ui/src/app/SessionPanel.tsx:2424
+msgid "Sessions"
+msgstr "Sessions"
+
 #. placeholder {0}: snap.sessions.length
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:770
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:776
 msgid "Sessions ({0})"
 msgstr "Sessions ({0})"
 
@@ -854,102 +972,129 @@ msgstr "Sessions ({0})"
 msgid "Set default folder…"
 msgstr "Définir le dossier par défaut…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:142
+#: libs/shell-ui/src/app/SettingsModal.tsx:143
 msgid "Settings"
 msgstr "Réglages"
 
 #: libs/shell-ui/src/app/SessionTabStrip.tsx:49
-msgid "shell"
-msgstr "shell"
+#~ msgid "shell"
+#~ msgstr "shell"
 
 #: libs/shell-ui/src/app/SessionTabStrip.tsx:43
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:49
 msgid "Shell"
 msgstr "Shell"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:478
+#: libs/shell-ui/src/app/SettingsModal.tsx:491
 msgid "Shell font"
 msgstr "Police du shell"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:111
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:132
+#: libs/shell-ui/src/app/SessionPanel.tsx:2189
+msgid "Show all sessions"
+msgstr "Afficher toutes les sessions"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:2189
+msgid "Show only sessions that need you"
+msgstr "Afficher uniquement les sessions qui vous attendent"
+
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:196
+msgid "Sign in"
+msgstr "Se connecter"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:113
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:134
 msgid "Sign in…"
 msgstr "Se connecter…"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:85
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:229
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:847
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:87
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:231
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:853
 msgid "Sign out"
 msgstr "Se déconnecter"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:552
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:558
 msgid "Signed in"
 msgstr "Connecté"
 
 #. placeholder {0}: auth.user ?? ''
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:78
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:80
 msgid "Signed in as {0}"
 msgstr "Connecté en tant que {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3311
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3331
 msgid "Start workflow…"
 msgstr "Démarrer le workflow…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:674
+#: libs/shell-ui/src/app/SettingsModal.tsx:926
+msgid "Status display"
+msgstr "Affichage du statut"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:691
 msgid "Stored in ~/.axn-term/config.yaml"
 msgstr "Stocké dans ~/.axn-term/config.yaml"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:917
+#: libs/shell-ui/src/app/SettingsModal.tsx:957
 msgid "Stored in ~/.axn-term/plugins.yaml"
 msgstr "Stocké dans ~/.axn-term/plugins.yaml"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:675
+#: libs/shell-ui/src/app/SettingsModal.tsx:692
 msgid "Stored in browser localStorage"
 msgstr "Stocké dans le localStorage du navigateur"
 
 #. placeholder {0}: t(modeMessages[next])
-#: libs/shell-ui/src/app/SettingsModal.tsx:43
 #: libs/shell-ui/src/app/SettingsModal.tsx:44
+#: libs/shell-ui/src/app/SettingsModal.tsx:45
 msgid "Switch to {0}"
 msgstr "Passer à {0}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:439
+#: libs/shell-ui/src/app/PanelStatusSection.tsx:257
+#: libs/shell-ui/src/app/SettingsModal.tsx:436
 msgid "System"
 msgstr "Système"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:481
+#: libs/shell-ui/src/app/SettingsModal.tsx:482
+msgid "System font"
+msgstr "Police du système"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:424
 #~ msgid "Terminal font family and size in px. Empty uses the built-in monospace stack at 14px."
 #~ msgstr "Famille et taille de police du terminal en px. Vide utilise la pile monospace intégrée à 14px."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:498
+#: libs/shell-ui/src/app/SettingsModal.tsx:513
 msgid "Terminal font family, size in px, and line height. Empty uses the built-in monospace stack at 14px."
 msgstr "Police du terminal, taille en px et hauteur de ligne. Vide utilise la pile monospace intégrée en 14px."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:591
+#: libs/shell-ui/src/app/SettingsModal.tsx:608
 msgid "Terminal renderer"
 msgstr "Moteur de rendu du terminal"
+
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:130
+msgid "The command line tool was not found on this machine. Install it from <0>{installUrl}</0>, then check again."
+msgstr "L'outil en ligne de commande est introuvable sur cette machine. Installez-le depuis <0>{installUrl}</0>, puis vérifiez à nouveau."
 
 #. placeholder {0}: workspace.name
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:38
 msgid "The default folder of “{0}” does not exist:"
 msgstr "Le dossier par défaut de « {0} » n'existe pas :"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:192
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:194
 msgid "The remote host is unreachable — is it running?"
 msgstr "L'hôte distant est injoignable — est-il démarré ?"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:547
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:553
 msgid "The saved server is not answering — connect again"
-msgstr ""
+msgstr "Le serveur enregistré ne répond pas — reconnectez-vous"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:194
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:196
 msgid "The server is reachable, but the remote channel failed."
 msgstr "Le serveur est joignable, mais le canal distant a échoué."
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:565
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:571
 msgid "The server refused this desktop: {lastDenied}"
 msgstr "Le serveur a refusé ce bureau : {lastDenied}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:387
+#: libs/shell-ui/src/app/SettingsModal.tsx:384
 msgid "Theme"
 msgstr "Thème"
 
@@ -959,11 +1104,11 @@ msgstr "Thème"
 msgid "This closes {0} {1} inside it."
 msgstr "Cela ferme les {0} {1} qu'il contient."
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:797
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:803
 msgid "This machine is the host"
 msgstr "Cette machine est l'hôte"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:912
+#: libs/shell-ui/src/app/SettingsModal.tsx:952
 msgid "This plugin declares no settings."
 msgstr "Ce plugin ne déclare aucun réglage."
 
@@ -975,15 +1120,19 @@ msgstr "Ce texte dépasse trois lignes — il sera raccourci dans la liste des s
 msgid "This view hit an unexpected error"
 msgstr "Cette vue a rencontré une erreur inattendue"
 
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:116
+msgid "This view lists the requests that wait for you on {forgeName}. It reads them with the <0>{cli}</0> command line tool."
+msgstr "Cette vue liste les requêtes qui vous attendent sur {forgeName}. Elle les lit avec l'outil en ligne de commande <0>{cli}</0>."
+
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
 msgid "This window"
 msgstr "Cette fenêtre"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:332
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:338
 msgid "to do"
 msgstr "à faire"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:524
+#: libs/shell-ui/src/app/SettingsModal.tsx:541
 msgid "UI zoom"
 msgstr "Zoom de l'UI"
 
@@ -992,15 +1141,19 @@ msgstr "Zoom de l'UI"
 msgid "Unable to read file"
 msgstr "Impossible de lire le fichier"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:859
+#: libs/shell-ui/src/app/SettingsModal.tsx:876
 msgid "unmet, plugin disabled"
 msgstr "non satisfait, plugin désactivé"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:466
+#: libs/shell-ui/src/app/SettingsModal.tsx:463
 msgid "Use system default"
 msgstr "Utiliser le réglage système"
 
-#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:697
+#: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:183
+msgid "Use this host"
+msgstr "Utiliser cet hôte"
+
+#: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:703
 msgid "User token"
 msgstr "Jeton utilisateur"
 
@@ -1011,16 +1164,20 @@ msgstr "Jeton utilisateur"
 #~ msgid "waiting for the browser sign-in…"
 #~ msgstr "en attente de la connexion dans le navigateur…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:582
+#: libs/shell-ui/src/app/SettingsModal.tsx:599
 msgid "Where the \"+\" for a new session appears: a ghost row at the end of each workspace's session list, the workspace header, or both."
 msgstr "Où apparaît le \"+\" de nouvelle session : une ligne fantôme à la fin de la liste des sessions de chaque espace de travail, l'en-tête de l'espace de travail, ou les deux."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:927
+msgid "Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise."
+msgstr "Où les indicateurs d'état de ce plugin apparaissent. « Auto » utilise la barre latérale sur les appareils tactiles et le panneau de session sinon."
 
 #. placeholder {0}: k.n
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
 msgid "Window {0}"
 msgstr "Fenêtre {0}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:579
+#: libs/shell-ui/src/app/SettingsModal.tsx:596
 msgid "Workspace header"
 msgstr "En-tête de l'espace de travail"
 
