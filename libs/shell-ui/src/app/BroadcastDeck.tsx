@@ -19,6 +19,7 @@ import type { SessionBackend } from '@axn-term/session-backend';
 import { activeTabAcceptsInput, ptyIdOf, sessionDisplayName, type ShellSession } from '../types';
 import { useBroadcastSet } from './broadcastSet';
 import { useSettings } from '../SettingsProvider';
+import { resolveShellFont } from '../themes';
 import { dangerCheck, type DangerHit } from './broadcastDanger';
 
 /**
@@ -108,6 +109,9 @@ export function BroadcastDeck({
 }) {
   const markedIds = useBroadcastSet();
   const { settings } = useSettings();
+  // Same font the terminals use — resolves family fallback, default size
+  // and uiZoom; raw settings fall back to the page's 16px when unset.
+  const shellFont = resolveShellFont(settings);
   const [text, setText] = useState('');
   /** Set while a dangerous buffer awaits the confirm dialog. */
   const [danger, setDanger] = useState<DangerHit | null>(null);
@@ -211,7 +215,7 @@ export function BroadcastDeck({
         <label
           htmlFor="axn-broadcast-input"
           className="shrink-0 select-none py-0.5 font-mono text-[var(--accent)]"
-          style={{ fontSize: settings.shellFontSize }}
+          style={{ fontSize: shellFont.size, lineHeight: shellFont.lineHeight }}
         >
           {'❯'}
         </label>
@@ -245,9 +249,9 @@ export function BroadcastDeck({
           spellCheck={false}
           disabled={!canSend}
           style={{
-            fontFamily: settings.shellFontFamily,
-            fontSize: settings.shellFontSize,
-            lineHeight: 1.4,
+            fontFamily: shellFont.family,
+            fontSize: shellFont.size,
+            lineHeight: shellFont.lineHeight,
             maxHeight: '10em',
             caretColor: 'var(--accent)',
           }}
