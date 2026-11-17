@@ -6,10 +6,11 @@ version backed by per-user remote session hosts.
 ## Status
 
 **Pre-alpha.** The project is under active development and there are no
-published releases — no signed DMGs, installers, or nightly builds. If you
-want to try it, you build it yourself from source (see Getting started);
-expect rough edges, breaking changes between commits, and no upgrade path
-for persisted state yet.
+published releases and no versioning yet — no signed DMGs, installers, or
+nightly builds; the version fields in the repo are placeholders. If you
+want to try it, you build it yourself from source (below); expect rough
+edges, breaking changes between commits, and no upgrade path for persisted
+state yet.
 
 Axn-term started as an exploration of developer experience rather than as
 another terminal. It's an alternative take on what tools like
@@ -65,6 +66,23 @@ pnpm dev:desktop
 
 # Run the unit tests
 npx nx run-many -t test
+```
+
+### Building the app
+
+```bash
+# macOS — .app lands in target/release/bundle/macos/, the DMG in
+# target/release/bundle/dmg/. The repo's signing identity only exists on
+# the dev machines; "-" signs adhoc instead (see docs/macos-packaging.md —
+# adhoc builds may re-ask for Local Network access).
+APPLE_SIGNING_IDENTITY="-" pnpm build:desktop
+
+# Linux — Docker builder, no host toolchain needed; artifacts land in
+# ./artifacts/desktop/
+pnpm build:desktop:docker
+
+# Windows — NSIS installer, Docker cross-build → ./artifacts/windows/bundle/
+pnpm build:desktop:windows
 ```
 
 ## Scripts
