@@ -120,6 +120,7 @@ function RailAndWorkspacesExample({ detailed }: { detailed: boolean }) {
             mergePluginData={mergePluginData}
             onOpenSubShell={() => {}}
             onTurnIntoWorkspace={() => {}}
+            onOpenPluginView={() => {}}
             hiddenStatusSources={
               detailed
                 ? all.filter((p) => p.renderRailDetail).map((p) => p.id)

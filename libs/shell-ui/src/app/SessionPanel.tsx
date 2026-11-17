@@ -110,6 +110,11 @@ interface SessionPanelProps {
    * publishing; the panel just skips their row.
    */
   hiddenStatusSources?: readonly string[];
+  /**
+   * Opens the plugin's own view (its `renderView`) — the status
+   * accordions of view-capable plugins get an "open" button.
+   */
+  onOpenPluginView?: (source: string) => void;
 }
 
 /**
@@ -1769,6 +1774,7 @@ export function SessionPanel({
   appAttention,
   onShowAttention,
   hiddenStatusSources,
+  onOpenPluginView,
 }: SessionPanelProps) {
   const { t } = useLingui();
   const { settings } = useSettings();
@@ -2379,6 +2385,10 @@ export function SessionPanel({
           list keeps its room. Hidden while nothing is published. */}
       <PanelStatusSection
         hiddenSources={hiddenStatusSources}
+        viewSources={
+          onOpenPluginView ? plugins.filter((p) => p.renderView).map((p) => p.id) : undefined
+        }
+        onOpenView={onOpenPluginView}
         systemExpanded={storedSystemExpanded(pluginData)}
         onToggleSystem={() =>
           mergePluginData(PANEL_UI_KEY, { systemExpanded: !storedSystemExpanded(pluginData) })

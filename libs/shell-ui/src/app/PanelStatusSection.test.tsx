@@ -74,7 +74,9 @@ it('stacks one accordion per tool in rail order, with System last', async () => 
   await render();
   // No parent header: every accordion is a sibling at the top level.
   expect(names()).toEqual(['Merge requests', 'Docker', 'System']);
-  expect(headers().every((b) => b.parentElement?.parentElement === host.firstElementChild)).toBe(true);
+  expect(
+    headers().every((b) => b.parentElement?.parentElement?.parentElement === host.firstElementChild),
+  ).toBe(true);
 });
 
 it('keeps tools collapsed by default with their key numbers, System open with its details', async () => {
@@ -134,4 +136,22 @@ it('renders nothing when every published source is hidden', async () => {
   publishPanelStatus('docker', docker);
   await render({ hiddenSources: ['docker'] });
   expect(host.innerHTML).toBe('');
+});
+
+it('offers an open button only for view-capable sources and calls onOpenView with its id', async () => {
+  publishPanelStatus('docker', docker);
+  publishPanelStatus('glab-mr', mrs);
+  const onOpenView = vi.fn();
+  const onToggleGroup = vi.fn();
+  await render({ viewSources: ['docker'], onOpenView, onToggleGroup });
+  const openButtons = [...host.querySelectorAll<HTMLButtonElement>('button[aria-label]')].filter(
+    (b) => !b.hasAttribute('aria-expanded'),
+  );
+  // Only Docker has a view — the MR accordion gets none.
+  expect(openButtons).toHaveLength(1);
+  expect(openButtons[0].getAttribute('aria-label')).toBe('Open Docker');
+  await act(async () => openButtons[0].click());
+  expect(onOpenView).toHaveBeenCalledWith('docker');
+  // Opening is its own button: it does not also toggle the accordion.
+  expect(onToggleGroup).not.toHaveBeenCalled();
 });
