@@ -1502,7 +1502,10 @@ export function SessionItem({
           onClick={wrapClick()}
           className={`group/row flex min-h-8 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[13px] text-[var(--text-primary)]${
             isSelected ? ' bg-[var(--fill-accent)]' : ''
-          }${titleTint ? ` ${TINT_CLASS}` : ''}`}
+          }${
+            // The solid row would cover the card's accent edge mark — repeat it on top.
+            titleTint ? ` ${TINT_CLASS} shadow-[inset_2px_0_0_0_var(--accent)]` : ''
+          }`}
           style={titleTint ? { ...tintStyle(titleTint), ...tintTextVars(colours) } : undefined}
         >
           {/* Icon tile — tinted while selected, coloured (with a soft halo)

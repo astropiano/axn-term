@@ -93,12 +93,14 @@ const header = () => container.querySelector<HTMLElement>('[data-tip$="right-cli
 it('tints the selected card body lighter than its solid title row, and an unselected card in between', async () => {
   await render({ plugins: [colourPlugin('c', { sessionColors: () => ['#ff0000'] })] });
   const [selected, idle] = cards();
-  expect(selected.style.getPropertyValue('--tint')).toContain('#ff0000 40%');
+  expect(selected.style.getPropertyValue('--tint')).toContain('#ff0000 50%');
   const title = selected.querySelector<HTMLElement>('[class*="group/row"]')!;
   expect(title.style.getPropertyValue('--tint')).toContain('#ff0000 100%');
+  // the solid row repeats the card's accent edge so it is not painted over
+  expect(title.className).toContain('shadow-[inset_2px_0_0_0_var(--accent)]');
   // #ff0000: 5.3:1 against black beats 4.0:1 against white
   expect(title.style.getPropertyValue('--text-primary')).toBe('#111111');
-  expect(idle.style.getPropertyValue('--tint')).toContain('#ff0000 22%');
+  expect(idle.style.getPropertyValue('--tint')).toContain('#ff0000 32%');
   expect(idle.querySelector<HTMLElement>('[class*="group/row"]')!.style.getPropertyValue('--tint')).toBe('');
 });
 
@@ -122,7 +124,7 @@ it('tints the whole workspace block faintly, behind its sessions, even when it h
   const workspaceColors = vi.fn(() => ['#00ff00']);
   await render({ plugins: [colourPlugin('c', { workspaceColors })] });
   const block = header().closest<HTMLElement>('[data-workspace-block]')!;
-  expect(block.style.getPropertyValue('--tint')).toContain('#00ff00 10%');
+  expect(block.style.getPropertyValue('--tint')).toContain('#00ff00 20%');
   expect(block.contains(cards()[0])).toBe(true);
   expect(block.className).toContain('-mx-1.5');
   expect(header().style.getPropertyValue('--tint')).toBe('');
@@ -169,6 +171,6 @@ it('adds no background-image without colour hooks', async () => {
 it('draws a theme slot colour in the active theme\'s shade', async () => {
   await render({ plugins: [colourPlugin('c', { sessionColors: () => ['blue'] })] });
   const css = cards()[1].style.getPropertyValue('--tint');
-  expect(css).toMatch(/color-mix\(in srgb, #[0-9a-f]{3,8} 22%/i);
+  expect(css).toMatch(/color-mix\(in srgb, #[0-9a-f]{3,8} 32%/i);
   expect(css).not.toContain('blue');
 });

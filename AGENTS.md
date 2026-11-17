@@ -271,7 +271,7 @@ through `themeTagPalette(activeTheme)` in `themes.ts`: a theme's optional
 `tagColors:` block, else its terminal colours, orange/violet mixed when absent;
 `applyTheme` also sets them as `--tag-<slot>` for CSS) — the host owns the shades (`TINT_INTENSITY`): one
 colour mixed with `--chrome` (solid, so a card hides its workspace's tint):
-workspace block 10%, session card 22%, selected card 40%, selected card's title
+workspace block 20%, session card 32%, selected card 50%, selected card's title
 row 100% with dark/light text picked by contrast (`tintTextVars`); tints are set
 through a `--tint` custom property (`tintStyle`); non-hex values are dropped and a
 throwing hook contributes nothing. `Workspace.pluginState[<settingsKey>]` is the
