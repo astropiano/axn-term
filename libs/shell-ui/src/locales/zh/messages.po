@@ -1124,7 +1124,7 @@ msgid "System font"
 msgstr "系统字体"
 
 #. placeholder {0}: scope.targets.length
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:80
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:91
 msgid "Tag {0} sessions"
 msgstr "为 {0} 个会话添加标签"
 
@@ -1136,16 +1136,16 @@ msgstr "标签颜色"
 msgid "Tag name"
 msgstr "标签名称"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:80
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:91
 msgid "Tag session"
 msgstr "为会话添加标签"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:98
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:109
 msgid "Tag workspace"
 msgstr "为工作区添加标签"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:75
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:95
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:86
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:106
 msgid "Tag…"
 msgstr "标签…"
 

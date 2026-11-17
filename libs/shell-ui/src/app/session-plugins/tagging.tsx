@@ -5,7 +5,9 @@ import type { ShellSession, Workspace } from '../../types';
 import { openTagModal } from '../tagHost';
 import type { SessionViewPlugin } from './plugin';
 import { TAGGING, tagColor, tagColorOverrides } from './taggingModel';
-import { cssColour } from './tint';
+import { useSettings } from '../../SettingsProvider';
+import { themeTagPalette } from '../../themes';
+import { contrastText, resolveColour } from './tint';
 import { TagColorSettings } from './TagColorSettings';
 
 const tagsOf = (state: unknown): string[] => {
@@ -15,6 +17,27 @@ const tagsOf = (state: unknown): string[] => {
 
 const sessionTags = (session: ShellSession): string[] => tagsOf(session.pluginState?.[TAGGING.id]);
 const workspaceTags = (workspace: Workspace): string[] => tagsOf(workspace.pluginState?.[TAGGING.id]);
+
+function TagChip({ tag, colour }: { tag: string; colour: string }) {
+  const { activeTheme } = useSettings();
+  const hex = resolveColour(colour, themeTagPalette(activeTheme));
+  if (!hex) return null;
+  const text = contrastText(hex);
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 truncate rounded-full px-1.5 text-[10px] font-medium leading-[16px]"
+      style={{
+        color: text,
+        backgroundColor: hex,
+        // Keeps the chip's edge visible on a card tinted in the same colour.
+        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${text} 25%, transparent)`,
+      }}
+    >
+      <Tag className="h-2.5 w-2.5 shrink-0" />
+      {tag}
+    </span>
+  );
+}
 
 /**
  * Colours sessions and workspaces from typed string tags. A tag's colour is
@@ -46,19 +69,7 @@ export const taggingPlugin: SessionViewPlugin = {
         return (
           <span className="flex min-w-0 shrink items-center gap-1">
             {tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-0.5 truncate rounded-full px-1.5 text-[10px] leading-[16px]"
-                style={{
-                  // On a solid tinted title row the tag's own colour would vanish —
-                  // the row's `--on-tint-*` contrast colours take over there.
-                  color: `var(--on-tint-fg, color-mix(in srgb, ${cssColour(tagColor(tag, colors))} 80%, var(--text-primary)))`,
-                  backgroundColor: `var(--on-tint-bg, color-mix(in srgb, ${cssColour(tagColor(tag, colors))} 18%, transparent))`,
-                }}
-              >
-                <Tag className="h-2.5 w-2.5 shrink-0" />
-                {tag}
-              </span>
+              <TagChip key={tag} tag={tag} colour={tagColor(tag, colors)} />
             ))}
           </span>
         );

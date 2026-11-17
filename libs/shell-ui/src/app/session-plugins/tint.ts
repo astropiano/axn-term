@@ -100,6 +100,14 @@ function luminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/** True when dark text reads better than light text on this luminance (WCAG contrast). */
+const prefersDarkText = (l: number) => (l + 0.05) / 0.05 >= 1.05 / (l + 0.05);
+
+/** Dark or light text for content drawn on a solid hex colour (WCAG contrast). */
+export function contrastText(hex: string): string {
+  return prefersDarkText(luminance(hex)) ? '#111111' : '#ffffff';
+}
+
 /**
  * Text-colour variables for content on a full-strength tint: dark text on
  * light colours, light text on dark ones (WCAG contrast against black vs
@@ -110,16 +118,12 @@ export function tintTextVars(colours: readonly string[]): CSSProperties | undefi
   const bands = bandsOf(colours);
   if (bands.length === 0) return undefined;
   const l = bands.reduce((sum, c) => sum + luminance(c), 0) / bands.length;
-  const dark = (l + 0.05) / 0.05 >= 1.05 / (l + 0.05);
-  const [primary, secondary, tertiary, chip] = dark
-    ? ['#111111', 'rgba(0, 0, 0, 0.68)', 'rgba(0, 0, 0, 0.5)', 'rgba(0, 0, 0, 0.14)']
-    : ['#ffffff', 'rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0.2)'];
+  const [primary, secondary, tertiary] = prefersDarkText(l)
+    ? ['#111111', 'rgba(0, 0, 0, 0.68)', 'rgba(0, 0, 0, 0.5)']
+    : ['#ffffff', 'rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.6)'];
   return {
     '--text-primary': primary,
     '--text-secondary': secondary,
     '--text-tertiary': tertiary,
-    // Self-coloured content (e.g. tag chips) on the solid tint switches to these.
-    '--on-tint-fg': primary,
-    '--on-tint-bg': chip,
   } as CSSProperties;
 }

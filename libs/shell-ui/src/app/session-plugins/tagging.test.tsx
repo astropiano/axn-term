@@ -6,6 +6,7 @@ import type { MenuScope, SessionViewContext, PluginApi, WorkspaceActionContext }
 import { taggingPlugin } from './tagging';
 import { tagColor } from './taggingModel';
 import { resolveCardLayout, type FieldMeta } from '../sessionCardLayout';
+import { StoryShellProviders } from '../storyMocks';
 import * as host from '../tagHost';
 
 vi.mock('../tagHost', () => ({ openTagModal: vi.fn() }));
@@ -40,11 +41,15 @@ it('shows nothing without tags and exposes tags to the panel search', () => {
   expect(field.search!(target(session('a', ['x', 'y'])))).toEqual(['x', 'y']);
 });
 
-it('tag chips switch to the contrast colours of a solid tinted row, keeping their own colour elsewhere', () => {
+it('draws each tag chip filled in its own colour with contrast text', () => {
   const [field] = taggingPlugin.sessionFields!;
-  const html = renderToStaticMarkup(field.value(target(session('a', ['x']))) as ReactElement);
-  expect(html).toContain('color:var(--on-tint-fg, color-mix(in srgb, var(--tag-');
-  expect(html).toContain('background-color:var(--on-tint-bg, color-mix(in srgb, var(--tag-');
+  const html = renderToStaticMarkup(
+    <StoryShellProviders>{field.value({ ...target(session('a', ['x', 'y'])), pluginSettings: { colors: { x: '#ffb224', y: '#6e56cf' } } }) as ReactElement}</StoryShellProviders>,
+  );
+  expect(html).toContain('background-color:#ffb224');
+  expect(html).toContain('color:#111111');
+  expect(html).toContain('background-color:#6e56cf');
+  expect(html).toContain('color:#ffffff');
 });
 
 it('opens the modal for every multi-selected session and writes each one', () => {
