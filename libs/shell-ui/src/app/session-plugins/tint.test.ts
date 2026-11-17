@@ -69,11 +69,8 @@ describe('tintTextVars', () => {
 });
 
 describe('tintStyle', () => {
-  it('paints through a --tint custom property, and nothing without a tint', () => {
-    expect(tintStyle('linear-gradient(red, red)')).toEqual({
-      '--tint': 'linear-gradient(red, red)',
-      backgroundImage: 'var(--tint)',
-    });
+  it('carries the tint only as --tint, so a hover class can still repaint it', () => {
+    expect(tintStyle('linear-gradient(red, red)')).toEqual({ '--tint': 'linear-gradient(red, red)' });
     expect(tintStyle(undefined)).toBeUndefined();
   });
 });

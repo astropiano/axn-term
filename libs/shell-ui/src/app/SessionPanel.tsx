@@ -13,7 +13,7 @@ import { useSettings } from '../SettingsProvider';
 import { fontStackAvailable } from '../themes';
 import { usePluginSettings } from './PluginSettingsProvider';
 import { createPluginApi } from './session-plugins/plugin';
-import { resolveTint, tintStyle, tintTextVars } from './session-plugins/tint';
+import { TINT_CLASS, TINT_HOVER_CLASS, resolveTint, tintStyle, tintTextVars } from './session-plugins/tint';
 import { AttentionDot } from './AttentionDot';
 import { sessionAttention, summarizeAttention } from './attention';
 import { IconButton } from './IconButton';
@@ -1476,8 +1476,10 @@ export function SessionItem({
             ? 'bg-[var(--fill-1)] shadow-[inset_2px_0_0_0_var(--accent),inset_0_0_0_1px_var(--hairline)]'
             : isMultiSel
               ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_40%,transparent)]'
-              : 'hover:bg-[var(--fill-1)]'
-        }${isDragging ? ' opacity-40' : ''}${dropBefore ? ` before:absolute before:-top-px before:left-0 before:right-0 before:h-[3px] before:rounded-full before:bg-[var(--accent)] before:content-['']` : ''}`}
+              : tint
+                ? TINT_HOVER_CLASS
+                : 'hover:bg-[var(--fill-1)]'
+        }${tint ? ` ${TINT_CLASS}` : ''}${isDragging ? ' opacity-40' : ''}${dropBefore ? ` before:absolute before:-top-px before:left-0 before:right-0 before:h-[3px] before:rounded-full before:bg-[var(--accent)] before:content-['']` : ''}`}
         style={tintStyle(tint)}
         data-tip={[sessionDisplayName(session), ...rowTips].join('\n')}
       >
@@ -1496,7 +1498,7 @@ export function SessionItem({
           onClick={wrapClick()}
           className={`group/row flex min-h-8 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[13px] text-[var(--text-primary)]${
             isSelected ? ' bg-[var(--fill-accent)]' : ''
-          }`}
+          }${titleTint ? ` ${TINT_CLASS}` : ''}`}
           style={titleTint ? { ...tintStyle(titleTint), ...tintTextVars(colours) } : undefined}
         >
           {/* Icon tile — tinted while selected, coloured (with a soft halo)
@@ -2298,7 +2300,7 @@ export function SessionPanel({
                 style={tintStyle(workspaceTint(workspace))}
                 className={`mb-3 transition ${
                   workspaceTint(workspace)
-                    ? '-mx-1.5 rounded-[var(--radius-lg)] px-1.5 py-1'
+                    ? `-mx-1.5 rounded-[var(--radius-lg)] px-1.5 py-1 ${TINT_CLASS}`
                     : 'rounded'
                 } ${
                   dropTarget?.workspaceId === workspace.id && dropTarget.beforeSessionId === null
