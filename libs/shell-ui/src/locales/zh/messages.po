@@ -39,6 +39,10 @@ msgstr "一个 Lucide 图标名称（如 <0>GitFork</0>）或内联 SVG 标签�
 msgid "Add icon"
 msgstr "添加图标"
 
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:228
+msgid "Add view"
+msgstr "添加视图"
+
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:687
 msgid "Advanced"
 msgstr "高级"
@@ -79,6 +83,11 @@ msgstr "axn-term 遇到了意外错误"
 #: libs/shell-ui/src/app/SettingsModal.tsx:670
 #~ msgid "axn-term-desktop (default)"
 #~ msgstr "axn-term-desktop（默认）"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:154
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:154
+msgid "Back to the session"
+msgstr "返回会话"
 
 #: libs/shell-ui/src/PathActionMenu.tsx:82
 msgid "Binary file"
@@ -141,6 +150,11 @@ msgstr "关闭"
 #: libs/shell-ui/src/app/ShellApp.tsx:3114
 msgid "Close tab"
 msgstr "关闭标签页"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:147
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:148
+msgid "Close this view"
+msgstr "关闭此视图"
 
 #: libs/shell-ui/src/app/SessionPanel.tsx:555
 msgid "Collapse"
@@ -228,6 +242,11 @@ msgstr "复制所选内容"
 msgid "Copy URL"
 msgstr "复制 URL"
 
+#. placeholder {0}: entry.title
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:160
+msgid "Could not open {0}"
+msgstr "无法打开 {0}"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:336
 msgid "Could not parse the file as YAML."
 msgstr "无法将该文件解析为 YAML。"
@@ -294,6 +313,10 @@ msgstr "不再询问"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:338
 msgid "done"
 msgstr "已完成"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:203
+msgid "Each view gets its own rail item. Give a URL, or a command that prints one when the view opens (for addresses carrying a token — it is never saved)."
+msgstr "每个视图在侧栏中都有自己的项目。请填写 URL，或填写在打开时输出 URL 的命令（用于带令牌的地址——不会被保存）。"
 
 #: libs/shell-ui/src/PathActionMenu.tsx:256
 msgid "Edit"
@@ -429,6 +452,10 @@ msgstr "常规"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:691
 msgid "Hub URL"
 msgstr "Hub \\u5730\\u5740"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:212
+msgid "Icon"
+msgstr "图标"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:687
 msgid "Import replaces all settings with the picked config.yaml."
@@ -623,6 +650,11 @@ msgstr "未连接——请在上方输入服务器地址"
 #~ msgid "Not publishing"
 #~ msgstr "\\u672a\\u53d1\\u5e03"
 
+#. placeholder {0}: dropped.join(', ')
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:223
+msgid "Not shown (needs an http(s) URL or a command): {0}"
+msgstr "未显示（需要 http(s) URL 或命令）：{0}"
+
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:139
 msgid "Not signed in"
 msgstr "未登录"
@@ -667,6 +699,12 @@ msgstr "打开已保存的工作区集文件"
 msgid "Open file"
 msgstr "打开文件"
 
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:136
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:137
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:167
+msgid "Open in browser"
+msgstr "在浏览器中打开"
+
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:66
 msgid "Open in home folder"
 msgstr "在主文件夹中打开"
@@ -699,6 +737,10 @@ msgstr "打开…"
 #: libs/shell-ui/src/app/SettingsModal.tsx:755
 #~ msgid "optional"
 #~ msgstr "\\u53ef\\u9009"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:218
+msgid "or a command printing the URL, e.g. launchpad url mr"
+msgstr "或输出 URL 的命令，例如 launchpad url mr"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:551
 msgid "Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size."
@@ -776,6 +818,11 @@ msgstr "发布"
 msgid "Rail item"
 msgstr "边栏项"
 
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:129
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:129
+msgid "Reload"
+msgstr "重新加载"
+
 #: libs/shell-ui/src/app/ErrorBoundary.tsx:72
 msgid "Reload view"
 msgstr "重新加载视图"
@@ -815,6 +862,11 @@ msgstr "远程访问"
 #~ msgid "Remote control"
 #~ msgstr "\\u8fdc\\u7a0b\\u63a7\\u5236"
 
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:213
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:213
+msgid "Remove"
+msgstr "移除"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:1144
 msgid "Remove icon"
 msgstr "移除图标"
@@ -853,6 +905,10 @@ msgstr "恢复 {agent} 会话{0}"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:766
 msgid "Resume viewport"
 msgstr "恢复视口"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
+msgid "Retry"
+msgstr "重试"
 
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:222
 msgid "Retry now"
@@ -1127,6 +1183,10 @@ msgstr "此视图列出 {forgeName} 上等待你处理的请求，通过命令�
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
 msgid "This window"
 msgstr "此窗口"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:211
+msgid "Title"
+msgstr "标题"
 
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:338
 msgid "to do"
