@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { externalViewsPlugin, normalizeViews, resolveEntryUrl } from './externalViews';
-import { openView, resetViewHostForTests } from '../viewHost';
+import { openView, resetViewHostForTests, runtimeViews } from '../viewHost';
+import { pluginViewApi } from './plugin';
 
 beforeEach(() => resetViewHostForTests());
 
@@ -75,5 +76,30 @@ describe('resolveEntryUrl', () => {
   });
   it('fails a urlCommand entry where commands cannot run', async () => {
     await expect(resolveEntryUrl({ id: 'a', title: 'A', urlCommand: 'x' }, undefined)).rejects.toThrow();
+  });
+});
+
+describe('axn-views commands', () => {
+  const cmd = (name: string) =>
+    externalViewsPlugin.commands!.map((c) => (typeof c === 'string' ? { name: c } : c)).find((c) => c.name === name)!;
+  const ctx = { pluginSettings: undefined, ...pluginViewApi };
+
+  it('declares every command app-level', () => {
+    for (const c of externalViewsPlugin.commands!) expect(typeof c !== 'string' && c.appRun).toBeTruthy();
+  });
+  it('open refuses a non-web URL', async () => {
+    await expect(
+      Promise.resolve().then(() => cmd('axn-views').appRun!(ctx, 'open javascript:alert(1)', 'axn-views open javascript:alert(1)')),
+    ).rejects.toThrow(/not an http\(s\) URL/);
+    expect(runtimeViews()).toHaveLength(0);
+  });
+  it('open adds a runtime view and replies with its key', async () => {
+    const out = await cmd('axn-views').appRun!(ctx, 'open http://127.0.0.1:1/x MR dashboard', 'axn-views open http://127.0.0.1:1/x MR dashboard');
+    expect(runtimeViews()[0].title).toBe('MR dashboard');
+    expect(out).toBe(`echo ${JSON.stringify(`external-views/${runtimeViews()[0].id}`)}`);
+  });
+  it('current replies with the active view as JSON', async () => {
+    const out = await cmd('axn-views').appRun!(ctx, 'current', 'axn-views current');
+    expect(out).toBe(`echo ${JSON.stringify('null')}`);
   });
 });

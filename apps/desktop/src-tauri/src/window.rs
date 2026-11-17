@@ -377,6 +377,25 @@ pub(crate) fn settings_target<'a>(
         .map(|(label, _)| *label)
 }
 
+/// The window an app-level command (`axn-term command`) runs in: the named
+/// one, which must be an open shell window, else `settings_target`'s choice.
+pub(crate) fn app_command_window<'a>(
+    windows: impl IntoIterator<Item = (&'a str, bool)> + Clone,
+    named: Option<&str>,
+) -> Result<String, String> {
+    match named {
+        Some(name) => windows
+            .into_iter()
+            .map(|(label, _)| label)
+            .find(|label| *label == name && is_shell_window_label(label))
+            .map(str::to_string)
+            .ok_or_else(|| format!("no axn-term window '{name}'")),
+        None => settings_target(windows)
+            .map(str::to_string)
+            .ok_or_else(|| "no axn-term window".to_string()),
+    }
+}
+
 #[cfg(test)]
 mod settings_target_tests {
     use super::*;
@@ -405,6 +424,16 @@ mod settings_target_tests {
         assert_eq!(settings_target(windows), Some("main"));
         // Main was closed: the lowest secondary window, whatever the order.
         assert_eq!(settings_target([("w-2", false), ("w-1", false)]), Some("w-1"));
+    }
+
+    #[test]
+    fn an_app_command_runs_in_the_named_or_the_settings_target_window() {
+        let windows = [("main", false), ("w-1", true), ("settings", false)];
+        assert_eq!(app_command_window(windows, Some("main")), Ok("main".to_string()));
+        assert_eq!(app_command_window(windows, None), Ok("w-1".to_string()));
+        assert!(app_command_window(windows, Some("w-9")).is_err());
+        assert!(app_command_window(windows, Some("settings")).is_err());
+        assert!(app_command_window([("settings", true)], None).is_err());
     }
 
     #[test]
