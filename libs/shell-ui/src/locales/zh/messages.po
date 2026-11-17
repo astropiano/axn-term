@@ -18,7 +18,7 @@ msgstr "将终止 {0} 个运行中的{1}"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} 正在主检出中运行 — 要隔离到 worktree 吗？"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2254
+#: libs/shell-ui/src/app/SessionPanel.tsx:2250
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} 个等待中"
 
@@ -151,9 +151,13 @@ msgstr "关闭"
 msgid "Close tab"
 msgstr "关闭标签页"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:560
+#: libs/shell-ui/src/app/SessionPanel.tsx:556
 msgid "Collapse"
 msgstr "折叠"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:38
+msgid "Colour of {tag}"
+msgstr "{tag} 的颜色"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:664
 msgid "Config file"
@@ -283,7 +287,7 @@ msgid "Delete {name}"
 msgstr "删除 {name}"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:603
+#: libs/shell-ui/src/app/SessionPanel.tsx:599
 msgid "Delete workspace"
 msgstr "删除工作区"
 
@@ -316,7 +320,7 @@ msgstr "编辑"
 msgid "Edit icon"
 msgstr "编辑图标"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:835
+#: libs/shell-ui/src/app/SessionPanel.tsx:831
 msgid "Edit summary…"
 msgstr "编辑摘要…"
 
@@ -346,7 +350,7 @@ msgstr "会话列表末尾"
 #~ msgid "Enter code {0} in the browser to finish sign-in."
 #~ msgstr "在浏览器中输入代码 {0} 以完成登录。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:560
+#: libs/shell-ui/src/app/SessionPanel.tsx:556
 msgid "Expand"
 msgstr "展开"
 
@@ -362,7 +366,7 @@ msgstr "导出…"
 msgid "Exported."
 msgstr "已导出。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:819
+#: libs/shell-ui/src/app/SessionPanel.tsx:815
 msgid "F2 · double-click"
 msgstr "F2 · 双击"
 
@@ -375,7 +379,7 @@ msgstr "失败"
 #~ msgid "Failed: {0}"
 #~ msgstr "\\u5931\\u8d25\\uff1a{0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:817
+#: libs/shell-ui/src/app/SessionPanel.tsx:813
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "更快：在所选会话上按 F2，或双击其名称"
 
@@ -536,11 +540,11 @@ msgstr "将可执行文件名或插件 ID 映射到 Lucide 图标（如 Bot、Sq
 msgid "Move “{sessionName}” to workspace"
 msgstr "将“{sessionName}”移到工作区"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:967
+#: libs/shell-ui/src/app/SessionPanel.tsx:963
 msgid "Move to new window"
 msgstr "移到新窗口"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:951
+#: libs/shell-ui/src/app/SessionPanel.tsx:947
 msgid "Move to workspace…"
 msgstr "移到工作区…"
 
@@ -548,7 +552,7 @@ msgstr "移到工作区…"
 msgid "needs attention"
 msgstr "需要处理"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1600
+#: libs/shell-ui/src/app/SessionPanel.tsx:1596
 msgid "Needs you"
 msgstr "需要处理"
 
@@ -556,7 +560,7 @@ msgstr "需要处理"
 msgid "New name for {name}"
 msgstr "{name} 的新名称"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2426
+#: libs/shell-ui/src/app/SessionPanel.tsx:2429
 msgid "New session"
 msgstr "新建会话"
 
@@ -564,11 +568,11 @@ msgstr "新建会话"
 msgid "New session button"
 msgstr "新建会话按钮"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2550
+#: libs/shell-ui/src/app/SessionPanel.tsx:2553
 msgid "New session in folder…"
 msgstr "在文件夹中新建会话…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:589
+#: libs/shell-ui/src/app/SessionPanel.tsx:585
 msgid "New session in workspace"
 msgstr "在工作区中新建会话"
 
@@ -581,6 +585,10 @@ msgstr "新建代理会话…"
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:46
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "“{0}”中的新会话将在此文件夹中启动。留空则使用主目录。"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:58
+msgid "New tag colour"
+msgstr "新标签颜色"
 
 #: libs/shell-ui/src/app/SessionPanel.tsx:286
 msgid "New workspace"
@@ -680,7 +688,7 @@ msgstr "打开"
 msgid "Open {title}"
 msgstr "打开{title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2530
+#: libs/shell-ui/src/app/SessionPanel.tsx:2533
 msgid "Open a saved workspace set file"
 msgstr "打开已保存的工作区集文件"
 
@@ -708,11 +716,11 @@ msgstr "打开日志文件夹…"
 msgid "Open preview in a tab"
 msgstr "在标签页中打开预览"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2538
+#: libs/shell-ui/src/app/SessionPanel.tsx:2541
 msgid "Open workspace set from file…"
 msgstr "从文件打开工作区集…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2219
+#: libs/shell-ui/src/app/SessionPanel.tsx:2215
 msgid "Open…"
 msgstr "打开…"
 
@@ -754,7 +762,7 @@ msgstr "权限："
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "使用同一账号登录的手机和浏览器可以连接"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2545
+#: libs/shell-ui/src/app/SessionPanel.tsx:2548
 msgid "Pick a folder — the new session starts in it"
 msgstr "选择文件夹 — 新会话在其中启动"
 
@@ -848,7 +856,7 @@ msgstr "移除 worktree"
 msgid "Rename {name}"
 msgstr "重命名 {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1540
+#: libs/shell-ui/src/app/SessionPanel.tsx:1536
 msgid "Rename session"
 msgstr "重命名会话"
 
@@ -862,7 +870,16 @@ msgstr "显示会话摘要（通过 axn-session-summary 设置）"
 msgid "requires {0}{1}"
 msgstr "需要 {0}{1}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:782
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:46
+msgid "Reset colour of {tag}"
+msgstr "重置 {tag} 的颜色"
+
+#. placeholder {0}: tagColor(tag)
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:47
+msgid "Reset to derived colour ({0})"
+msgstr "恢复为推导颜色 ({0})"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:778
 msgid "Reset to process name"
 msgstr "重置为进程名"
 
@@ -899,7 +916,7 @@ msgstr "在 Shell 标签页中运行"
 msgid "Run the login in a shell, then check again."
 msgstr "在 Shell 中运行登录命令，然后重新检查。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2489
+#: libs/shell-ui/src/app/SessionPanel.tsx:2492
 msgid "Running"
 msgstr "运行中"
 
@@ -913,7 +930,7 @@ msgstr "已沙箱化 — 无权限（无 shell、文件或终端访问）"
 msgid "Save"
 msgstr "保存"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2215
+#: libs/shell-ui/src/app/SessionPanel.tsx:2211
 msgid "Save workspace set"
 msgstr "保存工作区集"
 
@@ -951,8 +968,8 @@ msgstr "服务器地址"
 #~ msgid "Server URL"
 #~ msgstr "服务器 URL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1576
-#: libs/shell-ui/src/app/SessionPanel.tsx:1578
+#: libs/shell-ui/src/app/SessionPanel.tsx:1572
+#: libs/shell-ui/src/app/SessionPanel.tsx:1574
 msgid "Session actions"
 msgstr "会话操作"
 
@@ -984,7 +1001,7 @@ msgstr "会话摘要"
 msgid "Session: {0}"
 msgstr "会话：{0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2484
+#: libs/shell-ui/src/app/SessionPanel.tsx:2487
 msgid "Sessions"
 msgstr "会话"
 
@@ -992,6 +1009,10 @@ msgstr "会话"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:776
 msgid "Sessions ({0})"
 msgstr " ({0})"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:78
+msgid "Set colour"
+msgstr "设置颜色"
 
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:59
 msgid "Set default folder…"
@@ -1014,11 +1035,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell 字体"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2247
+#: libs/shell-ui/src/app/SessionPanel.tsx:2243
 msgid "Show all sessions"
 msgstr "显示所有会话"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2247
+#: libs/shell-ui/src/app/SessionPanel.tsx:2243
 msgid "Show only sessions that need you"
 msgstr "仅显示需要处理的会话"
 
@@ -1083,22 +1104,34 @@ msgid "System font"
 msgstr "系统字体"
 
 #. placeholder {0}: scope.targets.length
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:68
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:77
 msgid "Tag {0} sessions"
 msgstr "为 {0} 个会话添加标签"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:68
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:29
+msgid "Tag colours"
+msgstr "标签颜色"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:65
+msgid "Tag name"
+msgstr "标签名称"
+
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:77
 msgid "Tag session"
 msgstr "为会话添加标签"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:86
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:96
 msgid "Tag workspace"
 msgstr "为工作区添加标签"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:63
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:83
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:72
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:93
 msgid "Tag…"
 msgstr "标签…"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:32
+msgid "Tags without an entry here get a colour derived from their name."
+msgstr "此处没有条目的标签将使用根据名称推导的颜色。"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:424
 #~ msgid "Terminal font family and size in px. Empty uses the built-in monospace stack at 14px."

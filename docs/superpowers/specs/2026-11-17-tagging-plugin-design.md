@@ -190,3 +190,14 @@ to right.
   viewers (sessions already carry `pluginState`, so likely yes; workspace records unverified).
 - Two different names can hash to the same colour; accepted, since the name chip disambiguates.
 - Sandboxed plugins get no colour API in this change; adding one is a separate change.
+
+## Amendment: configurable colours, workspace block tint
+
+- Colour overrides live in the plugin's settings section (`plugins.yaml` → `tagging.colors`,
+  `{ "<lower-cased name>": "#hex" }`), edited in Settings → Plugins → Tags. A tag without an
+  entry keeps its derived colour. Tags still live only on their carrier; settings holds colours,
+  not tags, so renaming or deleting a tag stays in the Tag… modal.
+- Limit: the settings view has no access to sessions, so it lists only overrides (type a name to
+  add one), not every tag in use.
+- The workspace tint paints the whole workspace block (header and sessions) with rounded corners,
+  bleeding 6px past the list gutter so the container is visible.

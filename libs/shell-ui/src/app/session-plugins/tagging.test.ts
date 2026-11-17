@@ -68,3 +68,12 @@ it('tags a workspace with no sessions', () => {
   request.onApply([['e', 'n']]);
   expect(updateWorkspaceState).toHaveBeenCalledWith({ tags: ['e', 'n'] });
 });
+
+it('uses a configured colour over the derived one for sessions and workspaces', () => {
+  const pluginSettings = { colors: { x: '#123456' } };
+  expect(taggingPlugin.sessionColors!({ ...target(session('a', ['x', 'y'])), pluginSettings })).toEqual([
+    '#123456',
+    tagColor('y'),
+  ]);
+  expect(taggingPlugin.workspaceColors!({ workspace: ws('w', ['X']), pluginSettings })).toEqual(['#123456']);
+});

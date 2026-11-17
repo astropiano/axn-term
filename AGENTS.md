@@ -275,7 +275,9 @@ sessions/workspaces), and `workspaceActions(ctx)` contributes workspace-menu row
 without needing a session (empty workspaces included). The built-in `tagging`
 plugin (`session-plugins/tagging.tsx`) uses all of it: a tag is a typed string
 stored only on its session (`pluginState.tagging.tags`) or workspace, its colour
-derived from the string (`tagColor`), picked/created through `TagModal`
+derived from the string (`tagColor`) unless overridden in the plugin's
+`colors` map in plugins.yaml (edited in Settings → Plugins → Tags,
+`TagColorSettings`); a workspace's tint paints the whole workspace block; picked/created through `TagModal`
 (`openTagModal` in `app/tagHost.tsx`, mounted as `TagHost` in `ShellApp`); the
 `tagging.tags` card field is placed or hidden through `sessionCard` like any
 other. Design: `docs/superpowers/specs/2026-11-17-tagging-plugin-design.md`.

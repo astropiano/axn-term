@@ -478,7 +478,6 @@ function WorkspaceHeader({
   onClearDefaultFolder,
   hasSession,
   pluginItems,
-  tint,
   searchQuery,
   onDragStart,
   onDragEnd,
@@ -499,8 +498,6 @@ function WorkspaceHeader({
   onClearDefaultFolder: () => void;
   hasSession: boolean;
   pluginItems?: RepoMenuItem[];
-  /** CSS `background-image` from the plugins' `workspaceColors`. */
-  tint?: string;
   /** Active panel filter — matched name substring is highlighted. */
   searchQuery?: string;
   onDragStart: (e: React.DragEvent) => void;
@@ -533,7 +530,6 @@ function WorkspaceHeader({
           isDragging ? ' opacity-40' : ''
         }`}
         onClick={wrapClick(onToggle)}
-        style={tint ? { backgroundImage: tint } : undefined}
         draggable={!editing}
         onDragStart={(e) => {
           // Keep a press-and-hold drag from opening the context menu mid-drag.
@@ -2294,8 +2290,16 @@ export function SessionPanel({
               {dragWorkspaceId && workspaceDropIndex === index && (
                 <div className="mb-2 h-0.5 rounded-full bg-[var(--accent)]" />
               )}
+              {/* A tinted block bleeds 6px past the list gutter (-mx/px cancel out,
+                  so content stays aligned) to show the container it paints. */}
               <div
-                className={`mb-3 rounded transition ${
+                data-workspace-block={workspace.id}
+                style={workspaceTint(workspace) ? { backgroundImage: workspaceTint(workspace) } : undefined}
+                className={`mb-3 transition ${
+                  workspaceTint(workspace)
+                    ? '-mx-1.5 rounded-[var(--radius-lg)] px-1.5 py-1'
+                    : 'rounded'
+                } ${
                   dropTarget?.workspaceId === workspace.id && dropTarget.beforeSessionId === null
                     ? 'ring-1 ring-[var(--accent)]'
                     : ''
@@ -2334,7 +2338,6 @@ export function SessionPanel({
                   }
                   hasSession={representativeSession(workspace) !== undefined}
                   pluginItems={workspacePluginItems(workspace)}
-                  tint={workspaceTint(workspace)}
                   searchQuery={q}
                   onDragStart={(e) => handleWorkspaceDragStart(e, workspace.id)}
                   onDragEnd={handleWorkspaceDragEnd}

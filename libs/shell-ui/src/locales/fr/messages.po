@@ -18,7 +18,7 @@ msgstr "{0} {1} en cours seront terminés"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} s'exécute dans le checkout principal — l'isoler dans un worktree ?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2254
+#: libs/shell-ui/src/app/SessionPanel.tsx:2250
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} en attente"
 
@@ -151,9 +151,13 @@ msgstr "Fermer"
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:560
+#: libs/shell-ui/src/app/SessionPanel.tsx:556
 msgid "Collapse"
 msgstr "Replier"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:38
+msgid "Colour of {tag}"
+msgstr "Couleur de {tag}"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:664
 msgid "Config file"
@@ -283,7 +287,7 @@ msgid "Delete {name}"
 msgstr "Supprimer {name}"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:603
+#: libs/shell-ui/src/app/SessionPanel.tsx:599
 msgid "Delete workspace"
 msgstr "Supprimer le workspace"
 
@@ -316,7 +320,7 @@ msgstr "Modifier"
 msgid "Edit icon"
 msgstr "Modifier l'icône"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:835
+#: libs/shell-ui/src/app/SessionPanel.tsx:831
 msgid "Edit summary…"
 msgstr "Modifier le résumé…"
 
@@ -346,7 +350,7 @@ msgstr "Fin de la liste des sessions"
 #~ msgid "Enter code {0} in the browser to finish sign-in."
 #~ msgstr "Saisissez le code {0} dans le navigateur pour terminer la connexion."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:560
+#: libs/shell-ui/src/app/SessionPanel.tsx:556
 msgid "Expand"
 msgstr "Déplier"
 
@@ -362,7 +366,7 @@ msgstr "Exporter…"
 msgid "Exported."
 msgstr "Exporté."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:819
+#: libs/shell-ui/src/app/SessionPanel.tsx:815
 msgid "F2 · double-click"
 msgstr "F2 · double-clic"
 
@@ -375,7 +379,7 @@ msgstr "échec"
 #~ msgid "Failed: {0}"
 #~ msgstr "\\u00c9chec : {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:817
+#: libs/shell-ui/src/app/SessionPanel.tsx:813
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "Plus rapide : F2 sur la session sélectionnée ou double-clic sur son nom"
 
@@ -536,11 +540,11 @@ msgstr "Associez les noms d'exécutables ou les identifiants de plugins à une i
 msgid "Move “{sessionName}” to workspace"
 msgstr "Déplacer « {sessionName} » vers le workspace"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:967
+#: libs/shell-ui/src/app/SessionPanel.tsx:963
 msgid "Move to new window"
 msgstr "Déplacer vers une nouvelle fenêtre"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:951
+#: libs/shell-ui/src/app/SessionPanel.tsx:947
 msgid "Move to workspace…"
 msgstr "Déplacer vers le workspace…"
 
@@ -548,7 +552,7 @@ msgstr "Déplacer vers le workspace…"
 msgid "needs attention"
 msgstr "à vérifier"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1600
+#: libs/shell-ui/src/app/SessionPanel.tsx:1596
 msgid "Needs you"
 msgstr "Vous attend"
 
@@ -556,7 +560,7 @@ msgstr "Vous attend"
 msgid "New name for {name}"
 msgstr "Nouveau nom pour {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2426
+#: libs/shell-ui/src/app/SessionPanel.tsx:2429
 msgid "New session"
 msgstr "Nouvelle session"
 
@@ -564,11 +568,11 @@ msgstr "Nouvelle session"
 msgid "New session button"
 msgstr "Bouton nouvelle session"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2550
+#: libs/shell-ui/src/app/SessionPanel.tsx:2553
 msgid "New session in folder…"
 msgstr "Nouvelle session dans un dossier…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:589
+#: libs/shell-ui/src/app/SessionPanel.tsx:585
 msgid "New session in workspace"
 msgstr "Nouvelle session dans le workspace"
 
@@ -581,6 +585,10 @@ msgstr "Nouvelle session avec agent…"
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:46
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "Les nouvelles sessions dans « {0} » démarrent dans ce dossier. Laissez vide pour votre dossier personnel."
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:58
+msgid "New tag colour"
+msgstr "Nouvelle couleur de tag"
 
 #: libs/shell-ui/src/app/SessionPanel.tsx:286
 msgid "New workspace"
@@ -680,7 +688,7 @@ msgstr "Ouvrir"
 msgid "Open {title}"
 msgstr "Ouvrir {title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2530
+#: libs/shell-ui/src/app/SessionPanel.tsx:2533
 msgid "Open a saved workspace set file"
 msgstr "Ouvrir un fichier de jeu de workspaces enregistré"
 
@@ -708,11 +716,11 @@ msgstr "Ouvrir le dossier des journaux…"
 msgid "Open preview in a tab"
 msgstr "Ouvrir l'aperçu dans un onglet"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2538
+#: libs/shell-ui/src/app/SessionPanel.tsx:2541
 msgid "Open workspace set from file…"
 msgstr "Ouvrir un jeu de workspaces depuis un fichier…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2219
+#: libs/shell-ui/src/app/SessionPanel.tsx:2215
 msgid "Open…"
 msgstr "Ouvrir…"
 
@@ -754,7 +762,7 @@ msgstr "permissions :"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "les téléphones et navigateurs connectés au même compte peuvent s'y joindre"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2545
+#: libs/shell-ui/src/app/SessionPanel.tsx:2548
 msgid "Pick a folder — the new session starts in it"
 msgstr "Choisir un dossier — la nouvelle session y démarre"
 
@@ -848,7 +856,7 @@ msgstr "Supprimer le worktree"
 msgid "Rename {name}"
 msgstr "Renommer {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1540
+#: libs/shell-ui/src/app/SessionPanel.tsx:1536
 msgid "Rename session"
 msgstr "Renommer la session"
 
@@ -862,7 +870,16 @@ msgstr "Afficher les résumés de session (via axn-session-summary)"
 msgid "requires {0}{1}"
 msgstr "nécessite {0}{1}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:782
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:46
+msgid "Reset colour of {tag}"
+msgstr "Réinitialiser la couleur de {tag}"
+
+#. placeholder {0}: tagColor(tag)
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:47
+msgid "Reset to derived colour ({0})"
+msgstr "Revenir à la couleur dérivée ({0})"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:778
 msgid "Reset to process name"
 msgstr "Rétablir le nom du processus"
 
@@ -899,7 +916,7 @@ msgstr "Exécuter dans un onglet shell"
 msgid "Run the login in a shell, then check again."
 msgstr "Lancez la connexion dans un shell, puis vérifiez à nouveau."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2489
+#: libs/shell-ui/src/app/SessionPanel.tsx:2492
 msgid "Running"
 msgstr "Actives"
 
@@ -913,7 +930,7 @@ msgstr "sandboxé — aucune permission (pas d'accès shell, fichiers ou termina
 msgid "Save"
 msgstr "Enregistrer"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2215
+#: libs/shell-ui/src/app/SessionPanel.tsx:2211
 msgid "Save workspace set"
 msgstr "Enregistrer le jeu de workspaces"
 
@@ -951,8 +968,8 @@ msgstr "Adresse du serveur"
 #~ msgid "Server URL"
 #~ msgstr "URL du serveur"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1576
-#: libs/shell-ui/src/app/SessionPanel.tsx:1578
+#: libs/shell-ui/src/app/SessionPanel.tsx:1572
+#: libs/shell-ui/src/app/SessionPanel.tsx:1574
 msgid "Session actions"
 msgstr "Actions de la session"
 
@@ -984,7 +1001,7 @@ msgstr "Résumé de la session"
 msgid "Session: {0}"
 msgstr "Session : {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2484
+#: libs/shell-ui/src/app/SessionPanel.tsx:2487
 msgid "Sessions"
 msgstr "Sessions"
 
@@ -992,6 +1009,10 @@ msgstr "Sessions"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:776
 msgid "Sessions ({0})"
 msgstr "Sessions ({0})"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:78
+msgid "Set colour"
+msgstr "Définir la couleur"
 
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:59
 msgid "Set default folder…"
@@ -1014,11 +1035,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Police du shell"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2247
+#: libs/shell-ui/src/app/SessionPanel.tsx:2243
 msgid "Show all sessions"
 msgstr "Afficher toutes les sessions"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2247
+#: libs/shell-ui/src/app/SessionPanel.tsx:2243
 msgid "Show only sessions that need you"
 msgstr "Afficher uniquement les sessions qui vous attendent"
 
@@ -1083,22 +1104,34 @@ msgid "System font"
 msgstr "Police du système"
 
 #. placeholder {0}: scope.targets.length
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:68
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:77
 msgid "Tag {0} sessions"
 msgstr "Taguer {0} sessions"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:68
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:29
+msgid "Tag colours"
+msgstr "Couleurs des tags"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:65
+msgid "Tag name"
+msgstr "Nom du tag"
+
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:77
 msgid "Tag session"
 msgstr "Taguer la session"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:86
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:96
 msgid "Tag workspace"
 msgstr "Taguer l'espace de travail"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:63
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:83
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:72
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:93
 msgid "Tag…"
 msgstr "Taguer…"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:32
+msgid "Tags without an entry here get a colour derived from their name."
+msgstr "Les tags sans entrée ici reçoivent une couleur dérivée de leur nom."
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:424
 #~ msgid "Terminal font family and size in px. Empty uses the built-in monospace stack at 14px."
