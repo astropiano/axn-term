@@ -77,6 +77,7 @@ function setViews(next: RuntimeView[]): void {
 export function openView(args: { url: string; title?: string; logo?: string }): string {
   if (!isWebUrl(args.url)) throw new Error(`not an http(s) URL: ${args.url}`);
   let view = views.find((v) => v.url === args.url);
+  const created = !view;
   if (!view) {
     view = {
       id: Math.random().toString(36).slice(2, 10),
@@ -87,7 +88,10 @@ export function openView(args: { url: string; title?: string; logo?: string }): 
     setViews([...views, view]);
   }
   const key = viewKey(EXTERNAL_VIEWS_ID, view.id);
-  host?.select(key);
+  if (host && !host.select(key)) {
+    if (created) setViews(views.filter((v) => v !== view));
+    throw new Error(`${EXTERNAL_VIEWS_ID} is not enabled in this window`);
+  }
   return key;
 }
 

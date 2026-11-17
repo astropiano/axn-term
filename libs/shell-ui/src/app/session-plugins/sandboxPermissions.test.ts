@@ -24,6 +24,14 @@ describe('sandbox permissions', () => {
     expect(methodPermission('setRestoring')).toBe('terminal-input');
   });
 
+  it('gates opening, selecting and removing rail views behind sessions', () => {
+    expect(methodPermission('openView')).toBe('sessions');
+    expect(methodPermission('selectView')).toBe('sessions');
+    expect(methodPermission('removeView')).toBe('sessions');
+    // reading the selection reports only what the user already sees
+    expect(methodPermission('getActiveView')).toBeUndefined();
+  });
+
   it('leaves the plugin its own state and UI surfaces', () => {
     for (const m of ['updatePluginState', 'setBanner', 'setAttention', 'getSession', 'isProgressHandled']) {
       expect(methodPermission(m)).toBeUndefined();
