@@ -99,6 +99,10 @@ it('tints the selected card body lighter than its solid title row, and an unsele
   // the accent edge sits on an overlay over the whole card, above the solid row
   expect(selected.className).toContain('after:shadow-[inset_2px_0_0_0_var(--accent)');
   expect(title.className).not.toContain('inset_2px_0_0_0_var(--accent)');
+  // the icon tile follows the row's contrast text, not the theme accent
+  const icon = title.querySelector<HTMLElement>('span.rounded-\\[6px\\]')!;
+  expect(icon.className).toContain('text-[var(--text-primary)]');
+  expect(icon.className).not.toContain('text-[var(--accent)]');
   // #ff0000: 5.3:1 against black beats 4.0:1 against white
   expect(title.style.getPropertyValue('--text-primary')).toBe('#111111');
   expect(idle.style.getPropertyValue('--tint')).toContain('#ff0000 var(--tint-card, 32%)');

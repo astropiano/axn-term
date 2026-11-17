@@ -1513,9 +1513,12 @@ export function SessionItem({
             className={`relative flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] ${
               attention
                 ? ''
-                : isSelected
-                  ? 'bg-[color-mix(in_srgb,var(--accent)_22%,transparent)] text-[var(--accent)]'
-                  : 'bg-[var(--fill-1)] text-[var(--text-secondary)]'
+                : titleTint
+                  ? // On a solid tag colour the accent clashes — follow the row's contrast text.
+                    'bg-[color-mix(in_srgb,var(--text-primary)_14%,transparent)] text-[var(--text-primary)]'
+                  : isSelected
+                    ? 'bg-[color-mix(in_srgb,var(--accent)_22%,transparent)] text-[var(--accent)]'
+                    : 'bg-[var(--fill-1)] text-[var(--text-secondary)]'
             }`}
             style={
               attention
