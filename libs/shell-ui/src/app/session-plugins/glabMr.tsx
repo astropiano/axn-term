@@ -17,7 +17,13 @@ import {
 } from 'lucide-react';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import type { ShellSession, SessionAttention} from '../../types';
-import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
+import {
+  createMrPeopleCache,
+  mrActionProviders,
+  registerMrResolver,
+  type MrRef,
+  type MrRowEnv,
+} from './mrActions';
 import { CardChips } from './cardEnrichers';
 import { MrDescription } from './mrDescription';
 import { shellQuote } from '../../shellQuote';
@@ -27,6 +33,7 @@ import { PluginIcon } from '../SessionPanel';
 import { RailItem } from '../RailItem';
 import type { PluginSettings } from '../pluginSettings';
 import {
+  type MrPeople,
   authCommand,
   defaultHostNote,
   classifyCliError,
@@ -38,6 +45,7 @@ import {
   forgeOfRemote,
   forgeRailMode,
   repoRootsSetting,
+  splitByRole,
   type CliFailure,
 } from './forge';
 
@@ -189,6 +197,21 @@ interface RawMrListItem {
 
 interface RawMrDetail {
   head_pipeline?: { status?: string } | null;
+  web_url?: string;
+  author?: { username?: string } | null;
+  assignees?: { username?: string }[] | null;
+  reviewers?: { username?: string }[] | null;
+}
+
+/** People on an MR from the REST resource (`projects/:id/merge_requests/:iid`). */
+export function restMrPeople(raw: RawMrDetail): MrPeople {
+  const names = (list?: { username?: string }[] | null) =>
+    (list ?? []).map((u) => u.username ?? '').filter(Boolean);
+  return {
+    author: raw.author?.username ?? '',
+    assignees: names(raw.assignees),
+    reviewers: names(raw.reviewers),
+  };
 }
 
 interface RawMrDiscussion {
@@ -247,6 +270,9 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
         );
         const parsed = JSON.parse(detail) as RawMrDetail;
         pipeline = parsed.head_pipeline?.status?.toLowerCase() ?? null;
+        // the same resource carries the people — feeds the role lookup
+        const url = parsed.web_url ?? item.web_url;
+        if (url) mrPeople.fill(url, restMrPeople(parsed));
       } catch {
         // pipeline stays unknown
       }
@@ -526,6 +552,45 @@ function setOverview(next: MrOverview) {
   for (const listener of overviewListeners) listener();
 }
 
+/** The GitLab host a URL host stands for in the overview (`undefined` = gitlab.com). */
+const overviewHost = () => (overview.host ?? 'gitlab.com').toLowerCase();
+
+/** `--hostname` for one GitLab host. */
+const hostArg = (host: string) => `--hostname ${shellQuote(host)}`;
+
+/**
+ * Per-MR people cache behind dev-workflow's role lookup (`MrResolver`):
+ * filled by the overview poll and the per-session detail fetch, one
+ * `glab api` call on a miss.
+ */
+const mrPeople = createMrPeopleCache({
+  forge: 'gitlab',
+  knownMe: (host) => (host === overviewHost() ? overview.username || undefined : undefined),
+  fetchOne: async ({ host, project, iid }) => {
+    const rt = appRuntime();
+    if (!rt) return undefined;
+    const out = await rt.exec(
+      forgeCliCommand(
+        'glab',
+        `api ${hostArg(host)} ${shellQuote(`projects/${encodeURIComponent(project)}/merge_requests/${iid}`)}`,
+      ),
+    );
+    return restMrPeople(JSON.parse(out) as RawMrDetail);
+  },
+  fetchMe: async (host) => {
+    const rt = appRuntime();
+    if (!rt) return undefined;
+    const out = await rt.exec(forgeCliCommand('glab', `api ${hostArg(host)} user`));
+    return (JSON.parse(out) as { username?: string }).username || undefined;
+  },
+});
+registerMrResolver('glab-mr', mrPeople);
+
+/** Test seam: forget every cached MR's people. */
+export function resetMrPeople(): void {
+  mrPeople.clear();
+}
+
 export function useMrOverview(): MrOverview {
   return useSyncExternalStore(
     (listener) => {
@@ -787,12 +852,14 @@ export function refreshMrOverview(settings?: {
       const assigned = assignedRaw.map(toItem);
       const authored = authoredRaw.map(toItem);
       const review = reviewRaw.map(toItem);
+      for (const mr of [...assigned, ...authored, ...review]) {
+        if (mr.url) mrPeople.fill(mr.url, mr);
+      }
       setOverview({
         status: 'ready',
         host,
         username: user.username ?? '',
-        mine: mergeMine(assigned, authored),
-        review,
+        ...splitByRole(mergeMine(assigned, authored), review, user.username ?? ''),
         fetchedAt: Date.now(),
       });
     } catch (e) {

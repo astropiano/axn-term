@@ -460,3 +460,18 @@ describe('search', () => {
     expect(findSessionField(glabMrPlugin, 'mr')!.search!(ctx({ showInTitle: false }))).toBeNull();
   });
 });
+
+import { restMrPeople } from './glabMr';
+
+describe('restMrPeople', () => {
+  it('reads author, assignees and reviewers from the REST MR resource', () => {
+    expect(
+      restMrPeople({
+        author: { username: 'sebastian' },
+        assignees: [{ username: 'sebastian' }],
+        reviewers: [{ username: 'alex' }, { username: '' }],
+      }),
+    ).toEqual({ author: 'sebastian', assignees: ['sebastian'], reviewers: ['alex'] });
+    expect(restMrPeople({})).toEqual({ author: '', assignees: [], reviewers: [] });
+  });
+});

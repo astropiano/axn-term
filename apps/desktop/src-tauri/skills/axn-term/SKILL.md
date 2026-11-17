@@ -37,7 +37,7 @@ so the user can see at a glance what is happening without opening it.
   front (`shell`, a tab kind like `git`, an index or a label).
 - `"$AXN_TERM_CLI" session command <axn-command> [args…]` — any other `axn-*`
   or plugin command for this session, e.g.
-  `session command axn-workflow-move review`. To open a new session in a
+  `session command axn-workflow move review`. To open a new session in a
   workspace: `session command axn-session -w <workspace> [-n <name>]
   [--background] [--create-ws] [path]` (the workspace must exist unless
   `--create-ws`; `--background` doesn't take the user's focus). Existing
