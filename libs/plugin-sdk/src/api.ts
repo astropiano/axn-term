@@ -198,10 +198,22 @@ export type AxnLogicEvent =
   | 'bannerAction'
   | 'surfaceAction'
   | 'peer'
-  | 'theme';
+  | 'theme'
+  | 'viewChanged';
 
 /** Event names accepted by `axn.on` in the view frame. */
-export type AxnViewEvent = 'init' | 'sessions' | 'appState' | 'peer' | 'theme';
+export type AxnViewEvent = 'init' | 'sessions' | 'appState' | 'peer' | 'theme' | 'viewChanged';
+
+/** The selected rail view (`getActiveView`, `viewChanged`). Never carries a URL. */
+export interface ActiveView {
+  /** `pluginId`, or `pluginId/entryId` for an item from `railEntries`. */
+  key: string;
+  pluginId: string;
+  entryId?: string;
+  title: string;
+  /** Opened at runtime (`openView`), not from settings. */
+  runtime: boolean;
+}
 
 /** Session-scoped operations, also reachable via `axn.session(id)`. */
 export interface AxnSessionHandle {
@@ -303,6 +315,17 @@ export interface AxnClient {
   selectSession(sessionId: string): Promise<void>;
   /** Deactivate the plugin view (view frames only). */
   closeView(): Promise<void>;
+  /**
+   * Open an http(s) page as a rail view (the `external-views` plugin must be
+   * enabled); resolves its view key. Needs the `sessions` permission.
+   */
+  openView(view: { url: string; title?: string; logo?: string }): Promise<string>;
+  /** Activate a rail view by key (`null` = back to the session). Needs `sessions`. */
+  selectView(key: string | null): Promise<boolean>;
+  /** Remove a runtime view opened with `openView`. Needs `sessions`. */
+  removeView(key: string): Promise<boolean>;
+  /** The selected rail view, or null while a session shows. */
+  getActiveView(): Promise<ActiveView | null>;
 
   /**
    * Push a sanitized-HTML surface for a session — `render` shows under the

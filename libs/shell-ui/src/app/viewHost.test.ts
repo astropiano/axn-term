@@ -52,6 +52,12 @@ describe('openView', () => {
     expect(() => openView({ url: 'javascript:alert(1)' })).toThrow();
     expect(runtimeViews()).toHaveLength(0);
   });
+  it('fails and keeps nothing when the window refuses the view (external-views disabled)', () => {
+    unregister();
+    unregister = registerViewHost({ select: () => false, describe: () => null });
+    expect(() => openView({ url: 'http://127.0.0.1:1/x' })).toThrow(/external-views/);
+    expect(runtimeViews()).toHaveLength(0);
+  });
   it('titles an untitled view by its host', () => {
     openView({ url: 'http://127.0.0.1:37778/d/mr/' });
     expect(runtimeViews()[0].title).toBe('127.0.0.1:37778');
