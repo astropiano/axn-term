@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { isTagSlot, type TagSlot } from '../../themes';
 
 /**
  * Percentage of a colour mixed into the session panel's surface, per tinted
@@ -17,6 +18,26 @@ const SURFACE = 'var(--chrome)';
 
 export function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && HEX.test(value);
+}
+
+/**
+ * A plugin colour: a hex value, or a theme tag slot name (`blue`) drawn in
+ * the active theme's shade of it.
+ */
+export function isColourToken(value: unknown): value is string {
+  return isHexColor(value) || isTagSlot(value);
+}
+
+/** Hex of a colour token in the given theme palette; undefined when invalid. */
+export function resolveColour(token: unknown, palette: Readonly<Record<TagSlot, string>>): string | undefined {
+  if (isHexColor(token)) return token;
+  return isTagSlot(token) ? palette[token] : undefined;
+}
+
+/** CSS colour of a token — a slot follows the theme via `--tag-<slot>`. */
+export function cssColour(token: string): string | undefined {
+  if (isHexColor(token)) return token;
+  return isTagSlot(token) ? `var(--tag-${token})` : undefined;
 }
 
 /** Distinct valid hex colours, in order, at most {@link MAX_BANDS}. */

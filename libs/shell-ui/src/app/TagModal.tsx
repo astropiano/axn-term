@@ -3,6 +3,7 @@ import { Trans, useLingui } from '@lingui/react/macro';
 import { Pencil, Tag, Trash2 } from 'lucide-react';
 import type { TagRequest } from './tagHost';
 import { TagColorInput } from './session-plugins/TagColorInput';
+import { cssColour } from './session-plugins/tint';
 import {
   addTag,
   derivedTags,
@@ -117,7 +118,7 @@ export function TagModal({
                   aria-label={t`Change colour of ${name}`}
                   onClick={() => setColouring(colouring === name ? null : name)}
                   className="h-3 w-3 shrink-0 rounded-full ring-offset-1 ring-offset-[var(--elevated)] hover:ring-1 hover:ring-[var(--text-secondary)]"
-                  style={{ backgroundColor: tagColor(name, colors) }}
+                  style={{ backgroundColor: cssColour(tagColor(name, colors)) }}
                 />
                 {colouring === name && (
                   <TagColorInput

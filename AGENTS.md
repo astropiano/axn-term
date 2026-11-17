@@ -265,7 +265,11 @@ Plugins can colour the session panel: `sessionColors(ctx)` (a session card) and
 `workspaceColors({ workspace, pluginSettings })` (a workspace header — no session
 needed) return hex colours. `SessionPanel` combines every enabled plugin's colours
 (plugin order) into equal left-to-right bands via `resolveTint`
-(`session-plugins/tint.ts`) — the host owns the shades (`TINT_INTENSITY`): one
+(`session-plugins/tint.ts`; a colour is a hex or a theme tag slot — `red`,
+`orange`, `yellow`, `green`, `cyan`, `blue`, `violet`, `magenta` — resolved
+through `themeTagPalette(activeTheme)` in `themes.ts`: a theme's optional
+`tagColors:` block, else its terminal colours, orange/violet mixed when absent;
+`applyTheme` also sets them as `--tag-<slot>` for CSS) — the host owns the shades (`TINT_INTENSITY`): one
 colour mixed with `--chrome` (solid, so a card hides its workspace's tint):
 workspace block 10%, session card 22%, selected card 40%, selected card's title
 row 100% with dark/light text picked by contrast (`tintTextVars`); tints are set
@@ -278,8 +282,8 @@ sessions/workspaces), and `workspaceActions(ctx)` contributes workspace-menu row
 without needing a session (empty workspaces included). The built-in `tagging`
 plugin (`session-plugins/tagging.tsx`) uses all of it: a tag is a typed string
 stored only on its session (`pluginState.tagging.tags`) or workspace, its colour
-derived from the string (`tagColor`) unless overridden in the plugin's
-`colors` map in plugins.yaml (edited in Settings → Plugins → Tags,
+a theme tag slot hashed from the string (`tagColor`) unless set in the plugin's
+`colors` map in plugins.yaml (a slot name, which follows the theme, or a raw hex) (edited in Settings → Plugins → Tags,
 `TagColorSettings`, which lists every tag in use — `PluginSettingsViewContext`
 carries the window's `sessions`/`workspaces`, empty in the macOS Preferences
 window — or by clicking a tag's dot in `TagModal`, saved at once via `TagHost`;

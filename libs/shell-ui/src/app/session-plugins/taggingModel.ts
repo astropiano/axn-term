@@ -1,19 +1,8 @@
-import { isHexColor } from './tint';
+import { TAG_SLOTS } from '../../themes';
+import { isColourToken, isHexColor } from './tint';
 
 /** Plugin id and state key of the tagging plugin — session and workspace slices. */
 export const TAGGING = { id: 'tagging', stateKey: 'tags' } as const;
-
-/** Colours a tag name hashes into; readable as a tint in light and dark themes. */
-export const TAG_PALETTE: readonly string[] = [
-  '#e5484d',
-  '#f76b15',
-  '#ffb224',
-  '#46a758',
-  '#12a594',
-  '#0091ff',
-  '#6e56cf',
-  '#d6409f',
-];
 
 export type TagState = 'none' | 'some' | 'all';
 
@@ -24,7 +13,10 @@ export function normalizeTag(raw: string): string | null {
   return name === '' ? null : name;
 }
 
-/** Per-tag colour overrides, keyed by lower-cased name (plugins.yaml `colors`). */
+/**
+ * Per-tag colours, keyed by lower-cased name (plugins.yaml `colors`): a theme
+ * slot name (`blue`, follows the theme) or a raw hex (fixed).
+ */
 export type TagColorOverrides = Readonly<Record<string, string>>;
 
 export function tagColorOverrides(settings: unknown): TagColorOverrides {
@@ -32,11 +24,12 @@ export function tagColorOverrides(settings: unknown): TagColorOverrides {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const out: Record<string, string> = {};
   for (const [name, colour] of Object.entries(raw)) {
-    if (isHexColor(colour) && key(name) !== '') out[key(name)] = colour;
+    if (isColourToken(colour) && key(name) !== '') out[key(name)] = colour;
   }
   return out;
 }
 
+/** The tag's colour token: its configured one, else a theme slot hashed from the name. */
 export function tagColor(name: string, overrides: TagColorOverrides = {}): string {
   const override = overrides[key(name)];
   if (override) return override;
@@ -45,7 +38,7 @@ export function tagColor(name: string, overrides: TagColorOverrides = {}): strin
     hash ^= ch.codePointAt(0)!;
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return TAG_PALETTE[hash % TAG_PALETTE.length];
+  return TAG_SLOTS[hash % TAG_SLOTS.length];
 }
 
 /** A typed or pasted hex colour (`#abc`, `abc`, `#aabbcc`, `#aabbccdd`), lower-cased with `#`; null when invalid. */
@@ -56,7 +49,7 @@ export function parseHexColor(raw: string): string | null {
 
 export function setTagColor(overrides: TagColorOverrides, raw: string, colour: string): TagColorOverrides {
   const name = normalizeTag(raw);
-  if (!name || !isHexColor(colour)) return overrides;
+  if (!name || !isColourToken(colour)) return overrides;
   return { ...overrides, [key(name)]: colour };
 }
 
