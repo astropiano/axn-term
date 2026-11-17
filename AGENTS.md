@@ -277,7 +277,10 @@ plugin (`session-plugins/tagging.tsx`) uses all of it: a tag is a typed string
 stored only on its session (`pluginState.tagging.tags`) or workspace, its colour
 derived from the string (`tagColor`) unless overridden in the plugin's
 `colors` map in plugins.yaml (edited in Settings → Plugins → Tags,
-`TagColorSettings`); a workspace's tint paints the whole workspace block; picked/created through `TagModal`
+`TagColorSettings`, which lists every tag in use — `PluginSettingsViewContext`
+carries the window's `sessions`/`workspaces`, empty in the macOS Preferences
+window — or by clicking a tag's dot in `TagModal`, saved at once via `TagHost`;
+hex can be typed or pasted, `parseHexColor`); a workspace's tint paints the whole workspace block; picked/created through `TagModal`
 (`openTagModal` in `app/tagHost.tsx`, mounted as `TagHost` in `ShellApp`); the
 `tagging.tags` card field shows only where `sessionCard` places it (the default
 layout shows no tag name; the tint stays). Design: `docs/superpowers/specs/2026-11-17-tagging-plugin-design.md`.
