@@ -13,6 +13,7 @@ import { useSettings } from '../SettingsProvider';
 import { fontStackAvailable } from '../themes';
 import { usePluginSettings } from './PluginSettingsProvider';
 import { createPluginApi } from './session-plugins/plugin';
+import { resolveTint } from './session-plugins/tint';
 import { AttentionDot } from './AttentionDot';
 import { sessionAttention, summarizeAttention } from './attention';
 import { IconButton } from './IconButton';
@@ -477,6 +478,7 @@ function WorkspaceHeader({
   onClearDefaultFolder,
   hasSession,
   pluginItems,
+  tint,
   searchQuery,
   onDragStart,
   onDragEnd,
@@ -497,6 +499,8 @@ function WorkspaceHeader({
   onClearDefaultFolder: () => void;
   hasSession: boolean;
   pluginItems?: RepoMenuItem[];
+  /** CSS `background-image` from the plugins' `workspaceColors`. */
+  tint?: string;
   /** Active panel filter — matched name substring is highlighted. */
   searchQuery?: string;
   onDragStart: (e: React.DragEvent) => void;
@@ -529,6 +533,7 @@ function WorkspaceHeader({
           isDragging ? ' opacity-40' : ''
         }`}
         onClick={wrapClick(onToggle)}
+        style={tint ? { backgroundImage: tint } : undefined}
         draggable={!editing}
         onDragStart={(e) => {
           // Keep a press-and-hold drag from opening the context menu mid-drag.
@@ -1263,10 +1268,8 @@ export function SessionItem({
   // the selected card — comes from the `sessionCard` layout setting.
   const fieldMetas: FieldMeta[] = [...CORE_FIELDS];
   const pluginFieldValues = new Map<string, { value: () => ReactNode; tip?: () => string | string[] | null }>();
-  for (const plugin of plugins) {
-    const fields = pluginSessionFields(plugin);
-    if (fields.length === 0) continue;
-    const api = createPluginApi(session, plugin, {
+  const apiFor = (plugin: SessionViewPlugin) =>
+    createPluginApi(session, plugin, {
       backend,
       updateSession,
       mergePluginState,
@@ -1280,6 +1283,20 @@ export function SessionItem({
       pluginData,
       mergePluginData,
     });
+  const tint = resolveTint(
+    plugins.flatMap((plugin) => {
+      try {
+        return plugin.sessionColors?.(apiFor(plugin)) ?? [];
+      } catch {
+        return [];
+      }
+    }),
+    isSelected ? 'selected' : 'idle',
+  );
+  for (const plugin of plugins) {
+    const fields = pluginSessionFields(plugin);
+    if (fields.length === 0) continue;
+    const api = apiFor(plugin);
     for (const field of fields) {
       const id = `${plugin.id}.${field.id}`;
       fieldMetas.push({ id, label: field.label, kind: field.kind, zone: field.zone });
@@ -1462,6 +1479,7 @@ export function SessionItem({
               ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_40%,transparent)]'
               : 'hover:bg-[var(--fill-1)]'
         }${isDragging ? ' opacity-40' : ''}${dropBefore ? ` before:absolute before:-top-px before:left-0 before:right-0 before:h-[3px] before:rounded-full before:bg-[var(--accent)] before:content-['']` : ''}`}
+        style={tint ? { backgroundImage: tint } : undefined}
         data-tip={[sessionDisplayName(session), ...rowTips].join('\n')}
       >
         <div
@@ -1910,6 +1928,23 @@ export function SessionPanel({
     });
   };
 
+  const workspaceTint = (workspace: Workspace) =>
+    resolveTint(
+      plugins.flatMap((plugin) => {
+        try {
+          return (
+            plugin.workspaceColors?.({
+              workspace,
+              pluginSettings: pluginSettings[plugin.settingsKey ?? plugin.id],
+            }) ?? []
+          );
+        } catch {
+          return [];
+        }
+      }),
+      'workspace',
+    );
+
   const handleSetDefaultFolder = (workspace: Workspace) => {
     const rep = representativeSession(workspace);
     if (!rep) return;
@@ -2276,6 +2311,7 @@ export function SessionPanel({
                   }
                   hasSession={representativeSession(workspace) !== undefined}
                   pluginItems={workspacePluginItems(workspace)}
+                  tint={workspaceTint(workspace)}
                   searchQuery={q}
                   onDragStart={(e) => handleWorkspaceDragStart(e, workspace.id)}
                   onDragEnd={handleWorkspaceDragEnd}

@@ -812,6 +812,18 @@ export interface SessionViewPlugin {
    */
   sessionMenuItems?: (ctx: SessionViewContext & PluginApi) => RepoMenuItem[];
   /**
+   * Colours (hex) this plugin gives the session's card. The panel combines
+   * every plugin's colours into equal left-to-right bands and decides the
+   * intensity (stronger when selected). Synchronous and cheap — called per
+   * render; a throwing hook contributes nothing.
+   */
+  sessionColors?: (ctx: SessionViewContext & PluginApi) => string[];
+  /**
+   * Colours (hex) this plugin gives a workspace header, always at the faint
+   * intensity. Needs no session, so empty workspaces can be coloured.
+   */
+  workspaceColors?: (ctx: { workspace: Workspace; pluginSettings: unknown }) => string[];
+  /**
    * Contribute rows to the workspace context menu (right-click a workspace
    * header). `ctx` is the plugin's own full api bound to a representative
    * session of that workspace (the selected session when it belongs to the
