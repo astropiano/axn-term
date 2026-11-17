@@ -1298,7 +1298,7 @@ export function SessionItem({
     const api = apiFor(plugin);
     for (const field of fields) {
       const id = `${plugin.id}.${field.id}`;
-      fieldMetas.push({ id, label: field.label, kind: field.kind, zone: field.zone });
+      fieldMetas.push({ id, label: field.label, kind: field.kind, zone: field.zone, optIn: field.optIn });
       pluginFieldValues.set(id, {
         value: () => field.value(api),
         tip: field.tip ? () => field.tip!(api) : undefined,

@@ -1107,7 +1107,7 @@ msgid "System font"
 msgstr "System font"
 
 #. placeholder {0}: scope.targets.length
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:77
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:78
 msgid "Tag {0} sessions"
 msgstr "Tag {0} sessions"
 
@@ -1119,16 +1119,16 @@ msgstr "Tag colours"
 msgid "Tag name"
 msgstr "Tag name"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:77
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:78
 msgid "Tag session"
 msgstr "Tag session"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:96
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:97
 msgid "Tag workspace"
 msgstr "Tag workspace"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:72
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:93
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:73
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:94
 msgid "Tag…"
 msgstr "Tag…"
 

@@ -38,6 +38,7 @@ export const taggingPlugin: SessionViewPlugin = {
       label: 'Tags',
       kind: 'inline',
       zone: 'title',
+      optIn: true,
       value: (ctx) => {
         const tags = tagsOf(ctx.pluginState);
         if (tags.length === 0) return null;
