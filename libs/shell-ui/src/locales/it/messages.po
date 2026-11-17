@@ -18,7 +18,7 @@ msgstr "{0} {1} in esecuzione verranno terminati"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} è in esecuzione nel checkout principale — isolarlo in un worktree?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2194
+#: libs/shell-ui/src/app/SessionPanel.tsx:2196
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} in attesa"
 
@@ -539,7 +539,7 @@ msgstr "richiede attenzione"
 msgid "Needs you"
 msgstr "Ti aspetta"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2364
+#: libs/shell-ui/src/app/SessionPanel.tsx:2366
 msgid "New session"
 msgstr "Nuova sessione"
 
@@ -547,7 +547,7 @@ msgstr "Nuova sessione"
 msgid "New session button"
 msgstr "Pulsante nuova sessione"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2488
+#: libs/shell-ui/src/app/SessionPanel.tsx:2490
 msgid "New session in folder…"
 msgstr "Nuova sessione nella cartella…"
 
@@ -659,7 +659,7 @@ msgstr "Apri"
 msgid "Open {title}"
 msgstr "Apri {title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2468
+#: libs/shell-ui/src/app/SessionPanel.tsx:2470
 msgid "Open a saved workspace set file"
 msgstr "Apri un file di set di workspace salvato"
 
@@ -687,11 +687,11 @@ msgstr "Apri cartella dei log…"
 msgid "Open preview in a tab"
 msgstr "Apri l'anteprima in una scheda"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2476
+#: libs/shell-ui/src/app/SessionPanel.tsx:2478
 msgid "Open workspace set from file…"
 msgstr "Apri set di workspace da file…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2159
+#: libs/shell-ui/src/app/SessionPanel.tsx:2161
 msgid "Open…"
 msgstr "Apri…"
 
@@ -733,7 +733,7 @@ msgstr "permessi:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "telefoni e browser con lo stesso account possono collegarsi"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2483
+#: libs/shell-ui/src/app/SessionPanel.tsx:2485
 msgid "Pick a folder — the new session starts in it"
 msgstr "Scegli una cartella — la nuova sessione si avvia lì"
 
@@ -874,7 +874,7 @@ msgstr "Esegui in una scheda shell"
 msgid "Run the login in a shell, then check again."
 msgstr "Esegui l'accesso in una shell, poi controlla di nuovo."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2427
+#: libs/shell-ui/src/app/SessionPanel.tsx:2429
 msgid "Running"
 msgstr "Attive"
 
@@ -888,7 +888,7 @@ msgstr "in sandbox — nessun permesso (nessun accesso a shell, file o terminale
 msgid "Save"
 msgstr "Salva"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2155
+#: libs/shell-ui/src/app/SessionPanel.tsx:2157
 msgid "Save workspace set"
 msgstr "Salva set di workspace"
 
@@ -959,7 +959,7 @@ msgstr "Riepilogo della sessione"
 msgid "Session: {0}"
 msgstr "Sessione: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2422
+#: libs/shell-ui/src/app/SessionPanel.tsx:2424
 msgid "Sessions"
 msgstr "Sessioni"
 
@@ -989,11 +989,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Font della shell"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2187
+#: libs/shell-ui/src/app/SessionPanel.tsx:2189
 msgid "Show all sessions"
 msgstr "Mostra tutte le sessioni"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2187
+#: libs/shell-ui/src/app/SessionPanel.tsx:2189
 msgid "Show only sessions that need you"
 msgstr "Mostra solo le sessioni che ti aspettano"
 
