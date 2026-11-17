@@ -477,7 +477,7 @@ mod session_tests {
         assert_eq!(session_line(&args(&["rename", "api", "work"])).unwrap(), "axn-rename api work");
         assert_eq!(session_line(&args(&["set", "--summary", "wip"])).unwrap(), "axn-session set --summary wip");
         assert_eq!(session_line(&args(&["create", "src"])).unwrap(), "axn-session create src");
-        assert_eq!(session_line(&args(&["command", "axn-workflow-move", "review"])).unwrap(), "axn-workflow-move review");
+        assert_eq!(session_line(&args(&["command", "axn-workflow", "move", "review"])).unwrap(), "axn-workflow move review");
     }
 
     #[test]
