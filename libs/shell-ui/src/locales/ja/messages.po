@@ -138,7 +138,7 @@ msgstr "クライアント: {0}"
 msgid "Close"
 msgstr "閉じる"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2996
+#: libs/shell-ui/src/app/ShellApp.tsx:2997
 msgid "Close tab"
 msgstr "タブを閉じる"
 
@@ -892,6 +892,14 @@ msgstr "保存"
 msgid "Save workspace set"
 msgstr "ワークスペースセットを保存"
 
+#: libs/shell-ui/src/app/TabStrip.tsx:73
+msgid "Scroll tabs left"
+msgstr "タブを左にスクロール"
+
+#: libs/shell-ui/src/app/TabStrip.tsx:95
+msgid "Scroll tabs right"
+msgstr "タブを右にスクロール"
+
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:59
 msgid "Search workspaces or windows…"
 msgstr "ワークスペースまたはウィンドウを検索…"
@@ -980,8 +988,8 @@ msgstr "設定"
 #~ msgid "shell"
 #~ msgstr "shell"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:43
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:49
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:44
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:50
 msgid "Shell"
 msgstr "シェル"
 

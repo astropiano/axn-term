@@ -138,7 +138,7 @@ msgstr "：{0}"
 msgid "Close"
 msgstr "关闭"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2996
+#: libs/shell-ui/src/app/ShellApp.tsx:2997
 msgid "Close tab"
 msgstr "关闭标签页"
 
@@ -892,6 +892,14 @@ msgstr "保存"
 msgid "Save workspace set"
 msgstr "保存工作区集"
 
+#: libs/shell-ui/src/app/TabStrip.tsx:73
+msgid "Scroll tabs left"
+msgstr "向左滚动标签页"
+
+#: libs/shell-ui/src/app/TabStrip.tsx:95
+msgid "Scroll tabs right"
+msgstr "向右滚动标签页"
+
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:59
 msgid "Search workspaces or windows…"
 msgstr "搜索工作区或窗口…"
@@ -980,8 +988,8 @@ msgstr "设置"
 #~ msgid "shell"
 #~ msgstr "shell"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:43
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:49
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:44
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:50
 msgid "Shell"
 msgstr "Shell"
 

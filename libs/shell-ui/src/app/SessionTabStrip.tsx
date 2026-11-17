@@ -4,7 +4,8 @@ import { Eye, FileText, Folder, GitBranch, Radio, SquareTerminal, Terminal, X , 
 import type { EditorTab } from '../types';
 import { defaultTabLabel } from './subshellPromote';
 import { useSettings } from '../SettingsProvider';
-import { tabStripClasses, tabStripTabClasses } from './tabStyles';
+import { tabStripTabClasses } from './tabStyles';
+import { TabStrip } from './TabStrip';
 
 /**
  * A session's tab strip: `shell` pinned leftmost, then its sub-view tabs —
@@ -32,13 +33,13 @@ export function SessionTabStrip({
   const [tabDropId, setTabDropId] = useState<string | null>(null);
   const { settings } = useSettings();
   return (
-    <div
-      className={tabStripClasses}
+    <TabStrip
+      activeTab={activeTab}
       style={{ zoom: settings.uiZoom ? settings.uiZoom / 100 : undefined }}
-      data-tauri-drag-region
     >
       <button
         type="button"
+        data-tab-id="shell"
         onClick={() => onSelect('shell')}
         data-tip={t`Shell`}
         className={`relative flex shrink-0 items-center gap-1.5 px-2.5 text-xs transition-colors duration-[var(--dur-1)] ${tabStripTabClasses(
@@ -51,6 +52,7 @@ export function SessionTabStrip({
       {editors.map((ed) => (
         <div
           key={ed.id}
+          data-tab-id={ed.id}
           onContextMenu={(e) => {
             e.preventDefault();
             onTabMenu(ed, e.clientX, e.clientY);
@@ -152,6 +154,6 @@ export function SessionTabStrip({
           </button>
         </div>
       ))}
-    </div>
+    </TabStrip>
   );
 }
