@@ -136,6 +136,7 @@ import { ghostButtonClass } from './chromeStyles';
 import { MobileKeyBar } from './MobileKeyBar';
 import { LONG_PRESS_MS } from '../useContextMenuTrigger';
 import { useCoarsePointer, useVisualViewportSize } from '../useMediaQuery';
+import { resolveStatusDisplay, type StatusDisplay } from './panelStatus';
 
 const SMALL_SCREEN_QUERY = '(max-width: 639px)';
 /** How often batched terminal output reaches session state and plugins. */
@@ -507,26 +508,34 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // keyboard shrinks the app instead of covering it.
   const coarsePointer = useCoarsePointer();
   const viewportSize = useVisualViewportSize(coarsePointer);
-  // Plugins declaring a heavier rail form (renderRailDetail) get it instead
-  // of their plain icon when the statusDisplay setting resolves to the rail
-  // — explicitly, or by default on coarse pointers where the panel status
-  // stack costs the most space. Their panel accordion is hidden then.
+  // Where each plugin's status shows (`statusDisplay`, resolveStatusDisplay):
+  // plugins with a heavier rail form (renderRailDetail) get it instead of
+  // their plain icon when the setting resolves to the rail — explicitly, or
+  // by default on coarse pointers where the panel status stack costs the
+  // most space. A plugin without one shows just its plain icon in `rail`
+  // mode. Either way its panel accordion is dropped.
+  const statusDisplays = useMemo(() => {
+    const out = new Map<string, StatusDisplay>();
+    for (const p of enabledPlugins) {
+      const section = pluginSettings[(p.settingsKey ?? p.id) as keyof typeof pluginSettings] as
+        | { statusDisplay?: unknown }
+        | undefined;
+      out.set(p.id, resolveStatusDisplay(section?.statusDisplay, !!p.renderRailDetail, coarsePointer));
+    }
+    return out;
+  }, [enabledPlugins, pluginSettings, coarsePointer]);
   const railDetailIds = useMemo(
     () =>
       new Set(
         enabledPlugins
-          .filter(
-            (p) =>
-              p.renderRailDetail &&
-              ((
-                pluginSettings[(p.settingsKey ?? p.id) as keyof typeof pluginSettings] as
-                  | { statusDisplay?: string }
-                  | undefined
-              )?.statusDisplay ?? (coarsePointer ? 'rail' : 'panel')) === 'rail',
-          )
+          .filter((p) => p.renderRailDetail && statusDisplays.get(p.id) === 'rail')
           .map((p) => p.id),
       ),
-    [enabledPlugins, pluginSettings, coarsePointer],
+    [enabledPlugins, statusDisplays],
+  );
+  const hiddenStatusIds = useMemo(
+    () => [...statusDisplays].filter(([, d]) => d === 'rail').map(([id]) => id),
+    [statusDisplays],
   );
   // Long-press on a session/plugin tab opens the same menu as right-click.
   const tabLongPress = useRef<{
@@ -2823,7 +2832,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 onSessionDragEnd={handleSessionDragEnd}
                 foreignDrag={foreignDrag}
                 onForeignDrop={claimForeignDrop}
-                hiddenStatusSources={[...railDetailIds]}
+                hiddenStatusSources={hiddenStatusIds}
                 onOpenPluginView={setActivePluginView}
                 appAttention={
                   appFlagSummary

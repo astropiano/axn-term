@@ -45,6 +45,7 @@ import {
   forgeOfRemote,
   forgeRailMode,
   repoRootsSetting,
+  splitByRole,
   type CliFailure,
 } from './forge';
 
@@ -858,8 +859,7 @@ export function refreshMrOverview(settings?: {
         status: 'ready',
         host,
         username: user.username ?? '',
-        mine: mergeMine(assigned, authored),
-        review,
+        ...splitByRole(mergeMine(assigned, authored), review, user.username ?? ''),
         fetchedAt: Date.now(),
       });
     } catch (e) {
