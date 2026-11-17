@@ -371,3 +371,18 @@ describe('refreshPrOverview', () => {
     await pending;
   });
 });
+
+import { cliPrPeople } from './ghPr';
+
+describe('cliPrPeople', () => {
+  it('counts those who already reviewed as reviewers, never the author', () => {
+    expect(
+      cliPrPeople({
+        author: { login: 'bob' },
+        assignees: [{ login: 'bob' }],
+        reviewRequests: [{ login: 'alice' }],
+        latestReviews: [{ author: { login: 'me' } }, { author: { login: 'bob' } }, { author: { login: 'alice' } }],
+      }),
+    ).toEqual({ author: 'bob', assignees: ['bob'], reviewers: ['alice', 'me'] });
+  });
+});

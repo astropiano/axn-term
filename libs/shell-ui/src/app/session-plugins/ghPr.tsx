@@ -23,11 +23,18 @@ import { getSessionViewPlugins, isPluginEnabled } from './index';
 import { PluginIcon } from '../SessionPanel';
 import { RailItem } from '../RailItem';
 import type { PluginSettings } from '../pluginSettings';
-import { mrActionProviders, type MrRef, type MrRowEnv } from './mrActions';
+import {
+  createMrPeopleCache,
+  mrActionProviders,
+  registerMrResolver,
+  type MrRef,
+  type MrRowEnv,
+} from './mrActions';
 import { CardChips } from './cardEnrichers';
 import { MrDescription } from './mrDescription';
 import { shellQuote } from '../../shellQuote';
 import {
+  type MrPeople,
   authCommand,
   defaultHostNote,
   classifyCliError,
@@ -142,10 +149,34 @@ export interface RawPrListItem {
   statusCheckRollup?: unknown;
   isCrossRepository?: boolean;
   headRepositoryOwner?: { login?: string } | null;
+  author?: { login?: string } | null;
+  assignees?: { login?: string }[] | null;
+  reviewRequests?: { login?: string }[] | null;
+  latestReviews?: { author?: { login?: string } | null }[] | null;
 }
 
 const PR_LIST_FIELDS =
-  'number,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,isCrossRepository,headRepositoryOwner';
+  'number,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,isCrossRepository,headRepositoryOwner,author,assignees,reviewRequests,latestReviews';
+
+/** The `gh pr list`/`gh pr view --json` people fields, as one cache entry. */
+const PR_PEOPLE_FIELDS = 'author,assignees,reviewRequests,latestReviews';
+
+/**
+ * People on a PR from `gh … --json` output. GitHub drops a reviewer from
+ * `reviewRequests` once they submit a review, so those who reviewed
+ * (`latestReviews`) count as reviewers too.
+ */
+export function cliPrPeople(raw: RawPrListItem): MrPeople {
+  const logins = (list?: ({ login?: string } | null | undefined)[] | null) =>
+    (list ?? []).map((u) => u?.login ?? '').filter(Boolean);
+  const author = raw.author?.login ?? '';
+  const reviewed = logins((raw.latestReviews ?? []).map((r) => r?.author)).filter((l) => l !== author);
+  return {
+    author,
+    assignees: logins(raw.assignees),
+    reviewers: [...new Set([...logins(raw.reviewRequests), ...reviewed])],
+  };
+}
 
 /** `gh pr list` for the PRs whose head is `branch` (branch single-quoted: git allows `$(…)` in names). */
 export function prListCommand(branch: string): string {
@@ -287,6 +318,7 @@ async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
     root,
     top.map((i) => i.number ?? 0).filter(Boolean),
   );
+  for (const item of top) if (item.url) prPeople.fill(item.url, cliPrPeople(item));
   const prs = top.map((item): SessionPr => {
     const openThreads = openThreadCounts.get(item.number ?? 0);
     return {
@@ -532,6 +564,40 @@ function setOverview(next: PrOverview) {
   for (const listener of overviewListeners) listener();
 }
 
+/** `--hostname` for one GitHub host (github.com needs none). */
+const ghHostArg = (host: string) => (host === 'github.com' ? '' : ` --hostname ${shellQuote(host)}`);
+
+/**
+ * Per-PR people cache behind dev-workflow's role lookup (`MrResolver`):
+ * filled by the overview poll and the per-session list, one `gh pr view` on
+ * a miss.
+ */
+const prPeople = createMrPeopleCache({
+  forge: 'github',
+  knownMe: (host) =>
+    host === (overview.host ?? 'github.com').toLowerCase() ? overview.username || undefined : undefined,
+  fetchOne: async ({ url }) => {
+    const rt = appRuntime();
+    if (!rt) return undefined;
+    const out = await rt.exec(
+      forgeCliCommand('gh', `pr view ${shellQuote(url)} --json ${PR_PEOPLE_FIELDS}`),
+    );
+    return cliPrPeople(JSON.parse(out) as RawPrListItem);
+  },
+  fetchMe: async (host) => {
+    const rt = appRuntime();
+    if (!rt) return undefined;
+    const out = await rt.exec(forgeCliCommand('gh', `api user${ghHostArg(host)} --jq .login`));
+    return out.trim() || undefined;
+  },
+});
+registerMrResolver('gh-pr', prPeople);
+
+/** Test seam: forget every cached PR's people. */
+export function resetPrPeople(): void {
+  prPeople.clear();
+}
+
 export function usePrOverview(): PrOverview {
   return useSyncExternalStore(
     (listener) => {
@@ -656,6 +722,19 @@ export function refreshPrOverview(settings?: {
       if (!user) throw new Error('no viewer — run `gh auth login`');
       const nodes = (c?: { nodes?: (RawGqlPr | null)[] }) =>
         (c?.nodes ?? []).filter((n): n is RawGqlPr => !!n).map(normalizePr);
+      for (const conn of [parsed.data?.assigned, parsed.data?.authored, parsed.data?.review]) {
+        for (const pr of nodes(conn)) {
+          // approvals count as reviews — GitHub drops a reviewer from
+          // reviewRequests once they review
+          if (pr.url) {
+            prPeople.fill(pr.url, {
+              author: pr.author,
+              assignees: pr.assignees,
+              reviewers: [...new Set([...pr.reviewers, ...pr.approvedBy.filter((l) => l !== pr.author)])],
+            });
+          }
+        }
+      }
       setOverview({
         status: 'ready',
         host,

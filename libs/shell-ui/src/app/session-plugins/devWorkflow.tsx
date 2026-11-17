@@ -17,7 +17,16 @@ import { pickFromList } from '../pickerHost';
 import { resolvePersona, agentLauncherFor } from './agentRegistry';
 import type { AgentLaunchTools } from './agentRegistry';
 import { CardChips, ChipView, useCardEnrichment, type CardSubject } from './cardEnrichers';
-import { registerMrActions, type MrActionProps, type MrRef, type MrRowEnv } from './mrActions';
+import {
+  peekMrDetails,
+  registerMrActions,
+  resolveMrDetails,
+  useMrDetails,
+  type MrActionProps,
+  type MrRef,
+  type MrRowEnv,
+} from './mrActions';
+import { MR_ROLES, type MrRole } from './forge';
 import { normalizeReviewAgent } from '../gitReview';
 import { checkoutsOf, localCheckouts, parseRepoRoots } from '../repoDirectory';
 import { ticketListKey, useTicketLists, type Ticket } from './ticketSources';
@@ -29,6 +38,7 @@ import {
 } from './worktrees';
 import type {
   PluginApi,
+  PluginCommand,
   RepoMenuItem,
   SessionViewContext,
   SessionViewPlugin,
@@ -108,7 +118,7 @@ export interface WorkflowAction {
   agent?: WorkflowAgentSpec;
   /**
    * Fire this action when the workflow STARTS — initial bind to the start
-   * state only (`axn-workflow-start`, menu start, MR-review session bind);
+   * state only (`axn-workflow start`, menu start, MR-review session bind);
    * later moves into the state don't re-fire it.
    */
   auto?: boolean;
@@ -137,8 +147,8 @@ export interface ActionCheck {
 
 /**
  * A workflow-declared input variable. Values are supplied at start
- * (`axn-workflow-start <wf> [arg|key=value]`), via the session card's var
- * fields, the `axn-workflow-set` command or the `axn-workflow-var[<token>]:` output
+ * (`axn-workflow start <wf> [arg|key=value]`), via the session card's var
+ * fields, the `axn-workflow set` command or the `axn-workflow-var[<token>]:` output
  * marker. They substitute into `{{key}}` templates and are exported to
  * every action's environment as `KEY` (camelCase/kebab → SNAKE).
  * `kind: 'mr'` marks the value as a merge/pull-request reference — a GitLab
@@ -151,6 +161,17 @@ export interface WorkflowVarSpec {
   hint?: string;
   required?: boolean;
   kind?: 'mr';
+  /**
+   * Conditions an MR must meet to fill this var (`kind: mr` only). Gates the
+   * MR-row start button and `axn-workflow start <wf> <mr>`; absent = any MR.
+   */
+  when?: MrCondition;
+}
+
+/** `when` on a `kind: mr` var — every listed condition must hold. */
+export interface MrCondition {
+  /** Your role on the MR (`mrRole` in forge.ts); several = any of them. */
+  role?: MrRole[];
 }
 
 export interface WorkflowDef {
@@ -310,7 +331,32 @@ function varSpecOf(key: string, raw: unknown): WorkflowVarSpec {
     hint: typeof s.hint === 'string' ? s.hint : undefined,
     required: s.required === true ? true : undefined,
     kind: s.kind === 'mr' ? 'mr' : undefined,
+    when: s.kind === 'mr' ? parseMrCondition(s.when) : undefined,
   };
+}
+
+/**
+ * `when: { role: reviewer }` / `{ role: [author, other] }`. Unknown roles
+ * are dropped; a `role` that lists none at all matches nothing, so a typo
+ * hides the button instead of silently widening it to every MR.
+ */
+export function parseMrCondition(raw: unknown): MrCondition | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  if (r.role === undefined) return undefined;
+  const list = (Array.isArray(r.role) ? r.role : [r.role]).map((v) => String(v).trim().toLowerCase());
+  return { role: MR_ROLES.filter((role) => list.includes(role)) };
+}
+
+/** Whether an MR with `role` (undefined = not known) meets `when`. */
+export function mrConditionMet(when: MrCondition | undefined, role: MrRole | undefined): boolean {
+  if (!when?.role) return true;
+  return role !== undefined && when.role.includes(role);
+}
+
+/** The var an MR fills: the workflow's first `kind: mr` var. */
+export function mrVarOf(def: WorkflowDef): WorkflowVarSpec | undefined {
+  return def.vars?.find((v) => v.kind === 'mr');
 }
 
 /**
@@ -765,7 +811,7 @@ function showState(
     message: `${def.title} · ${rec.state}`,
     // what this state is for — lighter text, ellipsized, full text on hover
     detail: def.descriptions?.[rec.state],
-    // stays while the session is bound — only axn-workflow-stop clears it
+    // stays while the session is bound — only axn-workflow stop clears it
     dismissible: false,
     // chevrons lead the state name so its length doesn't shift them;
     // edge/disallowed moves render disabled instead of disappearing
@@ -1880,9 +1926,9 @@ const echo = (msg: string) => `echo ${JSON.stringify(msg)}`;
 export { shellTokens };
 
 /**
- * Parse `axn-workflow-start <wf>` trailing args into var values: `key=value`
+ * Parse `axn-workflow start <wf>` trailing args into var values: `key=value`
  * pairs set by name (keys camelized), bare tokens fill declared vars in
- * declaration order — `axn-workflow-start mr-review <mr-url>` lands in the
+ * declaration order — `axn-workflow start mr-review <mr-url>` lands in the
  * first declared var.
  */
 export function parseStartVars(
@@ -2022,6 +2068,29 @@ const pendingReviews = new Map<
 >();
 
 /**
+ * The main checkout behind `root`, given git's absolute common dir
+ * (`git rev-parse --path-format=absolute --git-common-dir`). A linked
+ * worktree's common dir is the main checkout's `.git`, so its parent is the
+ * repo every review worktree hangs off — without this, a review started from
+ * a session in `…/worktrees/foo` nested its worktree at
+ * `…/worktrees/worktrees/foo-mr-N`. Bare repos and unexpected output keep
+ * `root`.
+ */
+export function mainCheckoutOf(root: string, commonDir: string): string {
+  const dir = commonDir.trim().replace(/\/+$/, '');
+  if (!dir.startsWith('/') || !dir.endsWith('/.git')) return root;
+  return dir.slice(0, -'/.git'.length) || root;
+}
+
+/** `mainCheckoutOf` through git; any failure keeps `root`. */
+async function resolveMainCheckout(api: Ctx, root: string): Promise<string> {
+  const out = await api
+    .exec(`git -C ${shellQuote(root)} rev-parse --path-format=absolute --git-common-dir`, root)
+    .catch(() => '');
+  return mainCheckoutOf(root, String(out ?? ''));
+}
+
+/**
  * The 'review' contribution rendered on MR rows in glab-mr: resolve the
  * session whose repo hosts the MR, fetch the merge/pull-request head ref
  * (GitLab `merge-requests/N/head`, GitHub `pull/N/head`), create a worktree
@@ -2079,6 +2148,9 @@ export async function startMrReview(
     axnLog('warn', 'dev-workflow', `MR review: no repo checkout for ${project ?? mr.url}`);
     return msg;
   }
+  // A session in a linked worktree reports that worktree as its root —
+  // review worktrees always hang off the main checkout.
+  root = await resolveMainCheckout(host, root);
   // Already reviewing this MR: its worktree has a session — go there
   // instead of opening a second one.
   const dir = normPath(worktreeDirFor(root, `mr-${mr.iid}`));
@@ -2105,6 +2177,8 @@ async function reviewMr(
   def: WorkflowDef,
   workspaceId?: string,
   remote: string | undefined = api.session?.repo?.remote,
+  /** Further start vars (`axn-workflow start <wf> <mr> key=value …`). */
+  extraVars: Record<string, string> = {},
 ): Promise<string | undefined> {
   const ref = parseMrRef(mr.url);
   const slug = `mr-${mr.iid}`;
@@ -2153,9 +2227,12 @@ async function reviewMr(
     api.setAttention({ level: 'warning', message: msg });
     return msg;
   }
-  const key = def.vars?.find((v) => v.kind === 'mr')?.key ?? def.vars?.[0]?.key ?? 'mr';
-  const vars = expandVars(def, { [key]: mr.url }, {
+  const key = mrVarOf(def)?.key ?? def.vars?.[0]?.key ?? 'mr';
+  const role = peekMrDetails(mr.url)?.role;
+  const vars = expandVars(def, { ...extraVars, [key]: mr.url }, {
     [`${key}_title`]: mr.title,
+    // your role on the MR (author | reviewer | other) — `{{mr_role}}`, MR_ROLE
+    ...(role ? { [`${key}_role`]: role } : {}),
     ...(mr.sourceBranch ? { [`${key}_branch`]: mr.sourceBranch } : {}),
     ...(mr.targetBranch ? { [`${key}_target`]: mr.targetBranch } : {}),
     worktree: dir,
@@ -2329,16 +2406,22 @@ export function mrReviewLaunch(
 }
 
 /**
- * Workflows that start from an MR row: those declaring a *required*
- * `kind: mr` var. A workflow that only records its MR later (an optional
- * var, e.g. a development flow that opens its own MR) gets no row button —
- * starting it on someone else's MR makes no sense.
+ * Workflows that start from an MR row: those whose first `kind: mr` var is
+ * *required* and whose `when` holds for `role` (your role on that MR;
+ * undefined while unknown — then only workflows without a role condition).
+ * A workflow that only records its MR later (an optional var, e.g. a
+ * development flow that opens its own MR) gets no row button. Nothing is
+ * offered unless a workflow in plugins.yaml declares it.
  */
-export function mrStartWorkflows(settings: Record<string, unknown> | undefined): WorkflowDef[] {
+export function mrStartWorkflows(
+  settings: Record<string, unknown> | undefined,
+  role?: MrRole,
+): WorkflowDef[] {
   if (settings?.enabled !== true) return [];
-  return parseWorkflows(settings).filter((d) =>
-    d.vars?.some((v) => v.kind === 'mr' && v.required),
-  );
+  return parseWorkflows(settings).filter((d) => {
+    const v = mrVarOf(d);
+    return v?.required === true && mrConditionMet(v.when, role);
+  });
 }
 
 /**
@@ -2372,7 +2455,10 @@ function MrReviewButton({ mr, env }: MrActionProps) {
     return () => window.removeEventListener('keydown', key, true);
   }, [errOpen]);
   const settings = pluginSettings['dev-workflow'] as Record<string, unknown> | undefined;
-  const defs = mrStartWorkflows(settings);
+  // Your role on this MR, from the forge plugin's cache (fetched once on a
+  // miss) — workflows whose `when` needs a role wait until it is known.
+  const details = useMrDetails(mr.url);
+  const defs = mrStartWorkflows(settings, details?.role);
   if (defs.length === 0) return null;
   const workspaces = env.workspaces ?? [];
   const fail = (msg: string) => {
@@ -3070,7 +3156,7 @@ function DevWorkflowView({
             )}
             {cards.length === 0 && backlog.length === 0 && (
               <div className="text-[10px] text-[var(--text-secondary)]">
-                no sessions on this workflow — start one with axn-workflow-start {def.id}
+                no sessions on this workflow — start one with axn-workflow start {def.id}
               </div>
             )}
           </div>
@@ -3079,6 +3165,275 @@ function DevWorkflowView({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// `axn-workflow <sub>` — the one command for every workflow operation
+// ---------------------------------------------------------------------------
+
+type CommandResult = string | false | void | Promise<string | false | void>;
+
+interface WorkflowSubcommand {
+  /** One-line usage shown by `axn-workflow help` and unknown subcommands. */
+  usage: string;
+  run: (ctx: Ctx, arg: string | undefined) => CommandResult;
+  complete?: (ctx: Ctx, prefix: string) => string[] | Promise<string[]>;
+}
+
+const unquote = (v: string | undefined) => v?.replace(/^["']+|["']+$/g, '');
+const unbound = (sub: string) =>
+  echo(`axn-workflow ${sub}: no workflow bound — start one with axn-workflow start <workflow>`);
+
+/**
+ * `axn-workflow start <wf> <mr>` — the value for the workflow's `kind: mr`
+ * var names an MR: check the var's `when` against your role on it, then
+ * fetch it into its review worktree and open a session there (what the MR
+ * row button does). Returns undefined when the current session already is
+ * that worktree — the caller then binds in place.
+ */
+async function startOnMr(
+  ctx: Ctx,
+  def: WorkflowDef,
+  spec: WorkflowVarSpec,
+  raw: string,
+  extraVars: Record<string, string>,
+): Promise<string | false | undefined> {
+  const ref = parseMrRef(raw);
+  if (!ref) return undefined;
+  const cwd = (await ctx.getCwd()) ?? ctx.session.cwd;
+  const here =
+    ctx.session.repo?.root ??
+    (cwd ? (await ctx.exec('git rev-parse --show-toplevel', cwd).catch(() => '')).trim() : '');
+  if (!here) return echo('axn-workflow start: session is not inside a git repository');
+  const main = await resolveMainCheckout(ctx, here);
+  if (normPath(worktreeDirFor(main, `mr-${ref.iid}`)) === normPath(here)) return undefined;
+  let warning: string | undefined;
+  if (spec.when?.role) {
+    const role = ref.url ? (await resolveMrDetails(ref.url))?.role : undefined;
+    if (role === undefined) {
+      warning = `could not determine your role on ${raw} — started without checking 'when'`;
+    } else if (!mrConditionMet(spec.when, role)) {
+      return echo(
+        `axn-workflow start: '${def.id}' accepts MRs where you are ${spec.when.role.join(' or ') || 'nobody'} — you are ${role} on ${raw}`,
+      );
+    }
+  }
+  // URL form: GitHub (incl. GHES hosts) is the `/pull/N` shape.
+  const github = reviewFetchRef(ref, Number(ref.iid), ctx.session.repo?.remote).startsWith('pull/');
+  const mr: MrRef = {
+    iid: Number(ref.iid),
+    reference: github ? `#${ref.iid}` : `!${ref.iid}`,
+    title: ref.project ?? '',
+    url: ref.url ?? raw,
+    ...(ref.project ? { project: ref.project } : {}),
+  };
+  const err = await reviewMr(ctx, main, mr, def, undefined, ctx.session.repo?.remote, extraVars);
+  if (err) return echo(err);
+  return warning ? echo(`axn-workflow start: ${warning}`) : false;
+}
+
+const startSubcommand: WorkflowSubcommand = {
+  usage: 'start <workflow> [arg|key=value …]',
+  complete: (ctx, prefix) => {
+    const clean = (prefix ?? '').replace(/^["']/, '');
+    return workflowsOf(ctx)
+      .map((d) => d.id)
+      .filter((n) => n.startsWith(clean) && n !== clean);
+  },
+  run: async (ctx, arg) => {
+    const defs = workflowsOf(ctx);
+    if (defs.length === 0) {
+      return echo('axn-workflow start: no workflows defined — see dev-workflow in plugins.yaml');
+    }
+    const raw = (arg ?? '').trim();
+    // The whole arg may be the workflow name (titles contain spaces) —
+    // else split at the first whitespace: `<wf> [arg|key=value …]`.
+    let def = findWorkflow(ctx, raw);
+    let rest = '';
+    if (!def && raw) {
+      const split = raw.search(/\s/);
+      if (split > 0) {
+        def = findWorkflow(ctx, raw.slice(0, split));
+        rest = raw.slice(split + 1);
+      }
+    }
+    if (!def) {
+      return echo(
+        `axn-workflow start: usage — axn-workflow start <${defs.map((d) => d.id).join('|')}> [arg|key=value …]`,
+      );
+    }
+    const parsed = parseStartVars(def, rest);
+    if (parsed.error) return echo(`axn-workflow start: ${parsed.error}`);
+    // An MR for the `kind: mr` var: start in the MR's own worktree session.
+    const spec = mrVarOf(def);
+    const mrValue = spec ? parsed.vars[spec.key] : undefined;
+    if (spec && mrValue) {
+      const { [spec.key]: _mr, ...others } = parsed.vars;
+      const routed = await startOnMr(ctx, def, spec, mrValue, others);
+      if (routed !== undefined) return routed;
+    }
+    const vars = expandVars(def, parsed.vars);
+    const missing = missingRequiredVars(def, vars);
+    if (missing.length > 0) {
+      return echo(`axn-workflow start: '${def.id}' requires ${missing.map((k) => `<${k}>`).join(' ')}`);
+    }
+    if (Object.keys(vars).length > 0) writeBinding(ctx, { vars });
+    const attached = await attachExisting(ctx, def);
+    if (attached !== undefined) {
+      return echo(`workflow '${def.id}' attached — state '${attached}'`);
+    }
+    const res = await transitionTo(ctx, def, def.start, { waitForPrompt: true });
+    if (res.error) return echo(`axn-workflow start: ${res.error}`);
+    return echo(`workflow '${def.id}' started — state '${def.start}'`);
+  },
+};
+
+const WORKFLOW_SUBCOMMANDS: Record<string, WorkflowSubcommand> = {
+  status: {
+    usage: 'status',
+    run: (ctx) => {
+      const bound = bindingOf(ctx);
+      if (!bound.workflow) return echo('no workflow bound — start one with axn-workflow start <workflow>');
+      const prefix = `${bound.state ?? ''}:`;
+      const report = Object.entries(bound.checks ?? {})
+        .filter(([k]) => prefix !== ':' && k.startsWith(prefix))
+        .map(
+          ([k, c]) =>
+            `${k.slice(prefix.length)} ${
+              c.status === 'ok' ? 'ok' : c.status === 'failed' ? `FAILED (${c.rc ?? '?'})` : c.status
+            }`,
+        );
+      return echo(
+        `${bound.workflow}: ${bound.state ?? 'unknown'}${report.length ? ` — ${report.join(', ')}` : ''}`,
+      );
+    },
+  },
+  start: startSubcommand,
+  set: {
+    usage: 'set <var> <value>',
+    complete: (ctx, prefix) => {
+      const def = findBound(ctx);
+      const clean = (prefix ?? '').replace(/^["']/, '');
+      if (clean.includes(' ')) return [];
+      return (def?.vars ?? []).map((s) => s.key).filter((k) => k.startsWith(clean) && k !== clean);
+    },
+    run: (ctx, arg) => {
+      const def = findBound(ctx);
+      if (!def) return unbound('set');
+      const [key, ...rest] = shellTokens(arg ?? '');
+      const value = rest.join(' ');
+      if (!key || !value) return echo('axn-workflow set: usage — axn-workflow set <var> <value>');
+      setVar(ctx, def, key, value);
+      return echo(`${def.id}: ${camelKey(key)} set`);
+    },
+  },
+  move: {
+    usage: 'move <state>',
+    complete: (ctx, prefix) => {
+      const def = findBound(ctx);
+      if (!def) return [];
+      const clean = (prefix ?? '').replace(/^["']/, '');
+      return def.states.filter((st) => st.startsWith(clean) && st !== clean);
+    },
+    run: async (ctx, arg) => {
+      const def = findBound(ctx);
+      if (!def) return unbound('move');
+      const target = unquote(arg);
+      if (!target) return echo(`axn-workflow move: usage — axn-workflow move <${def.states.join('|')}>`);
+      const res = await transitionTo(ctx, def, target);
+      if (res.error) return echo(`axn-workflow move: ${res.error}`);
+      // only the entered state's `auto` actions ran — other steps still
+      // wait for the explicit Run action
+      return echo(`workflow '${def.id}' → ${target}`);
+    },
+  },
+  run: {
+    usage: 'run <action>',
+    complete: (ctx, prefix) => {
+      const def = findBound(ctx);
+      const bound = bindingOf(ctx);
+      if (!def || !bound.state) return [];
+      const clean = (prefix ?? '').replace(/^["']/, '');
+      return (def.steps[bound.state] ?? []).map((a) => a.name).filter((n) => n.startsWith(clean) && n !== clean);
+    },
+    run: async (ctx, arg) => {
+      const def = findBound(ctx);
+      const bound = bindingOf(ctx);
+      if (!def || !bound.state) return unbound('run');
+      const action = findAction(def, bound.state, unquote(arg));
+      if (!action) {
+        const actions = def.steps[bound.state] ?? [];
+        return echo(
+          actions.length === 0
+            ? `axn-workflow run: state '${bound.state}' has no actions`
+            : `axn-workflow run: usage — axn-workflow run <${actions.map((a) => a.name).join('|')}>`,
+        );
+      }
+      // Only reachable at a free prompt (a foreground agent gates the line
+      // to /exit), so a shell action can be returned as the replacement
+      // line — the user sees the real command, including its check trailer.
+      if ((action.runIn ?? 'shell') === 'shell') {
+        let cmd: string | undefined;
+        try {
+          cmd = await actionCommand(ctx, def, action, bound.state);
+        } catch (e) {
+          const msg = String(e instanceof Error ? e.message : e).split('\n')[0].slice(0, 300);
+          return `echo ${shellQuote(`axn-workflow run: ${msg}`)}`;
+        }
+        if (!cmd) return echo(`axn-workflow run: nothing to run for '${action.name}'`);
+        if (action.command) {
+          recordCheck(ctx, def, bound.state, action.name, { status: 'running', at: Date.now() });
+        }
+        return `${actionEnv(ctx, def, action, bound.state)}${shellLine(action, bound.state, cmd, bound.token ?? '')}`;
+      }
+      await runAction(ctx, def, bound.state, action);
+      return echo(`workflow '${def.id}' running '${action.name}'`);
+    },
+  },
+  stop: {
+    usage: 'stop',
+    run: (ctx) => {
+      const bound = bindingOf(ctx);
+      clearBinding(ctx);
+      return echo(bound.workflow ? `workflow '${bound.workflow}' stopped` : 'no workflow bound');
+    },
+  },
+};
+
+const workflowUsage = () =>
+  `usage — axn-workflow ${Object.values(WORKFLOW_SUBCOMMANDS)
+    .map((c) => c.usage)
+    .join(' | ')}`;
+
+/** Split `<sub> [rest]` — `rest` undefined when only the subcommand was given. */
+export function splitSubcommand(arg: string | undefined): { sub: string; rest?: string } {
+  const t = (arg ?? '').trim();
+  const at = t.search(/\s/);
+  if (at < 0) return { sub: t };
+  return { sub: t.slice(0, at), rest: t.slice(at + 1).trim() || undefined };
+}
+
+/** The plugin's one command: `axn-workflow <status|start|set|move|run|stop>`. */
+const WORKFLOW_COMMANDS: PluginCommand[] = [
+  {
+    name: 'axn-workflow',
+    takesArg: true,
+    completeArg: (ctx, prefix) => {
+      const { sub, rest } = splitSubcommand(prefix);
+      if (rest === undefined && !/\s$/.test(prefix ?? '')) {
+        return Object.keys(WORKFLOW_SUBCOMMANDS).filter((n) => n.startsWith(sub) && n !== sub);
+      }
+      const found = WORKFLOW_SUBCOMMANDS[sub]?.complete?.(ctx, rest ?? '') ?? [];
+      const withSub = (list: string[]) => list.map((c) => `${sub} ${c}`);
+      return Array.isArray(found) ? withSub(found) : found.then(withSub);
+    },
+    run: (ctx, arg) => {
+      const { sub, rest } = splitSubcommand(arg);
+      if (!sub) return WORKFLOW_SUBCOMMANDS.status.run(ctx, undefined);
+      const cmd = WORKFLOW_SUBCOMMANDS[sub];
+      return cmd ? cmd.run(ctx, rest) : echo(`axn-workflow: ${workflowUsage()}`);
+    },
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Plugin
@@ -3092,230 +3447,7 @@ export const devWorkflowPlugin: SessionViewPlugin = {
   settingsKey: 'dev-workflow',
   defaultEnabled: false,
 
-  commands: [
-    {
-      name: 'axn-workflow-start',
-      takesArg: true,
-      completeArg: (ctx, prefix) => {
-        const clean = (prefix ?? '').replace(/^["']/, '');
-        return workflowsOf(ctx)
-          .map((d) => d.id)
-          .filter((n) => n.startsWith(clean) && n !== clean);
-      },
-      run: async (ctx, arg) => {
-        const defs = workflowsOf(ctx);
-        if (defs.length === 0) {
-          return echo('axn-workflow-start: no workflows defined — see dev-workflow in plugins.yaml');
-        }
-        const raw = (arg ?? '').trim();
-        // The whole arg may be the workflow name (titles contain spaces) —
-        // else split at the first whitespace: `<wf> [arg|key=value …]`.
-        let def = findWorkflow(ctx, raw);
-        let rest = '';
-        if (!def && raw) {
-          const split = raw.search(/\s/);
-          if (split > 0) {
-            def = findWorkflow(ctx, raw.slice(0, split));
-            rest = raw.slice(split + 1);
-          }
-        }
-        if (!def) {
-          return echo(
-            `axn-workflow-start: usage — axn-workflow-start <${defs.map((d) => d.id).join('|')}> [arg|key=value …]`,
-          );
-        }
-        const parsed = parseStartVars(def, rest);
-        if (parsed.error) return echo(`axn-workflow-start: ${parsed.error}`);
-        const vars = expandVars(def, parsed.vars);
-        const missing = missingRequiredVars(def, vars);
-        if (missing.length > 0) {
-          return echo(
-            `axn-workflow-start: '${def.id}' requires ${missing.map((k) => `<${k}>`).join(' ')}`,
-          );
-        }
-        if (Object.keys(vars).length > 0) writeBinding(ctx, { vars });
-        const attached = await attachExisting(ctx, def);
-        if (attached !== undefined) {
-          return echo(`workflow '${def.id}' attached — state '${attached}'`);
-        }
-        const res = await transitionTo(ctx, def, def.start, { waitForPrompt: true });
-        if (res.error) return echo(`axn-workflow-start: ${res.error}`);
-        return echo(`workflow '${def.id}' started — state '${def.start}'`);
-      },
-    },
-    {
-      name: 'axn-mr-review',
-      takesArg: true,
-      run: async (ctx, arg) => {
-        const [raw, wfName] = shellTokens(arg ?? '');
-        const ref = raw ? parseMrRef(raw) : undefined;
-        if (!ref) {
-          return echo('usage: axn-mr-review <mr-url|!N|#N> [workflow]');
-        }
-        const defs = workflowsOf(ctx).filter((d) => d.vars?.some((v) => v.kind === 'mr'));
-        if (defs.length === 0) {
-          return echo('axn-mr-review: no workflow declares a kind: mr var — see dev-workflow in plugins.yaml');
-        }
-        const def = wfName !== undefined ? defs.find((d) => d.id === wfName) : defs[0];
-        if (!def) {
-          return echo(
-            `axn-mr-review: unknown MR workflow '${wfName}' — ${defs.map((d) => d.id).join('|')}`,
-          );
-        }
-        const cwd = (await ctx.getCwd()) ?? ctx.session.cwd;
-        const root =
-          ctx.session.repo?.root ??
-          (cwd
-            ? await ctx.exec('git rev-parse --show-toplevel', cwd).catch(() => '')
-            : '');
-        if (!root) {
-          return echo('axn-mr-review: session is not inside a git repository');
-        }
-        // URL form: GitHub (incl. GHES hosts) is the `/pull/N` shape.
-        const github =
-          reviewFetchRef(ref, Number(ref.iid), ctx.session.repo?.remote).startsWith('pull/');
-        const mr: MrRef = {
-          iid: Number(ref.iid),
-          reference: github ? `#${ref.iid}` : `!${ref.iid}`,
-          title: ref.project ?? '',
-          url: ref.url ?? raw,
-          ...(ref.project ? { project: ref.project } : {}),
-        };
-        const err = await reviewMr(ctx, root, mr, def);
-        return err ? echo(err) : false;
-      },
-    },
-    {
-      name: 'axn-workflow-set',
-      takesArg: true,
-      completeArg: (ctx, prefix) => {
-        const def = findBound(ctx);
-        const clean = (prefix ?? '').replace(/^["']/, '');
-        if (clean.includes(' ')) return [];
-        return (def?.vars ?? [])
-          .map((s) => s.key)
-          .filter((k) => k.startsWith(clean) && k !== clean);
-      },
-      run: (ctx, arg) => {
-        const def = findBound(ctx);
-        if (!def) {
-          return echo('axn-workflow-set: no workflow bound — start one with axn-workflow-start');
-        }
-        const tokens = shellTokens(arg ?? '');
-        const [key, ...rest] = tokens;
-        const value = rest.join(' ');
-        if (!key || !value) {
-          return echo('axn-workflow-set: usage — axn-workflow-set <var> <value>');
-        }
-        setVar(ctx, def, key, value);
-        return echo(`${def.id}: ${camelKey(key)} set`);
-      },
-    },
-    {
-      name: 'axn-workflow-move',
-      takesArg: true,
-      completeArg: (ctx, prefix) => {
-        const def = findBound(ctx);
-        if (!def) return [];
-        const clean = (prefix ?? '').replace(/^["']/, '');
-        return def.states.filter((s) => s.startsWith(clean) && s !== clean);
-      },
-      run: async (ctx, arg) => {
-        const def = findBound(ctx);
-        if (!def) {
-          return echo('axn-workflow-move: no workflow bound — start one with axn-workflow-start');
-        }
-        const target = arg?.replace(/^["']+|["']+$/g, '');
-        if (!target) {
-          return echo(`axn-workflow-move: usage — axn-workflow-move <${def.states.join('|')}>`);
-        }
-        const res = await transitionTo(ctx, def, target);
-        if (res.error) return echo(`axn-workflow-move: ${res.error}`);
-        // only the entered state's `auto` actions ran — other steps still
-        // wait for the explicit Run action
-        return echo(`workflow '${def.id}' → ${target}`);
-      },
-    },
-    {
-      name: 'axn-workflow-run',
-      takesArg: true,
-      completeArg: (ctx, prefix) => {
-        const def = findBound(ctx);
-        const bound = bindingOf(ctx);
-        if (!def || !bound.state) return [];
-        const clean = (prefix ?? '').replace(/^["']/, '');
-        return (def.steps[bound.state] ?? [])
-          .map((a) => a.name)
-          .filter((n) => n.startsWith(clean) && n !== clean);
-      },
-      run: async (ctx, arg) => {
-        const def = findBound(ctx);
-        const bound = bindingOf(ctx);
-        if (!def || !bound.state) {
-          return echo('axn-workflow-run: no workflow bound — start one with axn-workflow-start');
-        }
-        const name = arg?.replace(/^["']+|["']+$/g, '');
-        const action = findAction(def, bound.state, name);
-        if (!action) {
-          const actions = def.steps[bound.state] ?? [];
-          return echo(
-            actions.length === 0
-              ? `axn-workflow-run: state '${bound.state}' has no actions`
-              : `axn-workflow-run: usage — axn-workflow-run <${actions.map((a) => a.name).join('|')}>`,
-          );
-        }
-        // Only reachable at a free prompt (a foreground agent gates the line
-        // to /exit), so a shell action can be returned as the replacement
-        // line — the user sees the real command, including its check trailer.
-        if ((action.runIn ?? 'shell') === 'shell') {
-          let cmd: string | undefined;
-          try {
-            cmd = await actionCommand(ctx, def, action, bound.state);
-          } catch (e) {
-            const msg = String(e instanceof Error ? e.message : e).split('\n')[0].slice(0, 300);
-            return `echo ${shellQuote(`axn-workflow-run: ${msg}`)}`;
-          }
-          if (!cmd) return echo(`axn-workflow-run: nothing to run for '${action.name}'`);
-          if (action.command) {
-            recordCheck(ctx, def, bound.state, action.name, {
-              status: 'running',
-              at: Date.now(),
-            });
-          }
-          return `${actionEnv(ctx, def, action, bound.state)}${shellLine(action, bound.state, cmd, bound.token ?? '')}`;
-        }
-        await runAction(ctx, def, bound.state, action);
-        return echo(`workflow '${def.id}' running '${action.name}'`);
-      },
-    },
-    {
-      name: 'axn-workflow',
-      run: (ctx) => {
-        const bound = bindingOf(ctx);
-        if (!bound.workflow) return echo('no workflow bound — start one with axn-workflow-start');
-        const prefix = `${bound.state ?? ''}:`;
-        const report = Object.entries(bound.checks ?? {})
-          .filter(([k]) => prefix !== ':' && k.startsWith(prefix))
-          .map(
-            ([k, c]) =>
-              `${k.slice(prefix.length)} ${
-                c.status === 'ok' ? 'ok' : c.status === 'failed' ? `FAILED (${c.rc ?? '?'})` : c.status
-              }`,
-          );
-        return echo(
-          `${bound.workflow}: ${bound.state ?? 'unknown'}${report.length ? ` — ${report.join(', ')}` : ''}`,
-        );
-      },
-    },
-    {
-      name: 'axn-workflow-stop',
-      run: (ctx) => {
-        const bound = bindingOf(ctx);
-        clearBinding(ctx);
-        return echo(bound.workflow ? `workflow '${bound.workflow}' stopped` : 'no workflow bound');
-      },
-    },
-  ],
+  commands: WORKFLOW_COMMANDS,
 
   sessionMenuItems: (ctx): RepoMenuItem[] => {
     const bound = bindingOf(ctx);
