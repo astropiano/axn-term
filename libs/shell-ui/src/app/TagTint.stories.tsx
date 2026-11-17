@@ -44,6 +44,7 @@ const SESSIONS: ShellSession[] = [
   session('s2', 'w1', 'web load test', ['load-test'], 'Smoke test the web client'),
   session('s3', 'w1', 'scratch shell', []),
   session('s4', 'w1', 'two tags', ['load-test', 'urgent']),
+  session('s7', 'w1', 'three tags', ['load-test', 'urgent', 'review'], 'Needs a review before the release'),
   session('s5', 'w2', 'urgent fix', ['urgent'], 'Hotfix for the release'),
   session('s6', 'w2', 'plain', []),
 ];
@@ -57,11 +58,12 @@ interface Args {
   workspaceTag: string;
   loadTestTag: string;
   urgentTag: string;
+  reviewTag: string;
   showTagNames: boolean;
 }
 
 const pluginsYaml = (a: Args) =>
-  dump({ tagging: { enabled: true, colors: { backend: a.workspaceTag, 'load-test': a.loadTestTag, urgent: a.urgentTag } } });
+  dump({ tagging: { enabled: true, colors: { backend: a.workspaceTag, 'load-test': a.loadTestTag, urgent: a.urgentTag, review: a.reviewTag } } });
 
 /**
  * The story's SettingsProvider applies the configured theme on mount, so the
@@ -161,6 +163,7 @@ const meta = {
     workspaceTag: colour,
     loadTestTag: colour,
     urgentTag: colour,
+    reviewTag: colour,
     showTagNames: { control: 'boolean' },
   },
   args: {
@@ -169,6 +172,7 @@ const meta = {
     workspaceTag: 'cyan',
     loadTestTag: 'red',
     urgentTag: 'yellow',
+    reviewTag: 'violet',
     showTagNames: false,
   },
 } satisfies Meta<typeof Panel>;
@@ -181,3 +185,6 @@ export const Default: Story = {};
 
 /** Tag names shown as chips in the title row (placed via `sessionCard`). */
 export const WithTagNames: Story = { args: { showTagNames: true } };
+
+/** A session with three tags selected: three bands, three chips in the title row. */
+export const ThreeTagsSelected: Story = { args: { selected: 's7', showTagNames: true } };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isHexColor, resolveTint, tintStyle, tintTextVars } from './tint';
+import { contrastText, isHexColor, resolveTint, tintStyle, tintTextVars } from './tint';
 
 describe('isHexColor', () => {
   it.each(['#abc', '#aabbcc', '#aabbccdd', '#ABC'])('accepts %s', (v) => {
@@ -63,14 +63,7 @@ describe('tintTextVars', () => {
   });
 
   it('sets secondary and tertiary text too, and nothing without a valid colour', () => {
-    expect(Object.keys(tintTextVars(['#000'])!)).toEqual([
-      '--text-primary',
-      '--text-secondary',
-      '--text-tertiary',
-      '--on-tint-fg',
-      '--on-tint-bg',
-    ]);
-    expect(tintTextVars(['#ffb224'])).toMatchObject({ '--on-tint-fg': '#111111' });
+    expect(Object.keys(tintTextVars(['#000'])!)).toEqual(['--text-primary', '--text-secondary', '--text-tertiary']);
     expect(tintTextVars(['red'])).toBeUndefined();
   });
 });
@@ -79,5 +72,14 @@ describe('tintStyle', () => {
   it('carries the tint only as --tint, so a hover class can still repaint it', () => {
     expect(tintStyle('linear-gradient(red, red)')).toEqual({ '--tint': 'linear-gradient(red, red)' });
     expect(tintStyle(undefined)).toBeUndefined();
+  });
+});
+
+describe('contrastText', () => {
+  it('picks dark text on light colours and light text on dark ones', () => {
+    expect(contrastText('#ffb224')).toBe('#111111');
+    expect(contrastText('#fff')).toBe('#111111');
+    expect(contrastText('#6e56cf')).toBe('#ffffff');
+    expect(contrastText('#000000')).toBe('#ffffff');
   });
 });

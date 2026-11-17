@@ -1126,7 +1126,7 @@ msgid "System font"
 msgstr "시스템 글꼴"
 
 #. placeholder {0}: scope.targets.length
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:80
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:91
 msgid "Tag {0} sessions"
 msgstr "세션 {0}개에 태그 지정"
 
@@ -1138,16 +1138,16 @@ msgstr "태그 색상"
 msgid "Tag name"
 msgstr "태그 이름"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:80
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:91
 msgid "Tag session"
 msgstr "세션에 태그 지정"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:98
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:109
 msgid "Tag workspace"
 msgstr "워크스페이스에 태그 지정"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:75
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:95
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:86
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:106
 msgid "Tag…"
 msgstr "태그…"
 
