@@ -39,7 +39,7 @@ msgstr "Lucide 아이콘 이름(예: <0>GitFork</0>) 또는 인라인 SVG 태그
 msgid "Add icon"
 msgstr "아이콘 추가"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:228
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:262
 msgid "Add view"
 msgstr "보기 추가"
 
@@ -84,8 +84,8 @@ msgstr "axn-term에서 예기치 않은 오류가 발생했습니다"
 #~ msgid "axn-term-desktop (default)"
 #~ msgstr "axn-term-desktop (기본값)"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:154
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:154
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:188
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:188
 msgid "Back to the session"
 msgstr "세션으로 돌아가기"
 
@@ -147,12 +147,12 @@ msgstr "클라이언트: {0}"
 msgid "Close"
 msgstr "닫기"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3116
+#: libs/shell-ui/src/app/ShellApp.tsx:3119
 msgid "Close tab"
 msgstr "탭 닫기"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:147
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:148
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:181
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:182
 msgid "Close this view"
 msgstr "이 보기 닫기"
 
@@ -243,7 +243,7 @@ msgid "Copy URL"
 msgstr "URL 복사"
 
 #. placeholder {0}: entry.title
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:160
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:194
 msgid "Could not open {0}"
 msgstr "{0}을(를) 열 수 없습니다"
 
@@ -314,7 +314,7 @@ msgstr "다시 묻지 않기"
 msgid "done"
 msgstr "완료"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:203
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:237
 msgid "Each view gets its own rail item. Give a URL, or a command that prints one when the view opens (for addresses carrying a token — it is never saved)."
 msgstr "각 보기는 레일에 고유한 항목을 갖습니다. URL을 입력하거나, 열 때 URL을 출력하는 명령을 입력하세요(토큰이 포함된 주소용 — 저장되지 않습니다)."
 
@@ -453,7 +453,7 @@ msgstr "일반"
 msgid "Hub URL"
 msgstr "\\ud5c8\\ube0c URL"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:212
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:246
 msgid "Icon"
 msgstr "아이콘"
 
@@ -653,7 +653,7 @@ msgstr "연결되지 않음 — 위에 서버 주소를 입력하세요"
 #~ msgstr "\\uac8c\\uc2dc \\uc548 \\ud568"
 
 #. placeholder {0}: dropped.join(', ')
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:223
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:257
 msgid "Not shown (needs an http(s) URL or a command): {0}"
 msgstr "표시되지 않음(http(s) URL 또는 명령 필요): {0}"
 
@@ -701,9 +701,9 @@ msgstr "저장된 워크스페이스 세트 파일 열기"
 msgid "Open file"
 msgstr "파일 열기"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:136
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:137
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:167
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:170
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:171
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:201
 msgid "Open in browser"
 msgstr "브라우저에서 열기"
 
@@ -740,7 +740,7 @@ msgstr "열기…"
 #~ msgid "optional"
 #~ msgstr "\\uc120\\ud0dd \\uc0ac\\ud56d"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:218
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:252
 msgid "or a command printing the URL, e.g. launchpad url mr"
 msgstr "또는 URL을 출력하는 명령(예: launchpad url mr)"
 
@@ -820,8 +820,8 @@ msgstr "게시"
 msgid "Rail item"
 msgstr "레일 항목"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:129
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:129
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
 msgid "Reload"
 msgstr "새로고침"
 
@@ -864,8 +864,8 @@ msgstr "원격 접근"
 #~ msgid "Remote control"
 #~ msgstr "\\uc6d0\\uaca9 \\uc81c\\uc5b4"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:213
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:213
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
 msgid "Remove"
 msgstr "제거"
 
@@ -908,7 +908,7 @@ msgstr "{agent} 세션 재개{0}"
 msgid "Resume viewport"
 msgstr "뷰포트 재개"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:197
 msgid "Retry"
 msgstr "다시 시도"
 
@@ -1186,7 +1186,7 @@ msgstr "이 보기는 {forgeName}에서 내 확인을 기다리는 요청을 보
 msgid "This window"
 msgstr "이 창"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:211
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:245
 msgid "Title"
 msgstr "제목"
 

@@ -7,6 +7,7 @@ import { PanelHeader } from '../PanelHeader';
 import { fieldClass, ghostButtonClass, secondaryButtonClass } from '../chromeStyles';
 import { viewKey } from '../railOrder';
 import {
+  allowFrameOrigin,
   EXTERNAL_VIEWS_ID,
   isWebUrl,
   removeView,
@@ -25,6 +26,16 @@ export interface ExternalViewEntry {
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
+
+// An id for an entry that has no usable one: the same on every read (the
+// rail, the view lookup and `axn-views select` each normalise separately).
+function derivedId(seed: string, seen: ReadonlySet<string>): string {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i++) hash = Math.imul(hash ^ seed.charCodeAt(i), 16777619);
+  let id = `v${(hash >>> 0).toString(36)}`;
+  while (seen.has(id)) id += 'x';
+  return id;
+}
 
 /**
  * The `views` list as the plugin uses it: ids made unique and slash-free,
@@ -48,7 +59,9 @@ export function normalizeViews(section: unknown): { views: ExternalViewEntry[]; 
       continue;
     }
     let id = typeof r.id === 'string' ? r.id : '';
-    if (!id || id.includes('/') || seen.has(id)) id = newId();
+    if (!id || id.includes('/') || seen.has(id)) {
+      id = derivedId(`${views.length}|${title}|${url ?? ''}|${urlCommand ?? ''}`, seen);
+    }
     seen.add(id);
     const entry: ExternalViewEntry = { id, title: title || (url ? new URL(url).host : urlCommand!) };
     if (url && isWebUrl(url)) entry.url = url;
@@ -66,10 +79,22 @@ export async function resolveEntryUrl(
 ): Promise<string> {
   if (entry.url) return entry.url;
   if (!entry.urlCommand) throw new Error('no url');
-  if (!exec) throw new Error('this build cannot run commands');
+  if (!exec) throw new Error('open a session first: the URL command runs in one');
   const out = (await exec(entry.urlCommand)).trim();
   if (!isWebUrl(out)) throw new Error(`\`${entry.urlCommand}\` did not print an http(s) URL`);
   return out;
+}
+
+/** Fails with a readable reason when nothing answers at `url` (stopped server, wrong port). */
+export async function checkReachable(
+  url: string,
+  fetcher: (url: string, init: RequestInit) => Promise<unknown> = fetch,
+): Promise<void> {
+  try {
+    await fetcher(url, { mode: 'no-cors', cache: 'no-store' });
+  } catch {
+    throw new Error(`${hostOf(url)} is not reachable`);
+  }
 }
 
 function openExternal(url: string): void {
@@ -102,11 +127,20 @@ function ExternalView({
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
   const frame = useRef<HTMLIFrameElement>(null);
+  const execRef = useRef(exec);
+  execRef.current = exec;
 
   const resolve = useCallback(() => {
     setError(null);
-    resolveEntryUrl(entry, exec).then(setUrl, (e: unknown) => setError(String((e as Error)?.message ?? e)));
-    // exec identity changes every render; the entry decides what to resolve
+    setUrl(undefined);
+    resolveEntryUrl(entry, execRef.current)
+      .then(async (resolved) => {
+        await allowFrameOrigin(resolved);
+        await checkReachable(resolved);
+        setUrl(resolved);
+      })
+      .catch((e: unknown) => setError(String((e as Error)?.message ?? e)));
+    // the entry decides what to resolve; exec is read live from the ref
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.url, entry.urlCommand]);
   useEffect(resolve, [resolve]);
@@ -118,7 +152,7 @@ function ExternalView({
   }, [active, url, nonce]);
 
   const reload = () => {
-    if (entry.urlCommand && !entry.url) resolve();
+    resolve();
     setNonce((n) => n + 1);
   };
 

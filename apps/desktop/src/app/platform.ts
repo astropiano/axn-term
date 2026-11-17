@@ -186,6 +186,7 @@ export const desktopPlatform: ShellPlatform = {
         });
       }),
     ),
+  allowFrameOrigin: (url) => invoke('allow_frame_origin', { url }),
   onAppCommand: (cb) =>
     syncSub(
       listen<{ requestId: number; window: string; line: string }>('control-app-command', (event) => {

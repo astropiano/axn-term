@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { externalViewsPlugin, normalizeViews, resolveEntryUrl } from './externalViews';
+import { checkReachable, externalViewsPlugin, normalizeViews, resolveEntryUrl } from './externalViews';
 import { openView, resetViewHostForTests, runtimeViews } from '../viewHost';
 import { pluginViewApi } from './plugin';
 
@@ -24,6 +24,16 @@ describe('normalizeViews', () => {
     expect(new Set(ids).size).toBe(4);
     expect(ids[1]).toBe('x');
     for (const id of ids) expect(id).not.toContain('/');
+  });
+  it('regenerates the same ids on every read, so a hand-edited entry stays addressable', () => {
+    const section = {
+      views: [
+        { title: 'A', url: 'https://a.example' },
+        { id: 'x', title: 'B', url: 'https://b.example' },
+        { id: 'x', title: 'C', url: 'https://c.example' },
+      ],
+    };
+    expect(normalizeViews(section).views.map((v) => v.id)).toEqual(normalizeViews(section).views.map((v) => v.id));
   });
   it('drops entries without a usable URL and reports them', () => {
     const { views, dropped } = normalizeViews({
@@ -58,6 +68,17 @@ describe('railEntries', () => {
       ['MRs', false],
       ['Pushed', true],
     ]);
+  });
+});
+
+describe('checkReachable', () => {
+  it('passes when the page answers and names the host when it does not', async () => {
+    await expect(checkReachable('http://127.0.0.1:1/x', async () => new Response(null))).resolves.toBeUndefined();
+    await expect(
+      checkReachable('http://127.0.0.1:37778/t/tok/d/mr/', async () => {
+        throw new TypeError('Load failed');
+      }),
+    ).rejects.toThrow('127.0.0.1:37778 is not reachable');
   });
 });
 

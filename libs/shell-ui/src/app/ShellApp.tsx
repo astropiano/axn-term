@@ -134,7 +134,7 @@ import {
 import { terminalInput } from '../terminalRegistry';
 import { RailItem, RailShortcutContext } from './RailItem';
 import { nextKeptViews } from './keptViews';
-import { publishActiveView, registerViewHost, useRuntimeViews } from './viewHost';
+import { publishActiveView, registerViewHost, setFrameOriginAllower, useRuntimeViews } from './viewHost';
 import type { RailEntry } from './session-plugins/plugin';
 import { ghostButtonClass } from './chromeStyles';
 import { MobileKeyBar } from './MobileKeyBar';
@@ -2524,8 +2524,6 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
 
   // openView/selectView/activeView (viewHost) act on this window. Validation
   // reads live entries: a runtime view opened a moment ago is not rendered yet.
-  const resolveViewRef = useRef(resolveView);
-  resolveViewRef.current = resolveView;
   useEffect(
     () =>
       registerViewHost({
@@ -2558,7 +2556,12 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     const entry = plugin.railEntries?.({ pluginSettings: settings }).find((e) => e.id === entryId);
     return entry ? { plugin, entry } : undefined;
   }
-  useEffect(() => publishActiveView(effectiveViewKey), [effectiveViewKey, activeResolved?.entry?.title]);
+  useEffect(() => publishActiveView(effectiveViewKey), [effectiveViewKey]);
+  useEffect(() => {
+    const allow = platform.allowFrameOrigin?.bind(platform);
+    setFrameOriginAllower(allow ?? null);
+    return () => setFrameOriginAllower(null);
+  }, [platform]);
 
   // The PTY the touch key bar targets: the session's live main PTY on the
   // shell tab, the tab's own PTY on sub-shell tabs — nothing on non-terminal
