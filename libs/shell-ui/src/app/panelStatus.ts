@@ -183,3 +183,24 @@ export function storedExpandedGroups(pluginData: Record<string, unknown>): strin
 export function toggleExpandedGroup(expanded: readonly string[], source: string): string[] {
   return expanded.includes(source) ? expanded.filter((id) => id !== source) : [...expanded, source];
 }
+
+/**
+ * Where a plugin's status shows (`statusDisplay` in its plugins.yaml
+ * section): `panel` — its accordion in the session panel's status stack;
+ * `rail` — the rail only: its detailed rail item (`renderRailDetail`) when it
+ * has one, else just its plain rail icon, and no accordion either way (the
+ * plugin keeps publishing, the panel drops the group). `auto`/unset means
+ * the rail on touch devices for plugins with a detailed rail item, the
+ * panel otherwise.
+ */
+export type StatusDisplay = 'panel' | 'rail';
+
+export function resolveStatusDisplay(
+  setting: unknown,
+  hasRailDetail: boolean,
+  coarsePointer: boolean,
+): StatusDisplay {
+  const v = typeof setting === 'string' ? setting.trim().toLowerCase() : '';
+  if (v === 'panel' || v === 'rail') return v;
+  return hasRailDetail && coarsePointer ? 'rail' : 'panel';
+}
