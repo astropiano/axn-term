@@ -6,6 +6,7 @@ import { SessionPanel } from './SessionPanel';
 import { StoryShellProviders } from './storyMocks';
 import { ShellServicesProvider } from '../services';
 import type { ShellSession, Workspace } from '../types';
+import { TINT_CLASS, TINT_HOVER_CLASS } from './session-plugins/tint';
 import type { SessionViewPlugin } from './session-plugins/plugin';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -99,6 +100,22 @@ it('tints the selected card body lighter than its solid title row, and an unsele
   expect(title.style.getPropertyValue('--text-primary')).toBe('#111111');
   expect(idle.style.getPropertyValue('--tint')).toContain('#ff0000 22%');
   expect(idle.querySelector<HTMLElement>('[class*="group/row"]')!.style.getPropertyValue('--tint')).toBe('');
+});
+
+it('keeps hover feedback on a tinted card: the hover fill layers over the tint', async () => {
+  await render({ plugins: [colourPlugin('c', { sessionColors: () => ['#ff0000'] })] });
+  const [selected, idle] = cards();
+  expect(idle.className).toContain(TINT_CLASS);
+  expect(idle.className).toContain(TINT_HOVER_CLASS);
+  expect(idle.style.backgroundImage).toBe('');
+  expect(selected.className).not.toContain(TINT_HOVER_CLASS);
+});
+
+it('keeps the plain hover on an untinted card', async () => {
+  await render({ plugins: [] });
+  const idle = cards()[1];
+  expect(idle.className).toContain('hover:bg-[var(--fill-1)]');
+  expect(idle.className).not.toContain(TINT_CLASS);
 });
 
 it('tints the whole workspace block faintly, behind its sessions, even when it holds the selected session', async () => {

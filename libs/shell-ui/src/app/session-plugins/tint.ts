@@ -48,13 +48,21 @@ export function resolveTint(colours: readonly string[], intensity: TintIntensity
 }
 
 /**
- * Inline style painting a tint. Carried in a `--tint` custom property so the
- * value survives DOM implementations that reject `var()` inside
- * `background-image` (happy-dom); browsers render both the same.
+ * Inline style carrying a tint as the `--tint` custom property; the element
+ * paints it with {@link TINT_CLASS} (a class, so `:hover` can layer over it —
+ * an inline `background-image` would beat any hover rule). A custom property
+ * also survives DOM implementations that reject `var()` in
+ * `background-image` (happy-dom).
  */
 export function tintStyle(tint: string | undefined): CSSProperties | undefined {
-  return tint ? ({ '--tint': tint, backgroundImage: 'var(--tint)' } as CSSProperties) : undefined;
+  return tint ? ({ '--tint': tint } as CSSProperties) : undefined;
 }
+
+/** Paints `--tint`. Only on an element that sets it — the property inherits. */
+export const TINT_CLASS = '[background-image:var(--tint)]';
+
+/** Hover feedback on a tinted element: the theme's hover fill over the tint. */
+export const TINT_HOVER_CLASS = 'hover:[background-image:linear-gradient(var(--fill-1),var(--fill-1)),var(--tint)]';
 
 function luminance(hex: string): number {
   const digits = hex.slice(1);

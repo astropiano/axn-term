@@ -18,7 +18,7 @@ msgstr "{0} {1} en cours seront terminés"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} s'exécute dans le checkout principal — l'isoler dans un worktree ?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2251
+#: libs/shell-ui/src/app/SessionPanel.tsx:2253
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} en attente"
 
@@ -564,7 +564,7 @@ msgstr "Déplacer vers le workspace…"
 msgid "needs attention"
 msgstr "à vérifier"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1597
+#: libs/shell-ui/src/app/SessionPanel.tsx:1599
 msgid "Needs you"
 msgstr "Vous attend"
 
@@ -572,7 +572,7 @@ msgstr "Vous attend"
 msgid "New name for {name}"
 msgstr "Nouveau nom pour {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2430
+#: libs/shell-ui/src/app/SessionPanel.tsx:2432
 msgid "New session"
 msgstr "Nouvelle session"
 
@@ -580,7 +580,7 @@ msgstr "Nouvelle session"
 msgid "New session button"
 msgstr "Bouton nouvelle session"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2554
+#: libs/shell-ui/src/app/SessionPanel.tsx:2556
 msgid "New session in folder…"
 msgstr "Nouvelle session dans un dossier…"
 
@@ -704,7 +704,7 @@ msgstr "Ouvrir"
 msgid "Open {title}"
 msgstr "Ouvrir {title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2534
+#: libs/shell-ui/src/app/SessionPanel.tsx:2536
 msgid "Open a saved workspace set file"
 msgstr "Ouvrir un fichier de jeu de workspaces enregistré"
 
@@ -732,11 +732,11 @@ msgstr "Ouvrir le dossier des journaux…"
 msgid "Open preview in a tab"
 msgstr "Ouvrir l'aperçu dans un onglet"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2542
+#: libs/shell-ui/src/app/SessionPanel.tsx:2544
 msgid "Open workspace set from file…"
 msgstr "Ouvrir un jeu de workspaces depuis un fichier…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2216
+#: libs/shell-ui/src/app/SessionPanel.tsx:2218
 msgid "Open…"
 msgstr "Ouvrir…"
 
@@ -778,7 +778,7 @@ msgstr "permissions :"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "les téléphones et navigateurs connectés au même compte peuvent s'y joindre"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2549
+#: libs/shell-ui/src/app/SessionPanel.tsx:2551
 msgid "Pick a folder — the new session starts in it"
 msgstr "Choisir un dossier — la nouvelle session y démarre"
 
@@ -872,7 +872,7 @@ msgstr "Supprimer le worktree"
 msgid "Rename {name}"
 msgstr "Renommer {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1537
+#: libs/shell-ui/src/app/SessionPanel.tsx:1539
 msgid "Rename session"
 msgstr "Renommer la session"
 
@@ -932,7 +932,7 @@ msgstr "Exécuter dans un onglet shell"
 msgid "Run the login in a shell, then check again."
 msgstr "Lancez la connexion dans un shell, puis vérifiez à nouveau."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2493
+#: libs/shell-ui/src/app/SessionPanel.tsx:2495
 msgid "Running"
 msgstr "Actives"
 
@@ -946,7 +946,7 @@ msgstr "sandboxé — aucune permission (pas d'accès shell, fichiers ou termina
 msgid "Save"
 msgstr "Enregistrer"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2212
+#: libs/shell-ui/src/app/SessionPanel.tsx:2214
 msgid "Save workspace set"
 msgstr "Enregistrer le jeu de workspaces"
 
@@ -984,8 +984,8 @@ msgstr "Adresse du serveur"
 #~ msgid "Server URL"
 #~ msgstr "URL du serveur"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1573
 #: libs/shell-ui/src/app/SessionPanel.tsx:1575
+#: libs/shell-ui/src/app/SessionPanel.tsx:1577
 msgid "Session actions"
 msgstr "Actions de la session"
 
@@ -1017,7 +1017,7 @@ msgstr "Résumé de la session"
 msgid "Session: {0}"
 msgstr "Session : {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2488
+#: libs/shell-ui/src/app/SessionPanel.tsx:2490
 msgid "Sessions"
 msgstr "Sessions"
 
@@ -1051,11 +1051,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Police du shell"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2244
+#: libs/shell-ui/src/app/SessionPanel.tsx:2246
 msgid "Show all sessions"
 msgstr "Afficher toutes les sessions"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2244
+#: libs/shell-ui/src/app/SessionPanel.tsx:2246
 msgid "Show only sessions that need you"
 msgstr "Afficher uniquement les sessions qui vous attendent"
 
