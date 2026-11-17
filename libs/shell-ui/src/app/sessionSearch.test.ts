@@ -33,7 +33,7 @@ const termsFor = (sessionCard: unknown, s = session(), summaries = true) =>
 
 describe('sessionSearchTerms', () => {
   it('collects core names, summary, process and placed searchable fields', () => {
-    const t = termsFor(undefined);
+    const t = termsFor({ title: ['core.name', 'p.branch', 'p.persona'], always: [['core.summary'], ['p.quiet'], ['p.boom']] });
     expect(t).toEqual(['✳ AIACC-921 Onnx', 'wiring the manifest', 'claude', 'feature/VECTORDB-29-x']);
     expect(matchesTerms(t, 'vectordb-29')).toBe(true);
     expect(matchesTerms(t, 'aiacc-921')).toBe(true);
@@ -41,8 +41,12 @@ describe('sessionSearchTerms', () => {
   });
 
   it('never searches hidden fields', () => {
-    const t = termsFor({ hidden: ['p.branch', 'core.summary', 'core.process'] });
+    const t = termsFor({ title: ['core.name', 'p.branch'], hidden: ['p.branch', 'core.summary', 'core.process'] });
     expect(t).toEqual(['✳ AIACC-921 Onnx']);
+  });
+
+  it('never searches plugin fields the layout does not place', () => {
+    expect(termsFor(undefined)).not.toContain('feature/VECTORDB-29-x');
   });
 
   it('skips the summary while summaries are switched off', () => {
