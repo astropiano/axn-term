@@ -197,8 +197,10 @@ to right.
   `{ "<lower-cased name>": "#hex" }`), edited in Settings → Plugins → Tags. A tag without an
   entry keeps its derived colour. Tags still live only on their carrier; settings holds colours,
   not tags, so renaming or deleting a tag stays in the Tag… modal.
-- Limit: the settings view has no access to sessions, so it lists only overrides (type a name to
-  add one), not every tag in use.
+- The settings view lists every tag in use in the window (`renderSettings` ctx carries `sessions`
+  and `workspaces`; the separate macOS Preferences window has none, so it lists only overrides).
+  Clicking a tag's colour dot in the Tag… modal edits its colour, saved immediately, not on Apply.
+  Hex input accepts `#abc`, `abc`, `#aabbcc`, `#aabbccdd`, typed or pasted.
 - The workspace tint paints the whole workspace block (header and sessions) with rounded corners,
   bleeding 6px past the list gutter so the container is visible.
 - Plugin fields (all plugins, decided by the user) show only where a layout names them: the
