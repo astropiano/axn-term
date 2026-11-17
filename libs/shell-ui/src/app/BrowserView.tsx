@@ -407,7 +407,7 @@ export function BrowserView({
         </div>
         {pathDraft === null ? (
           <span
-            className="min-w-0 flex-1 cursor-text truncate font-mono text-[10px] text-[var(--text-secondary)]"
+            className="min-w-0 flex-1 cursor-text truncate font-mono text-[11px] text-[var(--text-secondary)]"
             data-tip={`${currentPath} (click to edit)`}
             onClick={() => setPathDraft(currentPath)}
           >
@@ -423,7 +423,7 @@ export function BrowserView({
               onKeyDown={handlePathKeyDown}
               onBlur={() => setPathDraft(null)}
               spellCheck={false}
-              className="w-full rounded border border-[var(--accent)] bg-[var(--bg)] px-1 font-mono text-[10px] text-[var(--text-primary)] outline-none"
+              className="w-full rounded border border-[var(--accent)] bg-[var(--bg)] px-1 font-mono text-[11px] text-[var(--text-primary)] outline-none"
             />
             {suggestions.length > 0 && (
               <ul className="absolute inset-x-0 top-full z-20 mt-0.5 max-h-48 overflow-y-auto rounded border border-[var(--border)] bg-[var(--surface)] shadow-lg">
@@ -435,7 +435,7 @@ export function BrowserView({
                         e.preventDefault();
                         commitPath(s);
                       }}
-                      className={`block w-full truncate px-2 py-1 text-left font-mono text-[10px] ${
+                      className={`block w-full truncate px-2 py-1 text-left font-mono text-[11px] ${
                         i === suggestIndex
                           ? 'bg-[var(--surface-hover)] text-[var(--accent)]'
                           : 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
@@ -461,7 +461,7 @@ export function BrowserView({
       </div>
       {!alwaysShowHidden && (
         <div className="flex h-5 shrink-0 items-center border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
-          <label className="flex cursor-pointer select-none items-center gap-1.5 text-[10px] text-[var(--text-secondary)]">
+          <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-[var(--text-secondary)]">
             <input
               type="checkbox"
               checked={showHidden}
@@ -488,11 +488,11 @@ export function BrowserView({
         className="min-h-0 flex-1 overflow-y-auto p-2 outline-none"
       >
         {loading && (
-          <div className="text-[10px] text-[var(--text-secondary)]">loading...</div>
+          <div className="text-[11px] text-[var(--text-secondary)]">loading...</div>
         )}
-        {error && <div className="text-[10px] text-[var(--red)]">{error}</div>}
+        {error && <div className="text-[11px] text-[var(--red)]">{error}</div>}
         {!loading && !error && rootEntryCount === 0 && !creating && (
-          <div className="text-[10px] text-[var(--text-secondary)]">empty directory</div>
+          <div className="text-[11px] text-[var(--text-secondary)]">empty directory</div>
         )}
         {creating && (
           <div
@@ -520,10 +520,10 @@ export function BrowserView({
               }}
               onBlur={() => setCreating(null)}
               spellCheck={false}
-              className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--bg)] px-1 font-mono text-[10px] text-[var(--text-primary)] outline-none"
+              className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--bg)] px-1 font-mono text-[11px] text-[var(--text-primary)] outline-none"
             />
             {createError && (
-              <span className="shrink-0 text-[10px] text-[var(--red)]">{createError}</span>
+              <span className="shrink-0 text-[11px] text-[var(--red)]">{createError}</span>
             )}
           </div>
         )}
@@ -533,7 +533,7 @@ export function BrowserView({
               <li
                 key={row.path}
                 style={{ paddingLeft: `${row.depth * 14 + 20}px` }}
-                className="truncate py-0.5 text-[10px] text-[var(--text-secondary)]"
+                className="truncate py-0.5 text-[11px] text-[var(--text-secondary)]"
               >
                 {row.text}
               </li>
@@ -563,9 +563,9 @@ export function BrowserView({
                       path: resolvePath(undefined, row.path),
                     });
                   }}
-                  className={`flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] transition hover:bg-[var(--surface)] ${
+                  className={`flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs transition hover:bg-[var(--surface)] ${
                     selected === row.path
-                      ? 'bg-[var(--surface)] text-[var(--accent)]'
+                      ? 'bg-[var(--fill-accent)] text-[var(--accent)]'
                       : 'text-[var(--text-primary)]'
                   }`}
                 >
@@ -628,7 +628,7 @@ export function BrowserView({
         <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
           <div className="p-1">
             <div
-              className="truncate px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]"
+              className="truncate px-2 py-1 font-mono text-[11px] text-[var(--text-secondary)]"
               data-tip={currentPath}
             >
               {currentPath}

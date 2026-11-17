@@ -2,7 +2,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@lingui/react';
 import { bindAppRuntime } from '../appRuntime';
+import { i18n } from '../../i18n';
 import { glabMrPlugin, refreshMrOverview, resetMrOverview } from './glabMr';
 
 // Only a stand-in action: the real dev-workflow button needs the settings provider.
@@ -105,4 +107,48 @@ it('declares its own repo-roots setting, as gh-pr does', async () => {
   }
   expect(glabMrPlugin.settings?.find((f) => f.key === 'repoRoots')?.description).toContain('GitLab');
   expect(ghPrPlugin.settings?.find((f) => f.key === 'repoRoots')?.description).toContain('GitHub');
+});
+
+it('shows the setup steps instead of an error card when not signed in', async () => {
+  // glab answers, but without a user: not signed in on the host it asked.
+  bindAppRuntime({
+    exec: async () => JSON.stringify({ data: { currentUser: null } }),
+    statPath: async () => null,
+    resolveSessionId: () => null,
+  });
+  resetMrOverview();
+  await refreshMrOverview({ hostname: 'gitlab.example.com' });
+  const selectSession = vi.fn();
+  const openSubShell = vi.fn();
+  const view = glabMrPlugin.renderView!({
+    pluginSettings: { hostname: 'gitlab.example.com' },
+    close: () => {},
+    sessions: [{ id: 's1', repo: { remote: 'git@gitlab.example.com:g/p.git' } }],
+    workspaces: [],
+    selectedSessionId: 's1',
+    selectSession,
+    sessionApi: () => ({ openSubShell }),
+    appState: {},
+    updateAppState: vi.fn(),
+  } as unknown as Parameters<NonNullable<typeof glabMrPlugin.renderView>>[0]);
+  // The onboarding is localized — it needs the app's i18n provider.
+  await act(async () => root.render(<I18nProvider i18n={i18n}>{view}</I18nProvider>));
+
+  expect(host.textContent).toContain('Connect GitLab');
+  expect(host.textContent).toContain('glab is installed');
+  // The host that was asked is visible, in the header and in the command.
+  expect(host.textContent).toContain('gitlab.example.com');
+  expect(host.textContent).toContain('glab auth login --hostname gitlab.example.com');
+  expect(host.textContent).not.toContain('Not signed in to GitLab');
+
+  const run = Array.from(host.querySelectorAll('button')).find((b) =>
+    b.textContent?.includes('Run in a shell tab'),
+  )!;
+  await act(async () => run.click());
+  expect(openSubShell).toHaveBeenCalledWith(
+    'glab auth login --hostname gitlab.example.com',
+    undefined,
+    'glab login',
+  );
+  expect(selectSession).toHaveBeenCalledWith('s1');
 });

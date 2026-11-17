@@ -25,16 +25,16 @@ function TextPreview({ ctx }: { ctx: FilePreviewContext }) {
   }, [ctx]);
 
   if (state === null) {
-    return <div className="p-4 text-[11px] text-[var(--text-secondary)]">Loading…</div>;
+    return <div className="p-4 text-xs text-[var(--text-secondary)]">Loading…</div>;
   }
   if (state.kind === 'binary') {
-    return <div className="p-4 text-[11px] text-[var(--text-secondary)]">Binary file</div>;
+    return <div className="p-4 text-xs text-[var(--text-secondary)]">Binary file</div>;
   }
   if (state.kind === 'error') {
-    return <div className="p-4 text-[11px] text-[var(--red)]">{state.message}</div>;
+    return <div className="p-4 text-xs text-[var(--red)]">{state.message}</div>;
   }
   return (
-    <pre className="whitespace-pre-wrap break-all p-4 font-mono text-[11px] leading-snug text-[var(--text-primary)]">
+    <pre className="whitespace-pre-wrap break-all p-4 font-mono text-xs leading-snug text-[var(--text-primary)]">
       {state.text}
     </pre>
   );

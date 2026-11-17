@@ -51,10 +51,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (!error) return this.props.children;
     const { kind = 'view', scope, extraAction } = this.props;
     const button =
-      'rounded border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]';
+      'rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]';
     return (
       <div className="flex h-full w-full items-center justify-center bg-[var(--terminal-bg)] p-4">
-        <div className="flex max-w-lg flex-col gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-secondary)] p-4 text-[11px] text-[var(--text-primary)]">
+        <div className="flex max-w-lg flex-col gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-secondary)] p-4 text-xs text-[var(--text-primary)]">
           <div className="flex items-center gap-2 font-semibold text-[var(--red)]">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             {kind === 'app' ? (
@@ -64,7 +64,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             )}
           </div>
           <div className="text-[var(--text-secondary)]">{scope}</div>
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--bg)] p-2 font-mono text-[10px] text-[var(--text-secondary)]">
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--bg)] p-2 font-mono text-[11px] text-[var(--text-secondary)]">
             {error.message}
           </pre>
           <div className="flex gap-2">

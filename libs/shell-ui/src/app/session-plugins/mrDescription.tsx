@@ -52,7 +52,7 @@ export function MrDescription({ markdown }: { markdown: string }) {
 
   if (html === null) {
     return (
-      <div className="mt-0.5 line-clamp-4 whitespace-pre-line break-words text-[10px] text-[var(--text-secondary)]">
+      <div className="mt-0.5 line-clamp-4 whitespace-pre-line break-words text-[11px] text-[var(--text-secondary)]">
         {markdown}
       </div>
     );
@@ -70,7 +70,7 @@ export function MrDescription({ markdown }: { markdown: string }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-0.5 text-[9px] text-[var(--accent)] hover:underline"
+          className="mt-0.5 text-[10px] text-[var(--accent)] hover:underline"
         >
           {expanded ? 'show less' : 'show more'}
         </button>

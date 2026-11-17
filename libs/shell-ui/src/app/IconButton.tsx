@@ -1,17 +1,18 @@
 import type { MouseEvent, ReactNode } from 'react';
 
 const sizeClass = {
-  sm: 'h-5 w-5',
-  md: 'h-6 w-6',
-  lg: 'h-7 w-7',
+  sm: 'h-6 w-6',
+  md: 'h-7 w-7',
+  lg: 'h-8 w-8',
   /** Content-sized — for icon+label actions. */
-  auto: 'h-5 w-auto px-1',
+  auto: 'h-6 w-auto gap-1 bg-[var(--fill-1)] px-2 text-[var(--text-primary)]',
 } as const;
 
 /**
- * Square bordered icon button, matching the session-panel header buttons.
- * `size` picks the box edge (icons size themselves via their own className).
- * `danger` hovers red instead of accent (destructive actions).
+ * Borderless icon button for toolbars (session-panel header, settings rows).
+ * It is quiet at rest and gets a neutral fill on hover — no outline, no
+ * accent swap. `size` picks the box edge (icons size themselves via their
+ * own className). `danger` hovers red (destructive actions).
  */
 export function IconButton({
   title,
@@ -35,10 +36,8 @@ export function IconButton({
       data-tip={title}
       aria-label={title}
       disabled={disabled}
-      className={`flex ${sizeClass[size]} shrink-0 items-center justify-center rounded border border-[var(--border)] bg-[var(--surface)] transition hover:bg-[var(--surface-hover)] disabled:opacity-40 ${
-        danger
-          ? 'text-[var(--text-primary)] hover:text-[var(--red)]'
-          : 'text-[var(--text-primary)] hover:text-[var(--accent)]'
+      className={`flex ${sizeClass[size]} shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--text-secondary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-1)] active:bg-[var(--fill-2)] disabled:opacity-40 ${
+        danger ? 'hover:text-[var(--red)]' : 'hover:text-[var(--text-primary)]'
       }`}
     >
       {children}

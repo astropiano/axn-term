@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { parseDockerAvailability, parseDockerDisk, parseDockerLive, parseDockerSize } from './docker';
+import {
+  dockerStatusGroup,
+  parseDockerAvailability,
+  parseDockerDisk,
+  parseDockerLive,
+  parseDockerSize,
+  type DockerLiveStats,
+} from './docker';
 import { containerMatches, parsePs } from './dockerView';
 
 describe('parseDockerSize', () => {
@@ -225,5 +232,69 @@ describe('containerMatches', () => {
     expect(containerMatches(web, 'WEB')).toBe(true);
     expect(containerMatches(lonely, 'redis')).toBe(true);
     expect(containerMatches(lonely, 'axn-term')).toBe(false);
+  });
+});
+
+describe('dockerStatusGroup (session panel Docker accordion)', () => {
+  const live = (over: Partial<DockerLiveStats> = {}): DockerLiveStats => ({
+    running: 5,
+    stopped: 2,
+    cpuPercent: 120,
+    memUsedBytes: 3e9,
+    cpuCount: 8,
+    memTotalBytes: 12e9,
+    vmBacked: true,
+    memAvailBytes: 6.84e9,
+    cpuStat: null,
+    vmCpuPct: 12,
+    ...over,
+  });
+  const disk = { usedBytes: 40e9, freeBytes: 60e9 };
+  const pct = { cpu: 12, mem: 43, vmMem: 43, disk: 40 };
+
+  it('is empty until docker answered', () => {
+    expect(dockerStatusGroup(null, null, { cpu: null, mem: null, vmMem: null, disk: 0 })).toBeNull();
+  });
+
+  it('lists the containers and CPU, memory and disk of the docker VM with absolute numbers', () => {
+    const group = dockerStatusGroup(live(), disk, pct)!;
+    expect(group.title).toBe('Docker');
+    expect(group.meters.map((m) => [m.label, m.summaryLabel, m.value, m.pct])).toEqual([
+      ['Containers', 'Running', '5', undefined],
+      ['CPU', undefined, '12%', 12],
+      ['Memory', 'Mem', '43%', 43],
+      ['Disk', undefined, '40%', 40],
+    ]);
+    expect(group.meters[0].detail).toBe('5 running · 2 stopped');
+    expect(group.meters[1].detail).toBe('containers 1.2 of 8 cores');
+    expect(group.meters[2].detail).toBe('5.2 GB of 12.0 GB');
+    expect(group.meters[3].detail).toBe('40.0 GB docker objects · 60.0 GB free');
+  });
+
+  it('names the host on native Linux and falls back to the containers working set', () => {
+    const group = dockerStatusGroup(
+      live({ vmBacked: false, memAvailBytes: null, vmCpuPct: null }),
+      null,
+      { cpu: 15, mem: 25, vmMem: null, disk: 0 },
+    )!;
+    expect(group.title).toBe('Docker');
+    expect(group.meters.map((m) => m.summaryLabel)).toEqual(['Running', undefined, 'Mem']);
+    expect(group.meters[2].detail).toBe('3.0 GB of 12.0 GB');
+  });
+
+  it('colours and levels follow the pressure thresholds', () => {
+    const group = dockerStatusGroup(live(), disk, { cpu: 50, mem: 85, vmMem: 85, disk: 95 })!;
+    expect(group.meters.slice(1).map((m) => m.level)).toEqual([0, 2, 3]);
+    expect(group.meters.slice(1).map((m) => m.color)).toEqual(['var(--green)', 'var(--orange)', 'var(--red)']);
+  });
+
+  it('skips what is unknown', () => {
+    const group = dockerStatusGroup(live(), { usedBytes: 1e9, freeBytes: null }, {
+      cpu: null,
+      mem: 43,
+      vmMem: 43,
+      disk: 0,
+    })!;
+    expect(group.meters.map((m) => m.label)).toEqual(['Containers', 'Memory']);
   });
 });

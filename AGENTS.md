@@ -2813,3 +2813,33 @@ Full details + the Developer-ID/notarization publishing roadmap:
 ## Merge request workflow
 
 Do not push directly to `develop` or `main`. Always create a feature branch, push the branch, open a merge request, and stop for the user to review. Do not auto-merge merge requests; wait for the user to merge after review.
+
+# UI design tokens (chrome)
+
+The app chrome (rail, session panel, tab strips, plugin view headers, dialogs) is styled from a small token set in `libs/shell-ui/src/styles.css`. Tokens are **derived in CSS** from the theme values `applyTheme()` sets (`color-mix`), so theme files need no changes; a theme may pin one through the optional `ui` keys `chrome`, `raised`, `elevated`, `attention`.
+
+- Fonts: `--font-ui` (system UI stack, override via the `uiFontFamily` setting) for all chrome; `--font-mono` only for the terminal, the editor and inline code (`font-mono`). Sentence case, no `uppercase`; 11px is the smallest text (10px for numeric badges).
+- Surfaces: `--chrome` (rail, session panel, window base), `--bg` (content pane), `--raised` (cards on it), `--elevated` (menus, tooltips, dialogs).
+- Lines and states: `--hairline` / `--hairline-strong` between regions (no boxed controls), hover `--fill-1`, pressed / active tab `--fill-2`, selection `--fill-accent`, "needs you" `--attention` / `--fill-attention`, focus `--ring` (global `:focus-visible`).
+- Metrics and motion: `--rail-w`, `--toolbar-h`, `--radius-sm|md|lg|xl`, `--dur-1|2`.
+- macOS overlay title bar: `data-titlebar="overlay"` on `<html>` (set in `apps/desktop/src/app/titlebar.ts`) turns on `--titlebar-h` / `--titlebar-overhang`, the room the rail and the session-panel toolbar leave for the traffic lights.
+
+Shared pieces to reuse instead of ad-hoc class strings: `app/chromeStyles.ts` (strip, ghost / primary / secondary buttons, field), `app/RailItem.tsx` (rail slots — plugins render it from `renderRail`), `app/PanelHeader.tsx` (plugin view header), `app/EmptyState.tsx` (empty and setup states), `tabStripClasses` / `tabStripTabClasses` in `app/tabStyles.ts`.
+
+## Rail, session panel toggle and their shortcuts
+
+The rail holds tools only: one item per plugin view, Settings at the bottom behind a hairline. Window-chrome shortcuts live in `app/shortcuts.ts`, are handled on `window` (capture) by ShellApp, and terminals let them through (`isAppChromeShortcut` next to `isAppNavigationShortcut` / `isReloadShortcut` in the custom key handlers of `ShellTerminal.tsx` and `SubShellView.tsx`):
+
+- `⌘1`…`⌘9` (`Ctrl+1`…`Ctrl+9` on Linux/Windows) open the 1st…9th rail view in the order shown; pressing the active view's shortcut returns to the session. The numbering follows the rendered rail (`railViewIds` in `app/railOrder.ts`): slots without a view, and slots whose plugin renders no item, take no number. Each item's tooltip shows its shortcut (`RailShortcutContext`). `⌘0`/`Ctrl+0` is not a rail shortcut and is never shown as one: it stays View → Actual Size in the app menu, so there are nine rail shortcuts.
+- `⌃⌘S` (`Ctrl+Shift+S`) shows/hides the session panel. The toggle button sits in the title-bar row right of the macOS traffic lights; without that row (no overlay title bar, fullscreen) and with the panel closed it falls back to the top of the rail. While the panel is closed it carries the count of raised attention flags.
+- `⌘,` / `Ctrl+,` is the app menu's Preferences… accelerator (`apps/desktop/src-tauri/src/lib.rs`), not a page shortcut. It toggles the same in-app settings dialog as the gear at the bottom of the rail: the native side picks the shell window (`window::settings_target` — the focused one, else `main`) and emits `menu-settings` to that window only; `App.tsx` forwards it as `axn:menu-settings`, ShellApp toggles the dialog. The standalone settings window opens only when no shell window is open.
+
+Attention lives in the session panel's toolbar: "N waiting" filters the list to sessions with a raised flag (click again to clear); flags that belong to no session get a warning button that opens `AttentionModal`.
+
+## Session panel status stack and rail tooltips
+
+Numbers that are read, not clicked, do not go into the rail or its tooltips: the machine's meters (memory, swap) and the statistics of the rail tools (docker containers and VM, open merge requests, running scenarios, personas, …). A plugin publishes one group with `publishPanelStatus(pluginId, group)` (`app/panelStatus.ts`) from a component it keeps mounted — next to its rail item with the `PublishPanelStatus` helper (`app/PanelStatusSection.tsx`), or from the headless `panelStatus` hook of `SessionViewPlugin`, which ShellApp mounts while the plugin is enabled (also the place for a status plugin's app attention flag). A group with nothing to show is not published.
+
+`PanelStatusSection` draws the groups above the panel footer as a flat stack of top-level accordions, there is no parent header: one accordion per tool in rail order (`splitPanelStatus`), then "System" last, which collects the groups published with `system: true` (host metrics only; the docker VM belongs to Docker). A header is one line: chevron, icon (the plugin's `logo`, else the group's `icon`, a Lucide name), name and, while collapsed, the "label value" pairs that fit, warnings first. Expanded, each meter gets a bar or its explanation. The stack takes at most 40% of the panel height and scrolls on its own beyond that. Window state: `pluginData['axn-panel']` holds `systemExpanded` (System, default open) and `expandedGroups` (source ids of the open tool accordions, default none).
+
+Rail tooltips are short and appear to the right of the item (`data-tip-side="right"`, placed by `placeTooltip` in `app/tooltipPlacement.ts`, clamped to the window and kept out of the title-bar strip): the tool's name with its shortcut — "Docker (⌘3)" — and at most one status line (`RailItem`'s `status`, e.g. "2 waiting for you").
