@@ -8,9 +8,9 @@ import { placeHoverCard } from './hoverCardPlacement';
 import type { ShellSession } from './types';
 import { useSettings } from './SettingsProvider';
 import { getXtermColors, resolveShellFont } from './themes';
-import { registerTerminal, serializeTerminal, setPendingReplay, takePendingReplay, takeReloadReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, registerSelectionResolver, unregisterSelectionResolver, type SelectionResolver, type TerminalInput } from './terminalRegistry';
+import { registerTerminal, resizeSessionBuffer, serializeTerminal, setPendingReplay, takePendingReplay, takeReloadReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, registerSelectionResolver, unregisterSelectionResolver, type SelectionResolver, type TerminalInput } from './terminalRegistry';
 import { applyTerminalRenderer, createTerminalInput, isUserInput, OSC_REPORT_RAW_WAIT_MS, oscReportTarget, repaintTerminal, safely } from './terminalRenderer';
-import { acquirePty } from './ptyLifetime';
+import { acquirePty, nudgePtyRedraw } from './ptyLifetime';
 import {
   createLookupCache,
   createOsc8LeakGuard,
@@ -537,7 +537,9 @@ export function ShellTerminal({
         };
 
         onResize = term.onResize(({ cols, rows }) => {
-          if (isVisibleRef.current) backend.resize(ptyId, cols, rows);
+          if (!isVisibleRef.current) return;
+          backend.resize(ptyId, cols, rows);
+          resizeSessionBuffer(sessionId, cols, rows);
         });
 
         // The spawn-time fit can run on a hidden (display:none) or not yet
@@ -549,6 +551,7 @@ export function ShellTerminal({
         if (isVisibleRef.current) {
           safeFit();
           backend.resize(ptyId, term.cols, term.rows);
+          resizeSessionBuffer(sessionId, term.cols, term.rows);
         }
 
         // Turn path-like tokens in the buffer into hoverable links. When the
@@ -955,15 +958,22 @@ export function ShellTerminal({
   useEffect(() => {
     if (!isVisible || !terminal.current || !fitAddon.current) return;
     fitAddon.current.fit();
+    const ptyId = session.mainPtyId ?? session.id;
+    resizeSessionBuffer(session.id, terminal.current.cols, terminal.current.rows);
     // A backend that released the stream on hide gets it back here: at an
     // unchanged size fit() fires no onResize, so nothing else would.
     if (backend.releasePty) {
-      backend.resize(session.mainPtyId ?? session.id, terminal.current.cols, terminal.current.rows);
+      backend.resize(ptyId, terminal.current.cols, terminal.current.rows);
     }
     // A display:none terminal pauses xterm's renderer (IntersectionObserver),
     // and the webview can drop the accelerated canvas' backing (and WebGL's
     // glyph atlas) meanwhile — repaint from freshly rasterized glyphs.
     repaintTerminal(terminal.current);
+    // An agent or full-screen program may have drawn for another size or
+    // left a stale screen (a remount replays a snapshot) — have it repaint.
+    if (session.agentInput || terminal.current.buffer.active.type === 'alternate') {
+      nudgePtyRedraw(backend, ptyId, () => terminal.current);
+    }
   }, [isVisible]);
 
   // Place the card from its real size, before paint, and again whenever it

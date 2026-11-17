@@ -90,6 +90,31 @@ export const BlockedAgent: Story = {
   ),
 };
 
+const manyEditors: EditorTab[] = Array.from({ length: 14 }, (_, i) => ({
+  id: `f${i}`,
+  path: `/repo/axn-term/libs/shell-ui/src/app/SomeLongFileName${i}.tsx`,
+}));
+
+/** More tabs than fit: chevrons appear, the native scrollbar stays hidden. */
+export const Overflow: Story = {
+  render: () => {
+    const [active, setActive] = useState('f7');
+    return (
+      <div className="flex w-full max-w-2xl flex-col border border-[var(--border)]">
+        <SessionTabStrip
+          editors={[...editors, ...manyEditors]}
+          activeTab={active}
+          onSelect={setActive}
+          onTabMenu={() => {}}
+          onReorder={() => {}}
+          onCloseTab={() => {}}
+        />
+        <div className="h-24 bg-[var(--bg)]" />
+      </div>
+    );
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Variant / color explorations — static markup sharing tabStripTabClasses so
 // the shapes below stay in sync with the real component.

@@ -168,7 +168,7 @@ msgstr "Clients: {0}"
 msgid "Close"
 msgstr "Sluiten"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3133
+#: libs/shell-ui/src/app/ShellApp.tsx:3134
 msgid "Close tab"
 msgstr "Tabblad sluiten"
 
@@ -1022,6 +1022,14 @@ msgstr "Opslaan"
 msgid "Save workspace set"
 msgstr "Workspace-set opslaan"
 
+#: libs/shell-ui/src/app/TabStrip.tsx:75
+msgid "Scroll tabs left"
+msgstr "Tabs naar links scrollen"
+
+#: libs/shell-ui/src/app/TabStrip.tsx:98
+msgid "Scroll tabs right"
+msgstr "Tabs naar rechts scrollen"
+
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:59
 msgid "Search workspaces or windows…"
 msgstr "Workspaces of vensters zoeken…"
@@ -1114,8 +1122,8 @@ msgstr "Instellingen"
 #~ msgid "shell"
 #~ msgstr "shell"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:43
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:49
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:44
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:50
 msgid "Shell"
 msgstr "Shell"
 

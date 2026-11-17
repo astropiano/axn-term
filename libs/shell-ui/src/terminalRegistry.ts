@@ -40,6 +40,16 @@ export function trackSessionBuffer(id: string): Terminal {
   return term;
 }
 
+/**
+ * Keep the headless buffer at the size the PTY was given. It starts at
+ * xterm's 80x24 default; left there, a wide TUI screen wraps into 80-column
+ * fragments and a remount replays them.
+ */
+export function resizeSessionBuffer(id: string, cols: number, rows: number): void {
+  const term = screenBuffers.get(id);
+  if (term && cols > 0 && rows > 0 && (term.cols !== cols || term.rows !== rows)) term.resize(cols, rows);
+}
+
 export function dropSessionBuffer(id: string): void {
   screenBuffers.get(id)?.dispose();
   screenBuffers.delete(id);

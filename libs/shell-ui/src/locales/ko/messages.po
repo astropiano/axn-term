@@ -168,7 +168,7 @@ msgstr "클라이언트: {0}"
 msgid "Close"
 msgstr "닫기"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3133
+#: libs/shell-ui/src/app/ShellApp.tsx:3134
 msgid "Close tab"
 msgstr "탭 닫기"
 
@@ -1024,6 +1024,14 @@ msgstr "저장"
 msgid "Save workspace set"
 msgstr "워크스페이스 세트 저장"
 
+#: libs/shell-ui/src/app/TabStrip.tsx:75
+msgid "Scroll tabs left"
+msgstr "탭을 왼쪽으로 스크롤"
+
+#: libs/shell-ui/src/app/TabStrip.tsx:98
+msgid "Scroll tabs right"
+msgstr "탭을 오른쪽으로 스크롤"
+
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:59
 msgid "Search workspaces or windows…"
 msgstr "워크스페이스 또는 창 검색…"
@@ -1116,8 +1124,8 @@ msgstr "설정"
 #~ msgid "shell"
 #~ msgstr "shell"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:43
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:49
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:44
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:50
 msgid "Shell"
 msgstr "셸"
 

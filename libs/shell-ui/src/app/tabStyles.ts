@@ -2,12 +2,12 @@
  * Class names for one tab on the tab strips (SessionTabStrip and the
  * plugin-view strip in ShellApp), shared so every strip looks identical.
  *
- * 'pill' (the default) is the quiet one: every tab is a 28px rounded pill
- * centred in the 40px strip. The active tab gets a neutral fill, medium
- * weight and a 2px accent band on its left edge — the same mark the
- * selected session card wears; inactive tabs are plain secondary text
- * that fills on hover. Selection changes the fill, never the geometry,
- * so labels do not move.
+ * 'pill' (the default): every tab is a 28px rounded pill centred in the
+ * 40px strip. Inactive tabs carry a quiet fill and hairline outline so they
+ * read as tabs, not loose labels; the active tab gets the accent selection
+ * fill, an accent outline, medium weight and a 2px accent band on its left
+ * edge — the same mark the selected session card wears. Selection changes
+ * fill and outline, never the geometry, so labels do not move.
  *
  * The earlier looks are kept for the Storybook comparison: 'tab' draws the
  * active tab as the connected one (content background, rounded top corners,
@@ -16,16 +16,9 @@
  * the sides via clip-path. Their inactive tabs are transparent with a
  * softened outline.
  *
- * The strips draw their bottom divider as an inset shadow, not a border —
- * a real border shrinks the strip's content box, and a full-height tab
- * then overflows one pixel, which overflow-x-auto turns into a vertical
- * scrollbar.
+ * The strip itself is `TabStrip`.
  */
 export type TabStripTabVariant = 'pill' | 'tab' | 'underline' | 'trapezoid';
-
-/** The strip itself — pair with `tabStripTabClasses` for its tabs. */
-export const tabStripClasses =
-  'flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto px-2 shadow-[inset_0_-1px_0_var(--hairline)]';
 
 export function tabStripTabClasses(
   active: boolean,
@@ -33,8 +26,8 @@ export function tabStripTabClasses(
 ): string {
   if (variant === 'pill') {
     return active
-      ? 'h-7 self-center rounded-[var(--radius-md)] bg-[var(--fill-2)] font-medium text-[var(--text-primary)] shadow-[inset_2px_0_0_0_var(--accent)]'
-      : 'h-7 self-center rounded-[var(--radius-md)] text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]';
+      ? 'h-7 self-center rounded-[var(--radius-md)] bg-[var(--fill-accent)] font-medium text-[var(--text-primary)] shadow-[inset_2px_0_0_0_var(--accent),inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_45%,transparent)]'
+      : 'h-7 self-center rounded-[var(--radius-md)] bg-[var(--fill-1)] text-[var(--text-secondary)] shadow-[inset_0_0_0_1px_var(--hairline)] hover:bg-[var(--fill-2)] hover:text-[var(--text-primary)]';
   }
   if (!active) {
     return 'self-stretch rounded-t-md border border-b-0 border-[var(--border)]/60 bg-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]';
