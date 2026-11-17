@@ -18,14 +18,14 @@ describe('resolveTint', () => {
 
   it('paints one colour across the full width', () => {
     expect(resolveTint(['#abc'], 'card')).toBe(
-      'linear-gradient(90deg, color-mix(in srgb, #abc 32%, var(--chrome)) 0% 100%)',
+      'linear-gradient(90deg, color-mix(in srgb, #abc var(--tint-card, 32%), var(--chrome)) 0% 100%)',
     );
   });
 
   it('splits two colours into equal bands, first colour on the left', () => {
     const css = resolveTint(['#ff0000', '#00ff00'], 'card')!;
-    expect(css).toContain('color-mix(in srgb, #ff0000 32%, var(--chrome)) 0% 50%');
-    expect(css).toContain('color-mix(in srgb, #00ff00 32%, var(--chrome)) 50% 100%');
+    expect(css).toContain('color-mix(in srgb, #ff0000 var(--tint-card, 32%), var(--chrome)) 0% 50%');
+    expect(css).toContain('color-mix(in srgb, #00ff00 var(--tint-card, 32%), var(--chrome)) 50% 100%');
     expect(css.indexOf('#ff0000')).toBeLessThan(css.indexOf('#00ff00'));
   });
 
@@ -41,10 +41,10 @@ describe('resolveTint', () => {
   });
 
   it('derives four solid shades of one colour: workspace < card < expanded body < selected title', () => {
-    expect(resolveTint(['#abc'], 'workspace')).toContain('#abc 20%, var(--chrome)');
-    expect(resolveTint(['#abc'], 'card')).toContain('#abc 32%, var(--chrome)');
-    expect(resolveTint(['#abc'], 'selectedCard')).toContain('#abc 50%, var(--chrome)');
-    expect(resolveTint(['#abc'], 'selectedTitle')).toContain('#abc 100%, var(--chrome)');
+    expect(resolveTint(['#abc'], 'workspace')).toContain('#abc var(--tint-workspace, 20%), var(--chrome)');
+    expect(resolveTint(['#abc'], 'card')).toContain('#abc var(--tint-card, 32%), var(--chrome)');
+    expect(resolveTint(['#abc'], 'selectedCard')).toContain('#abc var(--tint-selected-card, 50%), var(--chrome)');
+    expect(resolveTint(['#abc'], 'selectedTitle')).toContain('#abc var(--tint-selected-title, 100%), var(--chrome)');
   });
 
   it('never mixes with transparent, so stacked tints do not blend', () => {
