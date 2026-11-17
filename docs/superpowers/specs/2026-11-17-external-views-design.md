@@ -104,7 +104,8 @@ cited files at `2acacde`.
   listed in Constraints: `viewActive`/`toggleView`, ⌘N toggle, `selectAdjacentTab` and
   `pluginTabs` (keyed by plugin id, not view key), view lookup, `onOpenPluginView`,
   `setAppAttention` (entries share the plugin's attention).
-- `renderView` and `PluginRailContext` gain `entryId?: string`.
+- The host renders entry rail items itself (`RailItem` + entry logo); `renderView` gains
+  `entryId?: string`.
 - **Rail order.** Ranked keys first (saved order); then unranked plain plugins in registration
   order; then unranked entry keys in entry order. So a new entry never takes a number from an
   existing item. Runtime entry keys are never written to the saved order (`railOrderAfterDrop`
@@ -161,7 +162,7 @@ cited files at `2acacde`.
 
 - `openView({ url, title?, logo? }) → key` creates a runtime entry (or selects the existing one
   with the same URL) and activates it, in the window it is called in. URL validated as in B.
-  `closeView(key)` removes a runtime entry. `selectView(key)` activates any rail view.
+  `removeView(key)` removes a runtime entry (not `closeView`: the sandbox already uses that name for leaving a plugin view). `selectView(key)` activates any rail view.
 - **Hidden commands** owned by `external-views`: `axn-views open <url> [title]`,
   `axn-views select <key|title>`, `axn-views close <key>`, `axn-views current`.
 - **App-level control entry.** `PluginCommandDecl`/`PluginCommand` gain `appLevel?: true`. A new
@@ -171,8 +172,8 @@ cited files at `2acacde`.
   `axn-term command [--window <label>] <line>`. Target: `--window` if given (unknown label →
   error), else `settings_target`; `None` → error "no axn-term window". Desktop only. All four
   `axn-views` commands are `appLevel`.
-- **Plugin API.** `PluginApi.openView` / `selectView` / `closeView`, sandbox `openView` /
-  `selectView` / `closeView` RPCs, all under the `sessions` permission (added to
+- **Plugin API.** `PluginApi.openView` / `selectView` / `removeView`, sandbox `openView` /
+  `selectView` / `removeView` RPCs, all under the `sessions` permission (added to
   `METHOD_PERMISSIONS`).
 
 ### E. Knowing what is selected
@@ -185,7 +186,11 @@ cited files at `2acacde`.
 - The selected session stays set while a view covers it (existing behaviour) and is reported
   separately.
 
-## Gating spike (first task)
+## Gating spike (last task)
+
+Moved to the end: the axn-term half is useful for any frameable page whatever the hub outcome,
+and the hub change is needed to run the check at all.
+
 
 Load the hub in an iframe inside a running axn-term dev build and record: the parent origin
 (`location.ancestorOrigins`, the `Origin`/`Referer` the hub sees), whether `frame-ancestors`
@@ -209,7 +214,7 @@ Component split and file names, icon picker UI, copy and Lingui strings.
   (duplicate / missing / `/` ids, invalid URL dropped); `urlCommand` output validated; frame key
   changes on URL edit.
 - `openView`: same URL selects instead of duplicating; runtime entries not persisted; returns the
-  key. Sandbox: `openView`, `selectView`, `closeView` denied without `sessions`, allowed with it.
+  key. Sandbox: `openView`, `selectView`, `removeView` denied without `sessions`, allowed with it.
   `activeView()` null with a session shown, key after open/rail click/⌘N, no `url` field;
   `viewChanged` fires once per change.
 - App-level control: non-`appLevel` line refused; `appLevel` line dispatched without PTY secret;
