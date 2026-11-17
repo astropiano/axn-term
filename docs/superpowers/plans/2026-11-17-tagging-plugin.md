@@ -121,7 +121,7 @@
 **Interfaces:**
 - Consumes: Task 4 functions.
 - Produces:
-  - `export interface TagRequest { title: string; targets: string[][]; universe: string[][]; onApply(next: string[][]): void }` — `targets` are each target's current tags, `universe` every carrier's tags in the window.
+  - `export interface TagRequest { title: string; targets: string[][]; others: string[][]; onApply(next: string[][]): void }` — `targets` are each target's current tags, `others` the tags of every other carrier in the window (as built: renaming or deleting in the modal must not touch them, and the shared list is `derivedTags([...others, ...targets])`).
   - `export function openTagModal(request: TagRequest): void`
   - `TagModal` props `{ request: TagRequest; onClose(): void }`: filter/create input, a row per `derivedTags(universe)` with colour dot (`tagColor`) and tri-state checkbox (`tagState`), rename and delete per row, Enter on the input adds the typed tag (via `addTag` to every target). Apply writes once via `onApply` with the final per-target arrays, then closes.
 
