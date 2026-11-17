@@ -21,6 +21,7 @@ import { worktreesPlugin } from './worktrees';
 import { scratchpadPlugin } from './scratchpad';
 import { remoteLinkPlugin } from './remoteLink';
 import { agentsPlugin } from './agents';
+import { externalViewsPlugin } from './externalViews';
 import type { SessionViewPlugin } from './plugin';
 import { parsePermissions, type PluginManifest } from '@axn-term/plugin-sdk';
 import { registerExternalPreview } from '../preview-plugins';
@@ -81,6 +82,7 @@ const defaultPlugins: SessionViewPlugin[] = [
   worktreesPlugin,
   scratchpadPlugin,
   agentsPlugin,
+  externalViewsPlugin,
   remoteLinkPlugin,
 ];
 

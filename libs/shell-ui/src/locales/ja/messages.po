@@ -39,6 +39,10 @@ msgstr "Lucide アイコン名（例: <0>GitFork</0>）またはインライン 
 msgid "Add icon"
 msgstr "アイコンを追加"
 
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:228
+msgid "Add view"
+msgstr "ビューを追加"
+
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:687
 msgid "Advanced"
 msgstr "詳細設定"
@@ -79,6 +83,11 @@ msgstr "axn-term で予期しないエラーが発生しました"
 #: libs/shell-ui/src/app/SettingsModal.tsx:670
 #~ msgid "axn-term-desktop (default)"
 #~ msgstr "axn-term-desktop（デフォルト）"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:154
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:154
+msgid "Back to the session"
+msgstr "セッションに戻る"
 
 #: libs/shell-ui/src/PathActionMenu.tsx:82
 msgid "Binary file"
@@ -141,6 +150,11 @@ msgstr "閉じる"
 #: libs/shell-ui/src/app/ShellApp.tsx:3114
 msgid "Close tab"
 msgstr "タブを閉じる"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:147
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:148
+msgid "Close this view"
+msgstr "このビューを閉じる"
 
 #: libs/shell-ui/src/app/SessionPanel.tsx:555
 msgid "Collapse"
@@ -228,6 +242,11 @@ msgstr "選択範囲をコピー"
 msgid "Copy URL"
 msgstr "URL をコピー"
 
+#. placeholder {0}: entry.title
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:160
+msgid "Could not open {0}"
+msgstr "{0} を開けませんでした"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:336
 msgid "Could not parse the file as YAML."
 msgstr "ファイルを YAML として解析できませんでした。"
@@ -294,6 +313,10 @@ msgstr "再度確認しない"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:338
 msgid "done"
 msgstr "完了"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:203
+msgid "Each view gets its own rail item. Give a URL, or a command that prints one when the view opens (for addresses carrying a token — it is never saved)."
+msgstr "各ビューはレールに専用の項目を持ちます。URL、または開くときに URL を出力するコマンドを指定してください（トークン付きのアドレス向け。保存されません）。"
 
 #: libs/shell-ui/src/PathActionMenu.tsx:256
 msgid "Edit"
@@ -429,6 +452,10 @@ msgstr "一般"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:691
 msgid "Hub URL"
 msgstr "\\u30cf\\u30d6 URL"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:212
+msgid "Icon"
+msgstr "アイコン"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:687
 msgid "Import replaces all settings with the picked config.yaml."
@@ -623,6 +650,11 @@ msgstr "未接続 — 上にサーバーアドレスを入力してください"
 #~ msgid "Not publishing"
 #~ msgstr "\\u672a\\u516c\\u958b"
 
+#. placeholder {0}: dropped.join(', ')
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:223
+msgid "Not shown (needs an http(s) URL or a command): {0}"
+msgstr "表示されません（http(s) の URL またはコマンドが必要）: {0}"
+
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:139
 msgid "Not signed in"
 msgstr "未サインイン"
@@ -667,6 +699,12 @@ msgstr "保存したワークスペースセットファイルを開く"
 msgid "Open file"
 msgstr "ファイルを開く"
 
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:136
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:137
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:167
+msgid "Open in browser"
+msgstr "ブラウザで開く"
+
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:66
 msgid "Open in home folder"
 msgstr "ホームフォルダで開く"
@@ -699,6 +737,10 @@ msgstr "開く…"
 #: libs/shell-ui/src/app/SettingsModal.tsx:755
 #~ msgid "optional"
 #~ msgstr "\\u4efb\\u610f"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:218
+msgid "or a command printing the URL, e.g. launchpad url mr"
+msgstr "または URL を出力するコマンド（例: launchpad url mr）"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:551
 msgid "Overall UI scale in percent — panel, tabs, banners, menus. The terminal uses its own font size."
@@ -776,6 +818,11 @@ msgstr "公開"
 msgid "Rail item"
 msgstr "レール項目"
 
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:129
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:129
+msgid "Reload"
+msgstr "再読み込み"
+
 #: libs/shell-ui/src/app/ErrorBoundary.tsx:72
 msgid "Reload view"
 msgstr "ビューを再読み込み"
@@ -815,6 +862,11 @@ msgstr "リモートアクセス"
 #~ msgid "Remote control"
 #~ msgstr "\\u30ea\\u30e2\\u30fc\\u30c8\\u30b3\\u30f3\\u30c8\\u30ed\\u30fc\\u30eb"
 
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:213
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:213
+msgid "Remove"
+msgstr "削除"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:1144
 msgid "Remove icon"
 msgstr "アイコンを削除"
@@ -853,6 +905,10 @@ msgstr "{agent} セッションを再開{0}"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:766
 msgid "Resume viewport"
 msgstr "ビューポートを"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
+msgid "Retry"
+msgstr "再試行"
 
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:222
 msgid "Retry now"
@@ -1127,6 +1183,10 @@ msgstr "このビューには、{forgeName} で対応待ちのリクエストが
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:38
 msgid "This window"
 msgstr "このウィンドウ"
+
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:211
+msgid "Title"
+msgstr "タイトル"
 
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:338
 msgid "to do"
