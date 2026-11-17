@@ -47,6 +47,7 @@ import { createFileDrop } from './fileDrop';
 import { MoveToWorkspaceModal } from './MoveToWorkspaceModal';
 import { runSubShellClosers } from './subShellAgents';
 import { PickerHost } from './pickerHost';
+import { TagHost } from './tagHost';
 import {
   requestAdopt,
   TOPIC_ADOPT,
@@ -3223,8 +3224,14 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           }
         />
       )}
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        sessions={sessions}
+        workspaces={workspaces}
+      />
       <PickerHost />
+      <TagHost />
       {appMenu && (
         <AppContextMenu
           x={appMenu.x}

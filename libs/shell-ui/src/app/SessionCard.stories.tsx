@@ -286,6 +286,7 @@ function Panel({
             key={s.id}
             session={s}
             workspaces={[{ id: 'w1', name: 'ai-accelerator' }]}
+            allSessions={SESSIONS}
             isSelected={s.id === selected}
             taskState={s.id === selected && s.tasks.length ? taskSnapshot(s) : null}
             onSelect={() => {}}
