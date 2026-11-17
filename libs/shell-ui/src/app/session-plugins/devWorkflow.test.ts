@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { pickFromList } from '../pickerHost';
 
 vi.mock('../pickerHost', () => ({ pickFromList: vi.fn(async () => null) }));
@@ -32,6 +32,9 @@ import {
   shellTokens,
   mrReviewLaunch,
   mrStartWorkflows,
+  mainCheckoutOf,
+  mrConditionMet,
+  parseMrCondition,
   mrWorkspace,
   startMrReview,
   transitionAllowed,
@@ -40,7 +43,7 @@ import {
   type WorkflowAction,
   type WorkflowDef,
 } from './devWorkflow';
-import type { MrRowEnv } from './mrActions';
+import { registerMrResolver, resetMrResolvers, type MrRowEnv } from './mrActions';
 import { parsePersonas, registerPersonas } from './agentRegistry';
 // Side-effect imports — the agent plugins register their CLIs' launchers.
 import './claude';
@@ -224,6 +227,24 @@ beforeEach(() => {
     return a;
   });
 });
+
+
+/**
+ * `axn-workflow <sub>` as a stand-alone command: `wf('move').run(ctx, 'qa')`
+ * runs `axn-workflow move qa`, completions come back without the `move `.
+ */
+function wf(sub: string) {
+  const root = pluginCommands(devWorkflowPlugin).find((c) => c.name === 'axn-workflow')!;
+  return {
+    run: (ctx: SessionViewContext & PluginApi, arg?: string, _line?: string) =>
+      root.run!(ctx, arg === undefined ? sub : `${sub} ${arg}`, `axn-workflow ${sub}`),
+    completeArg: (ctx: SessionViewContext & PluginApi, prefix = '') => {
+      const strip = (list: string[]) => list.map((c) => c.slice(sub.length + 1));
+      const out = root.completeArg!(ctx, `${sub} ${prefix}`);
+      return (Array.isArray(out) ? strip(out) : out.then(strip)) as string[];
+    },
+  };
+}
 
 describe('parseWorkflows', () => {
   it('parses workflows, camelizes nested keys, infers format', () => {
@@ -448,17 +469,17 @@ describe('commands', () => {
   const cmd = (name: string) =>
     pluginCommands(devWorkflowPlugin).find((c) => c.name === name)!;
 
-  describe('axn-workflow-start', () => {
+  describe('axn-workflow start', () => {
     it('errors when no workflows are defined', async () => {
       const h = makeCtx({ settings: {} });
-      const out = await cmd('axn-workflow-start').run?.(h.ctx, undefined, 'axn-workflow-start');
-      expect(out).toMatch(/echo "axn-workflow-start: no workflows defined/);
+      const out = await wf('start').run?.(h.ctx, undefined, 'axn-workflow-start');
+      expect(out).toMatch(/echo "axn-workflow start: no workflows defined/);
     });
 
     it('requires an arg when several workflows exist', async () => {
       const h = makeCtx();
-      const out = await cmd('axn-workflow-start').run?.(h.ctx, undefined, 'axn-workflow-start');
-      expect(out).toMatch(/usage — axn-workflow-start <speckit\|offices\|multi>/);
+      const out = await wf('start').run?.(h.ctx, undefined, 'axn-workflow-start');
+      expect(out).toMatch(/usage — axn-workflow start <speckit\|offices\|multi>/);
     });
 
     it('starts the single workflow without an arg — no auto-launch', async () => {
@@ -468,7 +489,7 @@ describe('commands', () => {
         },
       };
       const h = makeCtx({ settings });
-      const out = await cmd('axn-workflow-start').run?.(h.ctx, undefined, 'axn-workflow-start');
+      const out = await wf('start').run?.(h.ctx, undefined, 'axn-workflow-start');
       expect(out).toMatch(/workflow 'only' started — state 'a'/);
       expect(h.writes).toHaveLength(0); // transitions never type into the PTY
       expect((h.stateStore['dev-workflow'] as { state?: string }).state).toBe('a');
@@ -480,7 +501,7 @@ describe('commands', () => {
         execImpl: async (command) =>
           command.includes('rev-parse') ? '/repo\n' : '',
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'axn-workflow-start speckit');
+      await wf('start').run?.(h.ctx, 'speckit', 'axn-workflow-start speckit');
       const rec = decodeState(h.files['/repo/.axn/workflow.yaml'] ?? '');
       expect(rec?.state).toBe('plan');
       expect(h.appStore.instances).toMatchObject({ s1: { workflow: 'speckit', state: 'plan' } });
@@ -490,7 +511,7 @@ describe('commands', () => {
       const h = makeCtx({
         settings: { workflows: { wf: { states: ['a', 'b'], start: 'a' } } },
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       expect(h.stateStore['dev-workflow']).toMatchObject({
         workflow: 'wf',
         state: 'a',
@@ -505,7 +526,7 @@ describe('commands', () => {
           workflows: { wf: { tracking: { file: '/tmp/wf.json' }, states: ['a'] } },
         },
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       const rec = decodeState(h.files['/tmp/wf.json'] ?? '');
       expect(rec?.workflow).toBe('wf');
       expect(h.files['/tmp/wf.json']).toContain('"workflow": "wf"'); // json encoding
@@ -526,7 +547,7 @@ describe('commands', () => {
         },
         execImpl: async (command) => (command.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       // the launch happens via the explicit Run action, not on start
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:default');
       await new Promise((r) => setTimeout(r, 0));
@@ -547,7 +568,7 @@ describe('commands', () => {
         // a swallowed command (handled itself — no shell involvement)
         commandImpl: async () => false,
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:default');
       await new Promise((r) => setTimeout(r, 0));
       expect(h.commandCalls).toEqual(['axn-git']);
@@ -568,7 +589,7 @@ describe('commands', () => {
         execImpl: async (command) => (command.includes('rev-parse') ? '/repo\n' : ''),
         commandImpl: async () => '/usr/local/bin/axn-term install --dry',
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:default');
       await new Promise((r) => setTimeout(r, 0));
       expect(h.writes).toHaveLength(1);
@@ -577,10 +598,10 @@ describe('commands', () => {
     });
   });
 
-  describe('axn-workflow-move', () => {
+  describe('axn-workflow move', () => {
     it('requires a bound workflow', async () => {
       const h = makeCtx();
-      const out = await cmd('axn-workflow-move').run?.(h.ctx, 'qa', 'axn-workflow-move qa');
+      const out = await wf('move').run?.(h.ctx, 'qa', 'axn-workflow-move qa');
       expect(out).toMatch(/no workflow bound/);
     });
 
@@ -588,8 +609,8 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (command) => (command.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
-      const out = await cmd('axn-workflow-move').run?.(h.ctx, 'plan-review', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
+      const out = await wf('move').run?.(h.ctx, 'plan-review', 'x');
       expect(out).toBe('echo "workflow \'speckit\' → plan-review"');
       expect(decodeState(h.files['/repo/.axn/workflow.yaml'] ?? '')?.state).toBe('plan-review');
     });
@@ -598,8 +619,8 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
-      const out = await cmd('axn-workflow-move').run?.(h.ctx, 'implement', 'axn-workflow-move implement');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
+      const out = await wf('move').run?.(h.ctx, 'implement', 'axn-workflow-move implement');
       expect(out).toMatch(/not allowed/);
       expect((h.stateStore['dev-workflow'] as { state?: string }).state).toBe('plan');
     });
@@ -617,9 +638,9 @@ describe('commands', () => {
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
         commandImpl: async () => false,
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       expect(h.commandCalls).toHaveLength(0); // 'a' has no auto step
-      await cmd('axn-workflow-move').run?.(h.ctx, 'b', 'x');
+      await wf('move').run?.(h.ctx, 'b', 'x');
       await new Promise((r) => setTimeout(r, 0));
       expect(h.commandCalls).toEqual(['axn-focus']);
       expect(h.writes).toHaveLength(0);
@@ -639,8 +660,8 @@ describe('commands', () => {
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
         commandImpl: async () => false,
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
-      const out = await cmd('axn-workflow-move').run?.(h.ctx, 'b', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
+      const out = await wf('move').run?.(h.ctx, 'b', 'x');
       expect(out).toMatch(/not allowed/);
       await new Promise((r) => setTimeout(r, 0));
       expect(h.commandCalls).toHaveLength(0);
@@ -648,19 +669,19 @@ describe('commands', () => {
   });
 
   describe('completion', () => {
-    it('completes workflow names for axn-workflow-start', () => {
+    it('completes workflow names for axn-workflow start', () => {
       const h = makeCtx();
-      const c = cmd('axn-workflow-start');
+      const c = wf('start');
       expect(c.completeArg?.(h.ctx, 's')).toEqual(['speckit']);
       expect(c.completeArg?.(h.ctx, '')).toEqual(['speckit', 'offices', 'multi']);
     });
 
-    it('completes bound workflow states for axn-workflow-move', async () => {
+    it('completes bound workflow states for axn-workflow move', async () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'offices', 'x');
-      expect(cmd('axn-workflow-move').completeArg?.(h.ctx, 'r')).toEqual(['review']);
+      await wf('start').run?.(h.ctx, 'offices', 'x');
+      expect(wf('move').completeArg?.(h.ctx, 'r')).toEqual(['review']);
     });
   });
 
@@ -681,7 +702,7 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
       const labels = (devWorkflowPlugin.sessionMenuItems?.(h.ctx) ?? []).map((i) => i.label);
       expect(labels).toEqual([
         'Run draft',
@@ -695,7 +716,7 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'offices', 'x');
+      await wf('start').run?.(h.ctx, 'offices', 'x');
       const labels = (devWorkflowPlugin.sessionMenuItems?.(h.ctx) ?? []).map((i) => i.label);
       expect(labels).toEqual([
         'Workflow offices → do',
@@ -705,16 +726,16 @@ describe('commands', () => {
     });
   });
 
-  describe('axn-workflow / axn-workflow-stop', () => {
+  describe('axn-workflow status / stop', () => {
     it('reports status and clears the binding', async () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'offices', 'x');
+      await wf('start').run?.(h.ctx, 'offices', 'x');
       expect(await cmd('axn-workflow').run?.(h.ctx, undefined, 'axn-workflow')).toBe(
         'echo "offices: think"',
       );
-      expect(await cmd('axn-workflow-stop').run?.(h.ctx, undefined, 'axn-workflow-stop')).toBe(
+      expect(await wf('stop').run?.(h.ctx, undefined, 'axn-workflow-stop')).toBe(
         'echo "workflow \'offices\' stopped"',
       );
       expect((h.stateStore['dev-workflow'] as { workflow?: string }).workflow).toBeUndefined();
@@ -727,7 +748,7 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       expect(h.appStore.instances).toMatchObject({ s1: { workflow: 'speckit' } });
       devWorkflowPlugin.onClose?.(h.ctx);
       expect(h.appStore.instances).toEqual({});
@@ -739,8 +760,8 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
-      const out = await cmd('axn-workflow-move').run?.(h.ctx, 'plan-review', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
+      const out = await wf('move').run?.(h.ctx, 'plan-review', 'x');
       // plan-review has no step → plain echo
       expect(out).toMatch(/→ plan-review/);
     });
@@ -754,7 +775,7 @@ describe('commands', () => {
         session: makeSession({ id: 's-m1' }),
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       devWorkflowPlugin.onOutput?.(h.ctx, 'agent work…\naxn-workflow-state[abababababababab]: implement\nmore');
       expect(h.stateStore['dev-workflow']).toMatchObject({
         workflow: 'speckit',
@@ -767,7 +788,7 @@ describe('commands', () => {
         session: makeSession({ id: 's-m2' }),
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-state[abababababababab]: implement\n');
       await new Promise((r) => setTimeout(r, 0)); // let the fire-and-forget writeRecord land
       expect(decodeState(h.files['/repo/.axn/workflow.yaml'] ?? '')?.state).toBe('implement');
@@ -778,7 +799,7 @@ describe('commands', () => {
         session: makeSession({ id: 's-m3' }),
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       devWorkflowPlugin.onOutput?.(h.ctx, 'now I emit axn-workflow-state: implement\n');
       devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-state[abababababababab]: nope\n');
       devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-state[abababababababab]: plan\n'); // already there
@@ -790,7 +811,7 @@ describe('commands', () => {
         session: makeSession({ id: 's-m4' }),
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-st');
       devWorkflowPlugin.onOutput?.(h.ctx, `ate[${TOKEN}]: implement\n`);
       expect(h.stateStore['dev-workflow']).toMatchObject({ state: 'implement' });
@@ -800,7 +821,7 @@ describe('commands', () => {
       // build and verify offer different actions, so the stale state's Run
       // affordance differs from the moved-to one
       const h = makeCtx({ session: makeSession({ id: 's-m7' }), execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : '') });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
       // The real host's live session lags behind updatePluginState until
       // React commits — freeze it at the pre-marker binding.
       const committed = { ...h.ctx.session, pluginState: { 'dev-workflow': { ...(h.stateStore['dev-workflow'] as object) } } };
@@ -816,7 +837,7 @@ describe('commands', () => {
         session: makeSession({ id: 's-m5' }),
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       expect((h.stateStore['dev-workflow'] as { token?: string }).token).toBe(TOKEN);
       // e.g. `cat` of a hostile README
       devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-state: implement\n');
@@ -833,8 +854,8 @@ describe('commands', () => {
         session: makeSession({ id: 's-m6' }),
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
-      await cmd('axn-workflow-stop').run?.(h.ctx, undefined, 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
+      await wf('stop').run?.(h.ctx, undefined, 'x');
       expect((h.stateStore['dev-workflow'] as { token?: string }).token).toBeUndefined();
     });
   });
@@ -852,7 +873,7 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       const banner = lastBanner(h);
       expect(banner.dismissible).toBe(false);
       expect(banner.actions?.map((a) => a.id)).toEqual(['prev', 'next']);
@@ -865,10 +886,10 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       expect(lastBanner(h).detail).toBe('Draft the implementation plan.');
       // states without a description leave the detail unset
-      await cmd('axn-workflow-move').run?.(h.ctx, 'plan-review', 'x');
+      await wf('move').run?.(h.ctx, 'plan-review', 'x');
       expect(lastBanner(h).detail).toBeUndefined();
     });
 
@@ -876,8 +897,8 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'offices', 'x'); // think
-      await cmd('axn-workflow-move').run?.(h.ctx, 'review', 'x'); // last state
+      await wf('start').run?.(h.ctx, 'offices', 'x'); // think
+      await wf('move').run?.(h.ctx, 'review', 'x'); // last state
       const banner = lastBanner(h);
       expect(banner.actions?.map((a) => a.id)).toEqual(['prev', 'next']);
       expect(banner.actions?.[0].disabled).toBe(false);
@@ -889,7 +910,7 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'next');
       await vi.waitFor(() =>
         expect((h.stateStore['dev-workflow'] as { state?: string }).state).toBe('plan-review'),
@@ -900,7 +921,7 @@ describe('commands', () => {
       const h = makeCtx({
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'prev');
       await Promise.resolve();
       expect((h.stateStore['dev-workflow'] as { state?: string }).state).toBe('plan');
@@ -912,9 +933,9 @@ describe('commands', () => {
       });
       // offices 'do' has no step in WORKFLOW_SETTINGS — use speckit's
       // implement (run-in: headless → dispatches via ctx.exec).
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
-      await cmd('axn-workflow-move').run?.(h.ctx, 'plan-review', 'x');
-      await cmd('axn-workflow-move').run?.(h.ctx, 'implement', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
+      await wf('move').run?.(h.ctx, 'plan-review', 'x');
+      await wf('move').run?.(h.ctx, 'implement', 'x');
       const baseline = h.execCalls.length;
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:default');
       await vi.waitFor(() => expect(h.execCalls.length).toBeGreaterThan(baseline));
@@ -928,7 +949,7 @@ describe('commands', () => {
         session: makeSession({ process: 'claude' }),
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       const run = lastBanner(h).trailingActions?.[0] as
         | { disabled?: boolean; title?: string }
         | undefined;
@@ -1010,7 +1031,7 @@ describe('commands', () => {
 
     it('injects the prompt into the running agent via bracketed paste', async () => {
       const h = makeCtx({ session: makeSession({ process: 'devin' }), execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:default');
       await vi.waitFor(() => expect(h.writes.length).toBeGreaterThan(0));
       expect(h.writes.at(-1)).toBe('\x1b[200~Plan it.\x1b[201~\r');
@@ -1018,7 +1039,7 @@ describe('commands', () => {
 
     it('refuses to type into a foreign process', async () => {
       const h = makeCtx({ session: makeSession({ process: 'vim' }), execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:default');
       await Promise.resolve();
       await Promise.resolve();
@@ -1027,7 +1048,7 @@ describe('commands', () => {
 
     it('types the launch command at a free prompt', async () => {
       const h = makeCtx({ execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'speckit', 'x');
+      await wf('start').run?.(h.ctx, 'speckit', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:default');
       await vi.waitFor(() => expect(h.writes.length).toBeGreaterThan(0));
       expect(h.writes.at(-1)).toContain('devin --model opus --');
@@ -1044,7 +1065,7 @@ describe('commands', () => {
         execImpl: async (c) =>
           c.includes('rev-parse') ? '/repo\n' : Promise.reject(new Error('lint exploded')),
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:spec-lint');
       await vi.waitFor(() =>
         expect(checksOf(h)['build:spec-lint']?.status).toBe('failed'),
@@ -1054,7 +1075,7 @@ describe('commands', () => {
 
     it('records a passing headless command action', async () => {
       const h = makeCtx({ execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:spec-lint');
       await vi.waitFor(() => expect(checksOf(h)['build:spec-lint']?.status).toBe('ok'));
       expect(checksOf(h)['build:spec-lint']?.rc).toBe(0);
@@ -1062,14 +1083,14 @@ describe('commands', () => {
 
     it('adopts the rc from a whole-line axn-workflow-check marker', async () => {
       const h = makeCtx({ session: makeSession({ id: 's-c1' }), execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
       devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-check[abababababababab]: spec-lint 2\n');
       expect(checksOf(h)['build:spec-lint']).toMatchObject({ status: 'failed', rc: 2 });
     });
 
     it('adopts the explicit <state>:<name> marker form', async () => {
       const h = makeCtx({ session: makeSession({ id: 's-c2' }), execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
       devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-check[abababababababab]: verify:dry-check 0\n');
       // reports for another state are stored under that state, not the current one
       expect(checksOf(h)['verify:dry-check']?.status).toBe('ok');
@@ -1078,8 +1099,8 @@ describe('commands', () => {
 
     it('appends the check trailer to shell command lines', async () => {
       const h = makeCtx({ execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
-      await cmd('axn-workflow-move').run?.(h.ctx, 'verify', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
+      await wf('move').run?.(h.ctx, 'verify', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:dry-check');
       await vi.waitFor(() => expect(h.writes.length).toBeGreaterThan(0));
       expect(h.writes.at(-1)).toBe(
@@ -1090,11 +1111,11 @@ describe('commands', () => {
 
     it('clears a state\'s checks when it is re-entered', async () => {
       const h = makeCtx({ session: makeSession({ id: 's-c3' }), execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
       devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-check[abababababababab]: spec-lint 1\n');
       expect(checksOf(h)['build:spec-lint']?.status).toBe('failed');
-      await cmd('axn-workflow-move').run?.(h.ctx, 'verify', 'x');
-      await cmd('axn-workflow-move').run?.(h.ctx, 'build', 'x');
+      await wf('move').run?.(h.ctx, 'verify', 'x');
+      await wf('move').run?.(h.ctx, 'build', 'x');
       expect(checksOf(h)['build:spec-lint']).toBeUndefined();
     });
 
@@ -1105,22 +1126,22 @@ describe('commands', () => {
     });
   });
 
-  describe('axn-workflow-run command + marker', () => {
+  describe('axn-workflow run command + marker', () => {
     const gitExec = async (c: string) => (c.includes('rev-parse') ? '/repo\n' : '');
 
     it('errors without a binding or with an unknown action', async () => {
       const h = makeCtx();
-      expect(await cmd('axn-workflow-run').run?.(h.ctx, 'x', 'x')).toMatch(/no workflow bound/);
+      expect(await wf('run').run?.(h.ctx, 'x', 'x')).toMatch(/no workflow bound/);
       const h2 = makeCtx({ execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h2.ctx, 'multi', 'x');
-      expect(await cmd('axn-workflow-run').run?.(h2.ctx, 'nope', 'x')).toMatch(/usage/);
+      await wf('start').run?.(h2.ctx, 'multi', 'x');
+      expect(await wf('run').run?.(h2.ctx, 'nope', 'x')).toMatch(/usage/);
     });
 
     it('returns the rendered shell line for a shell command action', async () => {
       const h = makeCtx({ execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
-      await cmd('axn-workflow-move').run?.(h.ctx, 'verify', 'x');
-      const out = await cmd('axn-workflow-run').run?.(h.ctx, 'dry-check', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
+      await wf('move').run?.(h.ctx, 'verify', 'x');
+      const out = await wf('run').run?.(h.ctx, 'dry-check', 'x');
       expect(out).toBe(
         `AXN_WORKFLOW=multi AXN_STATE=verify AXN_ACTION=dry-check AXN_WORKFLOW_TOKEN=abababababababab make check; rc=$?; printf '\\naxn-workflow-check[%s]: %s:%s %d\\n' abababababababab verify dry-check "$rc"`,
       );
@@ -1132,25 +1153,25 @@ describe('commands', () => {
 
     it('runs a sole action without a name argument', async () => {
       const h = makeCtx({ execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
-      await cmd('axn-workflow-move').run?.(h.ctx, 'verify', 'x');
-      const out = await cmd('axn-workflow-run').run?.(h.ctx, undefined, 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
+      await wf('move').run?.(h.ctx, 'verify', 'x');
+      const out = await wf('run').run?.(h.ctx, undefined, 'x');
       expect(out).toContain('make check');
     });
 
     it('completes action names of the current state', async () => {
       const h = makeCtx({ execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
-      expect(cmd('axn-workflow-run').completeArg?.(h.ctx, '')).toEqual([
+      await wf('start').run?.(h.ctx, 'multi', 'x');
+      expect(wf('run').completeArg?.(h.ctx, '')).toEqual([
         'draft',
         'spec-lint',
       ]);
-      expect(cmd('axn-workflow-run').completeArg?.(h.ctx, 'd')).toEqual(['draft']);
+      expect(wf('run').completeArg?.(h.ctx, 'd')).toEqual(['draft']);
     });
 
     it('fires a named action on a whole-line axn-workflow-run marker', async () => {
       const h = makeCtx({ session: makeSession({ id: 's-r1' }), execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
       const baseline = h.execCalls.length;
       devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-run[abababababababab]: spec-lint\n');
       await vi.waitFor(() => expect(h.execCalls.length).toBeGreaterThan(baseline));
@@ -1161,7 +1182,7 @@ describe('commands', () => {
 
     it('ignores a marker naming an unknown action', async () => {
       const h = makeCtx({ session: makeSession({ id: 's-r2' }), execImpl: gitExec });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'multi', 'x');
+      await wf('start').run?.(h.ctx, 'multi', 'x');
       const baseline = h.execCalls.length;
       devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-run[abababababababab]: nope\n');
       await new Promise((r) => setTimeout(r, 0));
@@ -1184,7 +1205,7 @@ describe('commands', () => {
 
     it('runs the command one-shot so the tab exit code is the check result', async () => {
       const h = makeCtx({ execImpl: gitExec, settings });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:dry-check');
       await vi.waitFor(() => expect(h.subShells.length).toBe(1));
       // no `exec $SHELL -l` continuation — the PTY exits with the check's rc
@@ -1200,14 +1221,14 @@ describe('commands', () => {
 
     it('ignores exits of tabs it did not open', async () => {
       const h = makeCtx({ execImpl: gitExec, settings });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       devWorkflowPlugin.onSubShellExit?.(h.ctx, 'sh-unrelated', 1);
       expect(Object.keys(checksOf(h))).toHaveLength(0);
     });
 
     it('records done when the backend reports no exit code', async () => {
       const h = makeCtx({ execImpl: gitExec, settings });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:dry-check');
       await vi.waitFor(() => expect(h.subShells.length).toBe(1));
       devWorkflowPlugin.onSubShellExit?.(h.ctx, h.subShells[0].id, null);
@@ -1229,7 +1250,7 @@ describe('commands', () => {
           },
         },
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:agent-step');
       await vi.waitFor(() => expect(h.subShells.length).toBe(1));
       expect(h.subShells[0].agent).toBe('claude');
@@ -1253,15 +1274,15 @@ describe('commands', () => {
           },
         },
       });
-      await cmd('axn-workflow-start').run?.(h.ctx, 'wf', 'x');
+      await wf('start').run?.(h.ctx, 'wf', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:g');
       await vi.waitFor(() => expect(h.subShells.length).toBe(1));
       expect(h.subShells[0].agent).toBe('agy');
-      await cmd('axn-workflow-move').run?.(h.ctx, 'b', 'x');
+      await wf('move').run?.(h.ctx, 'b', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:c');
       await vi.waitFor(() => expect(h.subShells.length).toBe(2));
       expect(h.subShells[1].agent).toBe('codex');
-      await cmd('axn-workflow-move').run?.(h.ctx, 'c', 'x');
+      await wf('move').run?.(h.ctx, 'c', 'x');
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:v');
       await vi.waitFor(() => expect(h.subShells.length).toBe(3));
       expect(h.subShells[2].agent).toBeUndefined();
@@ -1394,6 +1415,13 @@ describe('workflow vars — start args, set command, marker, env', () => {
     (c) => typeof c === 'object' && c.name === name,
   ) as { run: (ctx: Ctx, arg?: string, line?: string) => unknown; completeArg?: (ctx: Ctx, p?: string) => string[] } | undefined;
   const gitExec = async (c: string) => (c.includes('rev-parse') ? '/repo\n' : '');
+  /** A session already inside MR <iid>'s review worktree — starts bind in place. */
+  const inWorktree = (iid: number) => async (c: string) =>
+    c.includes('--git-common-dir')
+      ? '/repo/.git\n'
+      : c.includes('rev-parse')
+        ? `/worktrees/repo-mr-${iid}\n`
+        : '';
   const MR_SETTINGS = {
     workflows: {
       'mr-review': {
@@ -1410,10 +1438,10 @@ describe('workflow vars — start args, set command, marker, env', () => {
   const varsOf = (h: Harness) =>
     ((h.stateStore['dev-workflow'] as BindingState | undefined)?.vars ?? {});
 
-  it('axn-workflow-start takes a positional var and derives companions', async () => {
-    const h = makeCtx({ execImpl: gitExec, settings: MR_SETTINGS });
+  it('axn-workflow start takes a positional var and derives companions', async () => {
+    const h = makeCtx({ execImpl: inWorktree(114), settings: MR_SETTINGS });
     const url = 'https://gitlab.com/g/p/-/merge_requests/114';
-    const out = await cmd('axn-workflow-start')?.run(h.ctx, `mr-review ${url}`, 'x');
+    const out = await wf('start').run(h.ctx, `mr-review ${url}`, 'x');
     expect(String(out)).toContain("started — state 'fetch'");
     expect(varsOf(h)).toMatchObject({
       mr: url,
@@ -1425,17 +1453,17 @@ describe('workflow vars — start args, set command, marker, env', () => {
 
   it('refuses to start when a required var is missing', async () => {
     const h = makeCtx({ execImpl: gitExec, settings: MR_SETTINGS });
-    const out = await cmd('axn-workflow-start')?.run(h.ctx, 'mr-review', 'x');
+    const out = await wf('start').run(h.ctx, 'mr-review', 'x');
     expect(String(out)).toContain("requires <mr>");
     expect(varsOf(h)).toEqual({});
     expect((h.stateStore['dev-workflow'] as BindingState | undefined)?.state).toBeUndefined();
   });
 
   it('substitutes vars into commands and exports them to the env', async () => {
-    const h = makeCtx({ execImpl: gitExec, settings: MR_SETTINGS });
+    const h = makeCtx({ execImpl: inWorktree(114), settings: MR_SETTINGS });
     const url = 'https://gitlab.com/g/p/-/merge_requests/114';
-    await cmd('axn-workflow-start')?.run(h.ctx, `mr-review ${url} mr_title=Worktrees`, 'x');
-    const out = await cmd('axn-workflow-run')?.run(h.ctx, undefined, 'x');
+    await wf('start').run(h.ctx, `mr-review ${url} mr_title=Worktrees`, 'x');
+    const out = await wf('run').run(h.ctx, undefined, 'x');
     const line = String(out);
     expect(line).toContain('MR=https://gitlab.com/g/p/-/merge_requests/114');
     expect(line).toContain('MR_IID=114');
@@ -1444,12 +1472,12 @@ describe('workflow vars — start args, set command, marker, env', () => {
     expect(line).toContain('echo fetching 114 Worktrees');
   });
 
-  it('axn-workflow-set updates a var (with derivation) and the card mirror', async () => {
-    const h = makeCtx({ execImpl: gitExec, settings: MR_SETTINGS });
+  it('axn-workflow set updates a var (with derivation) and the card mirror', async () => {
+    const h = makeCtx({ execImpl: inWorktree(7), settings: MR_SETTINGS });
     const url = 'https://gitlab.com/g/p/-/merge_requests/7';
-    await cmd('axn-workflow-start')?.run(h.ctx, `mr-review ${url}`, 'x');
+    await wf('start').run(h.ctx, `mr-review ${url}`, 'x');
     const url2 = 'https://gitlab.com/g/q/-/merge_requests/9';
-    const out = await cmd('axn-workflow-set')?.run(h.ctx, `mr ${url2}`, 'x');
+    const out = await wf('set').run(h.ctx, `mr ${url2}`, 'x');
     expect(String(out)).toContain('mr set');
     expect(varsOf(h)).toMatchObject({ mr: url2, mr_iid: '9', mr_project: 'g/q' });
     const inst = (h.appStore['instances'] as Record<string, { vars?: Record<string, string> }>)['s1'];
@@ -1457,18 +1485,18 @@ describe('workflow vars — start args, set command, marker, env', () => {
   });
 
   it('the axn-workflow-var marker writes vars from output', async () => {
-    const h = makeCtx({ execImpl: gitExec, settings: MR_SETTINGS });
+    const h = makeCtx({ execImpl: inWorktree(7), settings: MR_SETTINGS });
     const url = 'https://gitlab.com/g/p/-/merge_requests/7';
-    await cmd('axn-workflow-start')?.run(h.ctx, `mr-review ${url}`, 'x');
+    await wf('start').run(h.ctx, `mr-review ${url}`, 'x');
     devWorkflowPlugin.onOutput?.(h.ctx, 'axn-workflow-var[abababababababab]: verdict approved\n');
     expect(varsOf(h).verdict).toBe('approved');
   });
 
   it('built-in AXN_* env vars survive a same-named user var', async () => {
-    const h = makeCtx({ execImpl: gitExec, settings: MR_SETTINGS });
+    const h = makeCtx({ execImpl: inWorktree(7), settings: MR_SETTINGS });
     const url = 'https://gitlab.com/g/p/-/merge_requests/7';
-    await cmd('axn-workflow-start')?.run(h.ctx, `mr-review ${url} axn_state=spoof`, 'x');
-    const out = await cmd('axn-workflow-run')?.run(h.ctx, undefined, 'x');
+    await wf('start').run(h.ctx, `mr-review ${url} axn_state=spoof`, 'x');
+    const out = await wf('run').run(h.ctx, undefined, 'x');
     expect(String(out)).toContain('AXN_STATE=fetch');
     expect(String(out)).not.toContain('AXN_STATE=spoof');
   });
@@ -1723,8 +1751,28 @@ describe('startMrReview', () => {
     });
     expect(err).toBeUndefined();
     expect(selected).toEqual(['rev']);
-    expect(h.execCalls).toHaveLength(0);
+    // only the read-only main-checkout lookup ran — no fetch, no worktree
+    expect(h.execCalls.map((c) => c.command)).toEqual([
+      "git -C '/repo' rev-parse --path-format=absolute --git-common-dir",
+    ]);
     expect(h.opened).toHaveLength(0);
+  });
+
+  it('hangs the review worktree off the main checkout when started from a linked worktree', async () => {
+    const linked = makeSession({
+      ...repoSession(),
+      repo: { ...repoSession().repo!, root: '/git/worktrees/p-feature' },
+    });
+    const h = makeCtx({
+      session: linked,
+      settings,
+      execImpl: async (cmd) => (cmd.includes('--git-common-dir') ? '/git/p-10/.git\n' : ''),
+    });
+    await startMrReview(MR, def(), envFor(h));
+    const calls = h.execCalls.map((c) => c.command);
+    expect(calls.some((c) => c.startsWith("git -C '/git/p-10' fetch origin"))).toBe(true);
+    expect(calls.at(-1)).toContain("worktree add '/git/worktrees/p-10-mr-114'");
+    expect(h.opened[0]?.cwd).toBe('/git/worktrees/p-10-mr-114');
   });
 
   it('still opens the review when the target-branch fetch fails', async () => {
@@ -1861,6 +1909,148 @@ describe('mrStartWorkflows', () => {
   it('offers nothing while dev-workflow is disabled', () => {
     expect(mrStartWorkflows({ ...settings, enabled: false })).toEqual([]);
     expect(mrStartWorkflows(undefined)).toEqual([]);
+  });
+
+  it("filters by `when: { role }` on the mr var; an unknown role offers only unconditioned ones", () => {
+    const mrVar = (when?: unknown) => ({ mr: { kind: 'mr', required: true, ...(when ? { when } : {}) } });
+    const roles = {
+      enabled: true,
+      workflows: {
+        review: { states: ['a'], vars: mrVar({ role: 'reviewer' }) },
+        address: { states: ['a'], vars: mrVar({ role: 'author' }) },
+        either: { states: ['a'], vars: mrVar({ role: ['author', 'other'] }) },
+        any: { states: ['a'], vars: mrVar() },
+        typo: { states: ['a'], vars: mrVar({ role: 'boss' }) },
+      },
+    };
+    const ids = (role?: 'author' | 'reviewer' | 'other') => mrStartWorkflows(roles, role).map((d) => d.id);
+    expect(ids('reviewer')).toEqual(['review', 'any']);
+    expect(ids('author')).toEqual(['address', 'either', 'any']);
+    expect(ids('other')).toEqual(['either', 'any']);
+    expect(ids()).toEqual(['any']);
+  });
+
+  it('nothing is offered without a declared workflow', () => {
+    expect(mrStartWorkflows({ enabled: true })).toEqual([]);
+    expect(mrStartWorkflows({ enabled: true, workflows: {} })).toEqual([]);
+  });
+});
+
+describe('parseMrCondition', () => {
+  it('reads a single role or a list, case-insensitively', () => {
+    expect(parseMrCondition({ role: 'Reviewer' })).toEqual({ role: ['reviewer'] });
+    expect(parseMrCondition({ role: ['other', 'author'] })).toEqual({ role: ['author', 'other'] });
+  });
+
+  it('drops unknown roles — an all-unknown list matches nothing', () => {
+    expect(parseMrCondition({ role: ['boss'] })).toEqual({ role: [] });
+    expect(mrConditionMet({ role: [] }, 'author')).toBe(false);
+  });
+
+  it('no condition at all accepts any MR, known role or not', () => {
+    expect(parseMrCondition(undefined)).toBeUndefined();
+    expect(parseMrCondition({})).toBeUndefined();
+    expect(mrConditionMet(undefined, undefined)).toBe(true);
+    expect(mrConditionMet({ role: ['author'] }, undefined)).toBe(false);
+  });
+
+  it('is only parsed on kind: mr vars', () => {
+    const [plain, mr] = parseWorkflowVars({
+      ticket: { when: { role: 'author' } },
+      mr: { kind: 'mr', when: { role: 'author' } },
+    });
+    expect(plain.when).toBeUndefined();
+    expect(mr.when).toEqual({ role: ['author'] });
+  });
+});
+
+describe('axn-workflow command', () => {
+  const find = (name: string) => pluginCommands(devWorkflowPlugin).find((c) => c.name === name)!;
+  const MR_SETTINGS = {
+    workflows: {
+      'mr-review': {
+        states: ['inspect', 'verdict'],
+        vars: { mr: { kind: 'mr', required: true, when: { role: 'reviewer' } } },
+      },
+    },
+  };
+
+  it('completes subcommands, then their arguments', async () => {
+    const h = makeCtx({ settings: MR_SETTINGS });
+    const complete = find('axn-workflow').completeArg!;
+    expect(await complete(h.ctx, 'st')).toEqual(['status', 'start', 'stop']);
+    expect(await complete(h.ctx, 'start ')).toEqual(['start mr-review']);
+    expect(await complete(h.ctx, 'start mr')).toEqual(['start mr-review']);
+  });
+
+  it('bare and status report the binding; unknown subcommands print usage', async () => {
+    const h = makeCtx({ settings: MR_SETTINGS });
+    expect(String(await find('axn-workflow').run!(h.ctx, undefined, 'x'))).toContain('no workflow bound');
+    expect(String(await find('axn-workflow').run!(h.ctx, 'status', 'x'))).toContain('no workflow bound');
+    expect(String(await find('axn-workflow').run!(h.ctx, 'frobnicate', 'x'))).toContain('usage — axn-workflow status | start <workflow>');
+  });
+
+  it('is the only command', () => {
+    expect(pluginCommands(devWorkflowPlugin).map((c) => c.name)).toEqual(['axn-workflow']);
+  });
+
+  describe('start with an MR', () => {
+    const url = 'https://gitlab.com/g/p/-/merge_requests/114';
+    const resolver = (role: 'author' | 'reviewer' | 'other' | undefined) => ({
+      handles: (u: string) => u.includes('/-/merge_requests/'),
+      peek: () => (role ? { author: 'a', assignees: [], reviewers: [], me: 'me', role } : undefined),
+      resolve: async () => (role ? { author: 'a', assignees: [], reviewers: [], me: 'me', role } : undefined),
+      subscribe: () => () => {},
+    });
+    const repoExec = async (c: string) =>
+      c.includes('--git-common-dir') ? '/repo/.git\n' : c.includes('rev-parse') ? '/repo\n' : '';
+    afterEach(() => resetMrResolvers());
+
+    it('opens the review worktree session with mr_role filled', async () => {
+      registerMrResolver('test', resolver('reviewer'));
+      const h = makeCtx({ settings: MR_SETTINGS, execImpl: repoExec });
+      const out = await find('axn-workflow').run!(h.ctx, `start mr-review ${url} note=hi`, 'x');
+      expect(out).toBe(false);
+      expect(h.execCalls.map((c) => c.command).at(-1)).toContain("worktree add '/worktrees/repo-mr-114'");
+      expect(h.opened[0]?.cwd).toBe('/worktrees/repo-mr-114');
+      // the staged binding carries the extra var and the derived role
+      const h2 = makeCtx({ settings: MR_SETTINGS, session: makeSession({ id: 's-wt', cwd: '/worktrees/repo-mr-114' }) });
+      await devWorkflowPlugin.onSessionOpen?.(h2.ctx);
+      const vars = (h2.stateStore['dev-workflow'] as BindingState | undefined)?.vars ?? {};
+      expect(vars).toMatchObject({ mr: url, mr_role: 'reviewer', note: 'hi' });
+    });
+
+    it("refuses an MR that does not meet the var's when", async () => {
+      registerMrResolver('test', resolver('author'));
+      const h = makeCtx({ settings: MR_SETTINGS, execImpl: repoExec });
+      const out = String(await find('axn-workflow').run!(h.ctx, `start mr-review ${url}`, 'x'));
+      expect(out).toContain('you are author');
+      expect(h.opened).toHaveLength(0);
+    });
+
+    it('starts with a warning when the role cannot be determined', async () => {
+      registerMrResolver('test', resolver(undefined));
+      const h = makeCtx({ settings: MR_SETTINGS, execImpl: repoExec });
+      const out = String(await find('axn-workflow').run!(h.ctx, `start mr-review ${url}`, 'x'));
+      expect(out).toContain('could not determine your role');
+      expect(h.opened[0]?.cwd).toBe('/worktrees/repo-mr-114');
+    });
+  });
+});
+
+describe('mainCheckoutOf', () => {
+  it('maps a linked worktree to its main checkout', () => {
+    expect(mainCheckoutOf('/g/worktrees/foo', '/g/repo-10/.git\n')).toBe('/g/repo-10');
+  });
+
+  it('keeps a main checkout as it is', () => {
+    expect(mainCheckoutOf('/g/repo', '/g/repo/.git')).toBe('/g/repo');
+  });
+
+  it('keeps root for bare repos, relative or empty output', () => {
+    expect(mainCheckoutOf('/g/repo', '/g/repo.git')).toBe('/g/repo');
+    expect(mainCheckoutOf('/g/repo', '.git')).toBe('/g/repo');
+    expect(mainCheckoutOf('/g/repo', '')).toBe('/g/repo');
   });
 });
 

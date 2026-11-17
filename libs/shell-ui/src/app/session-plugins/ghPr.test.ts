@@ -335,12 +335,13 @@ describe('refreshPrOverview', () => {
 
   it('loads mine/review from a graphql answer', async () => {
     const node = fixture.overviewNode;
+    const own = { ...node, number: 3489, author: { login: 'user9' } };
     runtime(async () =>
       JSON.stringify({
         data: {
           viewer: { login: 'user9' },
           assigned: { nodes: [] },
-          authored: { nodes: [node] },
+          authored: { nodes: [own] },
           review: { nodes: [node, null] },
         },
       }),
@@ -349,8 +350,8 @@ describe('refreshPrOverview', () => {
     const o = currentPrOverview();
     expect(o.status).toBe('ready');
     expect(o.failure).toBeUndefined();
-    expect(o.mine.map((p) => p.reference)).toEqual(['#3488']);
-    expect(o.review).toHaveLength(1);
+    expect(o.mine.map((p) => p.reference)).toEqual(['#3489']);
+    expect(o.review.map((p) => p.reference)).toEqual(['#3488']);
   });
 
   it.each([
@@ -369,5 +370,20 @@ describe('refreshPrOverview', () => {
     expect(currentPrOverview()).toMatchObject({ status: 'loading', failure });
     release();
     await pending;
+  });
+});
+
+import { cliPrPeople } from './ghPr';
+
+describe('cliPrPeople', () => {
+  it('counts those who already reviewed as reviewers, never the author', () => {
+    expect(
+      cliPrPeople({
+        author: { login: 'bob' },
+        assignees: [{ login: 'bob' }],
+        reviewRequests: [{ login: 'alice' }],
+        latestReviews: [{ author: { login: 'me' } }, { author: { login: 'bob' } }, { author: { login: 'alice' } }],
+      }),
+    ).toEqual({ author: 'bob', assignees: ['bob'], reviewers: ['alice', 'me'] });
   });
 });

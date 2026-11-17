@@ -8,6 +8,11 @@
 //! checks the secret against the one it minted for that PTY, then hands the
 //! line to the frontend's hidden/plugin command dispatch (`control-command`
 //! event); the window owning the PTY answers through `control_reply`.
+//!
+//! App-level lines (`axn-term command`) need no secret — the socket is the
+//! user's own (0600), like `activate`. They go to one window
+//! (`control-app-command`), which runs them only when the command declares
+//! itself app-level (`appRun`); anything else is refused there.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -30,6 +35,14 @@ pub struct ControlRequest {
     pub pty: String,
     pub secret: String,
     pub line: String,
+}
+
+/// An app-level command line, for one window (default: the focused one).
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AppRequest {
+    pub line: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, PartialEq, Clone)]
@@ -157,26 +170,31 @@ pub fn claim(path: &Path) -> Result<Claim, String> {
 
 /// Serve requests on threads. `dispatch(request_id, pty_id, line)` hands a
 /// verified line to the frontend, which answers via `ControlState::reply`;
-/// `activate()` answers a second app launch (`activate`).
+/// `activate()` answers a second app launch (`activate`). `app(id, line,
+/// window)` delivers an app-level line, or says why it cannot (no window).
 #[cfg(unix)]
-pub fn serve<F, A>(
+pub fn serve<F, A, P>(
     listener: UnixListener,
     state: Arc<ControlState>,
     timeout: Duration,
     dispatch: F,
     activate: A,
+    app: P,
 ) where
     F: Fn(u64, &str, &str) + Send + Sync + 'static,
     A: Fn() -> bool + Send + Sync + 'static,
+    P: Fn(u64, &str, Option<&str>) -> Result<(), String> + Send + Sync + 'static,
 {
     let dispatch = Arc::new(dispatch);
     let activate = Arc::new(activate);
+    let app = Arc::new(app);
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let state = state.clone();
             let dispatch = dispatch.clone();
             let activate = activate.clone();
-            std::thread::spawn(move || handle(stream, &state, timeout, &*dispatch, &*activate));
+            let app = app.clone();
+            std::thread::spawn(move || handle(stream, &state, timeout, &*dispatch, &*activate, &*app));
         }
     });
 }
@@ -186,6 +204,7 @@ pub fn serve<F, A>(
 #[serde(untagged)]
 enum Incoming {
     Command(ControlRequest),
+    App { app: AppRequest },
     Activate { activate: bool },
 }
 
@@ -196,6 +215,7 @@ fn handle(
     timeout: Duration,
     dispatch: &dyn Fn(u64, &str, &str),
     activate: &dyn Fn() -> bool,
+    app: &dyn Fn(u64, &str, Option<&str>) -> Result<(), String>,
 ) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let mut line = String::new();
@@ -209,6 +229,20 @@ fn handle(
                 } else {
                     ControlReply::error("no window to show")
                 }
+            }
+            Ok(Incoming::App { app: req }) if !req.line.trim_start().starts_with("axn-") => {
+                ControlReply::error("not an axn-term command")
+            }
+            Ok(Incoming::App { app: req }) => {
+                let (id, rx) = state.register();
+                let reply = match app(id, req.line.trim(), req.window.as_deref()) {
+                    Err(e) => ControlReply::error(&e),
+                    Ok(()) => rx
+                        .recv_timeout(timeout)
+                        .unwrap_or_else(|_| ControlReply::error("no axn-term window answered")),
+                };
+                state.unregister(id);
+                reply
             }
             Ok(Incoming::Command(req)) if !state.verify(&req.pty, &req.secret) => {
                 ControlReply::error("unknown terminal — run this inside an axn-term session")
@@ -233,6 +267,12 @@ fn handle(
 #[cfg(unix)]
 pub fn send(path: &Path, req: &ControlRequest) -> Result<ControlReply, String> {
     send_body(path, &serde_json::to_string(req).map_err(|e| e.to_string())?)
+}
+
+/// Client side (`axn-term command …`): an app-level line, one reply line.
+#[cfg(unix)]
+pub fn send_app(path: &Path, req: &AppRequest) -> Result<ControlReply, String> {
+    send_body(path, &serde_json::json!({ "app": req }).to_string())
 }
 
 /// A second launch asks the running instance to show a window.
@@ -283,7 +323,7 @@ mod tests {
         let listener = bound(&path);
         // A second launch must not take over the live socket.
         assert!(matches!(claim(&path).unwrap(), Claim::Running));
-        serve(listener, Arc::new(ControlState::default()), REPLY_TIMEOUT, |_, _, _| {}, || true);
+        serve(listener, Arc::new(ControlState::default()), REPLY_TIMEOUT, |_, _, _| {}, || true, |_, _, _| Err("no".into()));
         assert!(matches!(claim(&path).unwrap(), Claim::Running));
         assert!(activate(&path).unwrap().ok);
         // Not a socket at all.
@@ -301,7 +341,7 @@ mod tests {
         serve(bound(&path), state.clone(), REPLY_TIMEOUT, move |id, pty, line| {
             assert_eq!(pty, "pty-1");
             answering.reply(id, ControlReply { ok: true, message: Some(line.to_string()), error: None });
-        }, || false);
+        }, || false, |_, _, _| Err("no".into()));
         let reply = send(&path, &ControlRequest { pty: "pty-1".into(), secret, line: "axn-session-summary hi".into() }).unwrap();
         assert_eq!(reply.message.as_deref(), Some("axn-session-summary hi"));
         use std::os::unix::fs::PermissionsExt;
@@ -313,7 +353,7 @@ mod tests {
         let path = temp_socket("bad");
         let state = Arc::new(ControlState::default());
         let secret = state.mint_secret("pty-1").unwrap();
-        serve(bound(&path), state.clone(), REPLY_TIMEOUT, |_, _, _| panic!("dispatched"), || panic!("activated"));
+        serve(bound(&path), state.clone(), REPLY_TIMEOUT, |_, _, _| panic!("dispatched"), || panic!("activated"), |_, _, _| panic!("app"));
         for (pty, secret) in [("pty-1", "nope".to_string()), ("pty-2", secret)] {
             let reply = send(&path, &ControlRequest { pty: pty.into(), secret, line: "axn-rename x".into() }).unwrap();
             assert!(!reply.ok);
@@ -334,8 +374,42 @@ mod tests {
         let path = temp_socket("timeout");
         let state = Arc::new(ControlState::default());
         let secret = state.mint_secret("pty-1").unwrap();
-        serve(bound(&path), state.clone(), Duration::from_millis(100), |_, _, _| {}, || false);
+        serve(bound(&path), state.clone(), Duration::from_millis(100), |_, _, _| {}, || false, |_, _, _| Err("no".into()));
         let reply = send(&path, &ControlRequest { pty: "pty-1".into(), secret, line: "axn-x".into() }).unwrap();
         assert_eq!(reply.error.as_deref(), Some("no axn-term window answered"));
     }
+    #[test]
+    fn app_lines_reach_the_app_dispatch_without_a_secret() {
+        let path = temp_socket("app");
+        let state = Arc::new(ControlState::default());
+        let answering = state.clone();
+        serve(bound(&path), state.clone(), REPLY_TIMEOUT, |_, _, _| panic!("pty dispatch"), || false,
+            move |id, line, window| {
+                assert_eq!(window, Some("w-2"));
+                answering.reply(id, ControlReply { ok: true, message: Some(line.to_string()), error: None });
+                Ok(())
+            });
+        let reply = send_app(&path, &AppRequest { line: "axn-views current".into(), window: Some("w-2".into()) }).unwrap();
+        assert_eq!(reply.message.as_deref(), Some("axn-views current"));
+    }
+
+    #[test]
+    fn an_app_dispatch_error_is_the_reply() {
+        let path = temp_socket("app-err");
+        serve(bound(&path), Arc::new(ControlState::default()), REPLY_TIMEOUT, |_, _, _| {}, || false,
+            |_, _, _| Err("no axn-term window".into()));
+        let reply = send_app(&path, &AppRequest { line: "axn-views current".into(), window: None }).unwrap();
+        assert!(!reply.ok);
+        assert_eq!(reply.error.as_deref(), Some("no axn-term window"));
+    }
+
+    #[test]
+    fn an_app_line_must_be_an_axn_command() {
+        let path = temp_socket("app-bad");
+        serve(bound(&path), Arc::new(ControlState::default()), REPLY_TIMEOUT, |_, _, _| {}, || false,
+            |_, _, _| panic!("dispatched"));
+        let reply = send_app(&path, &AppRequest { line: "rm -rf /".into(), window: None }).unwrap();
+        assert!(!reply.ok);
+    }
+
 }

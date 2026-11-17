@@ -201,7 +201,27 @@ pub(crate) fn start_control_socket(app_handle: AppHandle, listener: std::os::uni
             );
         },
         move || bring_to_front(&front),
+        move |id, line, window| {
+            let target = app_command_target(&app_handle, window)?;
+            app_handle
+                .emit_to(
+                    target.as_str(),
+                    "control-app-command",
+                    serde_json::json!({ "requestId": id, "window": target, "line": line }),
+                )
+                .map_err(|e| e.to_string())
+        },
     );
+}
+
+#[cfg(unix)]
+fn app_command_target(app: &AppHandle, window: Option<&str>) -> Result<String, String> {
+    let windows = app.webview_windows();
+    let shells: Vec<(&str, bool)> = windows
+        .iter()
+        .map(|(label, w)| (label.as_str(), w.is_focused().unwrap_or(false)))
+        .collect();
+    crate::window::app_command_window(shells.iter().copied(), window)
 }
 
 /// A second launch: show and focus an app window, or open one if none is

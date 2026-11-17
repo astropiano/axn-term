@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <flows>
   <flow name="axn-term - MR review worktree session"
-        description="dev-workflow × MR review: axn-mr-review must fetch the MR head into a worktree, open a session there, bind the mr-review workflow with vars, and auto-run the first step.">
+        description="dev-workflow × MR review: axn-workflow start mr-review &lt;url&gt; must fetch the MR head into a worktree, open a session there, bind the mr-review workflow with vars, and auto-run the first step.">
     <tags>
       <tag>axn-term</tag>
     </tags>
@@ -20,7 +20,7 @@
         <assert that="contains" value="app started"  description="The app started"/>
       </step>
 
-      <step adapter="axn-term" action="mrReview" description="Submit axn-mr-review &lt;url&gt; through the remote command dispatch — must fetch the MR head, create worktree wt/mr-5, open a bound session and auto-run the probe step" >
+      <step adapter="axn-term" action="mrReview" description="Submit axn-workflow start mr-review &lt;url&gt; through the remote command dispatch — must fetch the MR head, create worktree wt/mr-5, open a bound session and auto-run the probe step" >
         <assert that="contains" value="review session"  description="The review worktree session is bound, the first step ran, and the auto axn-git step opened a compare git tab"/>
         <assert that="contains" value="wt/mr-5"  description="The review worktree session is bound, the first step ran, and the auto axn-git step opened a compare git tab"/>
         <assert that="contains" value="mr_iid=5"  description="The review worktree session is bound, the first step ran, and the auto axn-git step opened a compare git tab"/>

@@ -10,13 +10,32 @@ import { backendFileService, resolvePath } from '../fileService';
 import { getScreenLines } from '../../terminalRegistry';
 import { setSessionRestoring } from '../restoring';
 import { axnLog } from '../log';
+import { activeView, onViewChanged, openView, removeView, selectView } from '../viewHost';
 
 export interface SessionViewContext {
   session: ShellSession;
   updateSession: (sessionId: string, patch: Partial<ShellSession>) => void;
 }
 
-export interface PluginApi {
+/** The rail-view operations every plugin ctx carries (backed by `app/viewHost.ts`). */
+export interface PluginViewApi {
+  /** Open (or re-select) an http(s) page as a runtime rail view; returns its view key. */
+  openView: typeof openView;
+  /** Activate a rail view by key (`null` = back to the session). */
+  selectView: typeof selectView;
+  /** Remove a runtime view opened with `openView`. */
+  removeView: typeof removeView;
+  /** The selected rail view, or null while a session shows. Never carries a URL. */
+  activeView: typeof activeView;
+  onViewChanged: typeof onViewChanged;
+}
+
+/** ctx of a command's `appRun` — app level, no session. */
+export interface PluginAppCommandContext extends PluginViewApi {
+  pluginSettings: unknown;
+}
+
+export interface PluginApi extends PluginViewApi {
   writeToSession: (data: string) => Promise<void>;
   updatePluginState: (patch: unknown) => void;
   pluginState: unknown;
@@ -328,6 +347,16 @@ export interface PluginCommand {
     arg: string | undefined,
     line: string,
   ) => string | false | void | Promise<string | false | void>;
+  /**
+   * App-level handler: needs no session. Only commands declaring it are
+   * accepted from the secret-free control message (`axn-term command`);
+   * typed in a session, it runs when `run` is absent.
+   */
+  appRun?: (
+    ctx: PluginAppCommandContext,
+    arg: string | undefined,
+    line: string,
+  ) => string | false | void | Promise<string | false | void>;
 }
 
 /** Normalize a plugin's `commands` list to `PluginCommand` objects. */
@@ -345,6 +374,24 @@ export interface PluginDependency {
   /** The dependency's `id` (or `settingsKey`). */
   id: string;
   version?: string;
+}
+
+/** What a session menu acts on, plus the window's content for cross-session views. */
+export interface MenuScope {
+  /** The multi-selected sessions when the clicked one is in a multi-selection, else just it. */
+  targets: (SessionViewContext & PluginApi)[];
+  sessions: ShellSession[];
+  workspaces: Workspace[];
+}
+
+/** Context of `workspaceActions` — no session involved. */
+export interface WorkspaceActionContext {
+  workspace: Workspace;
+  pluginSettings: unknown;
+  sessions: ShellSession[];
+  workspaces: Workspace[];
+  /** Shallow-merge into this plugin's slice of `workspace.pluginState`. */
+  updateWorkspaceState: (patch: Record<string, unknown>) => void;
 }
 
 /** A row contributed to the repo context menu (see `repoMenuItems`). */
@@ -449,6 +496,9 @@ export interface PluginSettingsViewContext {
   settings: Record<string, unknown>;
   /** Shallow-merge a patch into the section and persist plugins.yaml. */
   update: (patch: Record<string, unknown>) => void;
+  /** This window's sessions and workspaces, read-only (e.g. to list values in use). */
+  sessions: readonly ShellSession[];
+  workspaces: readonly Workspace[];
 }
 
 /**
@@ -468,7 +518,11 @@ export interface SessionField {
    * placed in the title row.
    */
   kind: 'inline' | 'block';
-  /** Where the default layout puts it. */
+  /**
+   * The zone the field is meant for. Placement itself comes only from the
+   * `sessionCard` layout (or `DEFAULT_SESSION_CARD`); a field neither names
+   * is not shown.
+   */
   zone: SessionZone;
   /** The content for this session — null/false when there is nothing. */
   value: (ctx: SessionViewContext & PluginApi) => ReactNode;
@@ -522,6 +576,14 @@ export function pluginSessionFields(plugin: SessionViewPlugin): SessionField[] {
     out.push({ id: 'panel', label: plugin.title, kind: 'block', zone: 'selected', value: legacy.render });
   }
   return out;
+}
+
+/** One rail item a plugin contributes through `railEntries`. Ids never contain `/`. */
+export interface RailEntry {
+  id: string;
+  title: string;
+  logo?: string;
+  runtime?: boolean;
 }
 
 /** The ctx handed to a plugin's `renderRail`/`renderRailDetail`. */
@@ -682,6 +744,18 @@ export interface SessionViewPlugin {
    */
   renderRail?: (ctx: PluginRailContext) => ReactNode;
   /**
+   * Several rail items instead of one: the host renders one item per entry
+   * (title, `logo`) and opens `renderView` with its `entryId`. View key
+   * `pluginId/entryId` (`app/railOrder.ts`). `runtime` entries are never
+   * written to the saved rail order.
+   */
+  railEntries?: (ctx: { pluginSettings: unknown }) => RailEntry[];
+  /**
+   * Keep each opened view mounted (hidden, `inert`) while another view or a
+   * session shows, so its state survives switching — e.g. an iframe.
+   */
+  keepViewMounted?: boolean;
+  /**
    * Optional heavier rail presentation — the detailed counterpart of the
    * plain `renderRail` icon: live meters, counts, strips. The app renders
    * this instead of `renderRail` when the user places the plugin's status
@@ -704,6 +778,10 @@ export interface SessionViewPlugin {
    */
   renderView?: (ctx: {
     pluginSettings: unknown;
+    /** The rail entry this view was opened from (plugins declaring `railEntries`). */
+    entryId?: string;
+    /** False while a kept-mounted view (`keepViewMounted`) is hidden. */
+    active: boolean;
     close: () => void;
     appState: unknown;
     updateAppState: (patch: Record<string, unknown>) => void;
@@ -810,7 +888,27 @@ export interface SessionViewPlugin {
    * session-bound api, so items can read `pluginState`/`pluginSettings` and
    * write to the session PTY. Called each time the menu opens.
    */
-  sessionMenuItems?: (ctx: SessionViewContext & PluginApi) => RepoMenuItem[];
+  sessionMenuItems?: (ctx: SessionViewContext & PluginApi, scope: MenuScope) => RepoMenuItem[];
+  /**
+   * Contribute rows to the workspace context menu without needing a session
+   * (unlike `workspaceMenuItems`, it also runs for empty workspaces).
+   */
+  workspaceActions?: (ctx: WorkspaceActionContext) => RepoMenuItem[];
+  /**
+   * Colours this plugin gives the session's card: a hex value, or a theme
+   * tag slot name (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`,
+   * `violet`, `magenta`) drawn in the active theme's shade. The panel
+   * combines every plugin's colours into equal left-to-right bands and
+   * decides the shades. Synchronous and cheap — called per render; a
+   * throwing hook contributes nothing.
+   */
+  sessionColors?: (ctx: SessionViewContext & PluginApi) => string[];
+  /**
+   * Colours (hex or theme tag slot, as `sessionColors`) this plugin gives a
+   * workspace block, at the faintest shade. Needs no session, so empty
+   * workspaces can be coloured.
+   */
+  workspaceColors?: (ctx: { workspace: Workspace; pluginSettings: unknown }) => string[];
   /**
    * Contribute rows to the workspace context menu (right-click a workspace
    * header). `ctx` is the plugin's own full api bound to a representative
@@ -1030,5 +1128,14 @@ export function createPluginApi(
     },
     appState: deps.pluginData[settingsKey],
     updateAppState: (patch) => deps.mergePluginData(settingsKey, patch),
+    ...pluginViewApi,
   };
 }
+
+export const pluginViewApi: PluginViewApi = {
+  openView,
+  selectView,
+  removeView,
+  activeView,
+  onViewChanged,
+};

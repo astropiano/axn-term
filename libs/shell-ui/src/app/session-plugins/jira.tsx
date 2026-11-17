@@ -12,6 +12,11 @@ import {
   type CardEnrichment,
   type CardSubject,
 } from './cardEnrichers';
+import { Ticket as TicketIcon } from 'lucide-react';
+import { PanelHeader } from '../PanelHeader';
+import { RailItem } from '../RailItem';
+import { PluginIcon } from '../SessionPanel';
+import { sessionDisplayName, type ShellSession } from '../../types';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import { registerTicketSource, type Ticket } from './ticketSources';
 
@@ -526,12 +531,158 @@ function ticketsOf(ctx: SessionViewContext & PluginApi): string[] {
   );
 }
 
+/** Live sessions grouped under the ticket keys they carry, in first-seen order. */
+export function sessionTicketGroups(
+  sessions: ShellSession[],
+  projectKeys: string[],
+): { key: string; sessions: ShellSession[] }[] {
+  const groups = new Map<string, ShellSession[]>();
+  for (const s of sessions) {
+    const keys = sessionTicketKeys(
+      {
+        mrTitles: sessionMrTitles(s.pluginState as Record<string, unknown> | undefined),
+        branch: s.repo?.branch,
+        name: s.name?.trim() || s.autoName,
+        cwd: s.cwd,
+      },
+      projectKeys,
+    );
+    for (const key of keys) groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  return [...groups].map(([key, list]) => ({ key, sessions: list }));
+}
+
+/** Distinct ticket keys across the live sessions, in first-seen order. */
+export function sessionsTicketKeys(sessions: ShellSession[], projectKeys: string[]): string[] {
+  return sessionTicketGroups(sessions, projectKeys).map((g) => g.key);
+}
+
+function JiraRail({
+  sessions,
+  pluginSettings,
+  viewActive,
+  toggleView,
+}: {
+  sessions: ShellSession[];
+  pluginSettings: unknown;
+  viewActive: boolean;
+  toggleView: () => void;
+}) {
+  const result = jiraConfig(pluginSettings as PluginSettingsSection | undefined);
+  const keys = result.ok ? sessionsTicketKeys(sessions, result.config.projectKeys) : [];
+  const enriched = useEnrichedKeys('jira', keys);
+  // Keys Jira answered without are not real tickets (see SessionTickets).
+  const count = keys.filter((key) => enriched[key] !== null).length;
+  return (
+    <RailItem
+      title="Jira"
+      status={count > 0 ? `${count} ticket${count === 1 ? '' : 's'} in active sessions` : undefined}
+      onClick={toggleView}
+      active={viewActive}
+      badge={count > 0 ? count : undefined}
+      badgeTone="accent"
+    >
+      <PluginIcon plugin={jiraPlugin} />
+    </RailItem>
+  );
+}
+
+function JiraView({
+  sessions,
+  pluginSettings,
+  selectedSessionId,
+  selectSession,
+}: {
+  sessions: ShellSession[];
+  pluginSettings: unknown;
+  selectedSessionId?: string;
+  selectSession: (sessionId: string) => void;
+}) {
+  const result = jiraConfig(pluginSettings as PluginSettingsSection | undefined);
+  const groups = result.ok ? sessionTicketGroups(sessions, result.config.projectKeys) : [];
+  const enriched = useEnrichedKeys(
+    'jira',
+    groups.map((g) => g.key),
+  );
+  const visible = groups.filter((g) => enriched[g.key] !== null);
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-[var(--bg)]">
+      <PanelHeader icon={<TicketIcon />} title="Jira tickets" />
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+        {!result.ok ? (
+          <p className="text-xs text-[var(--text-secondary)]">
+            Jira is not set up: {result.reason}. Configure it in Settings → Plugins.
+          </p>
+        ) : visible.length === 0 ? (
+          <p className="text-xs text-[var(--text-secondary)]">No session carries a Jira ticket.</p>
+        ) : (
+          visible.map(({ key, sessions: list }) => {
+            const e = enriched[key];
+            const chip = e?.chips?.[0] ?? { label: key, tone: 'neutral' as const };
+            return (
+              <section
+                key={key}
+                className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--elevated)]"
+              >
+                <div className="flex min-w-0 items-center gap-2 px-3 py-2">
+                  <ChipView chip={chip} />
+                  <span className="min-w-0 truncate text-xs text-[var(--text-primary)]">
+                    {e?.fields?.['jira.summary']}
+                  </span>
+                </div>
+                <ul className="border-t border-[var(--border)] py-1">
+                  {list.map((s) => (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onClick={() => selectSession(s.id)}
+                        className={`flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-1)] ${
+                          s.id === selectedSessionId
+                            ? 'text-[var(--accent)]'
+                            : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                        }`}
+                      >
+                        <span className="min-w-0 truncate">{sessionDisplayName(s)}</span>
+                        {s.repo?.branch ? (
+                          <span className="min-w-0 truncate text-[var(--text-tertiary)]">
+                            {s.repo.branch}
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 export const jiraPlugin: SessionViewPlugin = {
   id: 'jira',
   title: 'Jira',
   logo: 'Ticket',
   version: '0.1.0',
   defaultEnabled: false,
+  renderRail: ({ sessions, pluginSettings, viewActive, toggleView }) => (
+    <JiraRail
+      sessions={sessions}
+      pluginSettings={pluginSettings}
+      viewActive={viewActive}
+      toggleView={toggleView}
+    />
+  ),
+  renderView: ({ sessions, pluginSettings, selectedSessionId, selectSession }) => (
+    <JiraView
+      sessions={sessions}
+      pluginSettings={pluginSettings}
+      selectedSessionId={selectedSessionId}
+      selectSession={selectSession}
+    />
+  ),
   sessionFields: [
     {
       id: 'tickets',

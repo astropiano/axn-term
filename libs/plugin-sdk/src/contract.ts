@@ -93,7 +93,9 @@ export type HostMessage =
   /** View frames: pushed session list (see `SessionInfo`). */
   | { axn: typeof AXN_MSG_TAG; type: 'sessions'; sessions: unknown[] }
   /** View frames: pushed app-level plugin state. */
-  | { axn: typeof AXN_MSG_TAG; type: 'appState'; value: unknown };
+  | { axn: typeof AXN_MSG_TAG; type: 'appState'; value: unknown }
+  /** Both frames: the selected rail view changed (`ActiveView | null`). */
+  | { axn: typeof AXN_MSG_TAG; type: 'viewChanged'; value: unknown };
 
 /** Frame → host. */
 export type FrameMessage =
