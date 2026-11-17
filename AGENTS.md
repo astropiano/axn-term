@@ -261,6 +261,25 @@ a fallback. The remote `axn-term session command` path (`controlReply` in
 reply text. Covered by the `command feedback (display channel)` cases in
 `hiddenCommands.test.ts`.
 
+Plugins can colour the session panel: `sessionColors(ctx)` (a session card) and
+`workspaceColors({ workspace, pluginSettings })` (a workspace header — no session
+needed) return hex colours. `SessionPanel` combines every enabled plugin's colours
+(plugin order) into equal left-to-right bands via `resolveTint`
+(`session-plugins/tint.ts`) — the host owns intensity: 30% on the selected card,
+12% otherwise and always on workspace headers; non-hex values are dropped and a
+throwing hook contributes nothing. `Workspace.pluginState[<settingsKey>]` is the
+workspace counterpart of a session's `pluginState` (written via the panel's
+`updateWorkspace`). `sessionMenuItems(ctx, scope)` also receives a `MenuScope`
+(`targets` = the multi-selection when the clicked session is in one, plus all
+sessions/workspaces), and `workspaceActions(ctx)` contributes workspace-menu rows
+without needing a session (empty workspaces included). The built-in `tagging`
+plugin (`session-plugins/tagging.tsx`) uses all of it: a tag is a typed string
+stored only on its session (`pluginState.tagging.tags`) or workspace, its colour
+derived from the string (`tagColor`), picked/created through `TagModal`
+(`openTagModal` in `app/tagHost.tsx`, mounted as `TagHost` in `ShellApp`); the
+`tagging.tags` card field is placed or hidden through `sessionCard` like any
+other. Design: `docs/superpowers/specs/2026-11-17-tagging-plugin-design.md`.
+
 Plugins can declare hidden commands via `commands?: (string | PluginCommand)[]`
 — they join the built-in `axn-*` names for Tab completion. A plain string is
 completion-only (handled via `onCommand`); a `PluginCommand` object

@@ -18,7 +18,7 @@ msgstr "将终止 {0} 个运行中的{1}"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} 正在主检出中运行 — 要隔离到 worktree 吗？"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2196
+#: libs/shell-ui/src/app/SessionPanel.tsx:2254
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} 个等待中"
 
@@ -39,6 +39,10 @@ msgstr "一个 Lucide 图标名称（如 <0>GitFork</0>）或内联 SVG 标签�
 msgid "Add icon"
 msgstr "添加图标"
 
+#: libs/shell-ui/src/app/TagModal.tsx:156
+msgid "Add tag “{typed}”"
+msgstr "添加标签“{typed}”"
+
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:687
 msgid "Advanced"
 msgstr "高级"
@@ -50,6 +54,10 @@ msgstr "此进程位于前台时也用作会话图标。"
 #: libs/shell-ui/src/app/SettingsModal.tsx:726
 msgid "Applies immediately to the running app. Logs rotate in the OS log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides."
 msgstr "立即应用于正在运行的应用。日志在系统日志文件夹 (~/Library/Logs/axn-term) 中轮转；LOG_LEVEL 环境变量优先生效。"
+
+#: libs/shell-ui/src/app/TagModal.tsx:170
+msgid "Apply"
+msgstr "应用"
 
 #: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:150
 msgid "Asking <0>{asked}</0>, the default. Enter another host if yours is self-hosted."
@@ -99,6 +107,7 @@ msgstr "内置字体"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
 #: libs/shell-ui/src/app/SettingsModal.tsx:1198
+#: libs/shell-ui/src/app/TagModal.tsx:163
 msgid "Cancel"
 msgstr "取消"
 
@@ -138,11 +147,11 @@ msgstr "：{0}"
 msgid "Close"
 msgstr "关闭"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:2996
+#: libs/shell-ui/src/app/ShellApp.tsx:2997
 msgid "Close tab"
 msgstr "关闭标签页"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:555
+#: libs/shell-ui/src/app/SessionPanel.tsx:560
 msgid "Collapse"
 msgstr "折叠"
 
@@ -269,8 +278,12 @@ msgstr "默认 Shell"
 msgid "Delete {0}"
 msgstr "删除 {0}"
 
+#: libs/shell-ui/src/app/TagModal.tsx:139
+msgid "Delete {name}"
+msgstr "删除 {name}"
+
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:598
+#: libs/shell-ui/src/app/SessionPanel.tsx:603
 msgid "Delete workspace"
 msgstr "删除工作区"
 
@@ -303,7 +316,7 @@ msgstr "编辑"
 msgid "Edit icon"
 msgstr "编辑图标"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:830
+#: libs/shell-ui/src/app/SessionPanel.tsx:835
 msgid "Edit summary…"
 msgstr "编辑摘要…"
 
@@ -333,7 +346,7 @@ msgstr "会话列表末尾"
 #~ msgid "Enter code {0} in the browser to finish sign-in."
 #~ msgstr "在浏览器中输入代码 {0} 以完成登录。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:555
+#: libs/shell-ui/src/app/SessionPanel.tsx:560
 msgid "Expand"
 msgstr "展开"
 
@@ -349,7 +362,7 @@ msgstr "导出…"
 msgid "Exported."
 msgstr "已导出。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:814
+#: libs/shell-ui/src/app/SessionPanel.tsx:819
 msgid "F2 · double-click"
 msgstr "F2 · 双击"
 
@@ -362,7 +375,7 @@ msgstr "失败"
 #~ msgid "Failed: {0}"
 #~ msgstr "\\u5931\\u8d25\\uff1a{0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:812
+#: libs/shell-ui/src/app/SessionPanel.tsx:817
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "更快：在所选会话上按 F2，或双击其名称"
 
@@ -378,7 +391,7 @@ msgstr "文件预览"
 msgid "Filter plugins…"
 msgstr "筛选插件…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:265
+#: libs/shell-ui/src/app/SessionPanel.tsx:266
 msgid "Filter sessions…"
 msgstr "筛选会话…"
 
@@ -523,11 +536,11 @@ msgstr "将可执行文件名或插件 ID 映射到 Lucide 图标（如 Bot、Sq
 msgid "Move “{sessionName}” to workspace"
 msgstr "将“{sessionName}”移到工作区"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:962
+#: libs/shell-ui/src/app/SessionPanel.tsx:967
 msgid "Move to new window"
 msgstr "移到新窗口"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:946
+#: libs/shell-ui/src/app/SessionPanel.tsx:951
 msgid "Move to workspace…"
 msgstr "移到工作区…"
 
@@ -535,11 +548,15 @@ msgstr "移到工作区…"
 msgid "needs attention"
 msgstr "需要处理"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1579
+#: libs/shell-ui/src/app/SessionPanel.tsx:1600
 msgid "Needs you"
 msgstr "需要处理"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2366
+#: libs/shell-ui/src/app/TagModal.tsx:114
+msgid "New name for {name}"
+msgstr "{name} 的新名称"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:2426
 msgid "New session"
 msgstr "新建会话"
 
@@ -547,11 +564,11 @@ msgstr "新建会话"
 msgid "New session button"
 msgstr "新建会话按钮"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2490
+#: libs/shell-ui/src/app/SessionPanel.tsx:2550
 msgid "New session in folder…"
 msgstr "在文件夹中新建会话…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:584
+#: libs/shell-ui/src/app/SessionPanel.tsx:589
 msgid "New session in workspace"
 msgstr "在工作区中新建会话"
 
@@ -565,7 +582,7 @@ msgstr "新建代理会话…"
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "“{0}”中的新会话将在此文件夹中启动。留空则使用主目录。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:285
+#: libs/shell-ui/src/app/SessionPanel.tsx:286
 msgid "New workspace"
 msgstr "新建工作区"
 
@@ -603,6 +620,10 @@ msgstr "其中没有会话。"
 #: libs/shell-ui/src/app/FilePickerModal.tsx:137
 msgid "No such path: {path}"
 msgstr "路径不存在：{path}"
+
+#: libs/shell-ui/src/app/TagModal.tsx:90
+msgid "No tags yet — type one above."
+msgstr "还没有标签 — 请在上方输入。"
 
 #: libs/shell-ui/src/WorkspacePicker.tsx:51
 msgid "no workspaces"
@@ -659,7 +680,7 @@ msgstr "打开"
 msgid "Open {title}"
 msgstr "打开{title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2470
+#: libs/shell-ui/src/app/SessionPanel.tsx:2530
 msgid "Open a saved workspace set file"
 msgstr "打开已保存的工作区集文件"
 
@@ -687,11 +708,11 @@ msgstr "打开日志文件夹…"
 msgid "Open preview in a tab"
 msgstr "在标签页中打开预览"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2478
+#: libs/shell-ui/src/app/SessionPanel.tsx:2538
 msgid "Open workspace set from file…"
 msgstr "从文件打开工作区集…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2161
+#: libs/shell-ui/src/app/SessionPanel.tsx:2219
 msgid "Open…"
 msgstr "打开…"
 
@@ -733,7 +754,7 @@ msgstr "权限："
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "使用同一账号登录的手机和浏览器可以连接"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2485
+#: libs/shell-ui/src/app/SessionPanel.tsx:2545
 msgid "Pick a folder — the new session starts in it"
 msgstr "选择文件夹 — 新会话在其中启动"
 
@@ -823,7 +844,11 @@ msgstr "移除图标"
 msgid "Remove worktree"
 msgstr "移除 worktree"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1519
+#: libs/shell-ui/src/app/TagModal.tsx:131
+msgid "Rename {name}"
+msgstr "重命名 {name}"
+
+#: libs/shell-ui/src/app/SessionPanel.tsx:1540
 msgid "Rename session"
 msgstr "重命名会话"
 
@@ -837,7 +862,7 @@ msgstr "显示会话摘要（通过 axn-session-summary 设置）"
 msgid "requires {0}{1}"
 msgstr "需要 {0}{1}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:777
+#: libs/shell-ui/src/app/SessionPanel.tsx:782
 msgid "Reset to process name"
 msgstr "重置为进程名"
 
@@ -874,7 +899,7 @@ msgstr "在 Shell 标签页中运行"
 msgid "Run the login in a shell, then check again."
 msgstr "在 Shell 中运行登录命令，然后重新检查。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2429
+#: libs/shell-ui/src/app/SessionPanel.tsx:2489
 msgid "Running"
 msgstr "运行中"
 
@@ -888,7 +913,7 @@ msgstr "已沙箱化 — 无权限（无 shell、文件或终端访问）"
 msgid "Save"
 msgstr "保存"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2157
+#: libs/shell-ui/src/app/SessionPanel.tsx:2215
 msgid "Save workspace set"
 msgstr "保存工作区集"
 
@@ -926,8 +951,8 @@ msgstr "服务器地址"
 #~ msgid "Server URL"
 #~ msgstr "服务器 URL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1555
-#: libs/shell-ui/src/app/SessionPanel.tsx:1557
+#: libs/shell-ui/src/app/SessionPanel.tsx:1576
+#: libs/shell-ui/src/app/SessionPanel.tsx:1578
 msgid "Session actions"
 msgstr "会话操作"
 
@@ -959,7 +984,7 @@ msgstr "会话摘要"
 msgid "Session: {0}"
 msgstr "会话：{0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2424
+#: libs/shell-ui/src/app/SessionPanel.tsx:2484
 msgid "Sessions"
 msgstr "会话"
 
@@ -989,11 +1014,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell 字体"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2189
+#: libs/shell-ui/src/app/SessionPanel.tsx:2247
 msgid "Show all sessions"
 msgstr "显示所有会话"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2189
+#: libs/shell-ui/src/app/SessionPanel.tsx:2247
 msgid "Show only sessions that need you"
 msgstr "仅显示需要处理的会话"
 
@@ -1056,6 +1081,24 @@ msgstr "系统"
 #: libs/shell-ui/src/app/SettingsModal.tsx:482
 msgid "System font"
 msgstr "系统字体"
+
+#. placeholder {0}: scope.targets.length
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:68
+msgid "Tag {0} sessions"
+msgstr "为 {0} 个会话添加标签"
+
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:68
+msgid "Tag session"
+msgstr "为会话添加标签"
+
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:86
+msgid "Tag workspace"
+msgstr "为工作区添加标签"
+
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:63
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:83
+msgid "Tag…"
+msgstr "标签…"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:424
 #~ msgid "Terminal font family and size in px. Empty uses the built-in monospace stack at 14px."
@@ -1131,6 +1174,10 @@ msgstr "此窗口"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:338
 msgid "to do"
 msgstr "待完成"
+
+#: libs/shell-ui/src/app/TagModal.tsx:82
+msgid "Type a tag…"
+msgstr "输入标签…"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:541
 msgid "UI zoom"
