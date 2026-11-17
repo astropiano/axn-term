@@ -1,4 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
+import type { ReactElement } from 'react';
 import type { ShellSession, Workspace } from '../../types';
 import type { MenuScope, SessionViewContext, PluginApi, WorkspaceActionContext } from './plugin';
 import { taggingPlugin } from './tagging';
@@ -36,6 +38,13 @@ it('shows nothing without tags and exposes tags to the panel search', () => {
   expect(field.search!(target(session('a')))).toBeNull();
   expect(field.value(target(session('a', ['x'])))).not.toBeNull();
   expect(field.search!(target(session('a', ['x', 'y'])))).toEqual(['x', 'y']);
+});
+
+it('tag chips switch to the contrast colours of a solid tinted row, keeping their own colour elsewhere', () => {
+  const [field] = taggingPlugin.sessionFields!;
+  const html = renderToStaticMarkup(field.value(target(session('a', ['x']))) as ReactElement);
+  expect(html).toContain('color:var(--on-tint-fg, color-mix(in srgb, var(--tag-');
+  expect(html).toContain('background-color:var(--on-tint-bg, color-mix(in srgb, var(--tag-');
 });
 
 it('opens the modal for every multi-selected session and writes each one', () => {

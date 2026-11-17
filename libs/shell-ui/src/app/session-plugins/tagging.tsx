@@ -50,8 +50,10 @@ export const taggingPlugin: SessionViewPlugin = {
                 key={tag}
                 className="inline-flex items-center gap-0.5 truncate rounded-full px-1.5 text-[10px] leading-[16px]"
                 style={{
-                  color: `color-mix(in srgb, ${cssColour(tagColor(tag, colors))} 80%, var(--text-primary))`,
-                  backgroundColor: `color-mix(in srgb, ${cssColour(tagColor(tag, colors))} 18%, transparent)`,
+                  // On a solid tinted title row the tag's own colour would vanish —
+                  // the row's `--on-tint-*` contrast colours take over there.
+                  color: `var(--on-tint-fg, color-mix(in srgb, ${cssColour(tagColor(tag, colors))} 80%, var(--text-primary)))`,
+                  backgroundColor: `var(--on-tint-bg, color-mix(in srgb, ${cssColour(tagColor(tag, colors))} 18%, transparent))`,
                 }}
               >
                 <Tag className="h-2.5 w-2.5 shrink-0" />
