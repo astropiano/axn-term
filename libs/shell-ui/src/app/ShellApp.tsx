@@ -21,7 +21,7 @@ import {
   setSessionRestoring,
   useRestoring,
 } from './restoring';
-import { SessionPanel } from './SessionPanel';
+import { PluginIcon, SessionPanel } from './SessionPanel';
 import { SettingsModal } from './SettingsModal';
 import { EditorView, GitInspectView, IdeView, preloadMonacoViews } from './lazyViews';
 import { useEditorClose } from './useEditorClose';
@@ -101,7 +101,9 @@ import { sessionAttention, setAppAttention, summarizeAttention, useAppAttention,
 import type { RailFlag } from './attention';
 import {
   RAIL_ORDER_KEY,
-  orderRailPlugins,
+  orderRailSlots,
+  parseViewKey,
+  viewKey,
   railDropIndexAt,
   railOrderAfterDrop,
   railViewAfterShortcut,
@@ -131,6 +133,9 @@ import {
 } from './session-plugins/agentHookBridge';
 import { terminalInput } from '../terminalRegistry';
 import { RailItem, RailShortcutContext } from './RailItem';
+import { nextKeptViews } from './keptViews';
+import { publishActiveView, registerViewHost, useRuntimeViews } from './viewHost';
+import type { RailEntry } from './session-plugins/plugin';
 import { ghostButtonClass } from './chromeStyles';
 import { MobileKeyBar } from './MobileKeyBar';
 import { LONG_PRESS_MS } from '../useContextMenuTrigger';
@@ -157,6 +162,13 @@ export interface ShellAppProps {
    * URL). Absent → no tasks stream.
    */
   tasksWsUrl?: () => string | null | Promise<string | null>;
+}
+
+/** One rail item: a plugin's own (`key` = plugin id) or one of its `railEntries`. */
+interface RailSlot {
+  key: string;
+  plugin: SessionViewPlugin;
+  entry?: RailEntry;
 }
 
 export function ShellApp({ backend, services, platform, fileReader, tasksWsUrl }: ShellAppProps) {
@@ -342,24 +354,47 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // pluginData key — the stored list is a preference over ids, so newly
   // enabled rail plugins append at the end and disabled ones keep their
   // slot for when they return.
+  // A plugin declaring `railEntries` contributes one slot per entry (view
+  // key `pluginId/entryId`); runtime views re-evaluate them.
+  const runtimeViewList = useRuntimeViews();
+  const slotsOf = useCallback(
+    (plugin: SessionViewPlugin): RailSlot[] => {
+      if (!plugin.railEntries) {
+        return plugin.renderRail ? [{ key: plugin.id, plugin }] : [];
+      }
+      const settings = pluginSettings[(plugin.settingsKey ?? plugin.id) as keyof typeof pluginSettings];
+      try {
+        return plugin.railEntries({ pluginSettings: settings })
+          .filter((entry) => !entry.id.includes('/'))
+          .map((entry) => ({ key: viewKey(plugin.id, entry.id), plugin, entry }));
+      } catch (e) {
+        console.warn(`[plugin:${plugin.id}] railEntries failed:`, e);
+        return [];
+      }
+    },
+    // runtimeViewList: railEntries reads the runtime views
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pluginSettings, runtimeViewList],
+  );
   const railPlugins = useMemo(
-    () => orderRailPlugins(enabledPlugins.filter((p) => p.renderRail && !p.pinned), pluginData),
-    [enabledPlugins, pluginData],
+    () => orderRailSlots(enabledPlugins.filter((p) => !p.pinned).flatMap(slotsOf), pluginData),
+    [enabledPlugins, pluginData, slotsOf],
   );
 
   // Pinned rail plugins always render first and are not draggable.
   const pinnedRailPlugins = useMemo(
-    () => enabledPlugins.filter((p) => p.renderRail && p.pinned),
-    [enabledPlugins],
+    () => enabledPlugins.filter((p) => p.pinned).flatMap(slotsOf),
+    [enabledPlugins, slotsOf],
   );
 
   const dropRailPlugin = useCallback(
     (dragId: string, dropIndex: number) => {
       const order = railOrderAfterDrop(
-        railPlugins.map((p) => p.id),
+        railPlugins.map((slot) => slot.key),
         storedRailOrder(pluginData),
         dragId,
         dropIndex,
+        new Set(railPlugins.filter((slot) => slot.entry?.runtime).map((slot) => slot.key)),
       );
       mergePluginData(RAIL_ORDER_KEY, { order });
     },
@@ -452,7 +487,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       const dropIndexAt = (y: number) =>
         railDropIndexAt(
           y,
-          railPlugins.map((p) => railItemRefs.current.get(p.id)?.getBoundingClientRect()),
+          railPlugins.map((slot) => railItemRefs.current.get(slot.key)?.getBoundingClientRect()),
         );
       const end = () => {
         window.removeEventListener('pointermove', move);
@@ -807,6 +842,26 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       mergePluginData,
       buildPluginApi,
     ],
+  );
+
+  // An entry slot is drawn by the host: the plugin only names its entries.
+  const railSlotNode = useCallback(
+    (slot: RailSlot) =>
+      slot.entry ? (
+        <RailItem
+          title={slot.entry.title}
+          active={activePluginView === slot.key}
+          onClick={() => setActivePluginView((v) => (v === slot.key ? null : slot.key))}
+        >
+          <PluginIcon
+            plugin={{ id: slot.key, logo: slot.entry.logo ?? slot.plugin.logo ?? 'Globe' }}
+            className="h-[18px] w-[18px]"
+          />
+        </RailItem>
+      ) : (
+        railNode(slot.plugin)
+      ),
+    [activePluginView, railNode],
   );
 
   // Enabled plugins declaring `repoDirs` feed local repo discovery
@@ -2437,9 +2492,71 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
 
   // The plugin whose full-area view is active (dropped when the plugin has no
   // renderView or is disabled while active → falls back to the session view).
-  const viewPlugin = activePluginView
-    ? enabledPlugins.find((p) => p.id === activePluginView && p.renderView)
-    : undefined;
+  const resolveView = useCallback(
+    (key: string): { plugin: SessionViewPlugin; entry?: RailEntry } | undefined => {
+      const { pluginId, entryId } = parseViewKey(key);
+      const plugin = enabledPlugins.find((p) => p.id === pluginId && p.renderView);
+      if (!plugin) return undefined;
+      if (entryId === undefined) return plugin.railEntries ? undefined : { plugin };
+      const entry = slotsOf(plugin).find((slot) => slot.key === key)?.entry;
+      return entry ? { plugin, entry } : undefined;
+    },
+    [enabledPlugins, slotsOf],
+  );
+  const activeResolved = activePluginView ? resolveView(activePluginView) : undefined;
+  const viewPlugin = activeResolved?.plugin;
+  const effectiveViewKey = activeResolved ? activePluginView : null;
+
+  // Views of plugins declaring `keepViewMounted` stay mounted once opened.
+  const [keptViews, setKeptViews] = useState<string[]>([]);
+  useEffect(() => {
+    setKeptViews((prev) =>
+      nextKeptViews(
+        prev,
+        effectiveViewKey,
+        (key) => resolveView(key)?.plugin.keepViewMounted === true,
+        (key) => resolveView(key)?.plugin.keepViewMounted === true,
+      ),
+    );
+  }, [effectiveViewKey, resolveView]);
+
+  // openView/selectView/activeView (viewHost) act on this window. Validation
+  // reads live entries: a runtime view opened a moment ago is not rendered yet.
+  const resolveViewRef = useRef(resolveView);
+  resolveViewRef.current = resolveView;
+  useEffect(
+    () =>
+      registerViewHost({
+        select: (key) => {
+          if (key !== null && !resolveLiveView(key)) return false;
+          setActivePluginView(key);
+          return true;
+        },
+        describe: (key) => {
+          const found = resolveLiveView(key);
+          if (!found) return null;
+          const { pluginId, entryId } = parseViewKey(key);
+          return {
+            pluginId,
+            entryId,
+            title: found.entry?.title ?? found.plugin.title,
+            runtime: found.entry?.runtime === true,
+          };
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  function resolveLiveView(key: string) {
+    const { pluginId, entryId } = parseViewKey(key);
+    const plugin = enabledPluginsRef.current.find((p) => p.id === pluginId && p.renderView);
+    if (!plugin) return undefined;
+    if (entryId === undefined) return plugin.railEntries ? undefined : { plugin };
+    const settings = pluginSettingsRef.current[(plugin.settingsKey ?? plugin.id) as keyof typeof pluginSettings];
+    const entry = plugin.railEntries?.({ pluginSettings: settings }).find((e) => e.id === entryId);
+    return entry ? { plugin, entry } : undefined;
+  }
+  useEffect(() => publishActiveView(effectiveViewKey), [effectiveViewKey, activeResolved?.entry?.title]);
 
   // The PTY the touch key bar targets: the session's live main PTY on the
   // shell tab, the tab's own PTY on sub-shell tabs — nothing on non-terminal
@@ -2697,31 +2814,32 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           {panelToggle}
           <div className="h-px w-5 bg-[var(--hairline)]" />
         </div>
-        {pinnedRailPlugins.map((plugin) => (
+        {pinnedRailPlugins.map((slot) => (
           <div
-            key={plugin.id}
-            data-rail-slot={plugin.id}
-            data-rail-view={plugin.renderView ? '' : undefined}
+            key={slot.key}
+            data-rail-slot={slot.key}
+            data-rail-view={slot.plugin.renderView ? '' : undefined}
             className="flex flex-col items-center empty:hidden"
           >
-            <RailShortcutContext.Provider value={railShortcutOf(plugin.id)}>
-            {railNode(plugin)}
+            <RailShortcutContext.Provider value={railShortcutOf(slot.key)}>
+            {railSlotNode(slot)}
             </RailShortcutContext.Provider>
           </div>
         ))}
-        {railPlugins.map((plugin, i) => {
+        {railPlugins.map((slot, i) => {
+          const plugin = slot.plugin;
           return (
             <div
-              key={plugin.id}
+              key={slot.key}
               ref={(el) => {
-                if (el) railItemRefs.current.set(plugin.id, el);
-                else railItemRefs.current.delete(plugin.id);
+                if (el) railItemRefs.current.set(slot.key, el);
+                else railItemRefs.current.delete(slot.key);
               }}
-              data-rail-slot={plugin.id}
+              data-rail-slot={slot.key}
               data-rail-view={plugin.renderView ? '' : undefined}
-              data-tip={`${plugin.title} (drag to reorder)`}
+              data-tip={`${slot.entry?.title ?? plugin.title} (drag to reorder)`}
               data-tip-side="right"
-              onPointerDown={(e) => startRailDrag(e, plugin.id)}
+              onPointerDown={(e) => startRailDrag(e, slot.key)}
               onClickCapture={(e) => {
                 if (!suppressRailClick.current) return;
                 suppressRailClick.current = false;
@@ -2730,21 +2848,21 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
               }}
               onDragStart={(e) => e.preventDefault()}
               className={`flex touch-none select-none flex-col items-center empty:hidden${railDragId ? ' cursor-grabbing' : ''}${
-                railDragId === plugin.id ? ' opacity-40' : ''
+                railDragId === slot.key ? ' opacity-40' : ''
               }${
-                railDropIndex === i && railDragId !== plugin.id
+                railDropIndex === i && railDragId !== slot.key
                   ? ' shadow-[inset_0_2px_0_var(--accent)]'
                   : ''
               }${
                 railDropIndex === railPlugins.length &&
                 i === railPlugins.length - 1 &&
-                railDragId !== plugin.id
+                railDragId !== slot.key
                   ? ' shadow-[inset_0_-2px_0_var(--accent)]'
                   : ''
               }`}
             >
-              <RailShortcutContext.Provider value={railShortcutOf(plugin.id)}>
-              {railNode(plugin)}
+              <RailShortcutContext.Provider value={railShortcutOf(slot.key)}>
+              {railSlotNode(slot)}
               </RailShortcutContext.Provider>
             </div>
           );
@@ -2889,7 +3007,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             />
           </div>
         )}
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {sessions.filter((s) => s.id === selectedSessionId).map((session) => {
           // Plugin-style mounting: only the selected session has a view.
           // Other sessions keep running — their PTYs are session-owned and
@@ -3007,7 +3125,39 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             </div>
           );
         })}
-        {viewPlugin?.renderView && (() => {
+        {keptViews.map((key) => {
+          const found = resolveView(key);
+          if (!found?.plugin.renderView) return null;
+          const plugin = found.plugin;
+          const settingsKey = plugin.settingsKey ?? plugin.id;
+          const active = key === effectiveViewKey;
+          return (
+            <div
+              key={key}
+              className={`absolute inset-0 flex flex-col overflow-hidden${active ? '' : ' invisible pointer-events-none'}`}
+              inert={!active}
+              aria-hidden={!active}
+            >
+              {plugin.renderView!({
+                pluginSettings: pluginSettings[settingsKey as keyof typeof pluginSettings],
+                entryId: found.entry?.id,
+                active,
+                close: () => setActivePluginView(null),
+                appState: pluginData[settingsKey],
+                updateAppState: (patch) => mergePluginData(settingsKey, patch),
+                sessions,
+                workspaces,
+                selectedSessionId,
+                selectSession: handleSelectSession,
+                sessionApi: (sessionId) => {
+                  const s = sessionsRef.current.find((x) => x.id === sessionId);
+                  return s ? buildPluginApi(s, plugin) : undefined;
+                },
+              })}
+            </div>
+          );
+        })}
+        {viewPlugin?.renderView && !viewPlugin.keepViewMounted && (() => {
           const viewKey = viewPlugin.settingsKey ?? viewPlugin.id;
           // Plugins declaring hostsTabs get a tab strip: their own view is
           // pinned leftmost as 'view', hosted tabs follow.
@@ -3098,6 +3248,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                   {viewPlugin.renderView({
                     pluginSettings:
                       pluginSettings[viewKey as keyof typeof pluginSettings],
+                    entryId: activeResolved?.entry?.id,
+                    active: true,
                     close: () => setActivePluginView(null),
                     appState: pluginData[viewKey],
                     updateAppState: (patch) => mergePluginData(viewKey, patch),
