@@ -166,3 +166,16 @@ describe('LOG_FORMAT', () => {
     expect(LOG_FORMAT).toContain('%x1e');
   });
 });
+
+describe('historyRefs', () => {
+  it('walks every ref without a compare base', async () => {
+    const { historyRefs } = await import('./gitClient');
+    expect(historyRefs()).toEqual(['--all', 'HEAD']);
+    expect(historyRefs(null)).toEqual(['--all', 'HEAD']);
+  });
+
+  it('walks only HEAD and the base for a review tab', async () => {
+    const { historyRefs } = await import('./gitClient');
+    expect(historyRefs('origin/develop')).toEqual(['HEAD', 'origin/develop']);
+  });
+});

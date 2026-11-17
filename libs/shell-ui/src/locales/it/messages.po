@@ -1167,7 +1167,7 @@ msgstr "Accesso effettuato"
 msgid "Signed in as {0}"
 msgstr "Accesso effettuato come {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3463
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3508
 msgid "Start workflow…"
 msgstr "Avvia workflow…"
 

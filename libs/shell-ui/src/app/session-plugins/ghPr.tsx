@@ -808,6 +808,7 @@ function SessionPrs({ ctx }: { ctx: SessionViewContext & PluginApi }) {
   const env: MrRowEnv = {
     sessions: [ctx.getSession()],
     workspaces: ctx.getWorkspaces?.() ?? [],
+    selectedSessionId: ctx.session.id,
     apiFor: (id) => (id === ctx.session.id ? ctx : undefined),
     selectSession: () => {},
   };
@@ -1437,6 +1438,7 @@ export const ghPrPlugin: SessionViewPlugin = {
       env={{
         sessions,
         workspaces,
+        selectedSessionId,
         apiFor: sessionApi,
         selectSession,
         checkouts: () => forgeCheckouts(pluginSettings as { repoRoots?: unknown } | undefined),

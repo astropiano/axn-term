@@ -625,7 +625,9 @@ recorded in `path`: staged/unstaged/untracked/conflicted file lists with
 per-file and bulk stage/unstage, a commit box with an amend toggle, a
 read-only Monaco diff editor (HEAD/index blobs vs. disk for the working
 copy, parent-vs-commit blobs for history), and a resizable lane-graph
-history strip (`app/GitGraph.tsx` + `assignLanes` in `app/gitClient.ts`)
+history strip (every ref, or only HEAD and the compare base when the tab has
+one — `historyRefs`: a review worktree shares its clone's refs, and `--all`
+showed unrelated branches as if they were the MR's) (`app/GitGraph.tsx` + `assignLanes` in `app/gitClient.ts`)
 where selecting a commit lists its files and shows their diffs. Hovering a
 commit row opens an interactive card (a portal, not `data-tip` — it must be
 clickable) with the full hash (click to copy), author, absolute commit time
@@ -674,7 +676,8 @@ sub-shell exits (desktop carries the real exit code, web reports `null`;
 dev-workflow correlates it to record `run-in: sub-shell` check results).
 
 `ctx.openSession(cwd?, name?, workspaceId?)` on `PluginApi` opens a new
-session rooted at `cwd` (default: the shell default) — in the ctx
+session rooted at `cwd` (default: the shell default; a given `name` becomes
+the session's custom name, so the terminal title does not replace it) — in the ctx
 session's workspace unless `workspaceId` targets another — selects it,
 and dismisses a covering plugin view so the user lands on the new
 session. `ctx.getWorkspace()` returns the session's `Workspace` (carrying
@@ -2012,7 +2015,9 @@ recorded in `path`: staged/unstaged/untracked/conflicted file lists with
 per-file and bulk stage/unstage, a commit box with an amend toggle, a
 read-only Monaco diff editor (HEAD/index blobs vs. disk for the working
 copy, parent-vs-commit blobs for history), and a resizable lane-graph
-history strip (`app/GitGraph.tsx` + `assignLanes` in `app/gitClient.ts`)
+history strip (every ref, or only HEAD and the compare base when the tab has
+one — `historyRefs`: a review worktree shares its clone's refs, and `--all`
+showed unrelated branches as if they were the MR's) (`app/GitGraph.tsx` + `assignLanes` in `app/gitClient.ts`)
 where selecting a commit lists its files and shows their diffs. Hovering a
 commit row opens an interactive card (a portal, not `data-tip` — it must be
 clickable) with the full hash (click to copy), author, absolute commit time
@@ -2061,7 +2066,8 @@ sub-shell exits (desktop carries the real exit code, web reports `null`;
 dev-workflow correlates it to record `run-in: sub-shell` check results).
 
 `ctx.openSession(cwd?, name?, workspaceId?)` on `PluginApi` opens a new
-session rooted at `cwd` (default: the shell default) — in the ctx
+session rooted at `cwd` (default: the shell default; a given `name` becomes
+the session's custom name, so the terminal title does not replace it) — in the ctx
 session's workspace unless `workspaceId` targets another — selects it,
 and dismisses a covering plugin view so the user lands on the new
 session. `ctx.getWorkspace()` returns the session's `Workspace` (carrying

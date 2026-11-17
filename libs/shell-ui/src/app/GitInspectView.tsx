@@ -37,6 +37,7 @@ import { GitGraph } from './GitGraph';
 import {
   assignLanes,
   gitBackendHandle, git,
+  historyRefs,
   indexBlob,
   parseLog,
   parseNameStatusZ,
@@ -498,6 +499,8 @@ export function GitInspectView({
         setBranch(branchOut.trim() || null);
         // Compare target (merge-request style): merge-base(base, HEAD) vs
         // HEAD. Ref missing vs. no common ancestor get distinct messages.
+        // A base that resolves also narrows the history to HEAD + base.
+        let logBase: string | undefined;
         if (base) {
           const exists = await git(sessionId, root, [
             'rev-parse',
@@ -508,6 +511,7 @@ export function GitInspectView({
           if (!exists.trim()) {
             setCompare({ base, error: `unknown ref: ${base}` });
           } else {
+            logBase = base;
             const [mbOut, countOut] = await Promise.all([
               git(sessionId, root, ['merge-base', base, 'HEAD']).catch(() => ''),
               git(sessionId, root, ['rev-list', '--count', `${base}...HEAD`]).catch(
@@ -527,8 +531,7 @@ export function GitInspectView({
         if (includeLog) {
           const logOut = await git(sessionId, root, [
             'log',
-            '--all',
-            'HEAD',
+            ...historyRefs(logBase),
             '--topo-order',
             `-n${LOG_LIMIT}`,
             `--format=${LOG_FORMAT}`,

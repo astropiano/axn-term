@@ -39,6 +39,13 @@ export interface MrRowEnv {
    * Empty where the host cannot enumerate workspaces.
    */
   workspaces?: Workspace[];
+  /**
+   * The session the click came from — the panel's selection when an overview
+   * opened, the session itself for a session-level MR row. A review prefers
+   * its clone and its workspace over the first match, so with several clones
+   * of one repo it lands where the user is working.
+   */
+  selectedSessionId?: string;
   /** Session-bound api for a known session id, when the view can provide it. */
   apiFor: (sessionId: string) => (SessionViewContext & PluginApi) | undefined;
   selectSession: (sessionId: string) => void;

@@ -433,17 +433,22 @@ registers itself at module scope; the button only renders when
 
 Clicking it (`startMrReview`):
 
-1. Picks the target workspace: the first workspace (panel order) belonging
-  to the MR's project — either scoped to the repo via the workspace's
+1. Picks the target workspace: the workspace of the session the click came
+  from (`env.selectedSessionId` — the panel's selection when the MR view
+  opened, the session itself for a session-level MR row); without one, the
+  first workspace (panel order) belonging to the MR's project — either scoped to the repo via the workspace's
   `defaultFolder` (basename matches the project's repo name), or hosting a
   session whose repo matches (`session.repo.remote` contains the project
   fullPath, or the checkout's directory name matches). When no workspace
   matches, an anchored workspace picker pops up (the shared
   `WorkspacePicker` context-menu component) and the review session opens in
   the workspace you choose.
-2. Resolves a session in that repo to run git through (`session.repo.remote`
-  match; falls back to any repo session — errors surface as an attention
-  flag, the current session is never touched).
+2. Resolves a session in that repo to run git through (`mrReviewSession`):
+  the clicking session when it is in the project, else an exact `origin`
+  match, else a checkout named after the project, else a remote containing
+  the project path — with several clones of one repo the review hangs off
+  the one you work in, not the first match. Errors surface as an attention
+  flag; the current session is never touched.
 3. `git fetch origin <ref>` — `merge-requests/<iid>/head` for GitLab urls,
   `pull/<iid>/head` for GitHub — then `git worktree add <dir> -B
   wt/mr-<iid> FETCH_HEAD` at the worktrees-plugin location
@@ -455,13 +460,15 @@ Clicking it (`startMrReview`):
   Re-reviewing reuses the existing worktree (`git merge --ff-only
   FETCH_HEAD` when the tree is clean — a dirty/diverged one stays as-is);
   failures surface as a red `failed` state on the button *and* a modal
-  dialog with the message (Esc/backdrop dismisses; the `failed` label
+  dialog with the message, selectable and with a Copy button (Esc or a
+  click that starts and ends on the backdrop dismisses; the `failed` label
   persists for retry), not only as a session attention flag. A rejected
   launch is reported the same way — no silent `preparing…` flicker. While
   the fetch + worktree + spawn run, the button shows a `preparing…`
   spinner.
 4. `openSession(worktree, '!123 title', workspaceId)` opens a fresh session
-  in the chosen workspace; the
+  in the chosen workspace — the name is kept as the session's custom name,
+  so the shell's terminal title does not replace it; the
   plugin's `onSessionOpen` consumes the staged entry from
   `pendingReviews`, stores the MR vars (`mr` = url plus derived
   `mr_iid`/`mr_url`/`mr_project`/`mr_title`/`mr_branch`/`mr_target`,
