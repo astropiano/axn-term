@@ -96,7 +96,7 @@ export function BarStrip({ pct, color, tip }: { pct: number; color: string; tip:
   const text =
     'pointer-events-none absolute inset-y-0 left-0 flex w-7 items-center justify-center text-[8px] font-bold leading-none';
   return (
-    <div className="relative h-3 w-7 bg-[var(--surface)]" data-tip={tip}>
+    <div className="relative h-3 w-7 bg-[var(--fill-2)]" data-tip={tip}>
       <div
         className="absolute inset-y-0 left-0 transition-all duration-500"
         style={{ width: `${pct}%`, background: color }}

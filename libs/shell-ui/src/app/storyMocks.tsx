@@ -339,8 +339,12 @@ export function StoryShellProviders({
    * true` so the Remote rail item and its accordion render). */
   configYaml?: string;
 }) {
-  const configStore = configYaml
-    ? { load: () => Promise.resolve(configYaml), save: () => Promise.resolve() }
+  // A canned config would otherwise re-apply the default theme over the
+  // toolbar's choice once it loads.
+  const theme = (globalThis as { __AXN_STORY_THEME__?: string }).__AXN_STORY_THEME__;
+  const seeded = configYaml && theme ? `theme: ${theme}\n${configYaml}` : configYaml;
+  const configStore = seeded
+    ? { load: () => Promise.resolve(seeded), save: () => Promise.resolve() }
     : undefined;
   return (
     <SessionBackendProvider backend={storyBackend}>

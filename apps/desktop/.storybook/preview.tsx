@@ -28,6 +28,8 @@ const preview: Preview = {
   decorators: [
     (Story, context) => {
       const themeId = (context.globals.theme as string | undefined) ?? defaultThemeId;
+      // Read by StoryShellProviders to seed stories that pass a canned config.
+      (globalThis as { __AXN_STORY_THEME__?: string }).__AXN_STORY_THEME__ = themeId;
       useEffect(() => {
         applyTheme(getTheme(themeId));
       }, [themeId]);
@@ -41,7 +43,7 @@ const preview: Preview = {
             margin: '-16px',
           }}
         >
-          <Story />
+          <Story key={themeId} />
         </div>
       );
     },
