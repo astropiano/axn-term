@@ -13,7 +13,7 @@ import { useSettings } from '../SettingsProvider';
 import { fontStackAvailable } from '../themes';
 import { usePluginSettings } from './PluginSettingsProvider';
 import { createPluginApi } from './session-plugins/plugin';
-import { resolveTint } from './session-plugins/tint';
+import { resolveTint, tintStyle, tintTextVars } from './session-plugins/tint';
 import { AttentionDot } from './AttentionDot';
 import { sessionAttention, summarizeAttention } from './attention';
 import { IconButton } from './IconButton';
@@ -1282,16 +1282,16 @@ export function SessionItem({
       pluginData,
       mergePluginData,
     });
-  const tint = resolveTint(
-    plugins.flatMap((plugin) => {
-      try {
-        return plugin.sessionColors?.(apiFor(plugin)) ?? [];
-      } catch {
-        return [];
-      }
-    }),
-    isSelected ? 'selected' : 'idle',
-  );
+  const colours = plugins.flatMap((plugin) => {
+    try {
+      return plugin.sessionColors?.(apiFor(plugin)) ?? [];
+    } catch {
+      return [];
+    }
+  });
+  // Selected: solid title row on a lighter expanded body.
+  const tint = resolveTint(colours, isSelected ? 'selectedCard' : 'card');
+  const titleTint = isSelected ? resolveTint(colours, 'selectedTitle') : undefined;
   for (const plugin of plugins) {
     const fields = pluginSessionFields(plugin);
     if (fields.length === 0) continue;
@@ -1478,7 +1478,7 @@ export function SessionItem({
               ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_40%,transparent)]'
               : 'hover:bg-[var(--fill-1)]'
         }${isDragging ? ' opacity-40' : ''}${dropBefore ? ` before:absolute before:-top-px before:left-0 before:right-0 before:h-[3px] before:rounded-full before:bg-[var(--accent)] before:content-['']` : ''}`}
-        style={tint ? { backgroundImage: tint } : undefined}
+        style={tintStyle(tint)}
         data-tip={[sessionDisplayName(session), ...rowTips].join('\n')}
       >
         <div
@@ -1497,6 +1497,7 @@ export function SessionItem({
           className={`group/row flex min-h-8 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[13px] text-[var(--text-primary)]${
             isSelected ? ' bg-[var(--fill-accent)]' : ''
           }`}
+          style={titleTint ? { ...tintStyle(titleTint), ...tintTextVars(colours) } : undefined}
         >
           {/* Icon tile — tinted while selected, coloured (with a soft halo)
               while the session needs attention. */}
@@ -2294,7 +2295,7 @@ export function SessionPanel({
                   so content stays aligned) to show the container it paints. */}
               <div
                 data-workspace-block={workspace.id}
-                style={workspaceTint(workspace) ? { backgroundImage: workspaceTint(workspace) } : undefined}
+                style={tintStyle(workspaceTint(workspace))}
                 className={`mb-3 transition ${
                   workspaceTint(workspace)
                     ? '-mx-1.5 rounded-[var(--radius-lg)] px-1.5 py-1'

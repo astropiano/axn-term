@@ -89,21 +89,26 @@ const colourPlugin = (id: string, over: Partial<SessionViewPlugin>): SessionView
 const cards = () => [...container.querySelectorAll<HTMLElement>('div.relative.cursor-pointer')];
 const header = () => container.querySelector<HTMLElement>('[data-tip$="right-click for options)"]')!;
 
-it('tints the selected card strongly and the other faintly', async () => {
+it('tints the selected card body lighter than its solid title row, and an unselected card in between', async () => {
   await render({ plugins: [colourPlugin('c', { sessionColors: () => ['#ff0000'] })] });
   const [selected, idle] = cards();
-  expect(selected.style.backgroundImage).toContain('#ff0000 30%');
-  expect(idle.style.backgroundImage).toContain('#ff0000 12%');
+  expect(selected.style.getPropertyValue('--tint')).toContain('#ff0000 40%');
+  const title = selected.querySelector<HTMLElement>('[class*="group/row"]')!;
+  expect(title.style.getPropertyValue('--tint')).toContain('#ff0000 100%');
+  // #ff0000: 5.3:1 against black beats 4.0:1 against white
+  expect(title.style.getPropertyValue('--text-primary')).toBe('#111111');
+  expect(idle.style.getPropertyValue('--tint')).toContain('#ff0000 22%');
+  expect(idle.querySelector<HTMLElement>('[class*="group/row"]')!.style.getPropertyValue('--tint')).toBe('');
 });
 
 it('tints the whole workspace block faintly, behind its sessions, even when it holds the selected session', async () => {
   const workspaceColors = vi.fn(() => ['#00ff00']);
   await render({ plugins: [colourPlugin('c', { workspaceColors })] });
   const block = header().closest<HTMLElement>('[data-workspace-block]')!;
-  expect(block.style.backgroundImage).toContain('#00ff00 12%');
+  expect(block.style.getPropertyValue('--tint')).toContain('#00ff00 10%');
   expect(block.contains(cards()[0])).toBe(true);
   expect(block.className).toContain('-mx-1.5');
-  expect(header().style.backgroundImage).toBe('');
+  expect(header().style.getPropertyValue('--tint')).toBe('');
   expect(workspaceColors).toHaveBeenCalledWith(expect.objectContaining({ workspace: workspaces[0] }));
 });
 
@@ -114,7 +119,7 @@ it('combines colours of several plugins in plugin order', async () => {
       colourPlugin('b', { sessionColors: () => ['#00ff00'] }),
     ],
   });
-  const css = cards()[0].style.backgroundImage;
+  const css = cards()[0].style.getPropertyValue('--tint');
   expect(css.indexOf('#ff0000')).toBeGreaterThan(-1);
   expect(css.indexOf('#ff0000')).toBeLessThan(css.indexOf('#00ff00'));
 });
@@ -134,12 +139,12 @@ it('ignores a throwing hook and non-hex colours', async () => {
     ],
   });
   expect(cards()).toHaveLength(2);
-  for (const card of cards()) expect(card.style.backgroundImage).toBe('');
-  expect(header().style.backgroundImage).toBe('');
+  for (const card of cards()) expect(card.style.getPropertyValue('--tint')).toBe('');
+  expect(header().style.getPropertyValue('--tint')).toBe('');
 });
 
 it('adds no background-image without colour hooks', async () => {
   await render({ plugins: [] });
-  for (const card of cards()) expect(card.style.backgroundImage).toBe('');
-  expect(header().style.backgroundImage).toBe('');
+  for (const card of cards()) expect(card.style.getPropertyValue('--tint')).toBe('');
+  expect(header().style.getPropertyValue('--tint')).toBe('');
 });

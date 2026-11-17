@@ -265,8 +265,11 @@ Plugins can colour the session panel: `sessionColors(ctx)` (a session card) and
 `workspaceColors({ workspace, pluginSettings })` (a workspace header — no session
 needed) return hex colours. `SessionPanel` combines every enabled plugin's colours
 (plugin order) into equal left-to-right bands via `resolveTint`
-(`session-plugins/tint.ts`) — the host owns intensity: 30% on the selected card,
-12% otherwise and always on workspace headers; non-hex values are dropped and a
+(`session-plugins/tint.ts`) — the host owns the shades (`TINT_INTENSITY`): one
+colour mixed with `--chrome` (solid, so a card hides its workspace's tint):
+workspace block 10%, session card 22%, selected card 40%, selected card's title
+row 100% with dark/light text picked by contrast (`tintTextVars`); tints are set
+through a `--tint` custom property (`tintStyle`); non-hex values are dropped and a
 throwing hook contributes nothing. `Workspace.pluginState[<settingsKey>]` is the
 workspace counterpart of a session's `pluginState` (written via the panel's
 `updateWorkspace`). `sessionMenuItems(ctx, scope)` also receives a `MenuScope`

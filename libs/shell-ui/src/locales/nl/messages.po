@@ -18,7 +18,7 @@ msgstr "{0} actieve {1} worden beëindigd"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} draait in de hoofd-checkout — isoleren in een worktree?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2250
+#: libs/shell-ui/src/app/SessionPanel.tsx:2251
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} wachtend"
 
@@ -564,7 +564,7 @@ msgstr "Naar workspace verplaatsen…"
 msgid "needs attention"
 msgstr "vraagt aandacht"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1596
+#: libs/shell-ui/src/app/SessionPanel.tsx:1597
 msgid "Needs you"
 msgstr "Wacht op jou"
 
@@ -572,7 +572,7 @@ msgstr "Wacht op jou"
 msgid "New name for {name}"
 msgstr "Nieuwe naam voor {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2429
+#: libs/shell-ui/src/app/SessionPanel.tsx:2430
 msgid "New session"
 msgstr "Nieuwe sessie"
 
@@ -580,7 +580,7 @@ msgstr "Nieuwe sessie"
 msgid "New session button"
 msgstr "Knop nieuwe sessie"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2553
+#: libs/shell-ui/src/app/SessionPanel.tsx:2554
 msgid "New session in folder…"
 msgstr "Nieuwe sessie in map…"
 
@@ -704,7 +704,7 @@ msgstr "Openen"
 msgid "Open {title}"
 msgstr "{title} openen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2533
+#: libs/shell-ui/src/app/SessionPanel.tsx:2534
 msgid "Open a saved workspace set file"
 msgstr "Opgeslagen workspace-setbestand openen"
 
@@ -732,11 +732,11 @@ msgstr "Logmap openen…"
 msgid "Open preview in a tab"
 msgstr "Voorbeeld in een tabblad openen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2541
+#: libs/shell-ui/src/app/SessionPanel.tsx:2542
 msgid "Open workspace set from file…"
 msgstr "Workspace-set uit bestand openen…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2215
+#: libs/shell-ui/src/app/SessionPanel.tsx:2216
 msgid "Open…"
 msgstr "Openen…"
 
@@ -778,7 +778,7 @@ msgstr "machtigingen:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "telefoons en browsers met hetzelfde account kunnen meekijken"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2548
+#: libs/shell-ui/src/app/SessionPanel.tsx:2549
 msgid "Pick a folder — the new session starts in it"
 msgstr "Kies een map — de nieuwe sessie start daarin"
 
@@ -872,7 +872,7 @@ msgstr "Worktree verwijderen"
 msgid "Rename {name}"
 msgstr "{name} hernoemen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1536
+#: libs/shell-ui/src/app/SessionPanel.tsx:1537
 msgid "Rename session"
 msgstr "Sessie hernoemen"
 
@@ -932,7 +932,7 @@ msgstr "Uitvoeren in een shell-tabblad"
 msgid "Run the login in a shell, then check again."
 msgstr "Voer de aanmelding uit in een shell en controleer daarna opnieuw."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2492
+#: libs/shell-ui/src/app/SessionPanel.tsx:2493
 msgid "Running"
 msgstr "Actief"
 
@@ -946,7 +946,7 @@ msgstr "gesandboxt — geen machtigingen (geen shell-, bestands- of terminaltoeg
 msgid "Save"
 msgstr "Opslaan"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2211
+#: libs/shell-ui/src/app/SessionPanel.tsx:2212
 msgid "Save workspace set"
 msgstr "Workspace-set opslaan"
 
@@ -984,8 +984,8 @@ msgstr "Serveradres"
 #~ msgid "Server URL"
 #~ msgstr "Server-URL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1572
-#: libs/shell-ui/src/app/SessionPanel.tsx:1574
+#: libs/shell-ui/src/app/SessionPanel.tsx:1573
+#: libs/shell-ui/src/app/SessionPanel.tsx:1575
 msgid "Session actions"
 msgstr "Sessieacties"
 
@@ -1017,7 +1017,7 @@ msgstr "Sessiesamenvatting"
 msgid "Session: {0}"
 msgstr "Sessie: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2487
+#: libs/shell-ui/src/app/SessionPanel.tsx:2488
 msgid "Sessions"
 msgstr "Sessies"
 
@@ -1051,11 +1051,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell-lettertype"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2243
+#: libs/shell-ui/src/app/SessionPanel.tsx:2244
 msgid "Show all sessions"
 msgstr "Alle sessies tonen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2243
+#: libs/shell-ui/src/app/SessionPanel.tsx:2244
 msgid "Show only sessions that need you"
 msgstr "Alleen sessies tonen die op jou wachten"
 
