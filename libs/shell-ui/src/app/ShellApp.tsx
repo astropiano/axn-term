@@ -2823,6 +2823,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 foreignDrag={foreignDrag}
                 onForeignDrop={claimForeignDrop}
                 hiddenStatusSources={[...railDetailIds]}
+                onOpenPluginView={setActivePluginView}
                 appAttention={
                   appFlagSummary
                     ? { count: appFlags.length, level: appFlagSummary.level, title: appFlagSummary.title }

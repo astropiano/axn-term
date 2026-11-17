@@ -1,6 +1,6 @@
 import { useEffect, useId, type ReactNode } from 'react';
 import { useLingui } from '@lingui/react/macro';
-import { Activity, ChevronDown, ChevronRight } from 'lucide-react';
+import { Activity, ArrowUpRight, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   publishPanelStatus,
   splitPanelStatus,
@@ -119,6 +119,7 @@ function StatusAccordion({
   summary,
   expanded,
   onToggle,
+  onOpen,
   children,
 }: {
   icon: ReactNode;
@@ -126,33 +127,49 @@ function StatusAccordion({
   summary: ReactNode;
   expanded: boolean;
   onToggle: () => void;
+  /** Opens the plugin's own view — only offered when it has one. */
+  onOpen?: () => void;
   children: ReactNode;
 }) {
+  const { t } = useLingui();
   const bodyId = useId();
   return (
     <div className="shadow-[inset_0_1px_0_var(--hairline)]">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        aria-controls={bodyId}
-        className="flex h-8 w-full items-center gap-1.5 px-3 text-left text-[11px] leading-4 transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-1)]"
-      >
-        {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" />
-        )}
-        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[var(--text-secondary)]">
-          {icon}
-        </span>
-        <span className="shrink-0 font-semibold text-[var(--text-secondary)]">{title}</span>
-        {!expanded && (
-          <span className="flex h-4 min-w-0 flex-1 flex-wrap content-start items-center justify-end gap-x-2.5 gap-y-2 overflow-hidden tabular-nums text-[var(--text-secondary)]">
-            {summary}
+      <div className="flex items-stretch">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={bodyId}
+          className="flex h-8 min-w-0 flex-1 items-center gap-1.5 pl-3 pr-1.5 text-left text-[11px] leading-4 transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-1)]"
+        >
+          {expanded ? (
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" />
+          )}
+          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[var(--text-secondary)]">
+            {icon}
           </span>
+          <span className="shrink-0 font-semibold text-[var(--text-secondary)]">{title}</span>
+          {!expanded && (
+            <span className="flex h-4 min-w-0 flex-1 flex-wrap content-start items-center justify-end gap-x-2.5 gap-y-2 overflow-hidden tabular-nums text-[var(--text-secondary)]">
+              {summary}
+            </span>
+          )}
+        </button>
+        {onOpen && (
+          <button
+            type="button"
+            onClick={onOpen}
+            aria-label={t`Open ${title}`}
+            data-tip={t`Open ${title}`}
+            className="flex w-7 shrink-0 items-center justify-center text-[var(--text-tertiary)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]"
+          >
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
         )}
-      </button>
+      </div>
       {expanded && (
         <div id={bodyId} className="pb-2 pl-8 pr-3">
           {children}
@@ -187,6 +204,8 @@ export function PanelStatusSection({
   sourceOrder = [],
   renderIcon,
   hiddenSources,
+  viewSources,
+  onOpenView,
 }: {
   /** The "System" accordion. */
   systemExpanded: boolean;
@@ -201,6 +220,10 @@ export function PanelStatusSection({
   /** Sources whose status moved to a detailed rail item — still published,
    * but skipped here. */
   hiddenSources?: readonly string[];
+  /** Sources whose plugin has its own view — the accordion gets an
+   * "open" button that calls `onOpenView`. */
+  viewSources?: readonly string[];
+  onOpenView?: (source: string) => void;
 }) {
   const { t } = useLingui();
   const published = usePanelStatus().filter((s) => !hiddenSources?.includes(s.source));
@@ -219,6 +242,11 @@ export function PanelStatusSection({
           summary={<MeterSummary meters={status.group.meters} />}
           expanded={expandedGroups.includes(status.source)}
           onToggle={() => onToggleGroup?.(status.source)}
+          onOpen={
+            viewSources?.includes(status.source) && onOpenView
+              ? () => onOpenView(status.source)
+              : undefined
+          }
         >
           <MeterRows meters={status.group.meters} />
         </StatusAccordion>
