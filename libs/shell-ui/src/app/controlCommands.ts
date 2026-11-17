@@ -1,5 +1,6 @@
 import type { ControlReply } from '@axn-term/session-backend';
 import { ptyIdOf, type ShellSession } from '../types';
+import { pluginCommands, pluginViewApi, type SessionViewPlugin } from './session-plugins/plugin';
 
 export type { ControlReply };
 
@@ -37,4 +38,30 @@ export function controlReply(line: string, result: string | false | undefined): 
     }
   }
   return { ok: false, error: `this command has to be typed at the shell prompt: ${result}` };
+}
+
+/**
+ * An app-level line (`axn-term command`, no terminal behind it): only a
+ * plugin command declaring `appRun` may run. Errors — including a throwing
+ * handler — come back as `ok: false`.
+ */
+export async function dispatchAppCommand(
+  plugins: readonly SessionViewPlugin[],
+  line: string,
+  settingsOf: (plugin: SessionViewPlugin) => unknown,
+): Promise<ControlReply> {
+  const trimmed = line.trim();
+  const word = trimmed.split(/\s+/)[0] ?? '';
+  for (const plugin of plugins) {
+    const command = pluginCommands(plugin).find((c) => c.name === word && c.appRun);
+    if (!command?.appRun) continue;
+    const arg = trimmed.slice(word.length).trim() || undefined;
+    try {
+      const result = await command.appRun({ pluginSettings: settingsOf(plugin), ...pluginViewApi }, arg, trimmed);
+      return controlReply(trimmed, result === undefined ? false : result);
+    } catch (e) {
+      return { ok: false, error: `${word}: ${(e as Error)?.message ?? String(e)}` };
+    }
+  }
+  return { ok: false, error: `not an app-level axn-term command: ${word}` };
 }

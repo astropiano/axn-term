@@ -585,6 +585,27 @@ function GeneralTab() {
         </label>
       </div>
 
+      <div className="mb-4" hidden={!matchSetting(query, 'allow external commands axn-term command session create dashboard launcher')}>
+        <div className="flex items-center gap-2">
+          <input
+            id="allow-external-commands"
+            type="checkbox"
+            checked={settings.allowExternalCommands ?? false}
+            onChange={(e) => updateSettings({ allowExternalCommands: e.currentTarget.checked })}
+            className="h-4 w-4 accent-[var(--accent)]"
+          />
+          <label htmlFor="allow-external-commands" className="text-[13px] text-[var(--text-primary)]">
+            <Trans>Let other programs start commands in new sessions</Trans>
+          </label>
+        </div>
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+          <Trans>
+            For launchers such as the MR dashboard: `axn-term command axn-session create … --command`.
+            Any program running as you can then start a command here, as with agterm.
+          </Trans>
+        </p>
+      </div>
+
       <div className="mb-4" hidden={!matchSetting(query, 'new session button placement workspace header list both')}>
         <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
           <Trans>New session button</Trans>

@@ -17,6 +17,7 @@ import shimSource from '../../../../plugin-sdk/src/shim.js?raw';
 import { previewContainStyle, sanitizePreviewHtml } from '../preview-plugins/html';
 import { shellServices } from '../../services';
 import { axnLog } from '../log';
+import { activeView, onViewChanged, openView, removeView, selectView } from '../viewHost';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
 import type { ShellSession } from '../../types';
 
@@ -268,10 +269,16 @@ class PluginSandbox {
   private sessionOpenReplayed = false;
   subscribed = new Set<string>();
   private onMessage = (e: MessageEvent) => this.route(e);
+  private offViewChanged: () => void;
 
   constructor(spec: SandboxPluginSpec) {
     this.spec = spec;
     window.addEventListener('message', this.onMessage);
+    this.offViewChanged = onViewChanged((value) => {
+      const msg: HostMessage = { axn: 'plugin-v1', type: 'viewChanged', value };
+      this.postLogic(msg);
+      this.postViews(msg);
+    });
     this.ensureLogic();
   }
 
@@ -449,6 +456,14 @@ class PluginSandbox {
           sandboxRuntime.selectSession?.(a(0) as string);
       case 'closeView':
         return viewCtx?.close();
+      case 'openView':
+        return openView(a(0));
+      case 'selectView':
+        return selectView(a(0));
+      case 'removeView':
+        return removeView(a(0));
+      case 'getActiveView':
+        return activeView();
       case 'openTab':
         return viewCtx?.openTab?.(a(0) as never);
       default:
@@ -600,6 +615,7 @@ class PluginSandbox {
 
   dispose(): void {
     window.removeEventListener('message', this.onMessage);
+    this.offViewChanged();
     if (this.logicFrame) {
       untrackFrame(this.logicFrame);
       this.logicFrame.remove();

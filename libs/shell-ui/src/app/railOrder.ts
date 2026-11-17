@@ -1,9 +1,9 @@
 /**
  * User-chosen ordering for the slim left rail. Persisted in window state
- * under `pluginData['axn-rail']` as `{ order: pluginId[] }` — a preference
- * list over plugin ids, not a full manifest, so rail plugins without a
- * recorded slot append in registration order and disabled ones keep their
- * position for when they come back.
+ * under `pluginData['axn-rail']` as `{ order: viewKey[] }` — a preference
+ * list over view keys (see `viewKey`), not a full manifest, so rail items
+ * without a recorded slot append and disabled ones keep their position for
+ * when they come back. Runtime entries are never recorded.
  */
 export const RAIL_ORDER_KEY = 'axn-rail';
 
@@ -32,6 +32,46 @@ export function orderRailPlugins<T extends { id: string }>(
 }
 
 /**
+ * A rail view's identity: the plugin id for a plugin's own item, or
+ * `pluginId/entryId` for one of the items a plugin contributes through
+ * `railEntries`. Entry ids never contain `/`.
+ */
+export function viewKey(pluginId: string, entryId?: string): string {
+  return entryId === undefined ? pluginId : `${pluginId}/${entryId}`;
+}
+
+export function parseViewKey(key: string): { pluginId: string; entryId?: string } {
+  const slash = key.indexOf('/');
+  return slash < 0
+    ? { pluginId: key }
+    : { pluginId: key.slice(0, slash), entryId: key.slice(slash + 1) };
+}
+
+export interface RailSlotLike {
+  key: string;
+  /** Set (truthy) when contributed through `railEntries` rather than the plugin's own item. */
+  entry?: unknown;
+}
+
+/**
+ * Rail slots in display order: saved ranks first, then unranked plugin
+ * items in input order, then unranked entries — so entries appearing never
+ * move an existing item's ⌘N number.
+ */
+export function orderRailSlots<T extends RailSlotLike>(
+  slots: readonly T[],
+  pluginData: Record<string, unknown>,
+): T[] {
+  const rank = new Map(storedRailOrder(pluginData).map((id, i) => [id, i]));
+  const tier = (s: T) => (rank.has(s.key) ? 0 : s.entry ? 2 : 1);
+  return [...slots].sort(
+    (a, b) =>
+      tier(a) - tier(b) ||
+      (rank.get(a.key) ?? 0) - (rank.get(b.key) ?? 0),
+  );
+}
+
+/**
  * Next persisted order after dropping `dragId` at `dropIndex` — an
  * insertion index into the rendered list (0..length; `i` lands before the
  * item currently at `i`, `length` appends at the end). Stored ids that are
@@ -42,15 +82,17 @@ export function railOrderAfterDrop(
   storedOrder: string[],
   dragId: string,
   dropIndex: number,
+  transient: ReadonlySet<string> = new Set(),
 ): string[] {
-  const ids = [...renderedIds];
+  const ids = renderedIds.filter((id) => !transient.has(id));
+  if (transient.has(dragId)) return storedOrder.filter((id) => !transient.has(id));
   const from = ids.indexOf(dragId);
   if (from < 0) return storedOrder;
   const to = Math.max(0, Math.min(dropIndex, ids.length));
   ids.splice(from, 1);
   ids.splice(to > from ? to - 1 : to, 0, dragId);
   for (const id of storedOrder) {
-    if (!ids.includes(id)) ids.push(id);
+    if (!ids.includes(id) && !transient.has(id)) ids.push(id);
   }
   return ids;
 }

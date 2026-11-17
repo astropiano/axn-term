@@ -3,7 +3,7 @@ import {
   RAIL_ORDER_KEY,
   orderRailPlugins,
   railOrderAfterDrop,
-  storedRailOrder, railDropIndexAt, railViewAfterShortcut, railViewIds } from './railOrder';
+  storedRailOrder, railDropIndexAt, railViewAfterShortcut, railViewIds, viewKey, parseViewKey, orderRailSlots } from './railOrder';
 
 const plugins = (...ids: string[]) => ids.map((id) => ({ id }));
 const data = (order: unknown) => ({ [RAIL_ORDER_KEY]: { order } });
@@ -127,5 +127,41 @@ describe('railViewAfterShortcut', () => {
     expect(railViewAfterShortcut(views, 3, null)).toBeUndefined();
     expect(railViewAfterShortcut(views, 9, 'docker')).toBeUndefined();
     expect(railViewAfterShortcut([], 0, null)).toBeUndefined();
+  });
+});
+
+describe('view keys', () => {
+  it('formats and parses plugin and entry keys', () => {
+    expect(viewKey('docker')).toBe('docker');
+    expect(viewKey('external-views', 'abc')).toBe('external-views/abc');
+    expect(parseViewKey('external-views/abc')).toEqual({ pluginId: 'external-views', entryId: 'abc' });
+    expect(parseViewKey('docker')).toEqual({ pluginId: 'docker' });
+  });
+});
+
+describe('orderRailSlots', () => {
+  const slot = (key: string, entry = false) => ({ key, entry });
+  const keys = (slots: { key: string }[]) => slots.map((s) => s.key);
+
+  it('puts unranked entries after every unranked plugin, so existing numbers never shift', () => {
+    const input = [slot('jira'), slot('ev/e1', true), slot('ev/e2', true), slot('docker'), slot('sandboxed')];
+    expect(keys(orderRailSlots(input, {}))).toEqual(['jira', 'docker', 'sandboxed', 'ev/e1', 'ev/e2']);
+  });
+  it('keeps a partial saved order first, then plugins, then entries', () => {
+    const input = [slot('jira'), slot('ev/e1', true), slot('docker')];
+    expect(keys(orderRailSlots(input, data(['jira'])))).toEqual(['jira', 'docker', 'ev/e1']);
+  });
+  it('honours a saved rank for an entry', () => {
+    const input = [slot('jira'), slot('ev/e1', true), slot('docker')];
+    expect(keys(orderRailSlots(input, data(['ev/e1', 'jira', 'docker'])))).toEqual(['ev/e1', 'jira', 'docker']);
+  });
+});
+
+describe('railOrderAfterDrop with transient keys', () => {
+  it('never persists transient (runtime) keys', () => {
+    expect(railOrderAfterDrop(['a', 'b', 'ev/rt'], [], 'b', 0, new Set(['ev/rt']))).toEqual(['b', 'a']);
+  });
+  it('drops a transient key already in the stored order', () => {
+    expect(railOrderAfterDrop(['a', 'b'], ['ev/rt', 'a', 'b'], 'b', 0, new Set(['ev/rt']))).toEqual(['b', 'a']);
   });
 });
