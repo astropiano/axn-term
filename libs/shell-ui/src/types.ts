@@ -98,6 +98,8 @@ export interface Workspace {
    * context menu.
    */
   defaultFolder?: string;
+  /** Per-plugin state, keyed by plugin `settingsKey`; follows the workspace. */
+  pluginState?: Record<string, unknown>;
 }
 
 /** Agent CLIs whose conversations a sub-shell tab can host and resume. */

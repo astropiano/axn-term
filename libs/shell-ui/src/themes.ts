@@ -60,12 +60,22 @@ export interface ThemeUi {
   attention?: string;
 }
 
+/** Named tag colours every theme provides (`themeTagPalette`). */
+export const TAG_SLOTS = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'violet', 'magenta'] as const;
+export type TagSlot = (typeof TAG_SLOTS)[number];
+
+export function isTagSlot(value: unknown): value is TagSlot {
+  return typeof value === 'string' && (TAG_SLOTS as readonly string[]).includes(value);
+}
+
 export interface ThemeDefinition {
   id: string;
   name: string;
   mode: ThemeMode;
   colors: ThemeColors;
   ui?: ThemeUi;
+  /** Optional hex per tag slot; unset slots come from the terminal colours. */
+  tagColors?: Partial<Record<TagSlot, string>>;
 }
 
 export interface AppSettings {
@@ -221,7 +231,55 @@ function normalizeTheme(raw: unknown): ThemeDefinition | null {
     mode: t.mode === 'light' ? 'light' : 'dark',
     colors: t.colors,
     ui: t.ui,
+    tagColors: normalizeTagColors(t.tagColors),
   };
+}
+
+const TAG_HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+function normalizeTagColors(raw: unknown): Partial<Record<TagSlot, string>> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const out: Partial<Record<TagSlot, string>> = {};
+  for (const [slot, value] of Object.entries(raw)) {
+    if (isTagSlot(slot) && typeof value === 'string' && TAG_HEX.test(value)) out[slot] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Used for a slot neither the theme nor its terminal colours fill with a hex. */
+const FALLBACK_TAG_COLORS: Record<TagSlot, string> = {
+  red: '#e5484d',
+  orange: '#f76b15',
+  yellow: '#ffb224',
+  green: '#46a758',
+  cyan: '#12a594',
+  blue: '#0091ff',
+  violet: '#6e56cf',
+  magenta: '#d6409f',
+};
+
+/**
+ * The theme's tag colours as hex: its `tagColors`, else its terminal
+ * colours (orange and violet mixed from their neighbours when absent).
+ */
+export function themeTagPalette(theme: ThemeDefinition): Record<TagSlot, string> {
+  const c = theme.colors;
+  const fromTerminal: Record<TagSlot, string | undefined> = {
+    red: c.red,
+    orange: c.orange ?? mixHex(c.red, c.yellow, 0.5),
+    yellow: c.yellow,
+    green: c.green,
+    cyan: c.cyan,
+    blue: c.blue,
+    violet: c.violet ?? mixHex(c.blue, c.magenta, 0.5),
+    magenta: c.magenta,
+  };
+  const out = {} as Record<TagSlot, string>;
+  for (const slot of TAG_SLOTS) {
+    const value = theme.tagColors?.[slot] ?? fromTerminal[slot];
+    out[slot] = value && TAG_HEX.test(value) ? value : FALLBACK_TAG_COLORS[slot];
+  }
+  return out;
 }
 
 // Used only if the bundled theme files fail to load: Axn Dark's terminal colours.
@@ -573,6 +631,9 @@ export function applyTheme(theme: ThemeDefinition) {
     if (value) {
       root.style.setProperty(key, value);
     }
+  }
+  for (const [slot, value] of Object.entries(themeTagPalette(theme))) {
+    root.style.setProperty(`--tag-${slot}`, value);
   }
 
   // Optional pins for the derived tokens — cleared when the theme leaves

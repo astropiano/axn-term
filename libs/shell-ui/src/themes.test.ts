@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { defaultSettings, mixHex, resolveTheme, resolveUiFont, themeDefinitions, themeMap } from './themes';
+import {
+  TAG_SLOTS,
+  defaultSettings,
+  mixHex,
+  resolveTheme,
+  resolveUiFont,
+  themeDefinitions,
+  themeMap,
+  themeTagPalette,
+  type ThemeDefinition,
+} from './themes';
 
 describe('themes', () => {
   it('defaults to the axn dark theme', () => {
@@ -109,5 +119,38 @@ describe('interface font', () => {
     // No layout engine here: the probe stays permissive, the stack is kept.
     expect(resolveUiFont({ ...defaultSettings, uiFontFamily: 'Inter' })).toBe('Inter, system-ui, sans-serif');
     expect(resolveUiFont({ ...defaultSettings, uiFontFamily: 'Inter, sans-serif' })).toBe('Inter, sans-serif');
+  });
+});
+
+describe('themeTagPalette', () => {
+  const hex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+  it('gives every shipped theme a valid hex for all eight tag slots', () => {
+    for (const theme of themeDefinitions) {
+      const palette = themeTagPalette(theme);
+      expect(Object.keys(palette)).toEqual([...TAG_SLOTS]);
+      for (const slot of TAG_SLOTS) expect(palette[slot], `${theme.id}.${slot}`).toMatch(hex);
+    }
+  });
+
+  it('takes the terminal colours, mixes orange and violet when absent, and lets tagColors win', () => {
+    const theme: ThemeDefinition = {
+      id: 't',
+      name: 't',
+      mode: 'dark',
+      colors: { red: '#ff0000', yellow: '#ffff00', blue: '#0000ff', magenta: '#ff00ff', green: '#00ff00', cyan: '#00ffff' },
+      tagColors: { green: '#123456' },
+    } as ThemeDefinition;
+    const palette = themeTagPalette(theme);
+    expect(palette.red).toBe('#ff0000');
+    expect(palette.orange).toBe(mixHex('#ff0000', '#ffff00', 0.5));
+    expect(palette.violet).toBe(mixHex('#0000ff', '#ff00ff', 0.5));
+    expect(palette.green).toBe('#123456');
+  });
+
+  it('falls back to a fixed colour for a slot with no usable value', () => {
+    const theme = { id: 't', name: 't', mode: 'dark', colors: { red: 'rgb(1,2,3)' } } as unknown as ThemeDefinition;
+    expect(themeTagPalette(theme).red).toMatch(hex);
+    expect(themeTagPalette(theme).red).not.toBe('rgb(1,2,3)');
   });
 });

@@ -13,6 +13,8 @@ import { useSettings } from '../SettingsProvider';
 import { fontStackAvailable } from '../themes';
 import { usePluginSettings } from './PluginSettingsProvider';
 import { createPluginApi } from './session-plugins/plugin';
+import { TINT_CLASS, TINT_HOVER_CLASS, resolveColour, resolveTint, tintStyle, tintTextVars } from './session-plugins/tint';
+import { themeTagPalette } from '../themes';
 import { AttentionDot } from './AttentionDot';
 import { sessionAttention, summarizeAttention } from './attention';
 import { IconButton } from './IconButton';
@@ -1105,6 +1107,7 @@ export function SessionIcon({
 export function SessionItem({
   session,
   workspaces,
+  allSessions,
   isSelected,
   isMultiSel,
   suppressDetails,
@@ -1139,6 +1142,8 @@ export function SessionItem({
 }: {
   session: ShellSession;
   workspaces: Workspace[];
+  /** Every session in the window — the scope handed to `sessionMenuItems`. */
+  allSessions: ShellSession[];
   isSelected: boolean;
   /** Active panel filter — matched name substring is highlighted. */
   searchQuery?: string;
@@ -1241,7 +1246,8 @@ export function SessionItem({
   const taskListRef = useRef<HTMLUListElement | null>(null);
   const [taskListMaxHeight, setTaskListMaxHeight] = useState<number | undefined>(undefined);
   const { pluginSettings } = usePluginSettings();
-  const { settings } = useSettings();
+  const { settings, activeTheme } = useSettings();
+  const tagPalette = themeTagPalette(activeTheme);
   const attention = summarizeAttention(sessionAttention(session, plugins));
   const attentionColor = attention?.level === 'warning' ? 'var(--orange)' : 'var(--attention)';
   const metaLine = sessionMetaLine(session, attention?.title);
@@ -1263,10 +1269,8 @@ export function SessionItem({
   // the selected card — comes from the `sessionCard` layout setting.
   const fieldMetas: FieldMeta[] = [...CORE_FIELDS];
   const pluginFieldValues = new Map<string, { value: () => ReactNode; tip?: () => string | string[] | null }>();
-  for (const plugin of plugins) {
-    const fields = pluginSessionFields(plugin);
-    if (fields.length === 0) continue;
-    const api = createPluginApi(session, plugin, {
+  const apiFor = (plugin: SessionViewPlugin, target: ShellSession = session) =>
+    createPluginApi(target, plugin, {
       backend,
       updateSession,
       mergePluginState,
@@ -1280,6 +1284,22 @@ export function SessionItem({
       pluginData,
       mergePluginData,
     });
+  const colours = plugins
+    .flatMap((plugin) => {
+      try {
+        return plugin.sessionColors?.(apiFor(plugin)) ?? [];
+      } catch {
+        return [];
+      }
+    })
+    .flatMap((token) => resolveColour(token, tagPalette) ?? []);
+  // Selected: solid title row on a lighter expanded body.
+  const tint = resolveTint(colours, isSelected ? 'selectedCard' : 'card');
+  const titleTint = isSelected ? resolveTint(colours, 'selectedTitle') : undefined;
+  for (const plugin of plugins) {
+    const fields = pluginSessionFields(plugin);
+    if (fields.length === 0) continue;
+    const api = apiFor(plugin);
     for (const field of fields) {
       const id = `${plugin.id}.${field.id}`;
       fieldMetas.push({ id, label: field.label, kind: field.kind, zone: field.zone });
@@ -1457,11 +1477,16 @@ export function SessionItem({
         onDrop={onDrop}
         className={`relative cursor-pointer rounded-[var(--radius-md)] transition-colors duration-[var(--dur-1)] ${
           isSelected
-            ? 'bg-[var(--fill-1)] shadow-[inset_2px_0_0_0_var(--accent),inset_0_0_0_1px_var(--hairline)]'
+            ? // Edge mark + hairline on an overlay above the content, so a solid
+              // tinted title row cannot cover it: one curve down the whole card.
+              "bg-[var(--fill-1)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_2px_0_0_0_var(--accent),inset_0_0_0_1px_var(--hairline)] after:content-['']"
             : isMultiSel
               ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_40%,transparent)]'
-              : 'hover:bg-[var(--fill-1)]'
-        }${isDragging ? ' opacity-40' : ''}${dropBefore ? ` before:absolute before:-top-px before:left-0 before:right-0 before:h-[3px] before:rounded-full before:bg-[var(--accent)] before:content-['']` : ''}`}
+              : tint
+                ? TINT_HOVER_CLASS
+                : 'hover:bg-[var(--fill-1)]'
+        }${tint ? ` ${TINT_CLASS}` : ''}${isDragging ? ' opacity-40' : ''}${dropBefore ? ` before:absolute before:-top-px before:left-0 before:right-0 before:h-[3px] before:rounded-full before:bg-[var(--accent)] before:content-['']` : ''}`}
+        style={tintStyle(tint)}
         data-tip={[sessionDisplayName(session), ...rowTips].join('\n')}
       >
         <div
@@ -1479,7 +1504,8 @@ export function SessionItem({
           onClick={wrapClick()}
           className={`group/row flex min-h-8 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[13px] text-[var(--text-primary)]${
             isSelected ? ' bg-[var(--fill-accent)]' : ''
-          }`}
+          }${titleTint ? ` ${TINT_CLASS}` : ''}`}
+          style={titleTint ? { ...tintStyle(titleTint), ...tintTextVars(colours) } : undefined}
         >
           {/* Icon tile — tinted while selected, coloured (with a soft halo)
               while the session needs attention. */}
@@ -1487,9 +1513,12 @@ export function SessionItem({
             className={`relative flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] ${
               attention
                 ? ''
-                : isSelected
-                  ? 'bg-[color-mix(in_srgb,var(--accent)_22%,transparent)] text-[var(--accent)]'
-                  : 'bg-[var(--fill-1)] text-[var(--text-secondary)]'
+                : titleTint
+                  ? // On a solid tag colour the accent clashes — follow the row's contrast text.
+                    'bg-[color-mix(in_srgb,var(--text-primary)_14%,transparent)] text-[var(--text-primary)]'
+                  : isSelected
+                    ? 'bg-[color-mix(in_srgb,var(--accent)_22%,transparent)] text-[var(--accent)]'
+                    : 'bg-[var(--fill-1)] text-[var(--text-secondary)]'
             }`}
             style={
               attention
@@ -1647,22 +1676,14 @@ export function SessionItem({
           pluginItems={plugins.flatMap((plugin) => {
             if (!plugin.sessionMenuItems) return [];
             try {
-              return plugin.sessionMenuItems(
-                createPluginApi(session, plugin, {
-                  backend,
-                  updateSession,
-                  mergePluginState,
-                  pluginSettings,
-                  plugins,
-                  openBrowser: onOpenBrowser,
-                  openTab: onOpenTab,
-                  openSubShell: onOpenSubShell,
-                  openSession: onAddSession,
-                  getWorkspaces: () => workspaces,
-                  pluginData,
-                  mergePluginData,
-                }),
-              );
+              const targetSessions = bulkIds
+                ? allSessions.filter((s) => bulkIds.includes(s.id))
+                : [session];
+              return plugin.sessionMenuItems(apiFor(plugin), {
+                targets: targetSessions.map((s) => apiFor(plugin, s)),
+                sessions: allSessions,
+                workspaces,
+              });
             } catch {
               return [] as RepoMenuItem[];
             }
@@ -1779,7 +1800,7 @@ export function SessionPanel({
   onOpenPluginView,
 }: SessionPanelProps) {
   const { t } = useLingui();
-  const { settings } = useSettings();
+  const { settings, activeTheme } = useSettings();
   const [dragSessionId, setDragSessionId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{
     workspaceId: string;
@@ -1881,7 +1902,30 @@ export function SessionPanel({
     sessions.find((s) => s.id === selectedSessionId && s.workspaceId === workspace.id) ??
     sessions.find((s) => s.workspaceId === workspace.id);
 
-  const workspacePluginItems = (workspace: Workspace): RepoMenuItem[] => {
+  const workspaceActionItems = (workspace: Workspace): RepoMenuItem[] =>
+    plugins.flatMap((plugin) => {
+      if (!plugin.workspaceActions) return [];
+      const key = plugin.settingsKey ?? plugin.id;
+      try {
+        return plugin.workspaceActions({
+          workspace,
+          pluginSettings: pluginSettings[key],
+          sessions,
+          workspaces,
+          updateWorkspaceState: (patch) =>
+            updateWorkspace(workspace.id, {
+              pluginState: {
+                ...workspace.pluginState,
+                [key]: { ...(workspace.pluginState?.[key] as Record<string, unknown> | undefined), ...patch },
+              },
+            }),
+        });
+      } catch {
+        return [] as RepoMenuItem[];
+      }
+    });
+
+  const workspaceSessionItems = (workspace: Workspace): RepoMenuItem[] => {
     const rep = representativeSession(workspace);
     if (!rep) return [];
     return plugins.flatMap((plugin) => {
@@ -1909,6 +1953,28 @@ export function SessionPanel({
       }
     });
   };
+
+  const workspacePluginItems = (workspace: Workspace): RepoMenuItem[] => [
+    ...workspaceSessionItems(workspace),
+    ...workspaceActionItems(workspace),
+  ];
+
+  const workspaceTint = (workspace: Workspace) =>
+    resolveTint(
+      plugins.flatMap((plugin) => {
+        try {
+          return (
+            plugin.workspaceColors?.({
+              workspace,
+              pluginSettings: pluginSettings[plugin.settingsKey ?? plugin.id],
+            }) ?? []
+          ).flatMap((token) => resolveColour(token, themeTagPalette(activeTheme)) ?? []);
+        } catch {
+          return [];
+        }
+      }),
+      'workspace',
+    );
 
   const handleSetDefaultFolder = (workspace: Workspace) => {
     const rep = representativeSession(workspace);
@@ -2236,8 +2302,16 @@ export function SessionPanel({
               {dragWorkspaceId && workspaceDropIndex === index && (
                 <div className="mb-2 h-0.5 rounded-full bg-[var(--accent)]" />
               )}
+              {/* A tinted block bleeds 4px past the list gutter (-mx/px cancel out,
+                  so content stays aligned) to show the container it paints. */}
               <div
-                className={`mb-3 rounded transition ${
+                data-workspace-block={workspace.id}
+                style={tintStyle(workspaceTint(workspace))}
+                className={`mb-3 transition ${
+                  workspaceTint(workspace)
+                    ? `-mx-1 rounded-[var(--radius-lg)] px-1 py-1 ${TINT_CLASS}`
+                    : 'rounded'
+                } ${
                   dropTarget?.workspaceId === workspace.id && dropTarget.beforeSessionId === null
                     ? 'ring-1 ring-[var(--accent)]'
                     : ''
@@ -2290,6 +2364,7 @@ export function SessionPanel({
                         key={session.id}
                         session={session}
                         workspaces={workspaces}
+                        allSessions={sessions}
                         isSelected={isSelected}
                         taskState={isSelected ? taskState : null}
                         isMultiSel={multiSelIds.includes(session.id)}

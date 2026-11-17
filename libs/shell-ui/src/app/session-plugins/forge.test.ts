@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import {
+  splitByRole,
   authCommand,
   authStatusHint,
   classifyCliError,
@@ -173,5 +174,39 @@ describe('compactCliError', () => {
     const out = compactCliError('x'.repeat(1000));
     expect(out).toHaveLength(601);
     expect(out.endsWith('…')).toBe(true);
+  });
+});
+
+describe('splitByRole', () => {
+  const item = (key: string, p: Partial<{ author: string; assignees: string[]; reviewers: string[] }> = {}) => ({
+    key,
+    author: 'bob',
+    assignees: [] as string[],
+    reviewers: [] as string[],
+    ...p,
+  });
+
+  it('puts each item in one section by the viewer role', () => {
+    const assignedAndReviewer = item('1', { assignees: ['me'], reviewers: ['me'] });
+    const ownNoAssignee = item('2', { author: 'me' });
+    const ownButReviewer = item('3', { author: 'me', reviewers: ['me'] });
+    const reviewOnly = item('4', { assignees: ['bob'], reviewers: ['me'] });
+    const { mine, review } = splitByRole(
+      [assignedAndReviewer, ownNoAssignee, ownButReviewer],
+      [assignedAndReviewer, ownButReviewer, reviewOnly],
+      'me',
+    );
+    expect(mine.map((m) => m.key)).toEqual(['1', '2']);
+    expect(review.map((m) => m.key)).toEqual(['3', '4']);
+  });
+
+  it('reads people through the mapper (GitHub approvers count as reviewers)', () => {
+    const pr = { ...item('1', { author: 'me' }), approvedBy: ['me'] };
+    const { mine, review } = splitByRole([pr], [], 'me', (p) => ({
+      ...p,
+      reviewers: p.approvedBy,
+    }));
+    expect(mine).toEqual([]);
+    expect(review).toEqual([pr]);
   });
 });

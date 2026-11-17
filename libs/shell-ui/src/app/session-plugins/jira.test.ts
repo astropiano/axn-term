@@ -12,6 +12,7 @@ import {
   matchSubject,
   parseBulkFetch,
   parseProjectKeys,
+  sessionsTicketKeys,
   splitStatus,
   type JiraConfig,
 } from './jira';
@@ -316,5 +317,25 @@ describe('session ticket sources', () => {
     ).toEqual(['VECTORDB-29']);
     // an earlier source still wins
     expect(sessionTicketKeys({ mrTitles: [], branch: 'AIACC-1-x', cwd: '/w/VECTORDB-29-y' }, keys)).toEqual(['AIACC-1']);
+  });
+});
+
+describe('sessionsTicketKeys', () => {
+  const keys = ['AIACC', 'MGNL'];
+  const session = (over: Record<string, unknown>) =>
+    ({ id: 'x', workspaceId: 'w', name: '', topic: '', summary: '', tasks: [], progress: 0, output: '', ...over }) as never;
+
+  it('counts a ticket once across sessions and skips sessions without one', () => {
+    expect(
+      sessionsTicketKeys(
+        [
+          session({ repo: { branch: 'feat/AIACC-1-a' } }),
+          session({ name: 'AIACC-1 review' }),
+          session({ cwd: '/w/mgnl-2-b' }),
+          session({ name: 'scratch' }),
+        ],
+        keys,
+      ),
+    ).toEqual(['AIACC-1', 'MGNL-2']);
   });
 });
