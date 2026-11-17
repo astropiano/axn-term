@@ -9,6 +9,7 @@ import { SessionIconGlyph } from './SessionPanel';
 import { useSettings, settingsFromYaml, settingsToYaml } from '../SettingsProvider';
 import { usePluginSettings } from './PluginSettingsProvider';
 import type { AppSettings, ThemeMode } from '../themes';
+import type { ShellSession, Workspace } from '../types';
 import { defaultShellLineHeight, themeDefinitions } from '../themes';
 import { useSessionBackend, useShellPlatform } from '../services';
 import { availableLocales, localeNames } from '../i18n';
@@ -19,6 +20,7 @@ import type { PluginSettingField, SessionViewPlugin } from './session-plugins';
 import { isSandboxedPlugin } from './session-plugins/sandbox';
 import { getFilePreviewPlugins, isFilePreviewEnabled } from './preview-plugins';
 import type { FilePreviewPlugin } from './preview-plugins';
+import { usePanelStatus } from './panelStatus';
 
 const cycle: Record<ThemeMode, ThemeMode> = {
   light: 'dark',
@@ -54,7 +56,12 @@ interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
   embedded?: boolean;
+  /** This window's sessions and workspaces, handed to plugins' `renderSettings`. */
+  sessions?: readonly ShellSession[];
+  workspaces?: readonly Workspace[];
 }
+
+const NONE: readonly never[] = [];
 
 const modeMessages: Record<ThemeMode, MessageDescriptor> = {
   light: msg`Light`,
@@ -113,7 +120,7 @@ const tabs: { id: SettingsTab; label: MessageDescriptor }[] = [
   { id: 'plugins', label: msg`Plugins` },
 ];
 
-export function SettingsModal({ open, onClose, embedded }: SettingsModalProps) {
+export function SettingsModal({ open, onClose, embedded, sessions = NONE, workspaces = NONE }: SettingsModalProps) {
   const { t } = useLingui();
   const [tab, setTab] = useState<SettingsTab>('general');
 
@@ -167,7 +174,7 @@ export function SettingsModal({ open, onClose, embedded }: SettingsModalProps) {
         </div>
 
         <div className="flex min-h-0 flex-1">
-          {tab === 'general' ? <GeneralTab /> : <PluginsTab />}
+          {tab === 'general' ? <GeneralTab /> : <PluginsTab sessions={sessions} workspaces={workspaces} />}
         </div>
       </div>
   );
@@ -578,6 +585,27 @@ function GeneralTab() {
         </label>
       </div>
 
+      <div className="mb-4" hidden={!matchSetting(query, 'allow external commands axn-term command session create dashboard launcher')}>
+        <div className="flex items-center gap-2">
+          <input
+            id="allow-external-commands"
+            type="checkbox"
+            checked={settings.allowExternalCommands ?? false}
+            onChange={(e) => updateSettings({ allowExternalCommands: e.currentTarget.checked })}
+            className="h-4 w-4 accent-[var(--accent)]"
+          />
+          <label htmlFor="allow-external-commands" className="text-[13px] text-[var(--text-primary)]">
+            <Trans>Let other programs start commands in new sessions</Trans>
+          </label>
+        </div>
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+          <Trans>
+            For launchers such as the MR dashboard: `axn-term command axn-session create … --command`.
+            Any program running as you can then start a command here, as with agterm.
+          </Trans>
+        </p>
+      </div>
+
       <div className="mb-4" hidden={!matchSetting(query, 'new session button placement workspace header list both')}>
         <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
           <Trans>New session button</Trans>
@@ -754,10 +782,19 @@ type PluginEntry =
   | { kind: 'session'; plugin: SessionViewPlugin }
   | { kind: 'preview'; plugin: FilePreviewPlugin };
 
-function PluginsTab() {
+function PluginsTab({
+  sessions,
+  workspaces,
+}: {
+  sessions: readonly ShellSession[];
+  workspaces: readonly Workspace[];
+}) {
   const { t } = useLingui();
   const { pluginSettings, updatePluginSection } = usePluginSettings();
   const [query, setQuery] = useState('');
+  // Plugins currently publishing a panel status group — they get the
+  // Status display choice even without a detailed rail item.
+  const statusSources = new Set(usePanelStatus().map((g) => g.source));
   const groups: { label: string; entries: PluginEntry[] }[] = [
     {
       label: t`Session plugins`,
@@ -916,21 +953,29 @@ function PluginsTab() {
               />
             ))}
 
-          {/* Standard choice for plugins with a heavier rail form — where
-              their status meters live. Unset ('auto') means the rail on
-              touch devices and the panel's status accordion elsewhere. */}
-          {selected.kind === 'session' && selected.plugin.renderRailDetail && (
+          {/* Standard choice for plugins with status in the panel's stack or a
+              heavier rail form: the panel accordion, or the rail only — the
+              detailed rail item where the plugin has one, else its plain
+              icon. Unset ('auto') means the rail on touch devices for
+              detailed items and the panel otherwise. */}
+          {selected.kind === 'session' &&
+            (selected.plugin.renderRailDetail || statusSources.has(selected.plugin.id)) && (
             <PluginSettingRow
               field={{
                 key: 'statusDisplay',
                 label: t`Status display`,
-                description: t`Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise.`,
+                description: selected.plugin.renderRailDetail
+                  ? t`Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise.`
+                  : t`Show this plugin's status as an accordion in the session panel, or keep only its rail icon.`,
                 type: 'string',
                 default: 'auto',
                 options: [
                   { value: 'auto', label: t`Auto` },
                   { value: 'panel', label: t`Panel accordion` },
-                  { value: 'rail', label: t`Rail item` },
+                  {
+                    value: 'rail',
+                    label: selected.plugin.renderRailDetail ? t`Rail item` : t`Rail icon only`,
+                  },
                 ],
               }}
               section={section}
@@ -942,6 +987,8 @@ function PluginsTab() {
             selected.plugin.renderSettings?.({
               settings: section,
               update: (patch) => updatePluginSection(settingsKey, patch),
+              sessions,
+              workspaces,
             })}
 
           {selected.kind === 'session' &&

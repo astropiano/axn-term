@@ -202,3 +202,83 @@ export function forgeCheckouts(settings: { repoRoots?: unknown } | undefined): P
   if (!rt) return Promise.resolve([]);
   return localCheckouts(rt.exec, parseRepoRoots(settings?.repoRoots));
 }
+
+// ---------------------------------------------------------------------------
+// The viewer's role on a merge/pull request
+// ---------------------------------------------------------------------------
+
+/**
+ * How the viewer relates to an MR/PR — what dev-workflow's `when: { role }`
+ * on a `kind: mr` var matches:
+ * - `author`: you drive it — an assignee, or the creator while nobody is
+ *   assigned (the "mine" list's rule, `mergeMine`)
+ * - `reviewer`: a requested reviewer, or anyone on an MR nobody claimed yet
+ *   (no assignee, no reviewer)
+ * - `other`: someone else drives it and you are not a reviewer
+ */
+export type MrRole = 'author' | 'reviewer' | 'other';
+
+export const MR_ROLES: readonly MrRole[] = ['author', 'reviewer', 'other'];
+
+/** Who is on an MR/PR — usernames (GitLab) or logins (GitHub). */
+export interface MrPeople {
+  author: string;
+  assignees: string[];
+  /** Requested reviewers; for GitHub also those who already reviewed. */
+  reviewers: string[];
+}
+
+/** `me`'s role on the MR; undefined when `me` is unknown. Case-insensitive. */
+export function mrRole(people: MrPeople, me: string | undefined): MrRole | undefined {
+  const self = me?.trim().toLowerCase();
+  if (!self) return undefined;
+  const is = (u: string) => u.trim().toLowerCase() === self;
+  if (people.assignees.some(is)) return 'author';
+  if (people.reviewers.some(is)) return 'reviewer';
+  if (people.assignees.length === 0) {
+    if (is(people.author)) return 'author';
+    if (people.reviewers.length === 0) return 'reviewer';
+  }
+  return 'other';
+}
+
+/**
+ * Splits fetched MRs/PRs by the viewer's role so each lands in one section:
+ * `author` → mine, `reviewer` → review; `other` is dropped. `people` maps an
+ * item to its `MrPeople` when the item's own fields are not the whole story.
+ */
+export function splitByRole<T extends { key: string } & MrPeople>(
+  mine: T[],
+  review: T[],
+  me: string,
+  people: (item: T) => MrPeople = (item) => item,
+): { mine: T[]; review: T[] } {
+  const byKey = new Map<string, T>();
+  for (const item of [...mine, ...review]) byKey.set(item.key, item);
+  const inRole = (role: MrRole) => [...byKey.values()].filter((m) => mrRole(people(m), me) === role);
+  return { mine: inRole('author'), review: inRole('reviewer') };
+}
+
+export interface MrUrl {
+  forge: Forge;
+  /** Lowercased host. */
+  host: string;
+  /** `group/sub/project` (GitLab) or `owner/repo` (GitHub). */
+  project: string;
+  iid: number;
+}
+
+/** A GitLab MR or GitHub PR web URL; anything else yields undefined. */
+export function parseMrUrl(url: string | undefined): MrUrl | undefined {
+  const v = url?.trim() ?? '';
+  const gl = /^https?:\/\/([^/\s]+)\/(.+?)\/-\/merge_requests\/(\d+)/.exec(v);
+  if (gl) return { forge: 'gitlab', host: gl[1].toLowerCase(), project: gl[2], iid: Number(gl[3]) };
+  const gh = /^https?:\/\/([^/\s]+)\/([^/\s]+\/[^/\s]+)\/pull\/(\d+)/.exec(v);
+  if (gh) return { forge: 'github', host: gh[1].toLowerCase(), project: gh[2], iid: Number(gh[3]) };
+  return undefined;
+}
+
+/** Cache key for one MR/PR: host, project and number — case-insensitive. */
+export function mrKey(u: Pick<MrUrl, 'host' | 'project' | 'iid'>): string {
+  return `${u.host.toLowerCase()}/${u.project.toLowerCase()}#${u.iid}`;
+}

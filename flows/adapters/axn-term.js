@@ -2068,14 +2068,14 @@ export async function run(step, env) {
       throw new Error("no isolation banner within 45s");
     }
 
-    // `axn-mr-review <url>` typed in the repo session must fetch the MR head
+    // `axn-workflow start mr-review <url>` typed in the repo session must fetch the MR head
     // from the bare origin, create worktree wt/mr-5, open a session there and
     // auto-run the workflow's headless probe (check `inspect:probe` → ok).
     case "mrReview": {
       const id = env.AXN_TERM_SESSION_ID;
       const url =
         env.AXN_TERM_MR_URL ?? "https://gitlab.com/group/repo/-/merge_requests/5";
-      await sendCommand(env, id, `axn-mr-review ${url}`);
+      await sendCommand(env, id, `axn-workflow start mr-review ${url}`);
       const state = await waitForState(
         env,
         (s) =>
@@ -2129,10 +2129,10 @@ export async function run(step, env) {
       const binding = () =>
         (readStateFile(env).windows ?? []).flatMap((w) => w.sessions ?? [])
           .find((s) => s.id === id)?.pluginState?.["dev-workflow"] ?? {};
-      await sendCommand(env, id, "axn-workflow-start harden");
+      await sendCommand(env, id, "axn-workflow start harden");
       await waitForState(env, () => binding().state === "build" && /^[0-9a-f]{16}$/.test(binding().token ?? ""));
       const token = binding().token;
-      await sendCommand(env, id, "axn-workflow-run token-env");
+      await sendCommand(env, id, "axn-workflow run token-env");
       await waitForOutput(env, id, (out) => out.includes(`token-env=${token}`));
       // leading \n: the shell's title escape precedes the command's output
       await writeToSession(env, id, "printf '\\naxn-workflow-state: review\\n'\r");

@@ -111,7 +111,7 @@ pub(crate) fn create_window_with<M: Manager<Wry>>(
         // place of the app (e.g. an image shown full-window), which also
         // unloads the close handler, so the window could no longer close.
         .on_navigation(move |url| {
-            is_app_navigation(url, dev_url.as_ref()) || is_dev_hmr_navigation(url)
+            is_app_navigation(url, dev_url.as_ref()) || is_dev_hmr_navigation(url) || is_framed_origin(url)
         });
     if let Some((x, y)) = window_position(options.x, options.y) {
         builder = builder.position(x, y);
@@ -227,6 +227,37 @@ pub(crate) fn is_app_navigation(url: &tauri::Url, dev_url: Option<&tauri::Url>) 
         }
         _ => false,
     }
+}
+
+/// Origins of pages the frontend shows in an iframe (the `external-views`
+/// plugin). WKWebView asks the navigation handler about frame loads too, so
+/// without this every such frame is cancelled. Frames get no
+/// `allow-top-navigation`, so an allowed origin cannot replace the app page.
+/// Grants last until restart.
+static FRAMED_ORIGINS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+pub(crate) fn allow_framed_origin(raw: &str) -> Result<(), String> {
+    let parsed = tauri::Url::parse(raw).map_err(|e| format!("not a URL: {e}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+        return Err(format!("not an http(s) URL: {raw}"));
+    }
+    let origin = parsed.origin().ascii_serialization();
+    let mut origins = FRAMED_ORIGINS.lock().map_err(|e| e.to_string())?;
+    if !origins.contains(&origin) {
+        origins.push(origin);
+    }
+    Ok(())
+}
+
+fn is_framed_origin(url: &tauri::Url) -> bool {
+    let origin = url.origin().ascii_serialization();
+    FRAMED_ORIGINS.lock().is_ok_and(|origins| origins.contains(&origin))
+}
+
+/// The frontend is about to frame `url` — let its origin through the guard.
+#[tauri::command]
+pub(crate) fn allow_frame_origin(url: String) -> Result<(), String> {
+    allow_framed_origin(&url)
 }
 
 /// axn-term-hmr loads its session windows from a spawned vite dev server —
@@ -377,6 +408,25 @@ pub(crate) fn settings_target<'a>(
         .map(|(label, _)| *label)
 }
 
+/// The window an app-level command (`axn-term command`) runs in: the named
+/// one, which must be an open shell window, else `settings_target`'s choice.
+pub(crate) fn app_command_window<'a>(
+    windows: impl IntoIterator<Item = (&'a str, bool)> + Clone,
+    named: Option<&str>,
+) -> Result<String, String> {
+    match named {
+        Some(name) => windows
+            .into_iter()
+            .map(|(label, _)| label)
+            .find(|label| *label == name && is_shell_window_label(label))
+            .map(str::to_string)
+            .ok_or_else(|| format!("no axn-term window '{name}'")),
+        None => settings_target(windows)
+            .map(str::to_string)
+            .ok_or_else(|| "no axn-term window".to_string()),
+    }
+}
+
 #[cfg(test)]
 mod settings_target_tests {
     use super::*;
@@ -405,6 +455,16 @@ mod settings_target_tests {
         assert_eq!(settings_target(windows), Some("main"));
         // Main was closed: the lowest secondary window, whatever the order.
         assert_eq!(settings_target([("w-2", false), ("w-1", false)]), Some("w-1"));
+    }
+
+    #[test]
+    fn an_app_command_runs_in_the_named_or_the_settings_target_window() {
+        let windows = [("main", false), ("w-1", true), ("settings", false)];
+        assert_eq!(app_command_window(windows, Some("main")), Ok("main".to_string()));
+        assert_eq!(app_command_window(windows, None), Ok("w-1".to_string()));
+        assert!(app_command_window(windows, Some("w-9")).is_err());
+        assert!(app_command_window(windows, Some("settings")).is_err());
+        assert!(app_command_window([("settings", true)], None).is_err());
     }
 
     #[test]
@@ -466,6 +526,19 @@ mod navigation_tests {
             is_app_navigation(&url("http://localhost:1420/index.html"), Some(&dev)),
             cfg!(debug_assertions)
         );
+    }
+
+    #[test]
+    fn an_origin_the_frontend_frames_may_load_and_nothing_else() {
+        let page = url("http://127.0.0.1:37791/t/tok/d/mr/app/index.html");
+        assert!(!is_framed_origin(&page));
+        allow_framed_origin("http://127.0.0.1:37791/t/tok/d/mr/app/index.html").unwrap();
+        assert!(is_framed_origin(&url("http://127.0.0.1:37791/api/d/mr/data")));
+        assert!(!is_framed_origin(&url("http://127.0.0.1:37792/")));
+        assert!(!is_framed_origin(&url("https://127.0.0.1:37791/")));
+        for bad in ["file:///etc/passwd", "javascript:alert(1)", "data:text/html,x", "not a url"] {
+            assert!(allow_framed_origin(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

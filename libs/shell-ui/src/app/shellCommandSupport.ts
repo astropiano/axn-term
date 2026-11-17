@@ -94,6 +94,7 @@ export const AXN_SESSION_FLAGS = [
   '--background',
   '--create-ws',
   '--summary',
+  '--command',
 ] as const;
 
 /** `axn-session set` options — every flag carries a value. */
@@ -110,6 +111,18 @@ export const AXN_SESSION_SET_FLAGS = [
  * tokens join back into the path, so an unquoted `axn-session my dir` still
  * addresses `my dir`.
  */
+// `--command-b64`: shellTokens has no escapes, so a command line mixing quote
+// types (what launchers build) travels encoded.
+function decodeBase64Utf8(value: string): string | undefined {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return undefined;
+  try {
+    const bytes = Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return undefined;
+  }
+}
+
 export function parseSessionArgs(arg: string): {
   workspace?: string;
   name?: string;
@@ -117,6 +130,8 @@ export function parseSessionArgs(arg: string): {
   createWs?: boolean;
   summary?: string;
   path?: string;
+  /** Typed into the new session once its shell has started. */
+  command?: string;
   error?: string;
 } {
   const opts: {
@@ -126,12 +141,19 @@ export function parseSessionArgs(arg: string): {
     createWs?: boolean;
     summary?: string;
     path?: string;
+    command?: string;
   } = {};
   const positional: string[] = [];
   const tokens = shellTokens(arg);
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
-    if (t === '-w' || t === '--workspace' || t === '-n' || t === '--name' || t === '--summary') {
+    if (t === '--command' || t === '--command-b64') {
+      const value = tokens[++i];
+      if (value === undefined) return { error: `${t} needs a value` };
+      const command = t === '--command' ? value : decodeBase64Utf8(value);
+      if (command === undefined) return { error: '--command-b64 is not base64' };
+      opts.command = command;
+    } else if (t === '-w' || t === '--workspace' || t === '-n' || t === '--name' || t === '--summary') {
       const value = tokens[++i];
       if (value === undefined) return { error: `${t} needs a value` };
       if (t === '-w' || t === '--workspace') opts.workspace = value;

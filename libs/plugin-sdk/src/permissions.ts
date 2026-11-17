@@ -23,7 +23,8 @@ export type PluginPermission =
   | 'fs-write'
   /**
    * Drive the app's sessions and views: `openSession`, `selectSession`,
-   * `activateTab`, `openTab`, `openBrowser`.
+   * `activateTab`, `openTab`, `openBrowser`, and the rail views —
+   * `openView`, `selectView`, `removeView`.
    */
   | 'sessions';
 
@@ -53,6 +54,9 @@ const METHOD_PERMISSIONS: Record<string, PluginPermission> = {
   activateTab: 'sessions',
   openTab: 'sessions',
   openBrowser: 'sessions',
+  openView: 'sessions',
+  selectView: 'sessions',
+  removeView: 'sessions',
 };
 
 const HOOK_PERMISSIONS: Record<string, PluginPermission> = {

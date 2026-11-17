@@ -262,6 +262,18 @@ export interface ShellPlatform {
     cb: (cmd: { ptyId: string; line: string }) => Promise<ControlReply | null>,
   ): Unsubscribe;
   /**
+   * App-level command lines (`axn-term command`, desktop control socket, no
+   * terminal behind them). Only this window's requests are delivered; the
+   * answer goes back to the caller. Absent on web.
+   */
+  onAppCommand?(cb: (cmd: { line: string }) => Promise<ControlReply>): Unsubscribe;
+  /**
+   * Let a page's origin through the window's navigation guard before it is
+   * shown in an iframe (desktop: the guard also judges frame loads). Absent
+   * where no guard exists.
+   */
+  allowFrameOrigin?(url: string): Promise<void>;
+  /**
    * Load external `.mjs` plugins from disk — desktop-only. Resolves the
    * number of plugins registered. Absent = no external plugin support.
    */

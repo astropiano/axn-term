@@ -92,6 +92,9 @@ Usage:
   axn-term session set <flags…>       Update this session (--summary, --name/--title)
   axn-term session create [path]      Open a new session (same flags as `axn-session create`)
   axn-term session command <axn-…>    Run any axn-* or plugin command for this session
+  axn-term command [--window <label>] <axn-…>
+                                      Run an app-level command (e.g. axn-views open <url>)
+                                      from any process, in the focused window by default
   axn-term --help                     Show this help
   axn-term --version                  Print the version
 
@@ -122,6 +125,7 @@ pub fn run_cli(args: &[String]) -> Option<i32> {
         "install" => Some(run_install(&args[1..], false)),
         "uninstall" => Some(run_install(&args[1..], true)),
         "session" => Some(run_session(&args[1..])),
+        "command" => Some(run_command(&args[1..])),
         "--help" | "-h" | "help" => {
             print!("{HELP}");
             Some(0)
@@ -420,6 +424,63 @@ fn session_line(args: &[String]) -> Result<String, String> {
     Ok(std::iter::once(command.as_str()).chain(rest.iter().map(String::as_str)).collect::<Vec<_>>().join(" "))
 }
 
+/// `axn-term command [--window <label>] <axn-command> [args…]`.
+fn app_request(args: &[String]) -> Result<crate::control::AppRequest, String> {
+    const USAGE: &str = "usage: axn-term command [--window <label>] <axn-command> [args…]";
+    let (window, rest) = match args.split_first() {
+        Some((flag, rest)) if flag == "--window" => {
+            let (label, rest) = rest.split_first().ok_or(USAGE)?;
+            (Some(label.clone()), rest)
+        }
+        _ => (None, args),
+    };
+    let (cmd, _) = rest.split_first().ok_or(USAGE)?;
+    if !cmd.starts_with("axn-") {
+        return Err(format!("not an axn-term command: {cmd}"));
+    }
+    Ok(crate::control::AppRequest { line: rest.join(" "), window })
+}
+
+fn state_dir() -> PathBuf {
+    std::env::var("AXN_TERM_STATE_DIR")
+        .map(PathBuf::from)
+        .or_else(|_| dirs::home_dir().map(|h| h.join(".axn-term")).ok_or(()))
+        .unwrap_or_default()
+}
+
+#[cfg(unix)]
+fn run_command(args: &[String]) -> i32 {
+    let request = match app_request(args) {
+        Ok(request) => request,
+        Err(e) => {
+            eprintln!("axn-term command: {e}");
+            return 2;
+        }
+    };
+    match crate::control::send_app(&crate::control::socket_path(&state_dir()), &request) {
+        Ok(reply) if reply.ok => {
+            if let Some(message) = reply.message {
+                println!("{message}");
+            }
+            0
+        }
+        Ok(reply) => {
+            eprintln!("axn-term command: {}", reply.error.unwrap_or_else(|| "failed".into()));
+            1
+        }
+        Err(e) => {
+            eprintln!("axn-term command: {e}");
+            1
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn run_command(_args: &[String]) -> i32 {
+    eprintln!("axn-term command: not supported on this platform");
+    2
+}
+
 #[cfg(unix)]
 fn run_session(args: &[String]) -> i32 {
     let line = match session_line(args) {
@@ -433,12 +494,8 @@ fn run_session(args: &[String]) -> i32 {
         eprintln!("axn-term session: not inside an axn-term terminal (AXN_TERM_PTY_ID/AXN_TERM_PTY_SECRET unset)");
         return 2;
     };
-    let state_dir = std::env::var("AXN_TERM_STATE_DIR")
-        .map(PathBuf::from)
-        .or_else(|_| dirs::home_dir().map(|h| h.join(".axn-term")).ok_or(()))
-        .unwrap_or_default();
     let request = crate::control::ControlRequest { pty, secret, line };
-    match crate::control::send(&crate::control::socket_path(&state_dir), &request) {
+    match crate::control::send(&crate::control::socket_path(&state_dir()), &request) {
         Ok(reply) if reply.ok => {
             if let Some(message) = reply.message {
                 println!("{message}");
@@ -477,7 +534,24 @@ mod session_tests {
         assert_eq!(session_line(&args(&["rename", "api", "work"])).unwrap(), "axn-rename api work");
         assert_eq!(session_line(&args(&["set", "--summary", "wip"])).unwrap(), "axn-session set --summary wip");
         assert_eq!(session_line(&args(&["create", "src"])).unwrap(), "axn-session create src");
-        assert_eq!(session_line(&args(&["command", "axn-workflow-move", "review"])).unwrap(), "axn-workflow-move review");
+        assert_eq!(session_line(&args(&["command", "axn-workflow", "move", "review"])).unwrap(), "axn-workflow move review");
+    }
+
+    #[test]
+    fn app_command_takes_an_optional_window() {
+        let r = super::app_request(&args(&["--window", "w-2", "axn-views", "open", "http://x/", "MR"])).unwrap();
+        assert_eq!(r.window.as_deref(), Some("w-2"));
+        assert_eq!(r.line, "axn-views open http://x/ MR");
+        let r = super::app_request(&args(&["axn-views", "current"])).unwrap();
+        assert!(r.window.is_none());
+        assert_eq!(r.line, "axn-views current");
+    }
+
+    #[test]
+    fn app_command_refuses_non_axn_lines_and_a_missing_window() {
+        assert!(super::app_request(&args(&["rm", "-rf", "/"])).is_err());
+        assert!(super::app_request(&args(&["--window"])).is_err());
+        assert!(super::app_request(&args(&[])).is_err());
     }
 
     #[test]
