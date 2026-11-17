@@ -8,7 +8,7 @@ import { isTagSlot, type TagSlot } from '../../themes';
  * `--chrome`, not `transparent`, so each shade is solid: a tinted card hides
  * its workspace's tint instead of blending with it.
  */
-export const TINT_INTENSITY = { workspace: 10, card: 22, selectedCard: 40, selectedTitle: 100 } as const;
+export const TINT_INTENSITY = { workspace: 20, card: 32, selectedCard: 50, selectedTitle: 100 } as const;
 
 export type TintIntensity = keyof typeof TINT_INTENSITY;
 
