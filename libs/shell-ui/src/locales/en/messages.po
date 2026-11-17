@@ -18,7 +18,7 @@ msgstr "{0} running {1} will be terminated"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} is running in the main checkout — isolate it in a worktree?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2259
+#: libs/shell-ui/src/app/SessionPanel.tsx:2262
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} waiting"
 
@@ -568,7 +568,7 @@ msgstr "Move to workspace…"
 msgid "needs attention"
 msgstr "needs attention"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1605
+#: libs/shell-ui/src/app/SessionPanel.tsx:1608
 msgid "Needs you"
 msgstr "Needs you"
 
@@ -576,7 +576,7 @@ msgstr "Needs you"
 msgid "New name for {name}"
 msgstr "New name for {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2438
+#: libs/shell-ui/src/app/SessionPanel.tsx:2441
 msgid "New session"
 msgstr "New session"
 
@@ -584,7 +584,7 @@ msgstr "New session"
 msgid "New session button"
 msgstr "New session button"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2562
+#: libs/shell-ui/src/app/SessionPanel.tsx:2565
 msgid "New session in folder…"
 msgstr "New session in folder…"
 
@@ -710,7 +710,7 @@ msgstr "Open"
 msgid "Open {title}"
 msgstr "Open {title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2542
+#: libs/shell-ui/src/app/SessionPanel.tsx:2545
 msgid "Open a saved workspace set file"
 msgstr "Open a saved workspace set file"
 
@@ -738,11 +738,11 @@ msgstr "Open log folder…"
 msgid "Open preview in a tab"
 msgstr "Open preview in a tab"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2550
+#: libs/shell-ui/src/app/SessionPanel.tsx:2553
 msgid "Open workspace set from file…"
 msgstr "Open workspace set from file…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2224
+#: libs/shell-ui/src/app/SessionPanel.tsx:2227
 msgid "Open…"
 msgstr "Open…"
 
@@ -784,7 +784,7 @@ msgstr "permissions:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "phones and browsers signed in as the same account can attach"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2557
+#: libs/shell-ui/src/app/SessionPanel.tsx:2560
 msgid "Pick a folder — the new session starts in it"
 msgstr "Pick a folder — the new session starts in it"
 
@@ -878,7 +878,7 @@ msgstr "Remove worktree"
 msgid "Rename {name}"
 msgstr "Rename {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1545
+#: libs/shell-ui/src/app/SessionPanel.tsx:1548
 msgid "Rename session"
 msgstr "Rename session"
 
@@ -939,7 +939,7 @@ msgstr "Run in a shell tab"
 msgid "Run the login in a shell, then check again."
 msgstr "Run the login in a shell, then check again."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2501
+#: libs/shell-ui/src/app/SessionPanel.tsx:2504
 msgid "Running"
 msgstr "Running"
 
@@ -953,7 +953,7 @@ msgstr "sandboxed — no permissions (no shell, files or terminal access)"
 msgid "Save"
 msgstr "Save"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2220
+#: libs/shell-ui/src/app/SessionPanel.tsx:2223
 msgid "Save workspace set"
 msgstr "Save workspace set"
 
@@ -991,8 +991,8 @@ msgstr "Server address"
 #~ msgid "Server URL"
 #~ msgstr "Server URL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1581
-#: libs/shell-ui/src/app/SessionPanel.tsx:1583
+#: libs/shell-ui/src/app/SessionPanel.tsx:1584
+#: libs/shell-ui/src/app/SessionPanel.tsx:1586
 msgid "Session actions"
 msgstr "Session actions"
 
@@ -1024,7 +1024,7 @@ msgstr "Session summary"
 msgid "Session: {0}"
 msgstr "Session: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2496
+#: libs/shell-ui/src/app/SessionPanel.tsx:2499
 msgid "Sessions"
 msgstr "Sessions"
 
@@ -1058,11 +1058,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell font"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2252
+#: libs/shell-ui/src/app/SessionPanel.tsx:2255
 msgid "Show all sessions"
 msgstr "Show all sessions"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2252
+#: libs/shell-ui/src/app/SessionPanel.tsx:2255
 msgid "Show only sessions that need you"
 msgstr "Show only sessions that need you"
 
