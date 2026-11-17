@@ -202,7 +202,7 @@ to right.
   Clicking a tag's colour dot in the Tag… modal edits its colour, saved immediately, not on Apply.
   Hex input accepts `#abc`, `abc`, `#aabbcc`, `#aabbccdd`, typed or pasted.
 - The workspace tint paints the whole workspace block (header and sessions) with rounded corners,
-  bleeding 6px past the list gutter so the container is visible.
+  bleeding 4px past the list gutter so the container is visible.
 - Plugin fields (all plugins, decided by the user) show only where a layout names them: the
   user's `sessionCard`, else per zone the shipped `DEFAULT_SESSION_CARD`, which keeps today's card
   but omits `tagging.tags` and `jira.tickets`. A disabled plugin's ids resolve to nothing. The
