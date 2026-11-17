@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
-    "storybook": "storybook dev -p 6006",
+    "storybook": "node ./scripts/storybook-dev.mjs",
     "build-storybook": "storybook build"
   },
   "dependencies": {
