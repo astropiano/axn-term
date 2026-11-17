@@ -67,7 +67,15 @@ function PluginPanelStatus({ plugins }: { plugins: SessionViewPlugin[] }) {
  * shows — and hides the accordions they replace, so status never renders
  * twice.
  */
-function RailAndWorkspacesExample({ detailed }: { detailed: boolean }) {
+function RailAndWorkspacesExample({
+  detailed,
+  selectedId = 'sess-1',
+}: {
+  detailed: boolean;
+  /** The selected session — `sess-4` has no plugin data: its field zones
+   * render empty, showing the card keeps no phantom space. */
+  selectedId?: string;
+}) {
   bindStoryRuntime();
   useEffect(() => () => unbindStoryRuntime(), []);
   const all = getSessionViewPlugins();
@@ -94,7 +102,7 @@ function RailAndWorkspacesExample({ detailed }: { detailed: boolean }) {
               { id: 'w2', name: 'scratch', collapsed: true },
             ]}
             sessions={storySessions}
-            selectedSessionId="sess-1"
+            selectedSessionId={selectedId}
             taskState={null}
             onSelectWorkspace={() => {}}
             onSelectSession={() => {}}
@@ -161,4 +169,13 @@ export const RailAndPanel: Story = {
  */
 export const RailAndPanelDetail: Story = {
   render: () => <RailAndWorkspacesExample detailed={true} />,
+};
+
+/**
+ * A selected session with no plugin fields (sess-4 — no memory entry, no
+ * plugin data): the card must close right under its title row — no dead
+ * strip where the field zones would be.
+ */
+export const RailAndPanelEmptyFields: Story = {
+  render: () => <RailAndWorkspacesExample detailed={false} selectedId="sess-4" />,
 };

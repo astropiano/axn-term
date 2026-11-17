@@ -1,13 +1,14 @@
 import { useEffect, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { publishPanelStatus } from './panelStatus';
-import { SessionItem, SessionPanel } from './SessionPanel';
+import { SessionPanel } from './SessionPanel';
 import { StoryShellProviders } from './storyMocks';
 import type { SessionAttention, ShellSession } from '../types';
 import type { SessionViewPlugin } from './session-plugins/plugin';
 
-// Stub plugin objects — SessionItem only needs id/stateKey to read attention
-// flags (and session fields if provided) from session.pluginState.
+// Stub plugin objects — the panel only needs id/stateKey to read attention
+// flags and banners from session.pluginState. (Real plugin fields live in
+// the `app/Session card` stories.)
 const devinStub: SessionViewPlugin = { id: 'devin', title: 'devin', stateKey: 'devin' };
 const gitStub: SessionViewPlugin = { id: 'git-status', title: 'git', stateKey: 'gitStatus' };
 
@@ -18,42 +19,8 @@ function attentionPluginState(
   return { [key]: { attention } };
 }
 
-function Row({ session, plugins = [] }: { session: ShellSession; plugins?: SessionViewPlugin[] }) {
-  return (
-    <div className="w-64">
-      <SessionItem
-        session={session}
-        workspaces={[{ id: 'w1', name: 'main' }]}
-        isSelected={false}
-        taskState={null}
-        onSelect={() => {}}
-        onMove={() => {}}
-        onRename={() => {}}
-        onDuplicate={() => {}}
-        onCloseSession={() => {}}
-        onOpenSubShell={() => {}}
-        onTurnIntoWorkspace={() => {}}
-        updateSession={() => {}}
-        mergePluginState={() => {}}
-        plugins={plugins}
-        onOpenBrowser={() => {}}
-        onOpenTab={() => {}}
-        pluginData={{}}
-        mergePluginData={() => {}}
-        isDragging={false}
-        dropBefore={false}
-        onDragStart={() => {}}
-        onDragEnd={() => {}}
-        onDragOver={() => {}}
-        onDrop={() => {}}
-      />
-    </div>
-  );
-}
-
 const meta = {
-  title: 'app/SessionItem',
-  component: Row,
+  title: 'app/Session panel',
   decorators: [
     (Story) => (
       <StoryShellProviders>
@@ -61,7 +28,7 @@ const meta = {
       </StoryShellProviders>
     ),
   ],
-} satisfies Meta<typeof Row>;
+} satisfies Meta;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -79,62 +46,11 @@ const baseSession: ShellSession = {
   status: 'running',
 };
 
-export const Plain: Story = {
-  args: { session: baseSession },
-};
-
-export const WarningAttention: Story = {
-  args: {
-    session: {
-      ...baseSession,
-      pluginState: attentionPluginState('devin', {
-        level: 'warning',
-        message: 'quiet for 45s — possibly finished',
-      }),
-    },
-    plugins: [devinStub],
-  },
-};
-
-export const CriticalAttention: Story = {
-  args: {
-    session: {
-      ...baseSession,
-      pluginState: attentionPluginState('devin', {
-        level: 'critical',
-        message: 'quiet for 45s — likely waiting for input',
-      }),
-    },
-    plugins: [devinStub],
-  },
-};
-
-/** Two plugins flagging the same session — worst level wins in the tooltip. */
-export const MultipleSources: Story = {
-  args: {
-    session: {
-      ...baseSession,
-      pluginState: {
-        devin: { attention: { level: 'warning', message: 'quiet for 45s' } },
-        gitStatus: { attention: { level: 'critical', message: 'rebase conflict' } },
-      },
-    },
-    plugins: [devinStub, gitStub],
-  },
-};
-
-export const IdleSession: Story = {
-  args: {
-    session: { ...baseSession, process: undefined, status: 'idle', name: 'scratch shell' },
-  },
-};
-
 /**
  * The whole panel including the header row (new workspace / save / load
  * workspace set buttons) — same h-8 height as the shell tab strip.
  */
 export const Panel: Story = {
-  args: { session: baseSession }, // required by the Row meta; render ignores it
   render: () => (
     <div className="h-96 w-64 overflow-hidden border border-[var(--border)]">
       <SessionPanel
@@ -195,7 +111,6 @@ export const Panel: Story = {
  * mid-list so the selection styling is visible next to plain rows.
  */
 export const PanelWithSelection: Story = {
-  args: { session: baseSession },
   render: () => (
     <div className="h-[480px] w-64 overflow-hidden border border-[var(--border)]">
       <SessionPanel
@@ -333,7 +248,6 @@ function WithSystemMeters({ children }: { children: ReactNode }) {
  * in the toolbar.
  */
 export const PanelWithSystem: Story = {
-  args: { session: baseSession },
   render: (args, context) => (
     <WithSystemMeters>{PanelWithSelection.render!(args, context)}</WithSystemMeters>
   ),
