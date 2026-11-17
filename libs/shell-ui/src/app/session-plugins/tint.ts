@@ -53,6 +53,9 @@ function bandsOf(colours: readonly string[]): string[] {
   return bands;
 }
 
+/** `selectedCard` → `selected-card`, the CSS variable spelling. */
+const cssName = (intensity: TintIntensity) => intensity.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+
 /**
  * CSS `background-image` of equal left-to-right solid bands, one per distinct
  * valid hex colour (first {@link MAX_BANDS}); `undefined` when none is valid.
@@ -60,10 +63,12 @@ function bandsOf(colours: readonly string[]): string[] {
 export function resolveTint(colours: readonly string[], intensity: TintIntensity): string | undefined {
   const bands = bandsOf(colours);
   if (bands.length === 0) return undefined;
-  const pct = TINT_INTENSITY[intensity];
+  // Overridable per CSS variable (`--tint-card: 40%`) for live tuning and
+  // themes; the constant is the fallback.
+  const pct = `var(--tint-${cssName(intensity)}, ${TINT_INTENSITY[intensity]}%)`;
   const edge = (i: number) => Math.round((i * 10000) / bands.length) / 100;
   const stops = bands.map(
-    (c, i) => `color-mix(in srgb, ${c} ${pct}%, ${SURFACE}) ${edge(i)}% ${edge(i + 1)}%`,
+    (c, i) => `color-mix(in srgb, ${c} ${pct}, ${SURFACE}) ${edge(i)}% ${edge(i + 1)}%`,
   );
   return `linear-gradient(90deg, ${stops.join(', ')})`;
 }
