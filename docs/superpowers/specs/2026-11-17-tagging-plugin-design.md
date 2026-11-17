@@ -201,5 +201,7 @@ to right.
   add one), not every tag in use.
 - The workspace tint paints the whole workspace block (header and sessions) with rounded corners,
   bleeding 6px past the list gutter so the container is visible.
-- The `tagging.tags` field is opt-in (`SessionField.optIn`): absent from the default layout and
-  shown only where `sessionCard` places it. The colour tint is independent of it.
+- Plugin fields (all plugins, decided by the user) show only where a layout names them: the
+  user's `sessionCard`, else per zone the shipped `DEFAULT_SESSION_CARD`, which keeps today's card
+  but omits `tagging.tags` and `jira.tickets`. A disabled plugin's ids resolve to nothing. The
+  colour tint is independent of the tags field.

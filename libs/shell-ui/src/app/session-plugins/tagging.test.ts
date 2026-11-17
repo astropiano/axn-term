@@ -85,7 +85,6 @@ it('shows the tag name only where the sessionCard layout places it', () => {
     label: f.label,
     kind: f.kind,
     zone: f.zone,
-    optIn: f.optIn,
   }));
   const all = (l: ReturnType<typeof resolveCardLayout>) => [...l.title, ...l.always.flat(), ...l.selected.flat()];
   expect(all(resolveCardLayout(undefined, meta))).not.toContain('tagging.tags');

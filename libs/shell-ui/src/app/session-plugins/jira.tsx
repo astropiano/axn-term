@@ -538,7 +538,6 @@ export const jiraPlugin: SessionViewPlugin = {
       label: 'Jira tickets',
       kind: 'inline',
       zone: 'always',
-      optIn: true,
       // Searchable: the keys, plus status and summary once fetched; keys
       // Jira does not know are not shown, so they do not match either.
       search: (ctx) =>
