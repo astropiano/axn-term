@@ -63,7 +63,14 @@ describe('tintTextVars', () => {
   });
 
   it('sets secondary and tertiary text too, and nothing without a valid colour', () => {
-    expect(Object.keys(tintTextVars(['#000'])!)).toEqual(['--text-primary', '--text-secondary', '--text-tertiary']);
+    expect(Object.keys(tintTextVars(['#000'])!)).toEqual([
+      '--text-primary',
+      '--text-secondary',
+      '--text-tertiary',
+      '--on-tint-fg',
+      '--on-tint-bg',
+    ]);
+    expect(tintTextVars(['#ffb224'])).toMatchObject({ '--on-tint-fg': '#111111' });
     expect(tintTextVars(['red'])).toBeUndefined();
   });
 });

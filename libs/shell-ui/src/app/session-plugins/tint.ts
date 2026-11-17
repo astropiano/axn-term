@@ -111,12 +111,15 @@ export function tintTextVars(colours: readonly string[]): CSSProperties | undefi
   if (bands.length === 0) return undefined;
   const l = bands.reduce((sum, c) => sum + luminance(c), 0) / bands.length;
   const dark = (l + 0.05) / 0.05 >= 1.05 / (l + 0.05);
-  const [primary, secondary, tertiary] = dark
-    ? ['#111111', 'rgba(0, 0, 0, 0.68)', 'rgba(0, 0, 0, 0.5)']
-    : ['#ffffff', 'rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.6)'];
+  const [primary, secondary, tertiary, chip] = dark
+    ? ['#111111', 'rgba(0, 0, 0, 0.68)', 'rgba(0, 0, 0, 0.5)', 'rgba(0, 0, 0, 0.14)']
+    : ['#ffffff', 'rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0.2)'];
   return {
     '--text-primary': primary,
     '--text-secondary': secondary,
     '--text-tertiary': tertiary,
+    // Self-coloured content (e.g. tag chips) on the solid tint switches to these.
+    '--on-tint-fg': primary,
+    '--on-tint-bg': chip,
   } as CSSProperties;
 }
