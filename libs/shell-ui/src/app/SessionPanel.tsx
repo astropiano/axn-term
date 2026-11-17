@@ -1110,6 +1110,7 @@ export function SessionIcon({
 export function SessionItem({
   session,
   workspaces,
+  allSessions,
   isSelected,
   isMultiSel,
   suppressDetails,
@@ -1144,6 +1145,8 @@ export function SessionItem({
 }: {
   session: ShellSession;
   workspaces: Workspace[];
+  /** Every session in the window — the scope handed to `sessionMenuItems`. */
+  allSessions: ShellSession[];
   isSelected: boolean;
   /** Active panel filter — matched name substring is highlighted. */
   searchQuery?: string;
@@ -1268,8 +1271,8 @@ export function SessionItem({
   // the selected card — comes from the `sessionCard` layout setting.
   const fieldMetas: FieldMeta[] = [...CORE_FIELDS];
   const pluginFieldValues = new Map<string, { value: () => ReactNode; tip?: () => string | string[] | null }>();
-  const apiFor = (plugin: SessionViewPlugin) =>
-    createPluginApi(session, plugin, {
+  const apiFor = (plugin: SessionViewPlugin, target: ShellSession = session) =>
+    createPluginApi(target, plugin, {
       backend,
       updateSession,
       mergePluginState,
@@ -1665,22 +1668,14 @@ export function SessionItem({
           pluginItems={plugins.flatMap((plugin) => {
             if (!plugin.sessionMenuItems) return [];
             try {
-              return plugin.sessionMenuItems(
-                createPluginApi(session, plugin, {
-                  backend,
-                  updateSession,
-                  mergePluginState,
-                  pluginSettings,
-                  plugins,
-                  openBrowser: onOpenBrowser,
-                  openTab: onOpenTab,
-                  openSubShell: onOpenSubShell,
-                  openSession: onAddSession,
-                  getWorkspaces: () => workspaces,
-                  pluginData,
-                  mergePluginData,
-                }),
-              );
+              const targetSessions = bulkIds
+                ? allSessions.filter((s) => bulkIds.includes(s.id))
+                : [session];
+              return plugin.sessionMenuItems(apiFor(plugin), {
+                targets: targetSessions.map((s) => apiFor(plugin, s)),
+                sessions: allSessions,
+                workspaces,
+              });
             } catch {
               return [] as RepoMenuItem[];
             }
@@ -1899,7 +1894,30 @@ export function SessionPanel({
     sessions.find((s) => s.id === selectedSessionId && s.workspaceId === workspace.id) ??
     sessions.find((s) => s.workspaceId === workspace.id);
 
-  const workspacePluginItems = (workspace: Workspace): RepoMenuItem[] => {
+  const workspaceActionItems = (workspace: Workspace): RepoMenuItem[] =>
+    plugins.flatMap((plugin) => {
+      if (!plugin.workspaceActions) return [];
+      const key = plugin.settingsKey ?? plugin.id;
+      try {
+        return plugin.workspaceActions({
+          workspace,
+          pluginSettings: pluginSettings[key],
+          sessions,
+          workspaces,
+          updateWorkspaceState: (patch) =>
+            updateWorkspace(workspace.id, {
+              pluginState: {
+                ...workspace.pluginState,
+                [key]: { ...(workspace.pluginState?.[key] as Record<string, unknown> | undefined), ...patch },
+              },
+            }),
+        });
+      } catch {
+        return [] as RepoMenuItem[];
+      }
+    });
+
+  const workspaceSessionItems = (workspace: Workspace): RepoMenuItem[] => {
     const rep = representativeSession(workspace);
     if (!rep) return [];
     return plugins.flatMap((plugin) => {
@@ -1927,6 +1945,11 @@ export function SessionPanel({
       }
     });
   };
+
+  const workspacePluginItems = (workspace: Workspace): RepoMenuItem[] => [
+    ...workspaceSessionItems(workspace),
+    ...workspaceActionItems(workspace),
+  ];
 
   const workspaceTint = (workspace: Workspace) =>
     resolveTint(
@@ -2326,6 +2349,7 @@ export function SessionPanel({
                         key={session.id}
                         session={session}
                         workspaces={workspaces}
+                        allSessions={sessions}
                         isSelected={isSelected}
                         taskState={isSelected ? taskState : null}
                         isMultiSel={multiSelIds.includes(session.id)}
