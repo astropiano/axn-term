@@ -895,11 +895,11 @@ msgstr "Save"
 msgid "Save workspace set"
 msgstr "Save workspace set"
 
-#: libs/shell-ui/src/app/TabStrip.tsx:73
+#: libs/shell-ui/src/app/TabStrip.tsx:75
 msgid "Scroll tabs left"
 msgstr "Scroll tabs left"
 
-#: libs/shell-ui/src/app/TabStrip.tsx:95
+#: libs/shell-ui/src/app/TabStrip.tsx:98
 msgid "Scroll tabs right"
 msgstr "Scroll tabs right"
 

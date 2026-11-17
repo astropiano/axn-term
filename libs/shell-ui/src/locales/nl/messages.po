@@ -892,11 +892,11 @@ msgstr "Opslaan"
 msgid "Save workspace set"
 msgstr "Workspace-set opslaan"
 
-#: libs/shell-ui/src/app/TabStrip.tsx:73
+#: libs/shell-ui/src/app/TabStrip.tsx:75
 msgid "Scroll tabs left"
 msgstr "Tabs naar links scrollen"
 
-#: libs/shell-ui/src/app/TabStrip.tsx:95
+#: libs/shell-ui/src/app/TabStrip.tsx:98
 msgid "Scroll tabs right"
 msgstr "Tabs naar rechts scrollen"
 
