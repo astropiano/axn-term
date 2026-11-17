@@ -4,8 +4,8 @@ import type { ShellPlatform } from '../platform';
 import { ptyIdOf, type ShellSession, type Workspace } from '../types';
 import { axnLog } from './log';
 import { runCommandChain } from './hiddenCommands';
-import { controlReply, dispatchAppCommand, sessionForPty } from './controlCommands';
-import { AXN_VIEW_COMMANDS, completePathArg } from './shellCommandSupport';
+import { controlReply, dispatchAppCommand, sessionForPty, type ControlReply } from './controlCommands';
+import { AXN_VIEW_COMMANDS, completePathArg, parseSessionArgs } from './shellCommandSupport';
 import {
   BUILTIN_ARG_COMMANDS,
   BUILTIN_COMMAND_NAMES,
@@ -22,6 +22,10 @@ export interface SessionCommandDeps {
   workspacesRef: MutableRefObject<Workspace[]>;
   enabledPluginsRef: MutableRefObject<SessionViewPlugin[]>;
   buildPluginApi: (session: ShellSession, plugin: SessionViewPlugin) => SessionViewContext & PluginApi;
+  /** The window's selected session — the context of an app-level `axn-session create`. */
+  selectedSessionId?: () => string | undefined;
+  /** The `allowExternalCommands` setting: app-level `axn-session create --command`. */
+  allowExternalCommands?: () => boolean;
   /** A plugin's settings section — the ctx of app-level (`appRun`) commands. */
   pluginSettingsOf?: (plugin: SessionViewPlugin) => unknown;
   /** Returns the new session's id (undefined when no valid workspace). */
@@ -189,15 +193,43 @@ export function useSessionCommands(input: SessionCommandDeps) {
   // no terminal): only commands declaring `appRun` run.
   useEffect(
     () =>
-      platform.onAppCommand?.(({ line }) =>
-        dispatchAppCommand(
+      platform.onAppCommand?.(async ({ line }) => {
+        const trimmed = line.trim();
+        if (/^axn-session\s/.test(trimmed) || trimmed === 'axn-session') {
+          return appSessionCreate(trimmed);
+        }
+        return dispatchAppCommand(
           deps.current.enabledPluginsRef.current,
-          line,
+          trimmed,
           (plugin) => deps.current.pluginSettingsOf?.(plugin),
-        ),
-      ),
+        );
+      }),
+    // appSessionCreate reads everything through deps.current
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [platform],
   );
+
+  // Only `axn-session create` is app-level among the built-ins; a command to
+  // type into the new session needs the allowExternalCommands setting.
+  const appSessionCreate = async (line: string): Promise<ControlReply> => {
+    const rest = line.slice('axn-session'.length).trim();
+    if (!/^create(\s|$)/.test(rest)) {
+      return { ok: false, error: 'only `axn-session create` is an app-level command' };
+    }
+    const opts = parseSessionArgs(rest.slice('create'.length));
+    if (opts.error) return { ok: false, error: `axn-session: ${opts.error}` };
+    if (opts.command && !deps.current.allowExternalCommands?.()) {
+      return {
+        ok: false,
+        error: 'axn-session: starting a command from outside axn-term is off — enable allowExternalCommands in Settings → General',
+      };
+    }
+    const sessions = deps.current.sessionsRef.current;
+    const selected = deps.current.selectedSessionId?.();
+    const session = sessions.find((s) => s.id === selected) ?? sessions[0];
+    if (!session) return { ok: false, error: 'axn-session: open a session in this window first' };
+    return controlReply(line, await handleSessionCommand(session.id, line, ptyIdOf(session)));
+  };
 
   // Tab-completion for axn-* hidden commands: completes the command word,
   // then delegates the argument to the owning built-in's `completeArg` (or a

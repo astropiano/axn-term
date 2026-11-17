@@ -26,7 +26,7 @@ msgstr "{attentionCount} 件待機中"
 msgid "{cli} is installed"
 msgstr "{cli} はインストール済みです"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1187
+#: libs/shell-ui/src/app/SettingsModal.tsx:1208
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "Lucide アイコン名（例: <0>GitFork</0>）またはインライン SVG タグ（例: <1>{SVG_HINT_EXAMPLE}</1>）"
 
@@ -34,8 +34,8 @@ msgstr "Lucide アイコン名（例: <0>GitFork</0>）またはインライン 
 #~ msgid "Account"
 #~ msgstr "アカウント"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1212
-#: libs/shell-ui/src/app/SettingsModal.tsx:1214
+#: libs/shell-ui/src/app/SettingsModal.tsx:1233
+#: libs/shell-ui/src/app/SettingsModal.tsx:1235
 msgid "Add icon"
 msgstr "アイコンを追加"
 
@@ -47,11 +47,11 @@ msgstr "ビューを追加"
 msgid "Advanced"
 msgstr "詳細設定"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1016
+#: libs/shell-ui/src/app/SettingsModal.tsx:1037
 msgid "Also used as the session icon while this process is foreground."
 msgstr "このプロセスがフォアグラウンドにある、セッションアイコンとしても使用されます。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:726
+#: libs/shell-ui/src/app/SettingsModal.tsx:747
 msgid "Applies immediately to the running app. Logs rotate in the OS log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides."
 msgstr "実行中のアプリにすぐ適用されます。ログは OS のログフォルダ (~/Library/Logs/axn-term) でローテーションされ、環境変数 LOG_LEVEL が優先されます。"
 
@@ -64,11 +64,11 @@ msgid "Asking <0>{asked}</0>."
 msgstr "<0>{asked}</0> に問い合わせています。"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:62
-#: libs/shell-ui/src/app/SettingsModal.tsx:931
+#: libs/shell-ui/src/app/SettingsModal.tsx:952
 msgid "Auto"
 msgstr "自動"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:619
+#: libs/shell-ui/src/app/SettingsModal.tsx:640
 msgid "Auto (WebGL → canvas → DOM)"
 msgstr "自動（WebGL → canvas → DOM）"
 
@@ -93,7 +93,7 @@ msgstr "セッションに戻る"
 msgid "Binary file"
 msgstr "バイナリファイル"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:594
+#: libs/shell-ui/src/app/SettingsModal.tsx:615
 msgid "Both"
 msgstr "両方"
 
@@ -107,11 +107,11 @@ msgstr "内蔵フォント"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1198
+#: libs/shell-ui/src/app/SettingsModal.tsx:1219
 msgid "Cancel"
 msgstr "キャンセル"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:625
+#: libs/shell-ui/src/app/SettingsModal.tsx:646
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "ターミナルのセルレンダラー。「自動」は GPU（WebGL）を使い自動フォールバックします。描画不具合時は canvas/DOM を強制してください。"
 
@@ -147,7 +147,7 @@ msgstr "クライアント: {0}"
 msgid "Close"
 msgstr "閉じる"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3119
+#: libs/shell-ui/src/app/ShellApp.tsx:3123
 msgid "Close tab"
 msgstr "タブを閉じる"
 
@@ -160,7 +160,7 @@ msgstr "このビューを閉じる"
 msgid "Collapse"
 msgstr "折りたたむ"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:664
+#: libs/shell-ui/src/app/SettingsModal.tsx:685
 msgid "Config file"
 msgstr "設定ファイル"
 
@@ -302,7 +302,7 @@ msgstr "ワークスペース「{0}」を削除しますか？"
 msgid "Directory"
 msgstr "ディレクトリ"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:840
+#: libs/shell-ui/src/app/SettingsModal.tsx:861
 msgid "disabled"
 msgstr "無効"
 
@@ -322,7 +322,7 @@ msgstr "各ビューはレールに専用の項目を持ちます。URL、また
 msgid "Edit"
 msgstr "編集"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1141
+#: libs/shell-ui/src/app/SettingsModal.tsx:1162
 msgid "Edit icon"
 msgstr "アイコンを編集"
 
@@ -338,16 +338,16 @@ msgstr "空"
 msgid "Enable devin task parser"
 msgstr "Devin タスクパーサーを有効化"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:744
+#: libs/shell-ui/src/app/SettingsModal.tsx:765
 msgid "Enable remote — show the Remote console in the rail"
 msgstr "リモートを — レールにリモートコンソールを"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:840
-#: libs/shell-ui/src/app/SettingsModal.tsx:903
+#: libs/shell-ui/src/app/SettingsModal.tsx:861
+#: libs/shell-ui/src/app/SettingsModal.tsx:924
 msgid "enabled"
 msgstr "有効"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:595
+#: libs/shell-ui/src/app/SettingsModal.tsx:616
 msgid "End of session list"
 msgstr "セッション一覧の末尾"
 
@@ -364,7 +364,7 @@ msgstr "展開"
 msgid "Export failed."
 msgstr "エクスポートに失敗しました。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:679
+#: libs/shell-ui/src/app/SettingsModal.tsx:700
 msgid "Export…"
 msgstr "エクスポート…"
 
@@ -389,15 +389,15 @@ msgstr "失敗"
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "より速く: 選択中のセッションで F2、または名前をダブルクリック"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:859
+#: libs/shell-ui/src/app/SettingsModal.tsx:880
 msgid "file preview"
 msgstr "ファイルプレビュー"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:769
+#: libs/shell-ui/src/app/SettingsModal.tsx:790
 msgid "File previews"
 msgstr "ファイルプレビュー"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:811
+#: libs/shell-ui/src/app/SettingsModal.tsx:832
 msgid "Filter plugins…"
 msgstr "プラグインを絞り込む…"
 
@@ -429,6 +429,10 @@ msgstr "フォントがインストールされていません — 前のフォ�
 msgid "Font size (px)"
 msgstr "フォントサイズ（px）"
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:595
+msgid "For launchers such as the MR dashboard: `axn-term command axn-session create … --command`. Any program running as you can then start a command here, as with agterm."
+msgstr "MR ダッシュボードなどのランチャー向け: `axn-term command axn-session create … --command`。あなたのユーザーで動くどのプログラムも、agterm と同様にここでコマンドを開始できるようになります。"
+
 #: libs/shell-ui/src/app/session-plugins/worktrees.tsx:554
 msgid "Force remove"
 msgstr "強制削除"
@@ -457,11 +461,11 @@ msgstr "\\u30cf\\u30d6 URL"
 msgid "Icon"
 msgstr "アイコン"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:687
+#: libs/shell-ui/src/app/SettingsModal.tsx:708
 msgid "Import replaces all settings with the picked config.yaml."
 msgstr "インポートするとすべての設定が選択した config.yaml で置き換えられます。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:672
+#: libs/shell-ui/src/app/SettingsModal.tsx:693
 msgid "Import…"
 msgstr "インポート…"
 
@@ -502,6 +506,10 @@ msgstr "言語"
 msgid "Leave empty to use the system $SHELL."
 msgstr "空欄にするとシステムの $SHELL を使用します。"
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:591
+msgid "Let other programs start commands in new sessions"
+msgstr "他のプログラムが新しいセッションでコマンドを開始することを許可"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:60
 msgid "Light"
 msgstr "ライト"
@@ -526,11 +534,11 @@ msgstr "読み込み中…"
 msgid "Loading…"
 msgstr "読み込み中…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:699
+#: libs/shell-ui/src/app/SettingsModal.tsx:720
 msgid "Log level"
 msgstr "ログレベル"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:996
+#: libs/shell-ui/src/app/SettingsModal.tsx:1017
 msgid "Logo"
 msgstr "ロゴ"
 
@@ -538,7 +546,7 @@ msgstr "ロゴ"
 msgid "Main window"
 msgstr "メインウィンドウ"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:655
+#: libs/shell-ui/src/app/SettingsModal.tsx:676
 msgid "Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
 msgstr "実行ファイル名またはプラグイン ID を Lucide アイコン（例: Bot、SquareTerminal）または SVG タグにマッピングします。"
 
@@ -570,7 +578,7 @@ msgstr "要対応"
 msgid "New session"
 msgstr "新しいセッション"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:583
+#: libs/shell-ui/src/app/SettingsModal.tsx:604
 msgid "New session button"
 msgstr "新規セッションボタン"
 
@@ -611,7 +619,7 @@ msgstr "新しい worktree セッション"
 msgid "no clients"
 msgstr "クライアントなし"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1151
+#: libs/shell-ui/src/app/SettingsModal.tsx:1172
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "アイコン未設定 — すべてのセッションにデフォルトのターミナルアイコンが表示されます。"
 
@@ -717,7 +725,7 @@ msgstr "ワークスペースで開く"
 msgid "Open link"
 msgstr "リンクを開く"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:722
+#: libs/shell-ui/src/app/SettingsModal.tsx:743
 msgid "Open log folder…"
 msgstr "ログフォルダを開く…"
 
@@ -750,7 +758,7 @@ msgstr "UI 全体の拡大率（%）— パネル、タブ、バナー、メニ�
 msgid "Pairing code for the axn-term app"
 msgstr "axn-term アプリのペアリングコード"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:932
+#: libs/shell-ui/src/app/SettingsModal.tsx:953
 msgid "Panel accordion"
 msgstr "パネルアコーディオン"
 
@@ -767,7 +775,7 @@ msgstr "貼り付け"
 msgid "Pause viewport"
 msgstr "ビューポートを"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:883
+#: libs/shell-ui/src/app/SettingsModal.tsx:904
 msgid "permissions:"
 msgstr "権限:"
 
@@ -792,7 +800,7 @@ msgstr "プレビュー"
 msgid "Preview unavailable"
 msgstr "プレビューできません"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1160
+#: libs/shell-ui/src/app/SettingsModal.tsx:1181
 msgid "Process"
 msgstr "プロセス"
 
@@ -814,7 +822,7 @@ msgstr "公開"
 #~ msgid "Publishing \\u2014 connected"
 #~ msgstr "\\u516c\\u958b\\u4e2d \\u2014 \\u63a5\\u7d9a\\u6e08\\u307f"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:933
+#: libs/shell-ui/src/app/SettingsModal.tsx:954
 msgid "Rail item"
 msgstr "レール項目"
 
@@ -850,7 +858,7 @@ msgstr "リモート — このマシンがホスト"
 msgid "Remote — viewing"
 msgstr "リモート — "
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:735
+#: libs/shell-ui/src/app/SettingsModal.tsx:756
 msgid "Remote access"
 msgstr "リモートアクセス"
 
@@ -867,7 +875,7 @@ msgstr "リモートアクセス"
 msgid "Remove"
 msgstr "削除"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1144
+#: libs/shell-ui/src/app/SettingsModal.tsx:1165
 msgid "Remove icon"
 msgstr "アイコンを削除"
 
@@ -885,7 +893,7 @@ msgstr "セッションサマリーを表示（axn-session-summary で設定）"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
-#: libs/shell-ui/src/app/SettingsModal.tsx:875
+#: libs/shell-ui/src/app/SettingsModal.tsx:896
 msgid "requires {0}{1}"
 msgstr "要 {0}{1}"
 
@@ -934,13 +942,13 @@ msgstr "シェルでログインを実行してから、再確認してくださ
 msgid "Running"
 msgstr "実行中"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:889
+#: libs/shell-ui/src/app/SettingsModal.tsx:910
 msgid "sandboxed — no permissions (no shell, files or terminal access)"
 msgstr "サンドボックス — 権限なし（シェル、ファイル、ターミナルへのアクセス不可）"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1206
+#: libs/shell-ui/src/app/SettingsModal.tsx:1227
 msgid "Save"
 msgstr "保存"
 
@@ -987,7 +995,7 @@ msgstr "サーバーアドレス"
 msgid "Session actions"
 msgstr "セッションの操作"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:634
+#: libs/shell-ui/src/app/SettingsModal.tsx:655
 msgid "Session icons"
 msgstr "セッションアイコン"
 
@@ -998,11 +1006,11 @@ msgstr "セッションアイコン"
 #~ msgid "Session name on the hub (optional)"
 #~ msgstr "\\u30cf\\u30d6\\u4e0a\\u306e\\u30bb\\u30c3\\u30b7\\u30e7\\u30f3\\u540d\\uff08\\u4efb\\u610f\\uff09"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:859
+#: libs/shell-ui/src/app/SettingsModal.tsx:880
 msgid "session plugin"
 msgstr "セッションプラグイン"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:763
+#: libs/shell-ui/src/app/SettingsModal.tsx:784
 msgid "Session plugins"
 msgstr "セッションプラグイン"
 
@@ -1081,19 +1089,19 @@ msgstr "{0} としてサインイン中"
 msgid "Start workflow…"
 msgstr "ワークフローを開始…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:926
+#: libs/shell-ui/src/app/SettingsModal.tsx:947
 msgid "Status display"
 msgstr "ステータス表示"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:691
+#: libs/shell-ui/src/app/SettingsModal.tsx:712
 msgid "Stored in ~/.axn-term/config.yaml"
 msgstr "~/.axn-term/config.yaml に保存"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:957
+#: libs/shell-ui/src/app/SettingsModal.tsx:978
 msgid "Stored in ~/.axn-term/plugins.yaml"
 msgstr "~/.axn-term/plugins.yaml に保存"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:692
+#: libs/shell-ui/src/app/SettingsModal.tsx:713
 msgid "Stored in browser localStorage"
 msgstr "ブラウザの localStorage に保存"
 
@@ -1121,7 +1129,7 @@ msgstr "システムフォント"
 msgid "Terminal font family, size in px, and line height. Empty uses the built-in monospace stack at 14px."
 msgstr "ターミナルのフォント、px サイズ、行の高さ。空欄なら 14px の内蔵等幅フォントスタックを使います。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:608
+#: libs/shell-ui/src/app/SettingsModal.tsx:629
 msgid "Terminal renderer"
 msgstr "ターミナルレンダラー"
 
@@ -1164,7 +1172,7 @@ msgstr "内部の {0} 件の{1}を閉じます。"
 msgid "This machine is the host"
 msgstr "このマシンがホストです"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:952
+#: libs/shell-ui/src/app/SettingsModal.tsx:973
 msgid "This plugin declares no settings."
 msgstr "このプラグインは設定を宣言していません。"
 
@@ -1201,7 +1209,7 @@ msgstr "UI ズーム"
 msgid "Unable to read file"
 msgstr "ファイルを読み取れません"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:876
+#: libs/shell-ui/src/app/SettingsModal.tsx:897
 msgid "unmet, plugin disabled"
 msgstr "未充足、プラグイン無効"
 
@@ -1224,11 +1232,11 @@ msgstr "\\u30e6\\u30fc\\u30b6\\u30fc\\u30c8\\u30fc\\u30af\\u30f3"
 #~ msgid "waiting for the browser sign-in…"
 #~ msgstr "ブラウザーでのサインインを待っています…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:599
+#: libs/shell-ui/src/app/SettingsModal.tsx:620
 msgid "Where the \"+\" for a new session appears: a ghost row at the end of each workspace's session list, the workspace header, or both."
 msgstr "新規セッションの \"+\" を表示する場所：各ワークスペースのセッション一覧末尾のゴースト行、ワークスペースのヘッダー、またはその両方。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:927
+#: libs/shell-ui/src/app/SettingsModal.tsx:948
 msgid "Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise."
 msgstr "このプラグインのステータスメーターの表示場所です。「自動」はタッチデバイスでレールを、それ以外ではセッションパネルを使います。"
 
@@ -1237,7 +1245,7 @@ msgstr "このプラグインのステータスメーターの表示場所です
 msgid "Window {0}"
 msgstr "ウィンドウ {0}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:596
+#: libs/shell-ui/src/app/SettingsModal.tsx:617
 msgid "Workspace header"
 msgstr "ワークスペースのヘッダー"
 
