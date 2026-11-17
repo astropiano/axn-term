@@ -108,3 +108,20 @@ describe('panel status slot', () => {
     expect(toggleExpandedGroup(['docker', 'ram'], 'docker')).toEqual(['ram']);
   });
 });
+
+import { resolveStatusDisplay } from './panelStatus';
+
+describe('resolveStatusDisplay', () => {
+  it('honours an explicit panel or rail, with or without a detailed rail item', () => {
+    expect(resolveStatusDisplay('rail', false, false)).toBe('rail');
+    expect(resolveStatusDisplay('Rail', true, false)).toBe('rail');
+    expect(resolveStatusDisplay('panel', true, true)).toBe('panel');
+  });
+
+  it('auto: the rail only for detailed items on touch devices', () => {
+    expect(resolveStatusDisplay(undefined, true, true)).toBe('rail');
+    expect(resolveStatusDisplay('auto', true, false)).toBe('panel');
+    expect(resolveStatusDisplay(undefined, false, true)).toBe('panel');
+    expect(resolveStatusDisplay('nonsense', false, false)).toBe('panel');
+  });
+});
