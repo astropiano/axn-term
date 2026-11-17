@@ -916,6 +916,28 @@ function PluginsTab() {
               />
             ))}
 
+          {/* Standard choice for plugins with a heavier rail form — where
+              their status meters live. Unset ('auto') means the rail on
+              touch devices and the panel's status accordion elsewhere. */}
+          {selected.kind === 'session' && selected.plugin.renderRailDetail && (
+            <PluginSettingRow
+              field={{
+                key: 'statusDisplay',
+                label: t`Status display`,
+                description: t`Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise.`,
+                type: 'string',
+                default: 'auto',
+                options: [
+                  { value: 'auto', label: t`Auto` },
+                  { value: 'panel', label: t`Panel accordion` },
+                  { value: 'rail', label: t`Rail item` },
+                ],
+              }}
+              section={section}
+              onChange={(value) => updatePluginSection(settingsKey, { statusDisplay: value })}
+            />
+          )}
+
           {selected.kind === 'session' &&
             selected.plugin.renderSettings?.({
               settings: section,
@@ -924,7 +946,8 @@ function PluginsTab() {
 
           {selected.kind === 'session' &&
             !selected.plugin.settings?.length &&
-            !selected.plugin.renderSettings && (
+            !selected.plugin.renderSettings &&
+            !selected.plugin.renderRailDetail && (
               <p className="text-[11px] text-[var(--text-secondary)]">
                 <Trans>This plugin declares no settings.</Trans>
               </p>

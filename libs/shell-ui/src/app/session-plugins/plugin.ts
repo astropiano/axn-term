@@ -524,6 +524,34 @@ export function pluginSessionFields(plugin: SessionViewPlugin): SessionField[] {
   return out;
 }
 
+/** The ctx handed to a plugin's `renderRail`/`renderRailDetail`. */
+export interface PluginRailContext {
+  /** The session backend — remote-only capabilities (e.g.
+   * `setViewportPaused`) are absent elsewhere; check presence. */
+  backend: SessionBackend;
+  pluginSettings: unknown;
+  setAppAttention: (attention: SessionAttention | null) => void;
+  viewActive: boolean;
+  toggleView: () => void;
+  /**
+   * App-level persisted data for this plugin — the view counterpart of
+   * `pluginState`. Stored in window state under `pluginData.<settingsKey>`.
+   */
+  appState: unknown;
+  /** Shallow-merge into `appState` — same write path as renderView's. */
+  updateAppState: (patch: Record<string, unknown>) => void;
+  /** Live sessions — e.g. to keep app-level session mirrors consistent. */
+  sessions: ShellSession[];
+  /**
+   * This plugin's session-bound api for another session — lets a session-
+   * less rail component drive per-session state (attention, pluginState).
+   * Undefined when the session no longer exists.
+   */
+  sessionApi: (
+    sessionId: string,
+  ) => (SessionViewContext & PluginApi) | undefined;
+}
+
 export interface SessionViewPlugin {
   id: string;
   title: string;
@@ -652,32 +680,20 @@ export interface SessionViewPlugin {
    * selected in the panel and the main area renders `renderView` instead of
    * the session terminals. `viewActive` reflects that state.
    */
-  renderRail?: (ctx: {
-    /** The session backend — remote-only capabilities (e.g.
-     * `setViewportPaused`) are absent elsewhere; check presence. */
-    backend: SessionBackend;
-    pluginSettings: unknown;
-    setAppAttention: (attention: SessionAttention | null) => void;
-    viewActive: boolean;
-    toggleView: () => void;
-    /**
-     * App-level persisted data for this plugin — the view counterpart of
-     * `pluginState`. Stored in window state under `pluginData.<settingsKey>`.
-     */
-    appState: unknown;
-    /** Shallow-merge into `appState` — same write path as renderView's. */
-    updateAppState: (patch: Record<string, unknown>) => void;
-    /** Live sessions — e.g. to keep app-level session mirrors consistent. */
-    sessions: ShellSession[];
-    /**
-     * This plugin's session-bound api for another session — lets a session-
-     * less rail component drive per-session state (attention, pluginState).
-     * Undefined when the session no longer exists.
-     */
-    sessionApi: (
-      sessionId: string,
-    ) => (SessionViewContext & PluginApi) | undefined;
-  }) => ReactNode;
+  renderRail?: (ctx: PluginRailContext) => ReactNode;
+  /**
+   * Optional heavier rail presentation — the detailed counterpart of the
+   * plain `renderRail` icon: live meters, counts, strips. The app renders
+   * this instead of `renderRail` when the user places the plugin's status
+   * in the rail (`statusDisplay` plugin setting); default is the rail on
+   * coarse-pointer devices and the panel's status accordion otherwise.
+   * While the detail item is shown, the plugin's status accordion is hidden
+   * in the panel — keep publishing via `publishPanelStatus`/`panelStatus`
+   * anyway so app attention and the accordion stay current when the user
+   * switches back. When declared, Settings → Plugins offers the
+   * "Status display" choice automatically.
+   */
+  renderRailDetail?: (ctx: PluginRailContext) => ReactNode;
   /**
    * Render the plugin's full-area view in place of the session terminals.
    * Activated from the rail via `toggleView` (only offered when this hook is

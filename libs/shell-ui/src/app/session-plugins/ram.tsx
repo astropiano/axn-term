@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
+import { MemoryStick } from 'lucide-react';
 import type { SessionViewPlugin } from './plugin';
 import type { SessionAttention } from '../../types';
 import { useMemoryStats, type MemoryStats } from '../useMemoryStats';
 import { publishPanelStatus, type StatusGroup, type StatusLevel } from '../panelStatus';
+import { RailItem } from '../RailItem';
 
 function formatKbParts(kb: number): { value: string; unit: string } {
   if (kb >= 1024 * 1024) return { value: (kb / 1024 / 1024).toFixed(1), unit: 'GB' };
@@ -121,6 +123,67 @@ function pressureAttention(usedPct: number, swapUsedKb: number): SessionAttentio
   return null;
 }
 
+/**
+ * The detailed rail item: free/used absolute numbers, the memory-stick icon
+ * and the pressure strip — the rail counterpart of the System accordion.
+ * Renders nothing until stats arrive.
+ */
+function RamRailDetail() {
+  const stats = useMemoryStats();
+  if (!stats || stats.totalKb === 0) return null;
+  const usedPct = usedPercent(stats);
+  const usedKb = stats.totalKb - stats.availableKb;
+  const swapUsedKb = stats.swapTotalKb - stats.swapFreeKb;
+  const color = pressureColor(usedPct, swapUsedKb);
+  const title = [
+    `RAM ${usedPct}% used (${formatKb(usedKb)} / ${formatKb(stats.totalKb)})`,
+    `axn-term ${formatKb(stats.appRssKb)}`,
+    stats.swapTotalKb > 0 ? `swap ${formatKb(swapUsedKb)} / ${formatKb(stats.swapTotalKb)}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const free = formatKbParts(stats.availableKb);
+  const used = formatKbParts(usedKb);
+  return (
+    <div data-tip={title} className="flex flex-col items-center gap-0.5">
+      <div className="flex items-center gap-0.5">
+        <div className="flex flex-col items-center gap-0.5">
+          <span
+            className="select-none text-[8px] font-bold leading-none"
+            style={{ color }}
+          >
+            {free.value}
+          </span>
+          <span className="select-none text-[8px] font-bold leading-none text-[var(--text-primary)]">
+            {used.value}
+          </span>
+        </div>
+        <MemoryStick className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+      </div>
+      <div className="mt-0.5 overflow-hidden rounded-sm border border-[var(--border)]">
+        <BarStrip pct={usedPct} color={color} tip={title} />
+      </div>
+    </div>
+  );
+}
+
+/** The plain rail item — passive icon with the current usage as status. */
+function RamRail() {
+  const stats = useMemoryStats();
+  const usedPct = stats ? usedPercent(stats) : 0;
+  const swapUsedKb = stats ? stats.swapTotalKb - stats.swapFreeKb : 0;
+  const level = pressureLevel(usedPct, swapUsedKb);
+  return (
+    <RailItem
+      title="RAM usage"
+      status={stats && stats.totalKb > 0 ? `${usedPct}% used` : undefined}
+      pip={level >= 3 ? 'attention' : level === 2 ? 'warning' : undefined}
+    >
+      <MemoryStick />
+    </RailItem>
+  );
+}
+
 function RamSessionView({ sessionId }: { sessionId: string }) {
   const stats = useMemoryStats();
   const entry = stats?.sessions.find((s) => s.sessionId === sessionId);
@@ -181,4 +244,6 @@ export const ramPlugin: SessionViewPlugin = {
     },
   ],
   panelStatus: ({ setAppAttention }) => <RamStatus setAppAttention={setAppAttention} />,
+  renderRail: () => <RamRail />,
+  renderRailDetail: () => <RamRailDetail />,
 };

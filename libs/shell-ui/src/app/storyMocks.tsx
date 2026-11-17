@@ -327,12 +327,23 @@ export function unbindStoryRuntime() {
 }
 
 /** Decorator for stories rendering app/* components. */
-export function StoryShellProviders({ children }: { children: ReactNode }) {
+export function StoryShellProviders({
+  children,
+  configYaml,
+}: {
+  children: ReactNode;
+  /** Canned config.yaml — seeds the SettingsProvider (e.g. `remoteEnabled:
+   * true` so the Remote rail item and its accordion render). */
+  configYaml?: string;
+}) {
+  const configStore = configYaml
+    ? { load: () => Promise.resolve(configYaml), save: () => Promise.resolve() }
+    : undefined;
   return (
     <SessionBackendProvider backend={storyBackend}>
       <ShellPlatformProvider platform={storyPlatform}>
         <ShellServicesProvider services={storyServices} fileReader={() => undefined}>
-          <SettingsProvider>
+          <SettingsProvider configStore={configStore}>
             <PluginSettingsProvider store={storyPlatform.pluginSettingsStore}>
               {children}
             </PluginSettingsProvider>
@@ -353,11 +364,20 @@ export function StoryRail({
   activeId,
   onToggle,
   pluginData = storyPluginData,
+  detailed = false,
+  bare = false,
 }: {
   activeId: string | null;
   onToggle: (pluginId: string) => void;
   /** pluginData.<settingsKey> the rail plugins read as appState. */
   pluginData?: Record<string, unknown>;
+  bare?: boolean;
+  /** Render `renderRailDetail` for plugins that declare it (statusDisplay:
+   * rail / touch default), the plain `renderRail` item otherwise. */
+  detailed?: boolean;
+  /** Drop the demo card chrome — the bare column like the app's rail, for
+   * composing with other chrome (e.g. next to the session panel). */
+  bare?: boolean;
 }) {
   const plugins = orderRailPlugins(
     getSessionViewPlugins().filter((p) => p.renderRail),
@@ -367,7 +387,13 @@ export function StoryRail({
 
   return (
     <MemoryStatsProvider active>
-      <div className="flex h-full w-[var(--rail-w)] flex-col items-center gap-1 rounded-[var(--radius-lg)] bg-[var(--chrome)] py-2 shadow-[0_0_0_1px_var(--hairline)]">
+      <div
+        className={`flex h-full w-[var(--rail-w)] flex-col items-center gap-1 bg-[var(--chrome)] ${
+          bare
+            ? 'pb-2.5 pt-3'
+            : 'rounded-[var(--radius-lg)] py-2 shadow-[0_0_0_1px_var(--hairline)]'
+        }`}
+      >
         {plugins.map((plugin) => {
           const settingsKey = plugin.settingsKey ?? plugin.id;
           return (
@@ -381,7 +407,7 @@ export function StoryRail({
                     : undefined
                 }
               >
-              {plugin.renderRail!({
+              {(detailed ? (plugin.renderRailDetail ?? plugin.renderRail) : plugin.renderRail)!({
                 backend: storyBackend,
                 pluginSettings: storyPluginSettings[settingsKey],
                 setAppAttention: (attention) => setAppAttention(plugin.id, attention),

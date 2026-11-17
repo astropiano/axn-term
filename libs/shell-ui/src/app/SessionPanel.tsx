@@ -104,6 +104,12 @@ interface SessionPanelProps {
   appAttention?: { count: number; level: AttentionLevel; title: string } | null;
   /** Open the list of all raised flags (the warning button's click). */
   onShowAttention?: () => void;
+  /**
+   * Status sources whose accordion is hidden because the user shows the
+   * plugin's detailed rail item instead (`statusDisplay` = rail). They keep
+   * publishing; the panel just skips their row.
+   */
+  hiddenStatusSources?: readonly string[];
 }
 
 /**
@@ -1762,6 +1768,7 @@ export function SessionPanel({
   onForeignDrop,
   appAttention,
   onShowAttention,
+  hiddenStatusSources,
 }: SessionPanelProps) {
   const { t } = useLingui();
   const { settings } = useSettings();
@@ -2371,6 +2378,7 @@ export function SessionPanel({
           It scrolls on its own beyond ~40% of the panel, so the session
           list keeps its room. Hidden while nothing is published. */}
       <PanelStatusSection
+        hiddenSources={hiddenStatusSources}
         systemExpanded={storedSystemExpanded(pluginData)}
         onToggleSystem={() =>
           mergePluginData(PANEL_UI_KEY, { systemExpanded: !storedSystemExpanded(pluginData) })
