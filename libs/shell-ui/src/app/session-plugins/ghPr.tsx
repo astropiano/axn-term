@@ -47,6 +47,7 @@ import {
   remoteOwner,
   repoRootsSetting,
   type CliFailure,
+  splitByRole,
 } from './forge';
 import {
   mergeMine,
@@ -696,6 +697,15 @@ export function resetPrOverview(): void {
   setOverview({ status: 'idle', mine: [], review: [] });
 }
 
+/** People on a PR for role purposes: approvers count as reviewers (GitHub drops them from `reviewRequests`). */
+function prPeopleOf(pr: GhPrItem): MrPeople {
+  return {
+    author: pr.author,
+    assignees: pr.assignees,
+    reviewers: [...new Set([...pr.reviewers, ...pr.approvedBy.filter((l) => l !== pr.author)])],
+  };
+}
+
 export function refreshPrOverview(settings?: {
   hostname?: unknown;
 }): Promise<void> {
@@ -727,11 +737,7 @@ export function refreshPrOverview(settings?: {
           // approvals count as reviews — GitHub drops a reviewer from
           // reviewRequests once they review
           if (pr.url) {
-            prPeople.fill(pr.url, {
-              author: pr.author,
-              assignees: pr.assignees,
-              reviewers: [...new Set([...pr.reviewers, ...pr.approvedBy.filter((l) => l !== pr.author)])],
-            });
+            prPeople.fill(pr.url, prPeopleOf(pr));
           }
         }
       }
@@ -739,8 +745,12 @@ export function refreshPrOverview(settings?: {
         status: 'ready',
         host,
         username: user.login ?? '',
-        mine: mergeMine(nodes(parsed.data?.assigned), nodes(parsed.data?.authored)),
-        review: nodes(parsed.data?.review),
+        ...splitByRole(
+          mergeMine(nodes(parsed.data?.assigned), nodes(parsed.data?.authored)),
+          nodes(parsed.data?.review),
+          user.login ?? '',
+          prPeopleOf,
+        ),
         fetchedAt: Date.now(),
       });
     } catch (e) {
