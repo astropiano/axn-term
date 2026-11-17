@@ -85,7 +85,9 @@ The Rust side owns everything a browser can't do:
 - `control.rs` / `cli.rs` — the `control.sock` local socket and the
   `axn-term` CLI subcommands (`session …`, `install --skills`, …) that
   let programs inside a terminal address their own session
-  (`AXN_TERM_PTY_ID`/`AXN_TERM_PTY_SECRET`/`AXN_TERM_CLI` env).
+  (`AXN_TERM_PTY_ID`/`AXN_TERM_PTY_SECRET`/`AXN_TERM_CLI` env), and
+  `command …` for app-level lines (`appRun` commands only) from any local
+  process.
 - `remote.rs` — the token-gated remote-control HTTP server
   (`AXN_TERM_REMOTE_CONTROL_PORT`) the flow tests drive the app through.
 - `procinfo.rs`, `exec.rs`, `files.rs`, `git.rs` — foreground-process/cwd

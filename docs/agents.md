@@ -57,6 +57,12 @@ over a local socket and acts on the terminal it runs in:
   failed (reason on stderr — e.g. a command whose result would have to be
   typed into the shell, like `axn-claude-resume`), `2` = usage error or not
   inside axn-term.
+- From outside a terminal (a hub, a script), `axn-term command
+  [--window <label>] <line>` runs an *app-level* command in the focused
+  window — only commands that declare themselves app-level, e.g.
+  `axn-term command axn-views open http://127.0.0.1:37778/d/mr/ "MR dashboard"`
+  (opens a page as a rail view; `axn-views current` prints the selected view
+  as JSON). No secret: the socket is the user's own (0600). Desktop only.
 - Web terminals work the same: the session host writes a small `sh` + `curl`
   client to `$AXN_STATE_DIR/bin/axn-term` and points `AXN_TERM_CLI` at it;
   it authenticates with `AXN_SESSION_ID` + `AXN_TERM_PTY_SECRET` against
