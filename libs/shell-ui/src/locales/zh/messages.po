@@ -18,7 +18,7 @@ msgstr "将终止 {0} 个运行中的{1}"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} 正在主检出中运行 — 要隔离到 worktree 吗？"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2260
+#: libs/shell-ui/src/app/SessionPanel.tsx:2259
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} 个等待中"
 
@@ -568,7 +568,7 @@ msgstr "移到工作区…"
 msgid "needs attention"
 msgstr "需要处理"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1606
+#: libs/shell-ui/src/app/SessionPanel.tsx:1605
 msgid "Needs you"
 msgstr "需要处理"
 
@@ -576,7 +576,7 @@ msgstr "需要处理"
 msgid "New name for {name}"
 msgstr "{name} 的新名称"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2439
+#: libs/shell-ui/src/app/SessionPanel.tsx:2438
 msgid "New session"
 msgstr "新建会话"
 
@@ -584,7 +584,7 @@ msgstr "新建会话"
 msgid "New session button"
 msgstr "新建会话按钮"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2563
+#: libs/shell-ui/src/app/SessionPanel.tsx:2562
 msgid "New session in folder…"
 msgstr "在文件夹中新建会话…"
 
@@ -708,7 +708,7 @@ msgstr "打开"
 msgid "Open {title}"
 msgstr "打开{title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2543
+#: libs/shell-ui/src/app/SessionPanel.tsx:2542
 msgid "Open a saved workspace set file"
 msgstr "打开已保存的工作区集文件"
 
@@ -736,11 +736,11 @@ msgstr "打开日志文件夹…"
 msgid "Open preview in a tab"
 msgstr "在标签页中打开预览"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2551
+#: libs/shell-ui/src/app/SessionPanel.tsx:2550
 msgid "Open workspace set from file…"
 msgstr "从文件打开工作区集…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2225
+#: libs/shell-ui/src/app/SessionPanel.tsx:2224
 msgid "Open…"
 msgstr "打开…"
 
@@ -782,7 +782,7 @@ msgstr "权限："
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "使用同一账号登录的手机和浏览器可以连接"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2558
+#: libs/shell-ui/src/app/SessionPanel.tsx:2557
 msgid "Pick a folder — the new session starts in it"
 msgstr "选择文件夹 — 新会话在其中启动"
 
@@ -876,7 +876,7 @@ msgstr "移除 worktree"
 msgid "Rename {name}"
 msgstr "重命名 {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1546
+#: libs/shell-ui/src/app/SessionPanel.tsx:1545
 msgid "Rename session"
 msgstr "重命名会话"
 
@@ -936,7 +936,7 @@ msgstr "在 Shell 标签页中运行"
 msgid "Run the login in a shell, then check again."
 msgstr "在 Shell 中运行登录命令，然后重新检查。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2502
+#: libs/shell-ui/src/app/SessionPanel.tsx:2501
 msgid "Running"
 msgstr "运行中"
 
@@ -950,7 +950,7 @@ msgstr "已沙箱化 — 无权限（无 shell、文件或终端访问）"
 msgid "Save"
 msgstr "保存"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2221
+#: libs/shell-ui/src/app/SessionPanel.tsx:2220
 msgid "Save workspace set"
 msgstr "保存工作区集"
 
@@ -988,8 +988,8 @@ msgstr "服务器地址"
 #~ msgid "Server URL"
 #~ msgstr "服务器 URL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1582
-#: libs/shell-ui/src/app/SessionPanel.tsx:1584
+#: libs/shell-ui/src/app/SessionPanel.tsx:1581
+#: libs/shell-ui/src/app/SessionPanel.tsx:1583
 msgid "Session actions"
 msgstr "会话操作"
 
@@ -1021,7 +1021,7 @@ msgstr "会话摘要"
 msgid "Session: {0}"
 msgstr "会话：{0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2497
+#: libs/shell-ui/src/app/SessionPanel.tsx:2496
 msgid "Sessions"
 msgstr "会话"
 
@@ -1055,11 +1055,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell 字体"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2253
+#: libs/shell-ui/src/app/SessionPanel.tsx:2252
 msgid "Show all sessions"
 msgstr "显示所有会话"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2253
+#: libs/shell-ui/src/app/SessionPanel.tsx:2252
 msgid "Show only sessions that need you"
 msgstr "仅显示需要处理的会话"
 

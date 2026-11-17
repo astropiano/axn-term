@@ -1477,7 +1477,9 @@ export function SessionItem({
         onDrop={onDrop}
         className={`relative cursor-pointer rounded-[var(--radius-md)] transition-colors duration-[var(--dur-1)] ${
           isSelected
-            ? 'bg-[var(--fill-1)] shadow-[inset_2px_0_0_0_var(--accent),inset_0_0_0_1px_var(--hairline)]'
+            ? // Edge mark + hairline on an overlay above the content, so a solid
+              // tinted title row cannot cover it: one curve down the whole card.
+              "bg-[var(--fill-1)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_2px_0_0_0_var(--accent),inset_0_0_0_1px_var(--hairline)] after:content-['']"
             : isMultiSel
               ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_40%,transparent)]'
               : tint
@@ -1502,10 +1504,7 @@ export function SessionItem({
           onClick={wrapClick()}
           className={`group/row flex min-h-8 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[13px] text-[var(--text-primary)]${
             isSelected ? ' bg-[var(--fill-accent)]' : ''
-          }${
-            // The solid row would cover the card's accent edge mark — repeat it on top.
-            titleTint ? ` ${TINT_CLASS} shadow-[inset_2px_0_0_0_var(--accent)]` : ''
-          }`}
+          }${titleTint ? ` ${TINT_CLASS}` : ''}`}
           style={titleTint ? { ...tintStyle(titleTint), ...tintTextVars(colours) } : undefined}
         >
           {/* Icon tile — tinted while selected, coloured (with a soft halo)
@@ -2300,14 +2299,14 @@ export function SessionPanel({
               {dragWorkspaceId && workspaceDropIndex === index && (
                 <div className="mb-2 h-0.5 rounded-full bg-[var(--accent)]" />
               )}
-              {/* A tinted block bleeds 6px past the list gutter (-mx/px cancel out,
+              {/* A tinted block bleeds 4px past the list gutter (-mx/px cancel out,
                   so content stays aligned) to show the container it paints. */}
               <div
                 data-workspace-block={workspace.id}
                 style={tintStyle(workspaceTint(workspace))}
                 className={`mb-3 transition ${
                   workspaceTint(workspace)
-                    ? `-mx-1.5 rounded-[var(--radius-lg)] px-1.5 py-1 ${TINT_CLASS}`
+                    ? `-mx-1 rounded-[var(--radius-lg)] px-1 py-1 ${TINT_CLASS}`
                     : 'rounded'
                 } ${
                   dropTarget?.workspaceId === workspace.id && dropTarget.beforeSessionId === null

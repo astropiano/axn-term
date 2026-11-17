@@ -181,6 +181,3 @@ export const Default: Story = {};
 
 /** Tag names shown as chips in the title row (placed via `sessionCard`). */
 export const WithTagNames: Story = { args: { showTagNames: true } };
-
-/** Light theme. */
-export const Light: Story = { globals: { theme: 'axn-light' } };

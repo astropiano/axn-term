@@ -18,7 +18,7 @@ msgstr "실행 중인 {1} {0}개가 종료됩니다"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent}이(가) 메인 체크아웃에서 실행 중 — 워크트리로 격리할까요?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2260
+#: libs/shell-ui/src/app/SessionPanel.tsx:2259
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount}개 대기 중"
 
@@ -568,7 +568,7 @@ msgstr "워크스페이스로 이동…"
 msgid "needs attention"
 msgstr "확인 필요"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1606
+#: libs/shell-ui/src/app/SessionPanel.tsx:1605
 msgid "Needs you"
 msgstr "확인 필요"
 
@@ -576,7 +576,7 @@ msgstr "확인 필요"
 msgid "New name for {name}"
 msgstr "{name}의 새 이름"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2439
+#: libs/shell-ui/src/app/SessionPanel.tsx:2438
 msgid "New session"
 msgstr "새 세션"
 
@@ -584,7 +584,7 @@ msgstr "새 세션"
 msgid "New session button"
 msgstr "새 세션 버튼"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2563
+#: libs/shell-ui/src/app/SessionPanel.tsx:2562
 msgid "New session in folder…"
 msgstr "폴더에서 새 세션…"
 
@@ -710,7 +710,7 @@ msgstr "열기"
 msgid "Open {title}"
 msgstr "{title} 열기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2543
+#: libs/shell-ui/src/app/SessionPanel.tsx:2542
 msgid "Open a saved workspace set file"
 msgstr "저장된 워크스페이스 세트 파일 열기"
 
@@ -738,11 +738,11 @@ msgstr "로그 폴더 열기…"
 msgid "Open preview in a tab"
 msgstr "탭에서 미리보기 열기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2551
+#: libs/shell-ui/src/app/SessionPanel.tsx:2550
 msgid "Open workspace set from file…"
 msgstr "파일에서 워크스페이스 세트 열기…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2225
+#: libs/shell-ui/src/app/SessionPanel.tsx:2224
 msgid "Open…"
 msgstr "열기…"
 
@@ -784,7 +784,7 @@ msgstr "권한:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "같은 계정으로 로그인한 휴대폰과 브라우저가 연결할 수 있습니다"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2558
+#: libs/shell-ui/src/app/SessionPanel.tsx:2557
 msgid "Pick a folder — the new session starts in it"
 msgstr "폴더 선택 — 새 세션이 여기서 시작됩니다"
 
@@ -878,7 +878,7 @@ msgstr "워크트리 삭제"
 msgid "Rename {name}"
 msgstr "{name} 이름 바꾸기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1546
+#: libs/shell-ui/src/app/SessionPanel.tsx:1545
 msgid "Rename session"
 msgstr "세션 이름 바꾸기"
 
@@ -938,7 +938,7 @@ msgstr "셸 탭에서 실행"
 msgid "Run the login in a shell, then check again."
 msgstr "셸에서 로그인을 실행한 다음 다시 확인하세요."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2502
+#: libs/shell-ui/src/app/SessionPanel.tsx:2501
 msgid "Running"
 msgstr "실행 중"
 
@@ -952,7 +952,7 @@ msgstr "샌드박스 — 권한 없음 (셸, 파일, 터미널 접근 불가)"
 msgid "Save"
 msgstr "저장"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2221
+#: libs/shell-ui/src/app/SessionPanel.tsx:2220
 msgid "Save workspace set"
 msgstr "워크스페이스 세트 저장"
 
@@ -990,8 +990,8 @@ msgstr "서버 주소"
 #~ msgid "Server URL"
 #~ msgstr "서버 URL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1582
-#: libs/shell-ui/src/app/SessionPanel.tsx:1584
+#: libs/shell-ui/src/app/SessionPanel.tsx:1581
+#: libs/shell-ui/src/app/SessionPanel.tsx:1583
 msgid "Session actions"
 msgstr "세션 작업"
 
@@ -1023,7 +1023,7 @@ msgstr "세션 요약"
 msgid "Session: {0}"
 msgstr "세션: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2497
+#: libs/shell-ui/src/app/SessionPanel.tsx:2496
 msgid "Sessions"
 msgstr "세션"
 
@@ -1057,11 +1057,11 @@ msgstr "셸"
 msgid "Shell font"
 msgstr "셸 글꼴"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2253
+#: libs/shell-ui/src/app/SessionPanel.tsx:2252
 msgid "Show all sessions"
 msgstr "모든 세션 표시"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2253
+#: libs/shell-ui/src/app/SessionPanel.tsx:2252
 msgid "Show only sessions that need you"
 msgstr "확인이 필요한 세션만 표시"
 

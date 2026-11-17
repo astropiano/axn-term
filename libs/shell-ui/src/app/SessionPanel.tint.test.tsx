@@ -96,8 +96,9 @@ it('tints the selected card body lighter than its solid title row, and an unsele
   expect(selected.style.getPropertyValue('--tint')).toContain('#ff0000 var(--tint-selected-card, 50%)');
   const title = selected.querySelector<HTMLElement>('[class*="group/row"]')!;
   expect(title.style.getPropertyValue('--tint')).toContain('#ff0000 var(--tint-selected-title, 100%)');
-  // the solid row repeats the card's accent edge so it is not painted over
-  expect(title.className).toContain('shadow-[inset_2px_0_0_0_var(--accent)]');
+  // the accent edge sits on an overlay over the whole card, above the solid row
+  expect(selected.className).toContain('after:shadow-[inset_2px_0_0_0_var(--accent)');
+  expect(title.className).not.toContain('inset_2px_0_0_0_var(--accent)');
   // #ff0000: 5.3:1 against black beats 4.0:1 against white
   expect(title.style.getPropertyValue('--text-primary')).toBe('#111111');
   expect(idle.style.getPropertyValue('--tint')).toContain('#ff0000 var(--tint-card, 32%)');
@@ -126,7 +127,7 @@ it('tints the whole workspace block faintly, behind its sessions, even when it h
   const block = header().closest<HTMLElement>('[data-workspace-block]')!;
   expect(block.style.getPropertyValue('--tint')).toContain('#00ff00 var(--tint-workspace, 20%)');
   expect(block.contains(cards()[0])).toBe(true);
-  expect(block.className).toContain('-mx-1.5');
+  expect(block.className).toContain('-mx-1 ');
   expect(header().style.getPropertyValue('--tint')).toBe('');
   expect(workspaceColors).toHaveBeenCalledWith(expect.objectContaining({ workspace: workspaces[0] }));
 });
