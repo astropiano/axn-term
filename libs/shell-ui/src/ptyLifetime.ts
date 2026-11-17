@@ -97,3 +97,34 @@ export function acquirePty(
     },
   };
 }
+
+/** How long the PTY sits one row short. Node only emits `resize` when the
+ * size it reads on SIGWINCH differs from the last one, so shrink and restore
+ * must not land inside the same event-loop turn of the program. */
+export const REDRAW_NUDGE_MS = 80;
+const redrawNudges = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Make the program in front of the PTY repaint its whole screen. A resize to
+ * the unchanged size sends no SIGWINCH, so the PTY is shrunk by one row and
+ * restored. Back-to-back nudges coalesce into one.
+ */
+export function nudgePtyRedraw(
+  backend: SessionBackend,
+  id: string,
+  size: () => { cols: number; rows: number } | null | undefined,
+): void {
+  const now = size();
+  if (!now || now.rows < 2) return;
+  const pending = redrawNudges.get(id);
+  if (pending) clearTimeout(pending);
+  else backend.resize(id, now.cols, now.rows - 1);
+  redrawNudges.set(
+    id,
+    setTimeout(() => {
+      redrawNudges.delete(id);
+      const latest = size() ?? now;
+      backend.resize(id, latest.cols, latest.rows);
+    }, REDRAW_NUDGE_MS),
+  );
+}
