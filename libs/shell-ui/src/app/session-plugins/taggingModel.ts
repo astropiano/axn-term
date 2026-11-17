@@ -1,3 +1,5 @@
+import { isHexColor } from './tint';
+
 /** Plugin id and state key of the tagging plugin — session and workspace slices. */
 export const TAGGING = { id: 'tagging', stateKey: 'tags' } as const;
 
@@ -22,13 +24,39 @@ export function normalizeTag(raw: string): string | null {
   return name === '' ? null : name;
 }
 
-export function tagColor(name: string): string {
+/** Per-tag colour overrides, keyed by lower-cased name (plugins.yaml `colors`). */
+export type TagColorOverrides = Readonly<Record<string, string>>;
+
+export function tagColorOverrides(settings: unknown): TagColorOverrides {
+  const raw = (settings as { colors?: unknown } | null | undefined)?.colors;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [name, colour] of Object.entries(raw)) {
+    if (isHexColor(colour) && key(name) !== '') out[key(name)] = colour;
+  }
+  return out;
+}
+
+export function tagColor(name: string, overrides: TagColorOverrides = {}): string {
+  const override = overrides[key(name)];
+  if (override) return override;
   let hash = 0x811c9dc5;
   for (const ch of key(name)) {
     hash ^= ch.codePointAt(0)!;
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return TAG_PALETTE[hash % TAG_PALETTE.length];
+}
+
+export function setTagColor(overrides: TagColorOverrides, raw: string, colour: string): TagColorOverrides {
+  const name = normalizeTag(raw);
+  if (!name || !isHexColor(colour)) return overrides;
+  return { ...overrides, [key(name)]: colour };
+}
+
+export function clearTagColor(overrides: TagColorOverrides, name: string): TagColorOverrides {
+  const { [key(name)]: _dropped, ...rest } = overrides;
+  return rest;
 }
 
 export function addTag(tags: readonly string[], raw: string): string[] {

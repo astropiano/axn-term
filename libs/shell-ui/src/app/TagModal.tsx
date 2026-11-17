@@ -105,7 +105,7 @@ export function TagModal({
                 />
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: tagColor(name) }}
+                  style={{ backgroundColor: tagColor(name, request.colors) }}
                 />
                 {renaming?.from === name ? (
                   <input

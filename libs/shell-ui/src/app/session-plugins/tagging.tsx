@@ -4,7 +4,8 @@ import { Tag } from 'lucide-react';
 import type { ShellSession, Workspace } from '../../types';
 import { openTagModal } from '../tagHost';
 import type { SessionViewPlugin } from './plugin';
-import { TAGGING, tagColor } from './taggingModel';
+import { TAGGING, tagColor, tagColorOverrides } from './taggingModel';
+import { TagColorSettings } from './TagColorSettings';
 
 const tagsOf = (state: unknown): string[] => {
   const tags = (state as { tags?: unknown } | null | undefined)?.tags;
@@ -23,8 +24,14 @@ export const taggingPlugin: SessionViewPlugin = {
   id: TAGGING.id,
   title: 'Tags',
   logo: 'tag',
-  sessionColors: (ctx) => tagsOf(ctx.pluginState).map(tagColor),
-  workspaceColors: ({ workspace }) => workspaceTags(workspace).map(tagColor),
+  sessionColors: (ctx) => {
+    const colors = tagColorOverrides(ctx.pluginSettings);
+    return tagsOf(ctx.pluginState).map((tag) => tagColor(tag, colors));
+  },
+  workspaceColors: ({ workspace, pluginSettings }) => {
+    const colors = tagColorOverrides(pluginSettings);
+    return workspaceTags(workspace).map((tag) => tagColor(tag, colors));
+  },
   sessionFields: [
     {
       id: 'tags',
@@ -34,6 +41,7 @@ export const taggingPlugin: SessionViewPlugin = {
       value: (ctx) => {
         const tags = tagsOf(ctx.pluginState);
         if (tags.length === 0) return null;
+        const colors = tagColorOverrides(ctx.pluginSettings);
         return (
           <span className="flex min-w-0 shrink items-center gap-1">
             {tags.map((tag) => (
@@ -41,8 +49,8 @@ export const taggingPlugin: SessionViewPlugin = {
                 key={tag}
                 className="inline-flex items-center gap-0.5 truncate rounded-full px-1.5 text-[10px] leading-[16px]"
                 style={{
-                  color: `color-mix(in srgb, ${tagColor(tag)} 80%, var(--text-primary))`,
-                  backgroundColor: `color-mix(in srgb, ${tagColor(tag)} 18%, transparent)`,
+                  color: `color-mix(in srgb, ${tagColor(tag, colors)} 80%, var(--text-primary))`,
+                  backgroundColor: `color-mix(in srgb, ${tagColor(tag, colors)} 18%, transparent)`,
                 }}
               >
                 <Tag className="h-2.5 w-2.5 shrink-0" />
@@ -58,7 +66,8 @@ export const taggingPlugin: SessionViewPlugin = {
       },
     },
   ],
-  sessionMenuItems: (_ctx, scope) => [
+  renderSettings: (ctx) => <TagColorSettings {...ctx} />,
+  sessionMenuItems: (ctx, scope) => [
     {
       label: i18n._(t`Tag…`),
       onClick: () => {
@@ -68,6 +77,7 @@ export const taggingPlugin: SessionViewPlugin = {
             scope.targets.length > 1 ? t`Tag ${scope.targets.length} sessions` : t`Tag session`,
           ),
           targets: scope.targets.map((target) => tagsOf(target.pluginState)),
+          colors: tagColorOverrides(ctx.pluginSettings),
           others: [
             ...scope.sessions.filter((s) => !ids.has(s.id)).map(sessionTags),
             ...scope.workspaces.map(workspaceTags),
@@ -78,13 +88,14 @@ export const taggingPlugin: SessionViewPlugin = {
       },
     },
   ],
-  workspaceActions: ({ workspace, sessions, workspaces, updateWorkspaceState }) => [
+  workspaceActions: ({ workspace, pluginSettings, sessions, workspaces, updateWorkspaceState }) => [
     {
       label: i18n._(t`Tag…`),
       onClick: () =>
         openTagModal({
           title: i18n._(t`Tag workspace`),
           targets: [workspaceTags(workspace)],
+          colors: tagColorOverrides(pluginSettings),
           others: [
             ...sessions.map(sessionTags),
             ...workspaces.filter((w) => w.id !== workspace.id).map(workspaceTags),

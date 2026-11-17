@@ -7,6 +7,9 @@ import {
   removeTag,
   renameTag,
   tagColor,
+  tagColorOverrides,
+  setTagColor,
+  clearTagColor,
   tagState,
   toggleTag,
 } from './taggingModel';
@@ -72,5 +75,28 @@ describe('derivedTags', () => {
   it('drops a tag once no carrier has it', () => {
     expect(derivedTags([['a'], ['b']])).toEqual(['a', 'b']);
     expect(derivedTags([['a'], []])).toEqual(['a']);
+  });
+});
+
+describe('tag colour overrides', () => {
+  it('an override wins over the hash, case-insensitively', () => {
+    expect(tagColor('Foo', { foo: '#123456' })).toBe('#123456');
+    expect(tagColor('bar', { foo: '#123456' })).toBe(tagColor('bar'));
+  });
+
+  it('reads only valid hex entries from the plugin settings section', () => {
+    expect(tagColorOverrides({ colors: { Foo: '#123456', bad: 'red', Url: 'url(x)', ' ': '#fff' } })).toEqual({
+      foo: '#123456',
+    });
+    expect(tagColorOverrides(undefined)).toEqual({});
+    expect(tagColorOverrides({ colors: ['#fff'] })).toEqual({});
+  });
+
+  it('sets and clears by normalised name and rejects invalid input', () => {
+    const set = setTagColor({}, ' Foo ', '#abcdef');
+    expect(set).toEqual({ foo: '#abcdef' });
+    expect(setTagColor(set, 'x', 'red')).toBe(set);
+    expect(setTagColor(set, '  ', '#fff')).toBe(set);
+    expect(clearTagColor(set, 'FOO')).toEqual({});
   });
 });

@@ -96,10 +96,14 @@ it('tints the selected card strongly and the other faintly', async () => {
   expect(idle.style.backgroundImage).toContain('#ff0000 12%');
 });
 
-it('tints a workspace header faintly even when it holds the selected session', async () => {
+it('tints the whole workspace block faintly, behind its sessions, even when it holds the selected session', async () => {
   const workspaceColors = vi.fn(() => ['#00ff00']);
   await render({ plugins: [colourPlugin('c', { workspaceColors })] });
-  expect(header().style.backgroundImage).toContain('#00ff00 12%');
+  const block = header().closest<HTMLElement>('[data-workspace-block]')!;
+  expect(block.style.backgroundImage).toContain('#00ff00 12%');
+  expect(block.contains(cards()[0])).toBe(true);
+  expect(block.className).toContain('-mx-1.5');
+  expect(header().style.backgroundImage).toBe('');
   expect(workspaceColors).toHaveBeenCalledWith(expect.objectContaining({ workspace: workspaces[0] }));
 });
 
