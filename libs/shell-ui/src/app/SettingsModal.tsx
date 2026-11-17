@@ -20,6 +20,7 @@ import type { PluginSettingField, SessionViewPlugin } from './session-plugins';
 import { isSandboxedPlugin } from './session-plugins/sandbox';
 import { getFilePreviewPlugins, isFilePreviewEnabled } from './preview-plugins';
 import type { FilePreviewPlugin } from './preview-plugins';
+import { usePanelStatus } from './panelStatus';
 
 const cycle: Record<ThemeMode, ThemeMode> = {
   light: 'dark',
@@ -770,6 +771,9 @@ function PluginsTab({
   const { t } = useLingui();
   const { pluginSettings, updatePluginSection } = usePluginSettings();
   const [query, setQuery] = useState('');
+  // Plugins currently publishing a panel status group — they get the
+  // Status display choice even without a detailed rail item.
+  const statusSources = new Set(usePanelStatus().map((g) => g.source));
   const groups: { label: string; entries: PluginEntry[] }[] = [
     {
       label: t`Session plugins`,
@@ -928,21 +932,29 @@ function PluginsTab({
               />
             ))}
 
-          {/* Standard choice for plugins with a heavier rail form — where
-              their status meters live. Unset ('auto') means the rail on
-              touch devices and the panel's status accordion elsewhere. */}
-          {selected.kind === 'session' && selected.plugin.renderRailDetail && (
+          {/* Standard choice for plugins with status in the panel's stack or a
+              heavier rail form: the panel accordion, or the rail only — the
+              detailed rail item where the plugin has one, else its plain
+              icon. Unset ('auto') means the rail on touch devices for
+              detailed items and the panel otherwise. */}
+          {selected.kind === 'session' &&
+            (selected.plugin.renderRailDetail || statusSources.has(selected.plugin.id)) && (
             <PluginSettingRow
               field={{
                 key: 'statusDisplay',
                 label: t`Status display`,
-                description: t`Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise.`,
+                description: selected.plugin.renderRailDetail
+                  ? t`Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise.`
+                  : t`Show this plugin's status as an accordion in the session panel, or keep only its rail icon.`,
                 type: 'string',
                 default: 'auto',
                 options: [
                   { value: 'auto', label: t`Auto` },
                   { value: 'panel', label: t`Panel accordion` },
-                  { value: 'rail', label: t`Rail item` },
+                  {
+                    value: 'rail',
+                    label: selected.plugin.renderRailDetail ? t`Rail item` : t`Rail icon only`,
+                  },
                 ],
               }}
               section={section}
