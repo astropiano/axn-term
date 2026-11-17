@@ -1339,7 +1339,7 @@ export function SessionItem({
       case 'core.summary':
         return session.summary && settings.sessionSummaries !== false ? (
           <div
-            className="line-clamp-3 whitespace-pre-line break-words pl-[30px] text-[11px] leading-[15px] text-[var(--text-secondary)]"
+            className="line-clamp-3 whitespace-pre-line break-words text-[11px] leading-[15px] text-[var(--text-secondary)]"
             data-tip={session.summary}
           >
             {session.summary}
@@ -1630,7 +1630,7 @@ export function SessionItem({
         )}
 
         {selectedRows.length > 0 && (
-          <div className="flex flex-col gap-2 px-2.5 text-xs leading-relaxed text-[var(--text-primary)] [&:has(>div:not(:empty))]:pb-2 [&:has(>div:not(:empty))]:pt-1.5 [&>div>*]:!my-0 [&>div:empty]:hidden">
+          <div className="flex flex-col gap-2 px-2 text-xs leading-relaxed text-[var(--text-primary)] [&:has(>div:not(:empty))]:pb-2 [&:has(>div:not(:empty))]:pt-1.5 [&>div>*]:!my-0 [&>div:empty]:hidden">
             {selectedRows}
           </div>
         )}
