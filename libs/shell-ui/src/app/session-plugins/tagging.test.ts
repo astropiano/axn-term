@@ -3,6 +3,7 @@ import type { ShellSession, Workspace } from '../../types';
 import type { MenuScope, SessionViewContext, PluginApi, WorkspaceActionContext } from './plugin';
 import { taggingPlugin } from './tagging';
 import { tagColor } from './taggingModel';
+import { resolveCardLayout, type FieldMeta } from '../sessionCardLayout';
 import * as host from '../tagHost';
 
 vi.mock('../tagHost', () => ({ openTagModal: vi.fn() }));
@@ -76,4 +77,17 @@ it('uses a configured colour over the derived one for sessions and workspaces', 
     tagColor('y'),
   ]);
   expect(taggingPlugin.workspaceColors!({ workspace: ws('w', ['X']), pluginSettings })).toEqual(['#123456']);
+});
+
+it('shows the tag name only where the sessionCard layout places it, and nowhere when hidden', () => {
+  const meta: FieldMeta[] = taggingPlugin.sessionFields!.map((f) => ({
+    id: `tagging.${f.id}`,
+    label: f.label,
+    kind: f.kind,
+    zone: f.zone,
+  }));
+  expect(resolveCardLayout(undefined, meta).title).toContain('tagging.tags');
+  expect(resolveCardLayout({ always: [['tagging.tags']] }, meta).always).toEqual([['tagging.tags']]);
+  const hidden = resolveCardLayout({ hidden: ['tagging.tags'] }, meta);
+  expect([...hidden.title, ...hidden.always.flat(), ...hidden.selected.flat()]).not.toContain('tagging.tags');
 });
