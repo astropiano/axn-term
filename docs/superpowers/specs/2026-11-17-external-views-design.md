@@ -147,6 +147,25 @@ entries (`http(s)` only). It is exposed three ways, all calling the same host fu
 `--agterm` does and calls `axn-term command "axn-views open …"`; the runtime entry holds the URL
 in memory only. From outside an axn-term install (socket absent) it falls back to the browser.
 
+### E. Knowing what is selected
+
+The selection is `activePluginView` (`ShellApp.tsx:306`), which becomes the `pluginId/entryId` key
+(section A). Today only the rail items read it (`viewActive`); nothing else can. Expose it:
+
+- **Read:** `PluginApi.activeView()` and sandbox `axn.getActiveView()` return
+  `{ key, pluginId, entryId?, title, url?, runtime } | null` (`null` = a session is showing).
+  Readable by any plugin, no permission: it only reports what the user already sees.
+- **Subscribe:** `viewChanged` event (in-process callback, sandbox `axn.on('viewChanged')`) fires
+  on every change with the same payload.
+- **Command:** `axn-views current` replies with the same JSON (through the control reply), so an
+  external caller or agent can ask `axn-term command "axn-views current"`.
+- **Link rail ↔ view:** the key is the one identity for the rail slot (`data-rail-slot`), the
+  saved order, ⌘N and the active view, so `openView` returns the key, and `selectView(key)` /
+  `axn-views select <key|title>` activate an existing entry (`sessions` permission, like
+  `selectSession`). `openView` on an existing key just selects it.
+- A view covering a session leaves `selectedSessionId` set (existing behaviour); `activeView()`
+  and the selected session are reported separately.
+
 ## Gating spike (first task of the plan)
 
 Before section C is built, load the hub's URL in an iframe inside a running axn-term (release-like
@@ -178,6 +197,8 @@ user** (approach 2 returns to the table); do not build C around a guess.
 
 ## Tests
 
+- Selection: `activeView()` is `null` with a session shown, the key after `openView`/rail click/
+  ⌘N, and `viewChanged` fires once per change (not on re-selecting the same key).
 - `openView`: validation (bad scheme refused), same key/URL re-activates instead of duplicating,
   runtime entries are not persisted, the `sessions` permission gates the sandbox RPC (denied
   without it), the control message reaches dispatch without a PTY secret and a wrong/absent window
