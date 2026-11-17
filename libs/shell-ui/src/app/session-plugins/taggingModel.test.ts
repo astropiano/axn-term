@@ -10,6 +10,7 @@ import {
   tagColorOverrides,
   setTagColor,
   clearTagColor,
+  parseHexColor,
   tagState,
   toggleTag,
 } from './taggingModel';
@@ -99,4 +100,16 @@ describe('tag colour overrides', () => {
     expect(setTagColor(set, '  ', '#fff')).toBe(set);
     expect(clearTagColor(set, 'FOO')).toEqual({});
   });
+});
+
+describe('parseHexColor', () => {
+  it.each([
+    ['#ABC', '#abc'],
+    ['abc', '#abc'],
+    ['  #12AB34 ', '#12ab34'],
+    ['12ab34cc', '#12ab34cc'],
+  ])('accepts %s', (raw, out) => expect(parseHexColor(raw)).toBe(out));
+  it.each(['', '#', 'red', '#12', '##abc', '#ggg', 'rgb(1,2,3)'])('rejects %s', (raw) =>
+    expect(parseHexColor(raw)).toBeNull(),
+  );
 });

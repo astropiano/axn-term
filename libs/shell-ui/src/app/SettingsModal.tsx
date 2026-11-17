@@ -9,6 +9,7 @@ import { SessionIconGlyph } from './SessionPanel';
 import { useSettings, settingsFromYaml, settingsToYaml } from '../SettingsProvider';
 import { usePluginSettings } from './PluginSettingsProvider';
 import type { AppSettings, ThemeMode } from '../themes';
+import type { ShellSession, Workspace } from '../types';
 import { defaultShellLineHeight, themeDefinitions } from '../themes';
 import { useSessionBackend, useShellPlatform } from '../services';
 import { availableLocales, localeNames } from '../i18n';
@@ -54,7 +55,12 @@ interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
   embedded?: boolean;
+  /** This window's sessions and workspaces, handed to plugins' `renderSettings`. */
+  sessions?: readonly ShellSession[];
+  workspaces?: readonly Workspace[];
 }
+
+const NONE: readonly never[] = [];
 
 const modeMessages: Record<ThemeMode, MessageDescriptor> = {
   light: msg`Light`,
@@ -113,7 +119,7 @@ const tabs: { id: SettingsTab; label: MessageDescriptor }[] = [
   { id: 'plugins', label: msg`Plugins` },
 ];
 
-export function SettingsModal({ open, onClose, embedded }: SettingsModalProps) {
+export function SettingsModal({ open, onClose, embedded, sessions = NONE, workspaces = NONE }: SettingsModalProps) {
   const { t } = useLingui();
   const [tab, setTab] = useState<SettingsTab>('general');
 
@@ -167,7 +173,7 @@ export function SettingsModal({ open, onClose, embedded }: SettingsModalProps) {
         </div>
 
         <div className="flex min-h-0 flex-1">
-          {tab === 'general' ? <GeneralTab /> : <PluginsTab />}
+          {tab === 'general' ? <GeneralTab /> : <PluginsTab sessions={sessions} workspaces={workspaces} />}
         </div>
       </div>
   );
@@ -754,7 +760,13 @@ type PluginEntry =
   | { kind: 'session'; plugin: SessionViewPlugin }
   | { kind: 'preview'; plugin: FilePreviewPlugin };
 
-function PluginsTab() {
+function PluginsTab({
+  sessions,
+  workspaces,
+}: {
+  sessions: readonly ShellSession[];
+  workspaces: readonly Workspace[];
+}) {
   const { t } = useLingui();
   const { pluginSettings, updatePluginSection } = usePluginSettings();
   const [query, setQuery] = useState('');
@@ -942,6 +954,8 @@ function PluginsTab() {
             selected.plugin.renderSettings?.({
               settings: section,
               update: (patch) => updatePluginSection(settingsKey, patch),
+              sessions,
+              workspaces,
             })}
 
           {selected.kind === 'session' &&

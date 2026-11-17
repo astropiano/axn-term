@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { Pencil, Tag, Trash2 } from 'lucide-react';
 import type { TagRequest } from './tagHost';
+import { TagColorInput } from './session-plugins/TagColorInput';
 import {
   addTag,
   derivedTags,
@@ -10,6 +11,7 @@ import {
   renameTag,
   tagColor,
   tagState,
+  type TagColorOverrides,
   toggleTag,
 } from './session-plugins/taggingModel';
 
@@ -20,16 +22,23 @@ import {
  */
 export function TagModal({
   request,
+  colors,
+  onColor,
   onApply,
   onClose,
 }: {
   request: TagRequest;
+  /** Configured colours (plugins.yaml); unset names use the derived colour. */
+  colors: TagColorOverrides;
+  /** Saves a tag's colour right away — not part of Apply. */
+  onColor: (name: string, hex: string) => void;
   onApply: (next: string[][]) => void;
   onClose: () => void;
 }) {
   const { t } = useLingui();
   const [current, setCurrent] = useState(request.targets);
   const [query, setQuery] = useState('');
+  const [colouring, setColouring] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ from: string; to: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => inputRef.current?.focus(), []);
@@ -103,10 +112,21 @@ export function TagModal({
                   }}
                   onChange={() => setCurrent(toggleTag(current, name))}
                 />
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: tagColor(name, request.colors) }}
+                <button
+                  type="button"
+                  aria-label={t`Change colour of ${name}`}
+                  onClick={() => setColouring(colouring === name ? null : name)}
+                  className="h-3 w-3 shrink-0 rounded-full ring-offset-1 ring-offset-[var(--elevated)] hover:ring-1 hover:ring-[var(--text-secondary)]"
+                  style={{ backgroundColor: tagColor(name, colors) }}
                 />
+                {colouring === name && (
+                  <TagColorInput
+                    autoFocus
+                    value={tagColor(name, colors)}
+                    label={t`Colour of ${name}`}
+                    onChange={(hex) => onColor(name, hex)}
+                  />
+                )}
                 {renaming?.from === name ? (
                   <input
                     autoFocus

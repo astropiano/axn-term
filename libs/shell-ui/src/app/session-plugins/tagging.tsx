@@ -67,7 +67,7 @@ export const taggingPlugin: SessionViewPlugin = {
     },
   ],
   renderSettings: (ctx) => <TagColorSettings {...ctx} />,
-  sessionMenuItems: (ctx, scope) => [
+  sessionMenuItems: (_ctx, scope) => [
     {
       label: i18n._(t`Tag…`),
       onClick: () => {
@@ -77,7 +77,6 @@ export const taggingPlugin: SessionViewPlugin = {
             scope.targets.length > 1 ? t`Tag ${scope.targets.length} sessions` : t`Tag session`,
           ),
           targets: scope.targets.map((target) => tagsOf(target.pluginState)),
-          colors: tagColorOverrides(ctx.pluginSettings),
           others: [
             ...scope.sessions.filter((s) => !ids.has(s.id)).map(sessionTags),
             ...scope.workspaces.map(workspaceTags),
@@ -88,14 +87,13 @@ export const taggingPlugin: SessionViewPlugin = {
       },
     },
   ],
-  workspaceActions: ({ workspace, pluginSettings, sessions, workspaces, updateWorkspaceState }) => [
+  workspaceActions: ({ workspace, sessions, workspaces, updateWorkspaceState }) => [
     {
       label: i18n._(t`Tag…`),
       onClick: () =>
         openTagModal({
           title: i18n._(t`Tag workspace`),
           targets: [workspaceTags(workspace)],
-          colors: tagColorOverrides(pluginSettings),
           others: [
             ...sessions.map(sessionTags),
             ...workspaces.filter((w) => w.id !== workspace.id).map(workspaceTags),

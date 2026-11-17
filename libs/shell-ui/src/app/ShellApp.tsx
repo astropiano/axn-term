@@ -3215,7 +3215,12 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           }
         />
       )}
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        sessions={sessions}
+        workspaces={workspaces}
+      />
       <PickerHost />
       <TagHost />
       {appMenu && (

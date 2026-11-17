@@ -467,6 +467,9 @@ export interface PluginSettingsViewContext {
   settings: Record<string, unknown>;
   /** Shallow-merge a patch into the section and persist plugins.yaml. */
   update: (patch: Record<string, unknown>) => void;
+  /** This window's sessions and workspaces, read-only (e.g. to list values in use). */
+  sessions: readonly ShellSession[];
+  workspaces: readonly Workspace[];
 }
 
 /**
