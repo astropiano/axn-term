@@ -347,6 +347,24 @@ export interface PluginDependency {
   version?: string;
 }
 
+/** What a session menu acts on, plus the window's content for cross-session views. */
+export interface MenuScope {
+  /** The multi-selected sessions when the clicked one is in a multi-selection, else just it. */
+  targets: (SessionViewContext & PluginApi)[];
+  sessions: ShellSession[];
+  workspaces: Workspace[];
+}
+
+/** Context of `workspaceActions` — no session involved. */
+export interface WorkspaceActionContext {
+  workspace: Workspace;
+  pluginSettings: unknown;
+  sessions: ShellSession[];
+  workspaces: Workspace[];
+  /** Shallow-merge into this plugin's slice of `workspace.pluginState`. */
+  updateWorkspaceState: (patch: Record<string, unknown>) => void;
+}
+
 /** A row contributed to the repo context menu (see `repoMenuItems`). */
 export interface RepoMenuItem {
   label: string;
@@ -810,7 +828,12 @@ export interface SessionViewPlugin {
    * session-bound api, so items can read `pluginState`/`pluginSettings` and
    * write to the session PTY. Called each time the menu opens.
    */
-  sessionMenuItems?: (ctx: SessionViewContext & PluginApi) => RepoMenuItem[];
+  sessionMenuItems?: (ctx: SessionViewContext & PluginApi, scope: MenuScope) => RepoMenuItem[];
+  /**
+   * Contribute rows to the workspace context menu without needing a session
+   * (unlike `workspaceMenuItems`, it also runs for empty workspaces).
+   */
+  workspaceActions?: (ctx: WorkspaceActionContext) => RepoMenuItem[];
   /**
    * Colours (hex) this plugin gives the session's card. The panel combines
    * every plugin's colours into equal left-to-right bands and decides the
