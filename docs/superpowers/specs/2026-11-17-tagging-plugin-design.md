@@ -207,3 +207,12 @@ to right.
   user's `sessionCard`, else per zone the shipped `DEFAULT_SESSION_CARD`, which keeps today's card
   but omits `tagging.tags` and `jira.tickets`. A disabled plugin's ids resolve to nothing. The
   colour tint is independent of the tags field.
+
+## Amendment: solid shades
+
+Translucent tints blended a session's colour with its workspace's. Each shade is now the colour
+mixed with the panel surface (`--chrome`), so it is solid: workspace block 10%, session card 22%,
+selected session card 40%, its title row 100% with dark or light text chosen by WCAG contrast
+(averaged over bands). Decided with the user; percentages tunable in `TINT_INTENSITY`. Known
+trade-off: hover and the multi-select accent fill are background colours under the opaque tint,
+so on a tinted card only the multi-select ring and the selected edge mark remain visible.

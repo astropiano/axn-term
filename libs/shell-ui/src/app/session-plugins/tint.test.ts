@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isHexColor, resolveTint } from './tint';
+import { isHexColor, resolveTint, tintStyle, tintTextVars } from './tint';
 
 describe('isHexColor', () => {
   it.each(['#abc', '#aabbcc', '#aabbccdd', '#ABC'])('accepts %s', (v) => {
@@ -12,36 +12,68 @@ describe('isHexColor', () => {
 
 describe('resolveTint', () => {
   it('returns undefined without a valid colour', () => {
-    expect(resolveTint([], 'idle')).toBeUndefined();
-    expect(resolveTint(['red', 'url(x)'], 'idle')).toBeUndefined();
+    expect(resolveTint([], 'card')).toBeUndefined();
+    expect(resolveTint(['red', 'url(x)'], 'card')).toBeUndefined();
   });
 
   it('paints one colour across the full width', () => {
-    expect(resolveTint(['#abc'], 'idle')).toBe(
-      'linear-gradient(90deg, color-mix(in srgb, #abc 12%, transparent) 0% 100%)',
+    expect(resolveTint(['#abc'], 'card')).toBe(
+      'linear-gradient(90deg, color-mix(in srgb, #abc 22%, var(--chrome)) 0% 100%)',
     );
   });
 
   it('splits two colours into equal bands, first colour on the left', () => {
-    const css = resolveTint(['#ff0000', '#00ff00'], 'idle')!;
-    expect(css).toContain('color-mix(in srgb, #ff0000 12%, transparent) 0% 50%');
-    expect(css).toContain('color-mix(in srgb, #00ff00 12%, transparent) 50% 100%');
+    const css = resolveTint(['#ff0000', '#00ff00'], 'card')!;
+    expect(css).toContain('color-mix(in srgb, #ff0000 22%, var(--chrome)) 0% 50%');
+    expect(css).toContain('color-mix(in srgb, #00ff00 22%, var(--chrome)) 50% 100%');
     expect(css.indexOf('#ff0000')).toBeLessThan(css.indexOf('#00ff00'));
   });
 
   it('shows a repeated colour once, case-insensitively', () => {
-    const css = resolveTint(['#abc', '#ABC'], 'idle')!;
+    const css = resolveTint(['#abc', '#ABC'], 'card')!;
     expect(css.match(/color-mix/g)).toHaveLength(1);
   });
 
   it('caps at four bands and drops invalid entries before counting', () => {
-    const css = resolveTint(['#111', 'red', '#222', '#333', '#444', '#555'], 'idle')!;
+    const css = resolveTint(['#111', 'red', '#222', '#333', '#444', '#555'], 'card')!;
     expect(css.match(/color-mix/g)).toHaveLength(4);
     expect(css).not.toContain('#555');
   });
 
-  it('uses the stronger intensity for a selected card and the faint one for a workspace', () => {
-    expect(resolveTint(['#abc'], 'selected')).toContain('abc 30%');
-    expect(resolveTint(['#abc'], 'workspace')).toContain('abc 12%');
+  it('derives four solid shades of one colour: workspace < card < expanded body < selected title', () => {
+    expect(resolveTint(['#abc'], 'workspace')).toContain('#abc 10%, var(--chrome)');
+    expect(resolveTint(['#abc'], 'card')).toContain('#abc 22%, var(--chrome)');
+    expect(resolveTint(['#abc'], 'selectedCard')).toContain('#abc 40%, var(--chrome)');
+    expect(resolveTint(['#abc'], 'selectedTitle')).toContain('#abc 100%, var(--chrome)');
+  });
+
+  it('never mixes with transparent, so stacked tints do not blend', () => {
+    for (const level of ['workspace', 'card', 'selectedCard', 'selectedTitle'] as const) {
+      expect(resolveTint(['#abc', '#123'], level)).not.toContain('transparent');
+    }
+  });
+});
+
+describe('tintTextVars', () => {
+  it('uses dark text on a light colour and light text on a dark one', () => {
+    expect(tintTextVars(['#ffb224'])).toMatchObject({ '--text-primary': '#111111' });
+    expect(tintTextVars(['#ffffff'])).toMatchObject({ '--text-primary': '#111111' });
+    expect(tintTextVars(['#6e56cf'])).toMatchObject({ '--text-primary': '#ffffff' });
+    expect(tintTextVars(['#000'])).toMatchObject({ '--text-primary': '#ffffff' });
+  });
+
+  it('sets secondary and tertiary text too, and nothing without a valid colour', () => {
+    expect(Object.keys(tintTextVars(['#000'])!)).toEqual(['--text-primary', '--text-secondary', '--text-tertiary']);
+    expect(tintTextVars(['red'])).toBeUndefined();
+  });
+});
+
+describe('tintStyle', () => {
+  it('paints through a --tint custom property, and nothing without a tint', () => {
+    expect(tintStyle('linear-gradient(red, red)')).toEqual({
+      '--tint': 'linear-gradient(red, red)',
+      backgroundImage: 'var(--tint)',
+    });
+    expect(tintStyle(undefined)).toBeUndefined();
   });
 });
