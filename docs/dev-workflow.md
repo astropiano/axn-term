@@ -31,7 +31,7 @@ retries/artifacts/`when:` — a named action is a button available while in a
 state, not a pipeline job. If something is a phase with its own handoff,
 model it as a state, not an action. The one exception is `auto: true`: an
 auto action is the state's "on-enter" hook and fires every time the state is
-entered (start, `axn-workflow-move`, board chevrons, an agent's
+entered (start, `axn-workflow move`, board chevrons, an agent's
 `axn-workflow-state[<token>]:` marker).
 
 ## Configuration (plugins.yaml)
@@ -148,9 +148,9 @@ string value is shorthand for `{ label }`) or a list of `{ key, … }`.
 Declared keys are camelized (`mr-url` → `mrUrl`).
 
 Values are set when the workflow starts —
-`axn-workflow-start mr-review <url>` fills declared vars in order,
+`axn-workflow start mr-review <url>` fills declared vars in order,
 `key=value` pairs set them by name — via the editable fields on the kanban
-card, via `axn-workflow-set <var> <value>`, or agent-side via the whole-line
+card, via `axn-workflow set <var> <value>`, or agent-side via the whole-line
 output marker `axn-workflow-var[<token>]: <key> <value>`. They persist in the
 session binding (`pluginState.vars`) and mirror onto cards
 (`WorkflowInstance.vars`) so closed-session cards keep showing them.
@@ -188,7 +188,7 @@ url (`…/-/merge_requests/123`), a GitHub PR url (`…/pull/45`) or a bare
 `$MR_IID` directly. Card fields render such values as compact
 `!123`/`#45` chips (full url on hover, click opens), and any other
 `http(s)` value shortens to host/path. Required-but-empty vars get a `*`
-marker; `axn-workflow-start` refuses to start until they're supplied.
+marker; `axn-workflow start` refuses to start until they're supplied.
 
 ## State tracking
 
@@ -223,7 +223,7 @@ which constrain interactive moves only):
 **Marker token.** Every output marker carries the binding's token in
 brackets. It is 16 random hex characters minted when the session binds to a
 workflow (a fresh one when it re-binds to another workflow, dropped on
-`axn-workflow-stop`), stored in `pluginState.token`, and handed only to what
+`axn-workflow stop`), stored in `pluginState.token`, and handed only to what
 the workflow launches: the `AXN_WORKFLOW_TOKEN` env var and the
 `{{workflow_token}}` template var. Marker-shaped lines without the token —
 or with another binding's — are ignored (and logged), so text that merely
@@ -255,19 +255,20 @@ Every confirmed transition also mirrors into `appState.instances`
 
 ## Commands
 
+One command, `axn-workflow <subcommand>`.
+
 | Command | Effect |
 |---|---|
-| `axn-workflow-start [name] [arg\|key=value …]` | Bind the session to a workflow (arg required when several are defined) and enter its start state. Trailing args fill declared `vars` — bare values in declaration order, `key=value` by name; missing `required` vars refuse the start. |
-| `axn-workflow-set <var> <value>` | Set a var on the bound session (kind derivation applies); completion lists declared var keys. |
-| `axn-mr-review <mr-url\|!N\|#N> [workflow]` | Fetch the MR/PR head into a `wt/mr-<iid>` worktree, open a session there (current workspace) and bind an MR-kind workflow with vars staged — the shell-side sibling of the `review` row button. |
-| `axn-workflow-move <state>` | Validate + persist the transition — the entered state's `auto` actions fire; everything else waits for Run. |
-| `axn-workflow-run [action]` | Run a named action of the current state (arg optional when the state has exactly one). Shell actions are returned as the replacement command line — the real command, check trailer included, is what gets typed. |
-| `axn-workflow` | Echo current workflow + state + the state's check results. |
-| `axn-workflow-stop` | Clear the binding (state record is kept). |
+| `axn-workflow start [name] [arg\|key=value …]` | Bind the session to a workflow (arg required when several are defined) and enter its start state. Trailing args fill declared `vars` — bare values in declaration order, `key=value` by name; missing `required` vars refuse the start. When the value for the workflow's `kind: mr` var is an MR (`<url>`, `!N`, `#N`), it checks the var's `when` against your role, fetches the MR head into a `wt/mr-<iid>` worktree, opens a session there and binds it — the same as the MR-row button; inside that worktree it binds in place. |
+| `axn-workflow set <var> <value>` | Set a var on the bound session (kind derivation applies); completion lists declared var keys. |
+| `axn-workflow move <state>` | Validate + persist the transition — the entered state's `auto` actions fire; everything else waits for Run. |
+| `axn-workflow run [action]` | Run a named action of the current state (arg optional when the state has exactly one). Shell actions are returned as the replacement command line — the real command, check trailer included, is what gets typed. |
+| `axn-workflow [status]` | Echo current workflow + state + the state's check results. |
+| `axn-workflow stop` | Clear the binding (state record is kept). |
 
-Tab completion: workflow names for `axn-workflow-start`, declared state
-names for `axn-workflow-move`, action names of the current state for
-`axn-workflow-run` — via the `completeArg` extension on `PluginCommand`.
+Tab completion: the subcommand, then workflow names for `start`, declared
+var keys for `set`, state names for `move`, action names of the current
+state for `run` — via the `completeArg` extension on `PluginCommand`.
 
 ## Action launch model
 
@@ -330,7 +331,7 @@ arbitrary prompt text survives `sh -c` quoting.
 
 - **Session banner** (`ctx.setBanner`): `<workflow title> · <state>` —
   non-dismissible (`dismissible: false`), stays while the session is bound
-  and is cleared by `axn-workflow-stop`. The banner always renders both
+  and is cleared by `axn-workflow stop`. The banner always renders both
   prev/next chevron actions (`SessionBanner.actions`) **before** the state
   name — the unavailable edge renders `disabled` instead of disappearing, so
   state-name length never shifts the controls. `SessionBanner.trailingActions`
@@ -391,7 +392,38 @@ button labelled with the workflow's `title` (e.g. "MR review") on every MR
 row in the gitlab-mr plugin — one per such workflow, so several stay
 distinguishable. An optional `kind: mr` var (a development flow that records
 its own MR later) gets no row button. The button appears in the full merge-requests
-view *and* the per-session MR list. The seam is `mrActions.ts`: plugins
+view *and* the per-session MR list.
+
+Which MRs a workflow accepts is a condition on its `kind: mr` var — `when`:
+
+```yaml
+mr-review:
+  vars:
+    mr:
+      kind: mr
+      required: true
+      when:
+        role: reviewer        # author | reviewer | other, or a list
+```
+
+`role` is your role on that MR, computed per MR from its people (`mrRole`
+in `forge.ts`, the "mine" list's rule): an assignee is `author`; a requested
+reviewer is `reviewer`; with nobody assigned the creator is `author` and,
+when no reviewer is requested either, everyone else is a `reviewer`;
+otherwise `other`. On GitHub, people who already submitted a review count as
+reviewers (GitHub drops them from the requested list). The forge plugins
+own the data: glab-mr and gh-pr keep a per-MR people cache filled by their
+overview poll and per-session fetches, and fetch a single MR on a miss
+(`createMrPeopleCache`, registered via `registerMrResolver` in
+`mrActions.ts`; dev-workflow reads it with `useMrDetails`/`resolveMrDetails`).
+A row whose role is not known yet shows only workflows without a `role`
+condition; an unknown role in the list matches nothing. Only the *first*
+`kind: mr` var counts — it is the one the MR fills. The role is checked when
+a workflow starts, not afterwards: a later change of reviewers never stops a
+running session. Starting also fills `mr_role` (`{{mr_role}}`, `MR_ROLE`).
+
+No button exists unless a workflow in `plugins.yaml` declares it — axn-term
+ships no workflows. The seam is `mrActions.ts`: plugins
 `registerMrActions(id, Provider)` at module scope and glab-mr renders each
 registered provider component on its rows with `{ mr, env }`
 (`env.sessions`/`apiFor`/`selectSession`) — a contribution point like
@@ -416,6 +448,10 @@ Clicking it (`startMrReview`):
   `pull/<iid>/head` for GitHub — then `git worktree add <dir> -B
   wt/mr-<iid> FETCH_HEAD` at the worktrees-plugin location
   (`<repo-parent>/worktrees/<repo>-mr-<iid>`), so `axn-dev` discovers it.
+  `<repo>` is always the main checkout — a session sitting in a linked
+  worktree is mapped back through `git rev-parse --git-common-dir`
+  (`mainCheckoutOf`), so the review worktree never nests under
+  `worktrees/worktrees/`.
   Re-reviewing reuses the existing worktree (`git merge --ff-only
   FETCH_HEAD` when the tree is clean — a dirty/diverged one stays as-is);
   failures surface as a red `failed` state on the button *and* a modal
@@ -436,7 +472,7 @@ Clicking it (`startMrReview`):
   the worktree.
 5. The entered state's actions marked `auto: true` fire automatically —
   on start once the session's first output arrives (all start paths — the
-  review button, `axn-workflow-start`, menu start), and on every later
+  review button, `axn-workflow start`, menu start), and on every later
   state entry (immediately). Unflagged steps still launch via the Run
   affordance. Typical auto steps are `command: axn-git
   origin/{{mr_target}}` — opens Git Inspect with a "Changes vs
@@ -469,7 +505,7 @@ dev-workflow:
 ```
 
 The same path works from a shell without the gitlab-mr plugin:
-`axn-workflow-start mr-review https://gitlab.com/g/p/-/merge_requests/114`
+`axn-workflow start mr-review https://gitlab.com/g/p/-/merge_requests/114`
 binds the current session with `mr` + companions pre-filled (no worktree
 created — the start-args path just binds).
 

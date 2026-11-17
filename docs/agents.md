@@ -43,7 +43,7 @@ over a local socket and acts on the terminal it runs in:
 "${AXN_TERM_CLI:-axn-term}" session summary 'Reviewing the auth token refresh race'
 "$AXN_TERM_CLI" session rename api-refactor
 "$AXN_TERM_CLI" session focus git
-"$AXN_TERM_CLI" session command axn-workflow-move review   # any axn-*/plugin command
+"$AXN_TERM_CLI" session command axn-workflow move review   # any axn-*/plugin command
 ```
 
 - Every PTY is started with `AXN_TERM_PTY_ID`, a random per-PTY
@@ -116,26 +116,28 @@ program use `axn-term session …` above:
   covering plugin view.
 - `axn-awesome [ls|add <path|url> [label]|rm <n|path>]` — manage the awesome
   list bookmark panel (plugin, enabled by default).
-- `axn-workflow-start [name] [arg|key=value …]` — bind the session to a dev
+- `axn-workflow` (or `axn-workflow status`) reports the binding.
+- `axn-workflow start [name] [arg|key=value …]` — bind the session to a dev
   workflow and enter its start state (name required when several are
   defined). Trailing args fill the workflow's declared `vars` — bare values
   in declaration order, `key=value` by name.
-- `axn-workflow-set <var> <value>` — set a declared var on the bound
+- `axn-workflow set <var> <value>` — set a declared var on the bound
   session. A step or agent can also emit
   `axn-workflow-var[<token>]: <key> <value>` on a whole output line (see the
-  token note under `axn-workflow-move`). Vars substitute into `{{key}}` action templates
+  token note under `axn-workflow move`). Vars substitute into `{{key}}` action templates
   and export to actions' env as `KEY` (plus `AXN_WORKFLOW`/`AXN_STATE`/
   `AXN_ACTION`/`AXN_WORKFLOW_TOKEN`).
-- `axn-mr-review <mr-url|!N|#N> [workflow]` — typed inside a repo session:
-  fetch the merge/pull-request head (`merge-requests/N/head`, GitHub
-  `pull/N/head`) into a `wt/mr-<iid>` worktree (an existing review
-  worktree is reused and fast-forwarded when clean), open a new session
-  there and bind it to an MR workflow (one declaring a `kind: mr` var),
-  vars pre-filled. The current session is untouched.
-- `axn-workflow-move <state>` — transition the bound workflow to `<state>`
+- `axn-workflow start <workflow> <mr-url|!N|#N>` — when the value fills
+  the workflow's `kind: mr` var: fetch the merge/pull-request head
+  (`merge-requests/N/head`, GitHub `pull/N/head`) into a `wt/mr-<iid>`
+  worktree (an existing review worktree is reused and fast-forwarded when
+  clean), open a new session there and bind the workflow, vars pre-filled
+  (`mr_role` included). The var's `when` (e.g. `role: reviewer`) must hold
+  for your role on the MR. The current session is untouched.
+- `axn-workflow move <state>` — transition the bound workflow to `<state>`
   (fires the entered state's `auto` actions — the on-enter hook; other
   steps still wait for the human's Run). As a *running agent* hand off with
-  `"$AXN_TERM_CLI" session command axn-workflow-move <state>` (see
+  `"$AXN_TERM_CLI" session command axn-workflow move <state>` (see
   `axn-term session` above), or by printing a whole line
   `axn-workflow-state[<token>]: <state>` to stdout (the plugin adopts
   declared states), or — when the workflow has `tracking.file` — updating `state:` in
@@ -145,14 +147,14 @@ program use `axn-term session …` above:
   prompt templates; markers without it are ignored, so a file you `cat` can't
   drive the workflow. Print the marker with the token expanded, e.g.
   `echo "axn-workflow-state[$AXN_WORKFLOW_TOKEN]: review"`.
-- `axn-workflow-run [action]` — run a named action of the current state
+- `axn-workflow run [action]` — run a named action of the current state
   (name optional when the state has exactly one). Two more whole-line output
   markers extend the handoff protocol: `axn-workflow-run[<token>]: <name>` asks the
   plugin to fire that action (equivalent of pressing its Run button), and
   `axn-workflow-check[<token>]: <name> <rc>` reports a check result for a command
   action — `<state>:<name> <rc>` addresses a check on another state.
 - `axn-workflow` — echo the session's bound workflow/state;
-  `axn-workflow-stop` — clear the binding. Both need
+  `axn-workflow stop` — clear the binding. Both need
   `dev-workflow.enabled: true`; see docs/dev-workflow.md.
 
 ## Environment
