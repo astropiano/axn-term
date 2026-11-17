@@ -10,13 +10,32 @@ import { backendFileService, resolvePath } from '../fileService';
 import { getScreenLines } from '../../terminalRegistry';
 import { setSessionRestoring } from '../restoring';
 import { axnLog } from '../log';
+import { activeView, onViewChanged, openView, removeView, selectView } from '../viewHost';
 
 export interface SessionViewContext {
   session: ShellSession;
   updateSession: (sessionId: string, patch: Partial<ShellSession>) => void;
 }
 
-export interface PluginApi {
+/** The rail-view operations every plugin ctx carries (backed by `app/viewHost.ts`). */
+export interface PluginViewApi {
+  /** Open (or re-select) an http(s) page as a runtime rail view; returns its view key. */
+  openView: typeof openView;
+  /** Activate a rail view by key (`null` = back to the session). */
+  selectView: typeof selectView;
+  /** Remove a runtime view opened with `openView`. */
+  removeView: typeof removeView;
+  /** The selected rail view, or null while a session shows. Never carries a URL. */
+  activeView: typeof activeView;
+  onViewChanged: typeof onViewChanged;
+}
+
+/** ctx of a command's `appRun` — app level, no session. */
+export interface PluginAppCommandContext extends PluginViewApi {
+  pluginSettings: unknown;
+}
+
+export interface PluginApi extends PluginViewApi {
   writeToSession: (data: string) => Promise<void>;
   updatePluginState: (patch: unknown) => void;
   pluginState: unknown;
@@ -328,6 +347,16 @@ export interface PluginCommand {
     arg: string | undefined,
     line: string,
   ) => string | false | void | Promise<string | false | void>;
+  /**
+   * App-level handler: needs no session. Only commands declaring it are
+   * accepted from the secret-free control message (`axn-term command`);
+   * typed in a session, it runs when `run` is absent.
+   */
+  appRun?: (
+    ctx: PluginAppCommandContext,
+    arg: string | undefined,
+    line: string,
+  ) => string | false | void | Promise<string | false | void>;
 }
 
 /** Normalize a plugin's `commands` list to `PluginCommand` objects. */
@@ -524,6 +553,14 @@ export function pluginSessionFields(plugin: SessionViewPlugin): SessionField[] {
   return out;
 }
 
+/** One rail item a plugin contributes through `railEntries`. Ids never contain `/`. */
+export interface RailEntry {
+  id: string;
+  title: string;
+  logo?: string;
+  runtime?: boolean;
+}
+
 /** The ctx handed to a plugin's `renderRail`/`renderRailDetail`. */
 export interface PluginRailContext {
   /** The session backend — remote-only capabilities (e.g.
@@ -682,6 +719,18 @@ export interface SessionViewPlugin {
    */
   renderRail?: (ctx: PluginRailContext) => ReactNode;
   /**
+   * Several rail items instead of one: the host renders one item per entry
+   * (title, `logo`) and opens `renderView` with its `entryId`. View key
+   * `pluginId/entryId` (`app/railOrder.ts`). `runtime` entries are never
+   * written to the saved rail order.
+   */
+  railEntries?: (ctx: { pluginSettings: unknown }) => RailEntry[];
+  /**
+   * Keep each opened view mounted (hidden, `inert`) while another view or a
+   * session shows, so its state survives switching — e.g. an iframe.
+   */
+  keepViewMounted?: boolean;
+  /**
    * Optional heavier rail presentation — the detailed counterpart of the
    * plain `renderRail` icon: live meters, counts, strips. The app renders
    * this instead of `renderRail` when the user places the plugin's status
@@ -704,6 +753,10 @@ export interface SessionViewPlugin {
    */
   renderView?: (ctx: {
     pluginSettings: unknown;
+    /** The rail entry this view was opened from (plugins declaring `railEntries`). */
+    entryId?: string;
+    /** False while a kept-mounted view (`keepViewMounted`) is hidden. */
+    active: boolean;
     close: () => void;
     appState: unknown;
     updateAppState: (patch: Record<string, unknown>) => void;
@@ -1030,5 +1083,14 @@ export function createPluginApi(
     },
     appState: deps.pluginData[settingsKey],
     updateAppState: (patch) => deps.mergePluginData(settingsKey, patch),
+    ...pluginViewApi,
   };
 }
+
+export const pluginViewApi: PluginViewApi = {
+  openView,
+  selectView,
+  removeView,
+  activeView,
+  onViewChanged,
+};

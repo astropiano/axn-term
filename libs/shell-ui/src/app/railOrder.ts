@@ -49,8 +49,8 @@ export function parseViewKey(key: string): { pluginId: string; entryId?: string 
 
 export interface RailSlotLike {
   key: string;
-  /** Contributed through `railEntries` rather than the plugin's own item. */
-  entry?: boolean;
+  /** Set (truthy) when contributed through `railEntries` rather than the plugin's own item. */
+  entry?: unknown;
 }
 
 /**
