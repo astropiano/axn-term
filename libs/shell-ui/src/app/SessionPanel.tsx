@@ -1303,22 +1303,22 @@ export function SessionItem({
                 className="flex shrink-0 items-center gap-1.5"
                 data-tip={`running — ${session.progress}%`}
               >
-                <span className="h-1.5 w-10 overflow-hidden rounded bg-[var(--bg)]">
+                <span className="h-1 w-10 overflow-hidden rounded-full bg-[var(--fill-2)]">
                   <span
-                    className="block h-full transition-all"
+                    className="block h-full rounded-full transition-all"
                     style={{
                       width: `${session.progress}%`,
                       backgroundColor: statusColor.running,
                     }}
                   />
                 </span>
-                <span className="text-[10px]" style={{ color: statusColor.running }}>
+                <span className="text-[11px] tabular-nums" style={{ color: statusColor.running }}>
                   {session.progress}%
                 </span>
               </span>
             ) : (
               <span
-                className="shrink-0 text-[10px] uppercase tracking-wide"
+                className="shrink-0 text-[11px] uppercase tracking-wide"
                 style={{ color: statusColor[session.status] }}
               >
                 {statusLabel[session.status]}
@@ -1328,7 +1328,7 @@ export function SessionItem({
       case 'core.summary':
         return session.summary && settings.sessionSummaries !== false ? (
           <div
-            className="line-clamp-3 whitespace-pre-line break-words text-[11px] text-[var(--text-secondary)]"
+            className="line-clamp-3 whitespace-pre-line break-words pl-[30px] text-[11px] leading-[15px] text-[var(--text-secondary)]"
             data-tip={session.summary}
           >
             {session.summary}
@@ -1336,7 +1336,7 @@ export function SessionItem({
         ) : null;
       case 'core.process':
         return session.process ? (
-          <p className="text-[10px] text-[var(--text-secondary)]">
+          <p className="mb-2 text-[11px] text-[var(--text-secondary)]">
             process: <span className="text-[var(--text-primary)]">{session.process}</span>
           </p>
         ) : null;
@@ -1372,13 +1372,13 @@ export function SessionItem({
             (session.tasks ?? []).length > 0 ||
             (session.progress ?? 0) > 0) && (
             <div>
-              <div className="mb-0.5 flex justify-between text-[10px] text-[var(--text-secondary)]">
+              <div className="mb-0.5 flex justify-between text-[11px] text-[var(--text-secondary)]">
                 <span>progress</span>
                 <span>{session.progress}%</span>
               </div>
-              <div className="h-1.5 w-full overflow-hidden bg-[var(--bg)]">
+              <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--fill-2)]">
                 <div
-                  className="h-full transition-all"
+                  className="h-full rounded-full transition-all"
                   style={{
                     width: `${session.progress}%`,
                     backgroundColor: session.status
@@ -1414,7 +1414,7 @@ export function SessionItem({
     if (parts.length === 0) return null;
     if (parts.length === 1) return <div key={key}>{parts[0].node}</div>;
     return (
-      <div key={key} className="flex flex-wrap items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+      <div key={key} className="flex flex-wrap items-center gap-1 text-[11px] text-[var(--text-secondary)]">
         {parts.map((p, i) => (
           <Fragment key={p.id}>
             {i > 0 && <span aria-hidden>·</span>}
