@@ -2,8 +2,9 @@
  * Session card layout — how a session's card in the panel is assembled from
  * session fields. Plugins only *provide* fields (`SessionViewPlugin.
  * sessionFields`: id, label, kind, default zone, value); the card is laid
- * out here, from the user's `sessionCard` setting in config.yaml or the
- * default below.
+ * out here, from the user's `sessionCard` setting in config.yaml, each unset
+ * zone falling back to {@link DEFAULT_SESSION_CARD}. A plugin field shows only
+ * where one of them names it.
  *
  * Three zones:
  *  - `title`    — the title row (one row of inline fields, always visible)
@@ -23,10 +24,8 @@ export interface FieldMeta {
   id: string;
   label: string;
   kind: 'inline' | 'block';
-  /** Where the default layout puts it. */
+  /** Where a built-in field goes when no layout places it; plugin fields are placed only by a layout. */
   zone: SessionZone;
-  /** Shown only where the `sessionCard` setting places it — never by default. */
-  optIn?: boolean;
 }
 
 /** The `sessionCard` setting (config.yaml). Every member optional. */
@@ -55,27 +54,40 @@ export const CORE_FIELDS: FieldMeta[] = [
 ];
 
 /**
- * The layout without user configuration — today's card: name, plugin title
- * badges, status in the title row; the summary (and other always fields)
- * below; process, plugin blocks, tasks and progress on the selected card.
- * `fields` lists plugin fields in plugin order.
+ * The shipped `sessionCard` — what a zone shows while the user's setting
+ * leaves it unset. Plugin fields show only where a layout names them, so
+ * this lists today's card explicitly; tags and Jira tickets are left out on
+ * purpose. Ids of disabled plugins resolve to nothing.
  */
-export function defaultCardLayout(fields: FieldMeta[]): ResolvedCardLayout {
-  const plugin = fields.filter((f) => !f.id.startsWith('core.') && !f.optIn);
-  const inZone = (zone: SessionZone) => plugin.filter((f) => f.zone === zone);
-  return {
-    title: ['core.name', ...inZone('title').filter((f) => f.kind === 'inline').map((f) => f.id), 'core.status'],
-    always: [['core.summary'], ...inZone('always').map((f) => [f.id])],
-    selected: [
-      ['core.process'],
-      ...inZone('selected').map((f) => [f.id]),
-      // A block field defaulting to the title row cannot sit there.
-      ...inZone('title').filter((f) => f.kind === 'block').map((f) => [f.id]),
-      ['core.tasks'],
-      ['core.progress'],
-    ],
-  };
-}
+export const DEFAULT_SESSION_CARD: ResolvedCardLayout = {
+  title: [
+    'core.name',
+    'git-status.branch',
+    'glab-mr.mr',
+    'gh-pr.pr',
+    'vibe.attention',
+    'worktrees.worktree',
+    'agents.persona',
+    'core.status',
+  ],
+  always: [['core.summary']],
+  selected: [
+    ['core.process'],
+    ['git-status.repo'],
+    ['glab-mr.mrs'],
+    ['gh-pr.prs'],
+    ['devin.panel'],
+    ['claude.resume'],
+    ['codex.resume'],
+    ['antigravity.resume'],
+    ['opencode.resume'],
+    ['dev-workflow.state'],
+    ['vibe.panel'],
+    ['ram.memory'],
+    ['core.tasks'],
+    ['core.progress'],
+  ],
+};
 
 const ids = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
@@ -106,16 +118,16 @@ export function parseCardLayout(raw: unknown): SessionCardLayout | undefined {
  * explicitly anywhere is left out of zones still on their default; ids naming no
  * available field are skipped (a disabled plugin's fields simply vanish);
  * a block field configured into the title row moves to the selected zone.
- * Every available field placed nowhere and not `hidden` (or `optIn`) is appended to its
- * default zone, so a newly enabled plugin is never invisible. `core.name`
- * is always in the title row.
+ * A built-in field placed nowhere and not `hidden` is appended to its zone;
+ * a plugin field placed nowhere is not shown. `core.name` is always in the
+ * title row.
  */
 export function resolveCardLayout(
   layout: SessionCardLayout | undefined,
   fields: FieldMeta[],
 ): ResolvedCardLayout {
   const byId = new Map(fields.map((f) => [f.id, f]));
-  const defaults = defaultCardLayout(fields);
+  const defaults = DEFAULT_SESSION_CARD;
   const hidden = new Set(layout?.hidden ?? []);
   hidden.delete('core.name');
   const placed = new Set<string>();
@@ -150,7 +162,7 @@ export function resolveCardLayout(
   const selected = [...zoneRows(layout?.selected, defaults.selected), ...demoted];
   // Unplaced fields fall back to their default zone.
   for (const f of fields) {
-    if (placed.has(f.id) || hidden.has(f.id) || f.optIn) continue;
+    if (placed.has(f.id) || hidden.has(f.id) || !f.id.startsWith('core.')) continue;
     placed.add(f.id);
     if (f.zone === 'title' && f.kind === 'inline') {
       // Before core.status when it sits at the end of the title row.

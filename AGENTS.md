@@ -279,8 +279,8 @@ derived from the string (`tagColor`) unless overridden in the plugin's
 `colors` map in plugins.yaml (edited in Settings → Plugins → Tags,
 `TagColorSettings`); a workspace's tint paints the whole workspace block; picked/created through `TagModal`
 (`openTagModal` in `app/tagHost.tsx`, mounted as `TagHost` in `ShellApp`); the
-`tagging.tags` card field is `optIn`: it shows only where `sessionCard` places it
-(default layout shows no tag name, the tint stays). Design: `docs/superpowers/specs/2026-11-17-tagging-plugin-design.md`.
+`tagging.tags` card field shows only where `sessionCard` places it (the default
+layout shows no tag name; the tint stays). Design: `docs/superpowers/specs/2026-11-17-tagging-plugin-design.md`.
 
 Plugins can declare hidden commands via `commands?: (string | PluginCommand)[]`
 — they join the built-in `axn-*` names for Tab completion. A plain string is
@@ -1107,11 +1107,13 @@ selected: [[ids]], hidden: [ids] }`) lays it out: a configured zone
 replaces that zone's default, a field placed explicitly anywhere is left
 out of default zones, unknown ids are skipped (a disabled plugin's fields
 vanish), blocks configured into the title row move to the selected zone,
-`core.name` is always in the title row, and every available field placed
-nowhere and not `hidden` falls back to its default zone — a newly enabled
-plugin is never invisible (`resolveCardLayout`). Without a layout the card
-is today's: name, title badges, status; summary + always fields; process,
-plugin blocks, tasks, progress (`defaultCardLayout`). `SessionItem`
+`core.name` is always in the title row, and a built-in field placed nowhere
+and not `hidden` falls back to its zone. A **plugin field shows only where a
+layout names it** (`resolveCardLayout`); its `zone` is only a hint. Each
+unset zone falls back to the shipped `DEFAULT_SESSION_CARD`, which lists
+today's card explicitly (git/MR/PR/vibe/worktree/persona badges, plugin
+blocks) and deliberately leaves out `tagging.tags` and `jira.tickets`; a
+new plugin's fields must be added there or to the user's `sessionCard`. `SessionItem`
 (`SessionPanel.tsx`) renders it. This replaced the per-plugin `renderRow`/
 `rowTip`/`render` hooks (and the short-lived `sessionLine`); external `.mjs`
 plugins declaring the old hooks still work — `pluginSessionFields` adapts
@@ -1320,7 +1322,7 @@ as a YAML map or the one-line `In Progress: blue; Reviewed: #8e44ad` form
 the Settings field writes (`parseStatusColors`, exact status before
 category — `statusColor`); backlog tickets carry the same `color`.
 Summary/type/assignee are in the tooltip and the chip links to
-`<base-url>/browse/KEY`. It offers one session field, `jira.tickets` (inline, default zone `always`): the session's ticket keys from its MR/PR titles (glab-mr `mrs` / gh-pr `prs` per-session state, `sessionMrTitles`), else its branch, else its name (custom, else the terminal-reported `autoName`), else its cwd folder name — the first source with any key wins and may yield several (`sessionTicketKeys`/`findIssueKeys`); each renders as `KEY · Status` once the shared enrichment cache has it (`useEnrichedKeys`, `ChipView`). Where it shows is the session card layout's business (below), not a plugin setting.
+`<base-url>/browse/KEY`. It offers one session field, `jira.tickets` (inline, shown only where `sessionCard` places it): the session's ticket keys from its MR/PR titles (glab-mr `mrs` / gh-pr `prs` per-session state, `sessionMrTitles`), else its branch, else its name (custom, else the terminal-reported `autoName`), else its cwd folder name — the first source with any key wins and may yield several (`sessionTicketKeys`/`findIssueKeys`); each renders as `KEY · Status` once the shared enrichment cache has it (`useEnrichedKeys`, `ChipView`). Where it shows is the session card layout's business (below), not a plugin setting.
 
 The `git-inspect` plugin (`session-plugins/gitInspect.tsx`) is layered on
 `git-status` (titled `git` in Settings): `dependsOn: [{ id: 'git-status',
@@ -2480,11 +2482,13 @@ selected: [[ids]], hidden: [ids] }`) lays it out: a configured zone
 replaces that zone's default, a field placed explicitly anywhere is left
 out of default zones, unknown ids are skipped (a disabled plugin's fields
 vanish), blocks configured into the title row move to the selected zone,
-`core.name` is always in the title row, and every available field placed
-nowhere and not `hidden` falls back to its default zone — a newly enabled
-plugin is never invisible (`resolveCardLayout`). Without a layout the card
-is today's: name, title badges, status; summary + always fields; process,
-plugin blocks, tasks, progress (`defaultCardLayout`). `SessionItem`
+`core.name` is always in the title row, and a built-in field placed nowhere
+and not `hidden` falls back to its zone. A **plugin field shows only where a
+layout names it** (`resolveCardLayout`); its `zone` is only a hint. Each
+unset zone falls back to the shipped `DEFAULT_SESSION_CARD`, which lists
+today's card explicitly (git/MR/PR/vibe/worktree/persona badges, plugin
+blocks) and deliberately leaves out `tagging.tags` and `jira.tickets`; a
+new plugin's fields must be added there or to the user's `sessionCard`. `SessionItem`
 (`SessionPanel.tsx`) renders it. This replaced the per-plugin `renderRow`/
 `rowTip`/`render` hooks (and the short-lived `sessionLine`); external `.mjs`
 plugins declaring the old hooks still work — `pluginSessionFields` adapts

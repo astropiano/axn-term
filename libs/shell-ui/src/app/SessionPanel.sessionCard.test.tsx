@@ -95,7 +95,21 @@ const titleRowOf = (name: string) =>
     .find((s) => s.className.includes('font-medium') && s.textContent === name)
     ?.closest('[class*="group/row"]');
 
-it('places fields in their default zones', async () => {
+it('shows no plugin field the layout does not place', async () => {
+  await render({ plugins: [fieldPlugin] });
+  const text = container.textContent ?? '';
+  expect(text).not.toContain('badge-');
+  expect(text).not.toContain('line-');
+  expect(text).not.toContain('more-');
+});
+
+it('places plugin fields in the zones the layout names', async () => {
+  localStorage.setItem(
+    'axn-term:settings',
+    JSON.stringify({
+      sessionCard: { title: ['core.name', 'probe.badge'], always: [['probe.line']], selected: [['probe.more']] },
+    }),
+  );
   await render({ plugins: [fieldPlugin] });
   const text = container.textContent ?? '';
   expect(titleRowOf('tests')?.textContent).toContain('badge-tests');
@@ -129,6 +143,10 @@ it('still renders legacy renderRow/render hooks of external plugins', async () =
     renderRow: () => <span>old-badge</span>,
     render: () => <div>old-panel</div>,
   } as unknown as SessionViewPlugin;
+  localStorage.setItem(
+    'axn-term:settings',
+    JSON.stringify({ sessionCard: { title: ['core.name', 'legacy.row'], selected: [['legacy.panel']] } }),
+  );
   await render({ plugins: [legacy] });
   const text = container.textContent ?? '';
   expect(text).toContain('old-badge');
@@ -161,6 +179,7 @@ const searchPlugin: SessionViewPlugin = {
 };
 
 it('filters sessions on searchable session fields', async () => {
+  localStorage.setItem('axn-term:settings', JSON.stringify({ sessionCard: { title: ['core.name', 'git.branch'] } }));
   await render({ plugins: [searchPlugin] });
   await filterBy('vectordb-29');
   const text = container.textContent ?? '';
@@ -169,7 +188,7 @@ it('filters sessions on searchable session fields', async () => {
 });
 
 it('does not match fields the layout hides', async () => {
-  localStorage.setItem('axn-term:settings', JSON.stringify({ sessionCard: { hidden: ['git.branch'] } }));
+  localStorage.setItem('axn-term:settings', JSON.stringify({ sessionCard: { title: ['core.name', 'git.branch'], hidden: ['git.branch'] } }));
   await render({ plugins: [searchPlugin] });
   await filterBy('vectordb-29');
   const text = container.textContent ?? '';

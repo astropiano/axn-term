@@ -486,13 +486,12 @@ export interface SessionField {
    * placed in the title row.
    */
   kind: 'inline' | 'block';
-  /** Where the default layout puts it. */
-  zone: SessionZone;
   /**
-   * Absent until the `sessionCard` setting places it; `zone` is then only
-   * a hint. Without this, an unplaced field falls back to its `zone`.
+   * The zone the field is meant for. Placement itself comes only from the
+   * `sessionCard` layout (or `DEFAULT_SESSION_CARD`); a field neither names
+   * is not shown.
    */
-  optIn?: boolean;
+  zone: SessionZone;
   /** The content for this session — null/false when there is nothing. */
   value: (ctx: SessionViewContext & PluginApi) => ReactNode;
   /**
