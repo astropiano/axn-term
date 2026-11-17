@@ -141,6 +141,10 @@
     updateAppState: function (patch) { return call('updateAppState', [patch]); },
     selectSession: function (id) { return call('selectSession', [id]); },
     closeView: function () { return call('closeView', []); },
+    openView: function (view) { return call('openView', [view]); },
+    selectView: function (key) { return call('selectView', [key]); },
+    removeView: function (key) { return call('removeView', [key]); },
+    getActiveView: function () { return call('getActiveView', []); },
     setSurface: function (surface, sessionId, html) {
       post({ type: 'surface', surface: surface, sessionId: sessionId, html: html });
     },
@@ -187,6 +191,9 @@
         break;
       case 'peer':
         emit('peer', m.payload);
+        break;
+      case 'viewChanged':
+        emit('viewChanged', m.value);
         break;
       case 'event': {
         var data = {

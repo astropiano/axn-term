@@ -112,6 +112,12 @@ export interface AppSettings {
   /** Render `session.summary` (set via `axn-session-summary`/`axn-session set --summary`) in the panel. */
   sessionSummaries?: boolean;
   /**
+   * Let programs outside axn-term start a command in a new session
+   * (`axn-term command axn-session create … --command`), as agterm's
+   * `agtermctl session new --command` does. Off by default.
+   */
+  allowExternalCommands?: boolean;
+  /**
    * How a session card in the panel is assembled from session fields —
    * see `app/sessionCardLayout.ts`. Unset = the default layout.
    */

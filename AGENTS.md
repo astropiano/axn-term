@@ -778,7 +778,17 @@ section, so `<plugin>.enabled: true` enables the preview too (still opt-in).
 launch that finds a live control socket asks the running app to focus a
 window and exits (a stale socket is replaced), so `pnpm tauri dev` from an
 axn-term terminal needs its own `AXN_TERM_STATE_DIR`; an unknown subcommand
-prints usage and exits 2. `axn-term session summary|rename|focus|command …`
+prints usage and exits 2. `axn-term command [--window <label>] <axn-…>` runs an
+app-level line from any local process — the socket's secret-free `app` message
+(like `activate`), delivered as `control-app-command` to the named window or the
+focused one (`window::app_command_window`); only plugin commands declaring
+`appRun` (e.g. `axn-views open|select|close|current`) run, plus the built-in
+`axn-session create` (in the window's selected session's context); everything else
+is refused (`dispatchAppCommand` in `app/controlCommands.ts`, `appSessionCreate` in
+`app/useSessionCommands.ts`). `axn-session create --command <line>` /
+`--command-b64 <base64>` types the line into the new session once its shell has
+printed; on the app-level path that needs the `allowExternalCommands` setting
+(default off) — agterm's `session new --command` model behind a switch. `axn-term session summary|rename|focus|command …`
 runs an `axn-*` command for the terminal it is invoked from — over the
 control socket (`src-tauri/src/control.rs`, `$AXN_TERM_STATE_DIR/control.sock`,
 0600): every PTY gets `AXN_TERM_PTY_ID` + a random `AXN_TERM_PTY_SECRET` +
@@ -1394,7 +1404,9 @@ and view frames). Sandboxes boot/dispose with the enabled set
 `line` hook and replacement lines from owned commands; `terminal-output` —
 `getScreenLines`/`waitForSessionOutput` and the `output` hook; `fs-read`;
 `fs-write`; `sessions` — `openSession`/`selectSession`/`activateTab`/`openTab`/
-`openBrowser`; `setRestoring` counts as `terminal-input` — its overlay takes the
+`openBrowser` and the rail views `openView`/`selectView`/`removeView`
+(`getActiveView` and the `viewChanged` push need none and carry no URL);
+`setRestoring` counts as `terminal-input` — its overlay takes the
 terminal's input). The
 bridge refuses undeclared calls with an error and never delivers undeclared
 hooks; unknown entries are dropped with a warning at load. Default is none —
@@ -2153,7 +2165,17 @@ section, so `<plugin>.enabled: true` enables the preview too (still opt-in).
 launch that finds a live control socket asks the running app to focus a
 window and exits (a stale socket is replaced), so `pnpm tauri dev` from an
 axn-term terminal needs its own `AXN_TERM_STATE_DIR`; an unknown subcommand
-prints usage and exits 2. `axn-term session summary|rename|focus|command …`
+prints usage and exits 2. `axn-term command [--window <label>] <axn-…>` runs an
+app-level line from any local process — the socket's secret-free `app` message
+(like `activate`), delivered as `control-app-command` to the named window or the
+focused one (`window::app_command_window`); only plugin commands declaring
+`appRun` (e.g. `axn-views open|select|close|current`) run, plus the built-in
+`axn-session create` (in the window's selected session's context); everything else
+is refused (`dispatchAppCommand` in `app/controlCommands.ts`, `appSessionCreate` in
+`app/useSessionCommands.ts`). `axn-session create --command <line>` /
+`--command-b64 <base64>` types the line into the new session once its shell has
+printed; on the app-level path that needs the `allowExternalCommands` setting
+(default off) — agterm's `session new --command` model behind a switch. `axn-term session summary|rename|focus|command …`
 runs an `axn-*` command for the terminal it is invoked from — over the
 control socket (`src-tauri/src/control.rs`, `$AXN_TERM_STATE_DIR/control.sock`,
 0600): every PTY gets `AXN_TERM_PTY_ID` + a random `AXN_TERM_PTY_SECRET` +
@@ -2769,7 +2791,9 @@ and view frames). Sandboxes boot/dispose with the enabled set
 `line` hook and replacement lines from owned commands; `terminal-output` —
 `getScreenLines`/`waitForSessionOutput` and the `output` hook; `fs-read`;
 `fs-write`; `sessions` — `openSession`/`selectSession`/`activateTab`/`openTab`/
-`openBrowser`; `setRestoring` counts as `terminal-input` — its overlay takes the
+`openBrowser` and the rail views `openView`/`selectView`/`removeView`
+(`getActiveView` and the `viewChanged` push need none and carry no URL);
+`setRestoring` counts as `terminal-input` — its overlay takes the
 terminal's input). The
 bridge refuses undeclared calls with an error and never delivers undeclared
 hooks; unknown entries are dropped with a warning at load. Default is none —
@@ -2863,7 +2887,7 @@ Shared pieces to reuse instead of ad-hoc class strings: `app/chromeStyles.ts` (s
 
 ## Rail, session panel toggle and their shortcuts
 
-The rail holds tools only: one item per plugin view, Settings at the bottom behind a hairline. Window-chrome shortcuts live in `app/shortcuts.ts`, are handled on `window` (capture) by ShellApp, and terminals let them through (`isAppChromeShortcut` next to `isAppNavigationShortcut` / `isReloadShortcut` in the custom key handlers of `ShellTerminal.tsx` and `SubShellView.tsx`):
+The rail holds tools only: one item per plugin view — or one per entry for a plugin declaring `railEntries` (view key `pluginId/entryId`, `app/railOrder.ts`; e.g. the `external-views` plugin, one item per configured or runtime-opened web page) — Settings at the bottom behind a hairline. The rail order, ⌘N numbering, the active view and `app/viewHost.ts` (`openView`/`selectView`/`activeView`, per window) all work on view keys; unranked entries sort after every unranked plugin so they never take an existing item's number, and runtime entries are never saved. A plugin declaring `keepViewMounted` keeps each opened view mounted (hidden, `inert`) while another view or a session shows. Window-chrome shortcuts live in `app/shortcuts.ts`, are handled on `window` (capture) by ShellApp, and terminals let them through (`isAppChromeShortcut` next to `isAppNavigationShortcut` / `isReloadShortcut` in the custom key handlers of `ShellTerminal.tsx` and `SubShellView.tsx`):
 
 - `⌘1`…`⌘9` (`Ctrl+1`…`Ctrl+9` on Linux/Windows) open the 1st…9th rail view in the order shown; pressing the active view's shortcut returns to the session. The numbering follows the rendered rail (`railViewIds` in `app/railOrder.ts`): slots without a view, and slots whose plugin renders no item, take no number. Each item's tooltip shows its shortcut (`RailShortcutContext`). `⌘0`/`Ctrl+0` is not a rail shortcut and is never shown as one: it stays View → Actual Size in the app menu, so there are nine rail shortcuts.
 - `⌃⌘S` (`Ctrl+Shift+S`) shows/hides the session panel. The toggle button sits in the title-bar row right of the macOS traffic lights; without that row (no overlay title bar, fullscreen) and with the panel closed it falls back to the top of the rail. While the panel is closed it carries the count of raised attention flags.
