@@ -1,10 +1,9 @@
 import { Fragment, useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { TooltipHost } from './Tooltip';
-import { PanelStatusSection } from './PanelStatusSection';
-import { PluginIcon, SessionIconGlyph } from './SessionPanel';
-import type { PublishedStatus } from './panelStatus';
+import { SessionPanel } from './SessionPanel';
 import { getSessionViewPlugins } from './session-plugins';
+import type { SessionViewPlugin } from './session-plugins/plugin';
 import { MemoryStatsProvider } from './useMemoryStats';
 import { setAppAttention } from './attention';
 import {
@@ -37,84 +36,98 @@ function RailExample() {
   );
 }
 
+/** Headless status sources, as ShellApp mounts them (ram). */
+function PluginPanelStatus({ plugins }: { plugins: SessionViewPlugin[] }) {
+  return (
+    <>
+      {plugins.map((plugin) =>
+        plugin.panelStatus ? (
+          <Fragment key={plugin.id}>
+            {plugin.panelStatus({
+              backend: storyBackend,
+              pluginSettings: storyPluginSettings[plugin.settingsKey ?? plugin.id],
+              setAppAttention: (attention) => setAppAttention(plugin.id, attention),
+              sessions: storySessions,
+            })}
+          </Fragment>
+        ) : null,
+      )}
+    </>
+  );
+}
+
 /**
- * The docker rail item next to the session panel's status stack, which
- * shows what docker and the RAM plugin used to put into the rail and its
- * tooltips — a Docker accordion and, below it, System: both expanded (left)
- * and as one line each (right).
+ * The rail beside the workspaces panel — the real layout. Every rail plugin
+ * renders; the ones publishing status fill the stack above the panel's
+ * footer (Remote, Merge requests, Docker, axn-dev, then System with the RAM
+ * meters), and the selected session shows plugin fields (RAM under sess-1).
+ *
+ * `detailed` switches rail items that declare it to their heavier form
+ * (`renderRailDetail`) — what `statusDisplay: rail` or a touch device
+ * shows — and hides the accordions they replace, so status never renders
+ * twice.
  */
-function DockerRamExample() {
+function RailAndWorkspacesExample({ detailed }: { detailed: boolean }) {
   bindStoryRuntime();
   useEffect(() => () => unbindStoryRuntime(), []);
-  const plugins = getSessionViewPlugins().filter((p) => p.id === 'docker' || p.id === 'ram');
-  const [open, setOpen] = useState<string[]>(['docker']);
-  const [systemOpen, setSystemOpen] = useState(true);
-  const renderIcon = ({ source, group }: PublishedStatus) => {
-    const plugin = plugins.find((p) => p.id === source);
-    return plugin?.logo !== undefined ? (
-      <PluginIcon plugin={plugin} className="h-3.5 w-3.5 shrink-0" />
-    ) : (
-      <SessionIconGlyph value={group.icon ?? 'Puzzle'} className="h-3.5 w-3.5 shrink-0" />
-    );
-  };
-  const toggle = (source: string) =>
-    setOpen((ids) => (ids.includes(source) ? ids.filter((id) => id !== source) : [...ids, source]));
+  const all = getSessionViewPlugins();
+  const [pluginData, setPluginData] = useState<Record<string, unknown>>({});
+  const mergePluginData = (key: string, patch: Record<string, unknown>) =>
+    setPluginData((d) => ({ ...d, [key]: { ...(d[key] as object), ...patch } }));
   return (
-    <StoryShellProviders>
+    <StoryShellProviders configYaml="remoteEnabled: true">
       <TooltipHost />
       <MemoryStatsProvider active>
-        <div className="flex items-start gap-4">
-          <div className="flex h-[300px] w-[var(--rail-w)] flex-col items-center gap-1 rounded-[var(--radius-lg)] bg-[var(--chrome)] py-2 shadow-[0_0_0_1px_var(--hairline)]">
-            {plugins.map((plugin) =>
-              plugin.renderRail ? (
-                <div key={plugin.id} className="flex flex-col items-center empty:hidden">
-                  {plugin.renderRail({
-                    backend: storyBackend,
-                    pluginSettings: storyPluginSettings[plugin.settingsKey ?? plugin.id],
-                    setAppAttention: (attention) => setAppAttention(plugin.id, attention),
-                    viewActive: false,
-                    toggleView: () => {},
-                    appState: undefined,
-                    updateAppState: () => {},
-                    sessions: storySessions,
-                    sessionApi: () => undefined,
-                  })}
-                </div>
-              ) : null,
-            )}
-          </div>
-          {/* Headless status sources, as ShellApp mounts them. */}
-          {plugins.map((plugin) =>
-            plugin.panelStatus ? (
-              <Fragment key={plugin.id}>
-                {plugin.panelStatus({
-                  backend: storyBackend,
-                  pluginSettings: storyPluginSettings[plugin.settingsKey ?? plugin.id],
-                  setAppAttention: (attention) => setAppAttention(plugin.id, attention),
-                  sessions: storySessions,
-                })}
-              </Fragment>
-            ) : null,
-          )}
-          <div className="w-72 overflow-hidden rounded-[var(--radius-lg)] bg-[var(--chrome)] shadow-[0_0_0_1px_var(--hairline)]">
-            <PanelStatusSection
-              systemExpanded={systemOpen}
-              onToggleSystem={() => setSystemOpen((v) => !v)}
-              expandedGroups={open}
-              onToggleGroup={toggle}
-              sourceOrder={['docker']}
-              renderIcon={renderIcon}
-            />
-          </div>
-          <div className="w-72 overflow-hidden rounded-[var(--radius-lg)] bg-[var(--chrome)] shadow-[0_0_0_1px_var(--hairline)]">
-            <PanelStatusSection
-              systemExpanded={false}
-              onToggleSystem={() => {}}
-              sourceOrder={['docker']}
-              renderIcon={renderIcon}
-            />
-          </div>
+      <PluginPanelStatus plugins={all} />
+      <div className="flex h-[460px] w-[336px] items-stretch overflow-hidden rounded-[var(--radius-lg)] bg-[var(--chrome)] shadow-[0_0_0_1px_var(--hairline)]">
+        <StoryRail
+          activeId={null}
+          onToggle={() => {}}
+          pluginData={pluginData}
+          detailed={detailed}
+          bare
+        />
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <SessionPanel
+            workspaces={[
+              { id: 'w1', name: 'main' },
+              { id: 'w2', name: 'scratch', collapsed: true },
+            ]}
+            sessions={storySessions}
+            selectedSessionId="sess-1"
+            taskState={null}
+            onSelectWorkspace={() => {}}
+            onSelectSession={() => {}}
+            onAddWorkspace={() => {}}
+            onSaveWorkspaceSet={() => {}}
+            onLoadWorkspaceSet={() => {}}
+            onRenameWorkspace={() => {}}
+            onDeleteWorkspace={() => {}}
+            onToggleWorkspace={() => {}}
+            onAddSession={() => {}}
+            onMoveSession={() => {}}
+            onReorderWorkspace={() => {}}
+            onMoveWorkspace={() => {}}
+            onRenameSession={() => {}}
+            onDuplicateSession={() => {}}
+            onCloseSession={() => {}}
+            updateSession={() => {}}
+            mergePluginState={() => {}}
+            plugins={all}
+            onOpenBrowser={() => {}}
+            onOpenTab={() => {}}
+            pluginData={pluginData}
+            mergePluginData={mergePluginData}
+            onOpenSubShell={() => {}}
+            onTurnIntoWorkspace={() => {}}
+            hiddenStatusSources={
+              detailed
+                ? all.filter((p) => p.renderRailDetail).map((p) => p.id)
+                : undefined
+            }
+          />
         </div>
+      </div>
       </MemoryStatsProvider>
     </StoryShellProviders>
   );
@@ -131,7 +144,20 @@ type Story = StoryObj<typeof meta>;
 /** The whole slim rail with every plugin's rail view fed canned data. */
 export const AllPlugins: Story = {};
 
-/** Docker's rail item, and the status stack: a Docker accordion (containers, VM) above System (RAM, swap). */
-export const DockerAndRam: Story = {
-  render: () => <DockerRamExample />,
+/**
+ * Default desktop: plain rail icons; status meters live in the accordions
+ * at the bottom of the workspaces panel. The selected session (sess-1)
+ * shows the RAM plugin's session field.
+ */
+export const RailAndPanel: Story = {
+  render: () => <RailAndWorkspacesExample detailed={false} />,
+};
+
+/**
+ * `statusDisplay: rail` (the touch default): rail items switch to their
+ * heavier form — RAM's free/used strip, docker's counts and CPU/mem/disk
+ * strips — and the accordions they replace are hidden.
+ */
+export const RailAndPanelDetail: Story = {
+  render: () => <RailAndWorkspacesExample detailed={true} />,
 };

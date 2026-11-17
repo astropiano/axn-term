@@ -119,3 +119,19 @@ it('shows no System accordion without machine-level groups, and draws the icon i
   expect(names()).toEqual(['Docker']);
   expect(host.querySelector('[data-icon="docker"]')).not.toBeNull();
 });
+
+it('skips sources whose status moved to the rail', async () => {
+  publishPanelStatus('ram', memory);
+  publishPanelStatus('docker', docker);
+  publishPanelStatus('glab-mr', mrs);
+  // docker + ram shown in the rail: only the MR accordion stays — and with
+  // ram filtered out there is no machine-level group, so no System either.
+  await render({ hiddenSources: ['docker', 'ram'] });
+  expect(names()).toEqual(['Merge requests']);
+});
+
+it('renders nothing when every published source is hidden', async () => {
+  publishPanelStatus('docker', docker);
+  await render({ hiddenSources: ['docker'] });
+  expect(host.innerHTML).toBe('');
+});

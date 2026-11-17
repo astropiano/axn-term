@@ -186,6 +186,7 @@ export function PanelStatusSection({
   onToggleGroup,
   sourceOrder = [],
   renderIcon,
+  hiddenSources,
 }: {
   /** The "System" accordion. */
   systemExpanded: boolean;
@@ -197,9 +198,12 @@ export function PanelStatusSection({
   sourceOrder?: readonly string[];
   /** Icon of a tool accordion; without it nothing is drawn. */
   renderIcon?: (status: PublishedStatus) => ReactNode;
+  /** Sources whose status moved to a detailed rail item — still published,
+   * but skipped here. */
+  hiddenSources?: readonly string[];
 }) {
   const { t } = useLingui();
-  const published = usePanelStatus();
+  const published = usePanelStatus().filter((s) => !hiddenSources?.includes(s.source));
   if (published.length === 0) return null;
 
   const { tools, system } = splitPanelStatus(published, sourceOrder);

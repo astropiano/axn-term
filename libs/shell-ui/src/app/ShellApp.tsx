@@ -506,6 +506,27 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // keyboard shrinks the app instead of covering it.
   const coarsePointer = useCoarsePointer();
   const viewportSize = useVisualViewportSize(coarsePointer);
+  // Plugins declaring a heavier rail form (renderRailDetail) get it instead
+  // of their plain icon when the statusDisplay setting resolves to the rail
+  // — explicitly, or by default on coarse pointers where the panel status
+  // stack costs the most space. Their panel accordion is hidden then.
+  const railDetailIds = useMemo(
+    () =>
+      new Set(
+        enabledPlugins
+          .filter(
+            (p) =>
+              p.renderRailDetail &&
+              ((
+                pluginSettings[(p.settingsKey ?? p.id) as keyof typeof pluginSettings] as
+                  | { statusDisplay?: string }
+                  | undefined
+              )?.statusDisplay ?? (coarsePointer ? 'rail' : 'panel')) === 'rail',
+          )
+          .map((p) => p.id),
+      ),
+    [enabledPlugins, pluginSettings, coarsePointer],
+  );
   // Long-press on a session/plugin tab opens the same menu as right-click.
   const tabLongPress = useRef<{
     timer: ReturnType<typeof setTimeout> | null;
@@ -750,6 +771,42 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         onAttention: notifyAttention,
       }),
     [updateSession, mergePluginState, mergePluginData, openSessionTab, openSubShell, openSession, notifyAttention, liveSessionWithPending],
+  );
+
+  // A rail plugin's rendered item: the heavier `renderRailDetail` when the
+  // plugin opted in and the user placed its status in the rail, else the
+  // plain `renderRail` icon. Same ctx either way.
+  const railNode = useCallback(
+    (plugin: SessionViewPlugin) => {
+      const render =
+        (railDetailIds.has(plugin.id) ? plugin.renderRailDetail : undefined) ?? plugin.renderRail;
+      const settingsKey = plugin.settingsKey ?? plugin.id;
+      return render?.({
+        backend,
+        pluginSettings: pluginSettings[settingsKey as keyof typeof pluginSettings],
+        setAppAttention: (attention) => setAppAttention(plugin.id, attention),
+        viewActive: activePluginView === plugin.id,
+        toggleView: () =>
+          setActivePluginView((v) => (plugin.renderView ? (v === plugin.id ? null : plugin.id) : v)),
+        appState: pluginData[settingsKey],
+        updateAppState: (patch) => mergePluginData(settingsKey, patch),
+        sessions,
+        sessionApi: (sessionId) => {
+          const s = sessionsRef.current.find((x) => x.id === sessionId);
+          return s ? buildPluginApi(s, plugin) : undefined;
+        },
+      });
+    },
+    [
+      backend,
+      pluginSettings,
+      pluginData,
+      sessions,
+      activePluginView,
+      railDetailIds,
+      mergePluginData,
+      buildPluginApi,
+    ],
   );
 
   // Enabled plugins declaring `repoDirs` feed local repo discovery
@@ -2648,28 +2705,11 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             className="flex flex-col items-center empty:hidden"
           >
             <RailShortcutContext.Provider value={railShortcutOf(plugin.id)}>
-            {plugin.renderRail!({
-              backend,
-              pluginSettings: pluginSettings[(plugin.settingsKey ?? plugin.id) as keyof typeof pluginSettings],
-              setAppAttention: (attention) => setAppAttention(plugin.id, attention),
-              viewActive: activePluginView === plugin.id,
-              toggleView: () =>
-                setActivePluginView((v) =>
-                  plugin.renderView ? (v === plugin.id ? null : plugin.id) : v,
-                ),
-              appState: pluginData[plugin.settingsKey ?? plugin.id],
-              updateAppState: (patch) => mergePluginData(plugin.settingsKey ?? plugin.id, patch),
-              sessions,
-              sessionApi: (sessionId) => {
-                const s = sessionsRef.current.find((x) => x.id === sessionId);
-                return s ? buildPluginApi(s, plugin) : undefined;
-              },
-            })}
+            {railNode(plugin)}
             </RailShortcutContext.Provider>
           </div>
         ))}
         {railPlugins.map((plugin, i) => {
-          const settingsKey = plugin.settingsKey ?? plugin.id;
           return (
             <div
               key={plugin.id}
@@ -2704,23 +2744,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
               }`}
             >
               <RailShortcutContext.Provider value={railShortcutOf(plugin.id)}>
-              {plugin.renderRail!({
-                backend,
-                pluginSettings: pluginSettings[settingsKey as keyof typeof pluginSettings],
-                setAppAttention: (attention) => setAppAttention(plugin.id, attention),
-                viewActive: activePluginView === plugin.id,
-                toggleView: () =>
-                  setActivePluginView((v) =>
-                    plugin.renderView ? (v === plugin.id ? null : plugin.id) : v,
-                  ),
-                appState: pluginData[settingsKey],
-                updateAppState: (patch) => mergePluginData(settingsKey, patch),
-                sessions,
-                sessionApi: (sessionId) => {
-                  const s = sessionsRef.current.find((x) => x.id === sessionId);
-                  return s ? buildPluginApi(s, plugin) : undefined;
-                },
-              })}
+              {railNode(plugin)}
               </RailShortcutContext.Provider>
             </div>
           );
@@ -2798,6 +2822,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 onSessionDragEnd={handleSessionDragEnd}
                 foreignDrag={foreignDrag}
                 onForeignDrop={claimForeignDrop}
+                hiddenStatusSources={[...railDetailIds]}
                 appAttention={
                   appFlagSummary
                     ? { count: appFlags.length, level: appFlagSummary.level, title: appFlagSummary.title }

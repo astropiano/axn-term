@@ -3,7 +3,7 @@ import type { SessionViewPlugin } from './plugin';
 import type { SessionAttention, ShellSession } from '../../types';
 import { ptyIdOf } from '../../types';
 import { useSessionBackend } from '../../services';
-import { pressureColor, pressureLevel } from './ram';
+import { BarStrip, pressureColor, pressureLevel } from './ram';
 import { PluginIcon } from '../SessionPanel';
 import { RailItem } from '../RailItem';
 import { publishPanelStatus, type StatusGroup } from '../panelStatus';
@@ -406,12 +406,15 @@ function DockerRail({
   setAppAttention,
   viewActive,
   toggleView,
+  detailed,
 }: {
   sessions: ShellSession[];
   pluginSettings: unknown;
   setAppAttention: (attention: SessionAttention | null) => void;
   viewActive: boolean;
   toggleView: () => void;
+  /** The heavier rail form: container counts and CPU/mem/disk strips. */
+  detailed?: boolean;
 }) {
   const backend = useSessionBackend();
   const [live, setLive] = useState<DockerLiveStats | null>(null);
@@ -575,17 +578,75 @@ function DockerRail({
       </RailItem>
     );
   }
+  if (!detailed) {
+    return (
+      // Running containers as the badge; everything else is in docker's accordion.
+      <RailItem
+        title="Docker"
+        onClick={toggleView}
+        active={viewActive}
+        badge={live.running > 0 ? live.running : undefined}
+        badgeTone="success"
+      >
+        <PluginIcon plugin={dockerPlugin} />
+      </RailItem>
+    );
+  }
+  const title = [
+    `${live.running} running · ${live.stopped} stopped`,
+    cpuTipOf(live, cpuPct),
+    live.memTotalBytes != null ? memTipOf(live, memPct, vmMemPct) : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
   return (
-    // Running containers as the badge; everything else is in docker's accordion.
-    <RailItem
-      title="Docker"
+    // The heavier rail item: running/stopped counts and CPU / MEM / disk
+    // strips, like the pre-redesign rail — opens the docker view on click.
+    <button
+      type="button"
       onClick={toggleView}
-      active={viewActive}
-      badge={live.running > 0 ? live.running : undefined}
-      badgeTone="success"
+      data-tip={title}
+      className={`flex flex-col items-center gap-0.5 rounded-[9px] p-1 transition-colors duration-[var(--dur-1)] ${
+        viewActive ? 'bg-[var(--fill-accent)]' : 'hover:bg-[var(--fill-1)]'
+      }`}
     >
-      <PluginIcon plugin={dockerPlugin} />
-    </RailItem>
+      <div className="flex items-center gap-0.5">
+        <div className="flex flex-col items-center gap-0.5">
+          <span
+            className={`select-none text-[8px] font-bold leading-none ${
+              live.running > 0 ? 'text-[var(--green)]' : 'text-[var(--text-secondary)]'
+            }`}
+            data-tip="running containers"
+          >
+            {live.running}
+          </span>
+          <span
+            className="select-none text-[8px] font-bold leading-none text-[var(--text-secondary)]"
+            data-tip="stopped containers"
+          >
+            {live.stopped}
+          </span>
+        </div>
+        <PluginIcon plugin={dockerPlugin} className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+      </div>
+      {(cpuPct != null || memPct != null || disk?.freeBytes != null) && (
+        <div className="mt-0.5 flex w-7 flex-col divide-y divide-[var(--border)] overflow-hidden rounded-sm border border-[var(--border)]">
+          {cpuPct != null && (
+            <BarStrip pct={cpuPct} color={pressureColor(cpuPct, 0)} tip={cpuTipOf(live, cpuPct)} />
+          )}
+          {memPct != null && (
+            <BarStrip pct={memPct} color={pressureColor(memPct, 0)} tip={memTipOf(live, memPct, vmMemPct)} />
+          )}
+          {disk?.freeBytes != null && (
+            <BarStrip
+              pct={usedPct}
+              color={pressureColor(usedPct, 0)}
+              tip={`docker objects — ${formatBytes(disk.usedBytes)} of the backing filesystem (${usedPct}%)`}
+            />
+          )}
+        </div>
+      )}
+    </button>
   );
 }
 
@@ -618,6 +679,16 @@ export const dockerPlugin: SessionViewPlugin = {
       setAppAttention={setAppAttention}
       viewActive={viewActive}
       toggleView={toggleView}
+    />
+  ),
+  renderRailDetail: ({ sessions, pluginSettings, setAppAttention, viewActive, toggleView }) => (
+    <DockerRail
+      sessions={sessions}
+      pluginSettings={pluginSettings}
+      setAppAttention={setAppAttention}
+      viewActive={viewActive}
+      toggleView={toggleView}
+      detailed
     />
   ),
   renderView: ({ close, sessions, pluginSettings, selectSession, sessionApi, appState, updateAppState }) => (
