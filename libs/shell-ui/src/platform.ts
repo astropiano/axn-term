@@ -268,6 +268,12 @@ export interface ShellPlatform {
    */
   onAppCommand?(cb: (cmd: { line: string }) => Promise<ControlReply>): Unsubscribe;
   /**
+   * Let a page's origin through the window's navigation guard before it is
+   * shown in an iframe (desktop: the guard also judges frame loads). Absent
+   * where no guard exists.
+   */
+  allowFrameOrigin?(url: string): Promise<void>;
+  /**
    * Load external `.mjs` plugins from disk — desktop-only. Resolves the
    * number of plugins registered. Absent = no external plugin support.
    */

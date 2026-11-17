@@ -10,6 +10,8 @@ import {
   resetViewHostForTests,
   runtimeViews,
   selectView,
+  allowFrameOrigin,
+  setFrameOriginAllower,
 } from './viewHost';
 
 let selected: string | null = null;
@@ -99,5 +101,17 @@ describe('selection', () => {
   it('selectView is refused without a registered host', () => {
     unregister();
     expect(selectView('docker')).toBe(false);
+  });
+});
+
+describe('allowFrameOrigin', () => {
+  it('asks the platform to let the page through its navigation guard', async () => {
+    const seen: string[] = [];
+    setFrameOriginAllower(async (url) => void seen.push(url));
+    await allowFrameOrigin('http://127.0.0.1:37778/t/x/d/mr/');
+    expect(seen).toEqual(['http://127.0.0.1:37778/t/x/d/mr/']);
+  });
+  it('resolves where no guard exists (web)', async () => {
+    await expect(allowFrameOrigin('http://x/')).resolves.toBeUndefined();
   });
 });

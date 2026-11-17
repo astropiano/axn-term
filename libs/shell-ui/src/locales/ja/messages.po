@@ -39,7 +39,7 @@ msgstr "Lucide アイコン名（例: <0>GitFork</0>）またはインライン 
 msgid "Add icon"
 msgstr "アイコンを追加"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:228
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:262
 msgid "Add view"
 msgstr "ビューを追加"
 
@@ -84,8 +84,8 @@ msgstr "axn-term で予期しないエラーが発生しました"
 #~ msgid "axn-term-desktop (default)"
 #~ msgstr "axn-term-desktop（デフォルト）"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:154
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:154
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:188
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:188
 msgid "Back to the session"
 msgstr "セッションに戻る"
 
@@ -147,12 +147,12 @@ msgstr "クライアント: {0}"
 msgid "Close"
 msgstr "閉じる"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3116
+#: libs/shell-ui/src/app/ShellApp.tsx:3119
 msgid "Close tab"
 msgstr "タブを閉じる"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:147
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:148
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:181
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:182
 msgid "Close this view"
 msgstr "このビューを閉じる"
 
@@ -243,7 +243,7 @@ msgid "Copy URL"
 msgstr "URL をコピー"
 
 #. placeholder {0}: entry.title
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:160
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:194
 msgid "Could not open {0}"
 msgstr "{0} を開けませんでした"
 
@@ -314,7 +314,7 @@ msgstr "再度確認しない"
 msgid "done"
 msgstr "完了"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:203
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:237
 msgid "Each view gets its own rail item. Give a URL, or a command that prints one when the view opens (for addresses carrying a token — it is never saved)."
 msgstr "各ビューはレールに専用の項目を持ちます。URL、または開くときに URL を出力するコマンドを指定してください（トークン付きのアドレス向け。保存されません）。"
 
@@ -453,7 +453,7 @@ msgstr "一般"
 msgid "Hub URL"
 msgstr "\\u30cf\\u30d6 URL"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:212
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:246
 msgid "Icon"
 msgstr "アイコン"
 
@@ -651,7 +651,7 @@ msgstr "未接続 — 上にサーバーアドレスを入力してください"
 #~ msgstr "\\u672a\\u516c\\u958b"
 
 #. placeholder {0}: dropped.join(', ')
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:223
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:257
 msgid "Not shown (needs an http(s) URL or a command): {0}"
 msgstr "表示されません（http(s) の URL またはコマンドが必要）: {0}"
 
@@ -699,9 +699,9 @@ msgstr "保存したワークスペースセットファイルを開く"
 msgid "Open file"
 msgstr "ファイルを開く"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:136
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:137
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:167
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:170
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:171
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:201
 msgid "Open in browser"
 msgstr "ブラウザで開く"
 
@@ -738,7 +738,7 @@ msgstr "開く…"
 #~ msgid "optional"
 #~ msgstr "\\u4efb\\u610f"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:218
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:252
 msgid "or a command printing the URL, e.g. launchpad url mr"
 msgstr "または URL を出力するコマンド（例: launchpad url mr）"
 
@@ -818,8 +818,8 @@ msgstr "公開"
 msgid "Rail item"
 msgstr "レール項目"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:129
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:129
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
 msgid "Reload"
 msgstr "再読み込み"
 
@@ -862,8 +862,8 @@ msgstr "リモートアクセス"
 #~ msgid "Remote control"
 #~ msgstr "\\u30ea\\u30e2\\u30fc\\u30c8\\u30b3\\u30f3\\u30c8\\u30ed\\u30fc\\u30eb"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:213
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:213
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
 msgid "Remove"
 msgstr "削除"
 
@@ -906,7 +906,7 @@ msgstr "{agent} セッションを再開{0}"
 msgid "Resume viewport"
 msgstr "ビューポートを"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:197
 msgid "Retry"
 msgstr "再試行"
 
@@ -1184,7 +1184,7 @@ msgstr "このビューには、{forgeName} で対応待ちのリクエストが
 msgid "This window"
 msgstr "このウィンドウ"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:211
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:245
 msgid "Title"
 msgstr "タイトル"
 

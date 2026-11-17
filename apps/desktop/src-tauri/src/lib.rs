@@ -405,6 +405,7 @@ pub fn run() {
             pty::ack_output,
             remote::control_reply,
             files::allow_file_roots,
+            window::allow_frame_origin,
             pty::get_default_shell,
             pty::create_session,
             pty::write_session,

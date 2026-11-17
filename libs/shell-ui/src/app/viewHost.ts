@@ -112,6 +112,18 @@ export function runtimeViewUrl(id: string): string | undefined {
   return views.find((v) => v.id === id)?.url;
 }
 
+let frameOriginAllower: ((url: string) => Promise<void>) | null = null;
+
+/** The platform's hook for framing a page (desktop: its navigation guard refuses foreign origins). */
+export function setFrameOriginAllower(fn: ((url: string) => Promise<void>) | null): void {
+  frameOriginAllower = fn;
+}
+
+/** Call before framing `url`; resolves once the page may load. */
+export function allowFrameOrigin(url: string): Promise<void> {
+  return frameOriginAllower ? frameOriginAllower(url) : Promise.resolve();
+}
+
 export function activeView(): ActiveView | null {
   if (!activeKey) return null;
   const info = host?.describe(activeKey);
@@ -133,6 +145,7 @@ export function publishActiveView(key: string | null): void {
 
 export function resetViewHostForTests(): void {
   host = null;
+  frameOriginAllower = null;
   views = [];
   activeKey = null;
   viewListeners.clear();

@@ -39,7 +39,7 @@ msgstr "Een Lucide-iconaam (bijv. <0>GitFork</0>) of een inline SVG-tag, bijv. <
 msgid "Add icon"
 msgstr "Icoon toevoegen"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:228
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:262
 msgid "Add view"
 msgstr "Weergave toevoegen"
 
@@ -84,8 +84,8 @@ msgstr "axn-term liep tegen een onverwachte fout aan"
 #~ msgid "axn-term-desktop (default)"
 #~ msgstr "axn-term-desktop (standaard)"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:154
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:154
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:188
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:188
 msgid "Back to the session"
 msgstr "Terug naar de sessie"
 
@@ -147,12 +147,12 @@ msgstr "Clients: {0}"
 msgid "Close"
 msgstr "Sluiten"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3116
+#: libs/shell-ui/src/app/ShellApp.tsx:3119
 msgid "Close tab"
 msgstr "Tabblad sluiten"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:147
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:148
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:181
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:182
 msgid "Close this view"
 msgstr "Deze weergave sluiten"
 
@@ -243,7 +243,7 @@ msgid "Copy URL"
 msgstr "URL kopiëren"
 
 #. placeholder {0}: entry.title
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:160
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:194
 msgid "Could not open {0}"
 msgstr "Kon {0} niet openen"
 
@@ -314,7 +314,7 @@ msgstr "Niet opnieuw vragen"
 msgid "done"
 msgstr "klaar"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:203
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:237
 msgid "Each view gets its own rail item. Give a URL, or a command that prints one when the view opens (for addresses carrying a token — it is never saved)."
 msgstr "Elke weergave krijgt een eigen item in de balk. Geef een URL op, of een opdracht die er een afdrukt bij het openen (voor adressen met een token — die wordt nooit opgeslagen)."
 
@@ -453,7 +453,7 @@ msgstr "Algemeen"
 msgid "Hub URL"
 msgstr "Hub-URL"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:212
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:246
 msgid "Icon"
 msgstr "Pictogram"
 
@@ -651,7 +651,7 @@ msgstr "niet verbonden — vul hierboven het serveradres in"
 #~ msgstr "Niet gepubliceerd"
 
 #. placeholder {0}: dropped.join(', ')
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:223
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:257
 msgid "Not shown (needs an http(s) URL or a command): {0}"
 msgstr "Niet getoond (heeft een http(s)-URL of een opdracht nodig): {0}"
 
@@ -699,9 +699,9 @@ msgstr "Opgeslagen workspace-setbestand openen"
 msgid "Open file"
 msgstr "Bestand openen"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:136
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:137
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:167
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:170
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:171
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:201
 msgid "Open in browser"
 msgstr "Openen in browser"
 
@@ -738,7 +738,7 @@ msgstr "Openen…"
 #~ msgid "optional"
 #~ msgstr "optioneel"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:218
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:252
 msgid "or a command printing the URL, e.g. launchpad url mr"
 msgstr "of een opdracht die de URL afdrukt, bijv. launchpad url mr"
 
@@ -818,8 +818,8 @@ msgstr "Publiceren"
 msgid "Rail item"
 msgstr "Rail-item"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:129
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:129
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
 msgid "Reload"
 msgstr "Opnieuw laden"
 
@@ -862,8 +862,8 @@ msgstr "Remote-toegang"
 #~ msgid "Remote control"
 #~ msgstr "Afstandsbediening"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:213
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:213
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
 msgid "Remove"
 msgstr "Verwijderen"
 
@@ -906,7 +906,7 @@ msgstr "{agent}-sessie hervatten{0}"
 msgid "Resume viewport"
 msgstr "Viewport hervatten"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:197
 msgid "Retry"
 msgstr "Opnieuw proberen"
 
@@ -1184,7 +1184,7 @@ msgstr "Deze weergave toont de requests die op {forgeName} op je wachten. Ze wor
 msgid "This window"
 msgstr "Dit venster"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:211
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:245
 msgid "Title"
 msgstr "Titel"
 
