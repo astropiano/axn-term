@@ -262,6 +262,12 @@ export interface ShellPlatform {
     cb: (cmd: { ptyId: string; line: string }) => Promise<ControlReply | null>,
   ): Unsubscribe;
   /**
+   * App-level command lines (`axn-term command`, desktop control socket, no
+   * terminal behind them). Only this window's requests are delivered; the
+   * answer goes back to the caller. Absent on web.
+   */
+  onAppCommand?(cb: (cmd: { line: string }) => Promise<ControlReply>): Unsubscribe;
+  /**
    * Load external `.mjs` plugins from disk — desktop-only. Resolves the
    * number of plugins registered. Absent = no external plugin support.
    */

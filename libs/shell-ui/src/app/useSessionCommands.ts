@@ -4,7 +4,7 @@ import type { ShellPlatform } from '../platform';
 import { ptyIdOf, type ShellSession, type Workspace } from '../types';
 import { axnLog } from './log';
 import { runCommandChain } from './hiddenCommands';
-import { controlReply, sessionForPty } from './controlCommands';
+import { controlReply, dispatchAppCommand, sessionForPty } from './controlCommands';
 import { AXN_VIEW_COMMANDS, completePathArg } from './shellCommandSupport';
 import {
   BUILTIN_ARG_COMMANDS,
@@ -12,7 +12,7 @@ import {
   BUILTIN_COMMANDS,
 } from './builtinCommands';
 import { pluginCommands, type PluginApi, type SessionViewContext, type SessionViewPlugin } from './session-plugins';
-import { registerSessionCommandDispatch } from './session-plugins/plugin';
+import { pluginViewApi, registerSessionCommandDispatch } from './session-plugins/plugin';
 
 /** What the command dispatch needs from ShellApp — read live through a ref. */
 export interface SessionCommandDeps {
@@ -22,6 +22,8 @@ export interface SessionCommandDeps {
   workspacesRef: MutableRefObject<Workspace[]>;
   enabledPluginsRef: MutableRefObject<SessionViewPlugin[]>;
   buildPluginApi: (session: ShellSession, plugin: SessionViewPlugin) => SessionViewContext & PluginApi;
+  /** A plugin's settings section — the ctx of app-level (`appRun`) commands. */
+  pluginSettingsOf?: (plugin: SessionViewPlugin) => unknown;
   /** Returns the new session's id (undefined when no valid workspace). */
   openSession: (workspaceId: string, cwd?: string, name?: string, background?: boolean) => string | undefined;
   openSubShell: (sessionId: string, command?: string, cwd?: string) => string | undefined;
@@ -101,11 +103,18 @@ export function useSessionCommands(input: SessionCommandDeps) {
         // outcome (a string replaces the line, `false` swallows it, undefined
         // passes it through to the shell).
         for (const plugin of deps.current.enabledPluginsRef.current) {
-          const declared = pluginCommands(plugin).find((c) => c.name === word && c.run);
-          if (!declared?.run) continue;
+          const declared = pluginCommands(plugin).find((c) => c.name === word && (c.run || c.appRun));
+          if (!declared) continue;
           try {
             // `void` collapses to `undefined` at runtime: pass-through.
-            return declared.run(deps.current.buildPluginApi(session, plugin), arg, line.trim()) as
+            const outcome = declared.run
+              ? declared.run(deps.current.buildPluginApi(session, plugin), arg, line.trim())
+              : declared.appRun!(
+                  { pluginSettings: deps.current.pluginSettingsOf?.(plugin), ...pluginViewApi },
+                  arg,
+                  line.trim(),
+                );
+            return outcome as
               | string
               | false
               | undefined
@@ -175,6 +184,20 @@ export function useSessionCommands(input: SessionCommandDeps) {
     const unlisten = [platform.onControlCommand?.(answer), backend.onControlCommand?.(answer)];
     return () => unlisten.forEach((u) => u?.());
   }, [platform, backend, handleSessionCommand]);
+
+  // `axn-term command …` from any local process (desktop control socket,
+  // no terminal): only commands declaring `appRun` run.
+  useEffect(
+    () =>
+      platform.onAppCommand?.(({ line }) =>
+        dispatchAppCommand(
+          deps.current.enabledPluginsRef.current,
+          line,
+          (plugin) => deps.current.pluginSettingsOf?.(plugin),
+        ),
+      ),
+    [platform],
+  );
 
   // Tab-completion for axn-* hidden commands: completes the command word,
   // then delegates the argument to the owning built-in's `completeArg` (or a

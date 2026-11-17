@@ -385,3 +385,32 @@ it('axn-tell completes session names for the target', async () => {
   // After the target, the message is freeform — no completions.
   await expect(commands.handleCompleteInput('s-1', 'axn-tell s-2 hi')).resolves.toEqual([]);
 });
+
+it('a typed app-level command runs its appRun without a session ctx', async () => {
+  await mount([session('s-1')]);
+  deps.enabledPluginsRef.current = [
+    { id: 'p', title: 'P', commands: [{ name: 'axn-app', appRun: (_ctx, arg) => `echo ${JSON.stringify(`app ${arg}`)}` }] },
+  ];
+  await expect(dispatch('s-1', 'axn-app hi')).resolves.toBe('echo "app hi"');
+  expect(deps.buildPluginApi).not.toHaveBeenCalled();
+});
+
+it('app-level control lines reach only appRun commands', async () => {
+  let answer: ((cmd: { line: string }) => Promise<unknown>) | undefined;
+  deps = undefined as unknown as SessionCommandDeps;
+  await mount([session('s-1')]);
+  // remount with a platform that captures the app-command listener
+  await act(async () => root?.unmount());
+  deps.platform = { onAppCommand: (cb: typeof answer) => ((answer = cb), () => {}) } as unknown as ShellPlatform;
+  deps.enabledPluginsRef.current = [
+    { id: 'p', title: 'P', commands: [{ name: 'axn-app', appRun: () => false }, { name: 'axn-sess', run: () => false }] },
+  ];
+  function Harness() {
+    commands = useSessionCommands(deps);
+    return null;
+  }
+  root = createRoot(document.createElement('div'));
+  await act(async () => root!.render(<Harness />));
+  await expect(answer!({ line: 'axn-app' })).resolves.toEqual({ ok: true });
+  await expect(answer!({ line: 'axn-sess' })).resolves.toMatchObject({ ok: false });
+});

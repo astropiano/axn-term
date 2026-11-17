@@ -147,7 +147,7 @@ msgstr "클라이언트: {0}"
 msgid "Close"
 msgstr "닫기"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3114
+#: libs/shell-ui/src/app/ShellApp.tsx:3116
 msgid "Close tab"
 msgstr "탭 닫기"
 

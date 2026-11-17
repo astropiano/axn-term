@@ -13,7 +13,7 @@ import {
   runtimeViews,
   type RuntimeView,
 } from '../viewHost';
-import type { RailEntry, SessionViewPlugin } from './plugin';
+import type { PluginAppCommandContext, RailEntry, SessionViewPlugin } from './plugin';
 
 /** One `views` entry in plugins.yaml. `urlCommand` (desktop) prints the URL on open. */
 export interface ExternalViewEntry {
@@ -231,6 +231,37 @@ function ExternalViewsSettings({
   );
 }
 
+const USAGE = 'usage: axn-views open <url> [title] | select <key|title> | close <key> | current';
+const echo = (text: string) => `echo ${JSON.stringify(text)}`;
+
+/** `axn-views …` — app level, so `axn-term command` can drive it from any process. */
+async function axnViews(ctx: PluginAppCommandContext, arg: string | undefined): Promise<string> {
+  const [sub = '', ...rest] = (arg ?? '').split(/\s+/).filter(Boolean);
+  switch (sub) {
+    case 'open': {
+      const [url, ...title] = rest;
+      if (!url) throw new Error(USAGE);
+      return echo(ctx.openView({ url, title: title.join(' ') || undefined }));
+    }
+    case 'select': {
+      const wanted = rest.join(' ');
+      const entries = externalViewsPlugin.railEntries!({ pluginSettings: ctx.pluginSettings });
+      const byTitle = entries.find((e) => e.title === wanted);
+      const key = byTitle ? viewKey(EXTERNAL_VIEWS_ID, byTitle.id) : wanted;
+      if (!wanted || !ctx.selectView(key)) throw new Error(`no such view: ${wanted}`);
+      return echo(key);
+    }
+    case 'close': {
+      if (!ctx.removeView(rest.join(' '))) throw new Error(`not a runtime view: ${rest.join(' ')}`);
+      return echo('closed');
+    }
+    case 'current':
+      return echo(JSON.stringify(ctx.activeView()));
+    default:
+      throw new Error(USAGE);
+  }
+}
+
 const runtimeEntry = (view: RuntimeView): ExternalViewEntry => ({
   id: view.id,
   title: view.title,
@@ -270,5 +301,13 @@ export const externalViewsPlugin: SessionViewPlugin = {
       />
     );
   },
+  commands: [
+    {
+      name: 'axn-views',
+      takesArg: true,
+      completeArg: (_ctx, prefix) => ['open', 'select', 'close', 'current'].filter((s) => s.startsWith(prefix)),
+      appRun: (ctx, arg) => axnViews(ctx, arg),
+    },
+  ],
   renderSettings: ({ settings, update }) => <ExternalViewsSettings settings={settings} update={update} />,
 };

@@ -186,6 +186,14 @@ export const desktopPlatform: ShellPlatform = {
         });
       }),
     ),
+  onAppCommand: (cb) =>
+    syncSub(
+      listen<{ requestId: number; window: string; line: string }>('control-app-command', (event) => {
+        const { requestId, window, line } = event.payload;
+        if (window !== appWindow.label) return;
+        void cb({ line }).then((reply) => invoke('control_reply', { requestId, reply }).catch(() => {}));
+      }),
+    ),
   peers: {
     publish: (topic, payload) => void emit(topic, payload).catch(() => {}),
     subscribe: (topic, cb) => syncSub(listen<unknown>(topic, (event) => cb(event.payload))),

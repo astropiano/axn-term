@@ -147,7 +147,7 @@ msgstr "Clients : {0}"
 msgid "Close"
 msgstr "Fermer"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3114
+#: libs/shell-ui/src/app/ShellApp.tsx:3116
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 

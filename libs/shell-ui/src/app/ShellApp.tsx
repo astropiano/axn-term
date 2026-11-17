@@ -1558,6 +1558,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     workspacesRef,
     enabledPluginsRef,
     buildPluginApi,
+    pluginSettingsOf: (plugin) =>
+      pluginSettingsRef.current[(plugin.settingsKey ?? plugin.id) as keyof typeof pluginSettings],
     openSession,
     openSubShell,
     addWorkspace,
