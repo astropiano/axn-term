@@ -3,10 +3,11 @@
  * plugin-view strip in ShellApp), shared so every strip looks identical.
  *
  * 'pill' (the default) is the quiet one: every tab is a 28px rounded pill
- * centred in the 40px strip. The active tab gets a neutral fill and medium
- * weight, inactive tabs are plain secondary text that fills on hover. No
- * borders and no accent band — selection changes the fill, never the
- * geometry, so labels do not move.
+ * centred in the 40px strip. The active tab gets a neutral fill, medium
+ * weight and a 2px accent band on its left edge — the same mark the
+ * selected session card wears; inactive tabs are plain secondary text
+ * that fills on hover. Selection changes the fill, never the geometry,
+ * so labels do not move.
  *
  * The earlier looks are kept for the Storybook comparison: 'tab' draws the
  * active tab as the connected one (content background, rounded top corners,
@@ -32,7 +33,7 @@ export function tabStripTabClasses(
 ): string {
   if (variant === 'pill') {
     return active
-      ? 'h-7 self-center rounded-[var(--radius-md)] bg-[var(--fill-2)] font-medium text-[var(--text-primary)]'
+      ? 'h-7 self-center rounded-[var(--radius-md)] bg-[var(--fill-2)] font-medium text-[var(--text-primary)] shadow-[inset_2px_0_0_0_var(--accent)]'
       : 'h-7 self-center rounded-[var(--radius-md)] text-[var(--text-secondary)] hover:bg-[var(--fill-1)] hover:text-[var(--text-primary)]';
   }
   if (!active) {

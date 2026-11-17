@@ -1457,7 +1457,7 @@ export function SessionItem({
         onDrop={onDrop}
         className={`relative cursor-pointer rounded-[var(--radius-md)] transition-colors duration-[var(--dur-1)] ${
           isSelected
-            ? 'bg-[var(--fill-1)] shadow-[inset_0_0_0_1px_var(--hairline)]'
+            ? 'bg-[var(--fill-1)] shadow-[inset_2px_0_0_0_var(--accent),inset_0_0_0_1px_var(--hairline)]'
             : isMultiSel
               ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_40%,transparent)]'
               : 'hover:bg-[var(--fill-1)]'
