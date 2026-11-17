@@ -26,7 +26,7 @@ import { agentInputPluginFor } from './session-plugins/agentHookBridge';
 import { createHiddenCommandInput } from './hiddenCommands';
 import { createOsc8LeakGuard, createOsc8LinkHandler, OSC8_CLOSE } from '../terminalLinks';
 import { applyTerminalRenderer, createTerminalInput, isUserInput, OSC_REPORT_RAW_WAIT_MS, oscReportTarget, repaintTerminal, safely } from '../terminalRenderer';
-import { acquirePty } from '../ptyLifetime';
+import { acquirePty, nudgePtyRedraw } from '../ptyLifetime';
 import {
   agentOfProcess,
   captureAgentResume,
@@ -545,6 +545,9 @@ export function SubShellView({
     // Same as ShellTerminal: the webview may drop the accelerated canvas'
     // backing (and WebGL's glyph atlas) while display:none — repaint.
     repaintTerminal(term.current);
+    if (spawnedRef.current && (tab.agentActive || term.current.buffer.active.type === 'alternate')) {
+      nudgePtyRedraw(backend, tab.id, () => term.current);
+    }
   }, [isVisible]);
 
   return (

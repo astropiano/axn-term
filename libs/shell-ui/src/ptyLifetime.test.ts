@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SessionBackend } from '@axn-term/session-backend';
-import { acquirePty, syncRetainedPtys } from './ptyLifetime';
+import { acquirePty, nudgePtyRedraw, REDRAW_NUDGE_MS, syncRetainedPtys } from './ptyLifetime';
 
 function harness() {
   const live = new Set<string>();
@@ -202,5 +202,54 @@ describe('PTY view lifetime', () => {
     expect(right.live.has('main')).toBe(true);
     b.release();
     await flush();
+  });
+});
+
+describe('nudgePtyRedraw', () => {
+  const resizer = () => {
+    const resize = vi.fn();
+    return { resize, backend: { resize } as unknown as SessionBackend };
+  };
+
+  it('shrinks by one row, then restores the size after the delay', () => {
+    vi.useFakeTimers();
+    try {
+      const { resize, backend } = resizer();
+      nudgePtyRedraw(backend, 'p1', () => ({ cols: 230, rows: 50 }));
+      expect(resize.mock.calls).toEqual([['p1', 230, 49]]);
+      vi.advanceTimersByTime(REDRAW_NUDGE_MS);
+      expect(resize.mock.calls).toEqual([['p1', 230, 49], ['p1', 230, 50]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('coalesces back-to-back nudges and restores the latest size', () => {
+    vi.useFakeTimers();
+    try {
+      const { resize, backend } = resizer();
+      let size = { cols: 230, rows: 50 };
+      nudgePtyRedraw(backend, 'p2', () => size);
+      nudgePtyRedraw(backend, 'p2', () => size);
+      size = { cols: 200, rows: 40 };
+      vi.advanceTimersByTime(REDRAW_NUDGE_MS);
+      expect(resize.mock.calls).toEqual([['p2', 230, 49], ['p2', 200, 40]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restores the last known size when the view is gone', () => {
+    vi.useFakeTimers();
+    try {
+      const { resize, backend } = resizer();
+      let size: { cols: number; rows: number } | null = { cols: 120, rows: 30 };
+      nudgePtyRedraw(backend, 'p3', () => size);
+      size = null;
+      vi.advanceTimersByTime(REDRAW_NUDGE_MS);
+      expect(resize).toHaveBeenLastCalledWith('p3', 120, 30);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
