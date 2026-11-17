@@ -18,7 +18,7 @@ msgstr "{0} actieve {1} worden beëindigd"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} draait in de hoofd-checkout — isoleren in een worktree?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2194
+#: libs/shell-ui/src/app/SessionPanel.tsx:2196
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} wachtend"
 
@@ -539,7 +539,7 @@ msgstr "vraagt aandacht"
 msgid "Needs you"
 msgstr "Wacht op jou"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2364
+#: libs/shell-ui/src/app/SessionPanel.tsx:2366
 msgid "New session"
 msgstr "Nieuwe sessie"
 
@@ -547,7 +547,7 @@ msgstr "Nieuwe sessie"
 msgid "New session button"
 msgstr "Knop nieuwe sessie"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2488
+#: libs/shell-ui/src/app/SessionPanel.tsx:2490
 msgid "New session in folder…"
 msgstr "Nieuwe sessie in map…"
 
@@ -659,7 +659,7 @@ msgstr "Openen"
 msgid "Open {title}"
 msgstr "{title} openen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2468
+#: libs/shell-ui/src/app/SessionPanel.tsx:2470
 msgid "Open a saved workspace set file"
 msgstr "Opgeslagen workspace-setbestand openen"
 
@@ -687,11 +687,11 @@ msgstr "Logmap openen…"
 msgid "Open preview in a tab"
 msgstr "Voorbeeld in een tabblad openen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2476
+#: libs/shell-ui/src/app/SessionPanel.tsx:2478
 msgid "Open workspace set from file…"
 msgstr "Workspace-set uit bestand openen…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2159
+#: libs/shell-ui/src/app/SessionPanel.tsx:2161
 msgid "Open…"
 msgstr "Openen…"
 
@@ -733,7 +733,7 @@ msgstr "machtigingen:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "telefoons en browsers met hetzelfde account kunnen meekijken"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2483
+#: libs/shell-ui/src/app/SessionPanel.tsx:2485
 msgid "Pick a folder — the new session starts in it"
 msgstr "Kies een map — de nieuwe sessie start daarin"
 
@@ -874,7 +874,7 @@ msgstr "Uitvoeren in een shell-tabblad"
 msgid "Run the login in a shell, then check again."
 msgstr "Voer de aanmelding uit in een shell en controleer daarna opnieuw."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2427
+#: libs/shell-ui/src/app/SessionPanel.tsx:2429
 msgid "Running"
 msgstr "Actief"
 
@@ -888,7 +888,7 @@ msgstr "gesandboxt — geen machtigingen (geen shell-, bestands- of terminaltoeg
 msgid "Save"
 msgstr "Opslaan"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2155
+#: libs/shell-ui/src/app/SessionPanel.tsx:2157
 msgid "Save workspace set"
 msgstr "Workspace-set opslaan"
 
@@ -959,7 +959,7 @@ msgstr "Sessiesamenvatting"
 msgid "Session: {0}"
 msgstr "Sessie: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2422
+#: libs/shell-ui/src/app/SessionPanel.tsx:2424
 msgid "Sessions"
 msgstr "Sessies"
 
@@ -989,11 +989,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell-lettertype"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2187
+#: libs/shell-ui/src/app/SessionPanel.tsx:2189
 msgid "Show all sessions"
 msgstr "Alle sessies tonen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2187
+#: libs/shell-ui/src/app/SessionPanel.tsx:2189
 msgid "Show only sessions that need you"
 msgstr "Alleen sessies tonen die op jou wachten"
 

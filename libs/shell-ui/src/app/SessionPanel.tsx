@@ -1624,11 +1624,13 @@ export function SessionItem({
         </div>
 
         {alwaysRows.length > 0 && (
-          <div className="flex flex-col gap-1 px-2 pb-1.5 [&>div:empty]:hidden">{alwaysRows}</div>
+          <div className="flex flex-col gap-1 px-2 [&:has(>div:not(:empty))]:pb-1.5 [&>div>*]:!my-0 [&>div:empty]:hidden">
+            {alwaysRows}
+          </div>
         )}
 
         {selectedRows.length > 0 && (
-          <div className="flex flex-col gap-2 px-2.5 pb-2 pt-1.5 text-xs leading-relaxed text-[var(--text-primary)] [&>div:empty]:hidden">
+          <div className="flex flex-col gap-2 px-2.5 text-xs leading-relaxed text-[var(--text-primary)] [&:has(>div:not(:empty))]:pb-2 [&:has(>div:not(:empty))]:pt-1.5 [&>div>*]:!my-0 [&>div:empty]:hidden">
             {selectedRows}
           </div>
         )}

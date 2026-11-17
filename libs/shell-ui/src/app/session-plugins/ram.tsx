@@ -190,7 +190,7 @@ function RamSessionView({ sessionId }: { sessionId: string }) {
   if (!entry || entry.rssKb === 0) return null;
   return (
     <div
-      className="mb-2 flex items-center gap-1 text-[11px] text-[var(--text-secondary)]"
+      className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)]"
       data-tip="Approximate RSS of this session's process tree"
     >
       <span>RAM</span>
