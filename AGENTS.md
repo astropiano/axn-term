@@ -261,6 +261,37 @@ a fallback. The remote `axn-term session command` path (`controlReply` in
 reply text. Covered by the `command feedback (display channel)` cases in
 `hiddenCommands.test.ts`.
 
+Plugins can colour the session panel: `sessionColors(ctx)` (a session card) and
+`workspaceColors({ workspace, pluginSettings })` (a workspace header — no session
+needed) return hex colours. `SessionPanel` combines every enabled plugin's colours
+(plugin order) into equal left-to-right bands via `resolveTint`
+(`session-plugins/tint.ts`; a colour is a hex or a theme tag slot — `red`,
+`orange`, `yellow`, `green`, `cyan`, `blue`, `violet`, `magenta` — resolved
+through `themeTagPalette(activeTheme)` in `themes.ts`: a theme's optional
+`tagColors:` block, else its terminal colours, orange/violet mixed when absent;
+`applyTheme` also sets them as `--tag-<slot>` for CSS) — the host owns the shades (`TINT_INTENSITY`): one
+colour mixed with `--chrome` (solid, so a card hides its workspace's tint):
+workspace block 20%, session card 32%, selected card 50%, selected card's title
+row 100% with dark/light text picked by contrast (`tintTextVars`); tints are set
+through a `--tint` custom property (`tintStyle`); non-hex values are dropped and a
+throwing hook contributes nothing. `Workspace.pluginState[<settingsKey>]` is the
+workspace counterpart of a session's `pluginState` (written via the panel's
+`updateWorkspace`). `sessionMenuItems(ctx, scope)` also receives a `MenuScope`
+(`targets` = the multi-selection when the clicked session is in one, plus all
+sessions/workspaces), and `workspaceActions(ctx)` contributes workspace-menu rows
+without needing a session (empty workspaces included). The built-in `tagging`
+plugin (`session-plugins/tagging.tsx`) uses all of it: a tag is a typed string
+stored only on its session (`pluginState.tagging.tags`) or workspace, its colour
+a theme tag slot hashed from the string (`tagColor`) unless set in the plugin's
+`colors` map in plugins.yaml (a slot name, which follows the theme, or a raw hex) (edited in Settings → Plugins → Tags,
+`TagColorSettings`, which lists every tag in use — `PluginSettingsViewContext`
+carries the window's `sessions`/`workspaces`, empty in the macOS Preferences
+window — or by clicking a tag's dot in `TagModal`, saved at once via `TagHost`;
+hex can be typed or pasted, `parseHexColor`); a workspace's tint paints the whole workspace block; picked/created through `TagModal`
+(`openTagModal` in `app/tagHost.tsx`, mounted as `TagHost` in `ShellApp`); the
+`tagging.tags` card field shows only where `sessionCard` places it (the default
+layout shows no tag name; the tint stays). Design: `docs/superpowers/specs/2026-11-17-tagging-plugin-design.md`.
+
 Plugins can declare hidden commands via `commands?: (string | PluginCommand)[]`
 — they join the built-in `axn-*` names for Tab completion. A plain string is
 completion-only (handled via `onCommand`); a `PluginCommand` object
@@ -1096,11 +1127,13 @@ selected: [[ids]], hidden: [ids] }`) lays it out: a configured zone
 replaces that zone's default, a field placed explicitly anywhere is left
 out of default zones, unknown ids are skipped (a disabled plugin's fields
 vanish), blocks configured into the title row move to the selected zone,
-`core.name` is always in the title row, and every available field placed
-nowhere and not `hidden` falls back to its default zone — a newly enabled
-plugin is never invisible (`resolveCardLayout`). Without a layout the card
-is today's: name, title badges, status; summary + always fields; process,
-plugin blocks, tasks, progress (`defaultCardLayout`). `SessionItem`
+`core.name` is always in the title row, and a built-in field placed nowhere
+and not `hidden` falls back to its zone. A **plugin field shows only where a
+layout names it** (`resolveCardLayout`); its `zone` is only a hint. Each
+unset zone falls back to the shipped `DEFAULT_SESSION_CARD`, which lists
+today's card explicitly (git/MR/PR/vibe/worktree/persona badges, plugin
+blocks) and deliberately leaves out `tagging.tags` and `jira.tickets`; a
+new plugin's fields must be added there or to the user's `sessionCard`. `SessionItem`
 (`SessionPanel.tsx`) renders it. This replaced the per-plugin `renderRow`/
 `rowTip`/`render` hooks (and the short-lived `sessionLine`); external `.mjs`
 plugins declaring the old hooks still work — `pluginSessionFields` adapts
@@ -1309,7 +1342,7 @@ as a YAML map or the one-line `In Progress: blue; Reviewed: #8e44ad` form
 the Settings field writes (`parseStatusColors`, exact status before
 category — `statusColor`); backlog tickets carry the same `color`.
 Summary/type/assignee are in the tooltip and the chip links to
-`<base-url>/browse/KEY`. It offers one session field, `jira.tickets` (inline, default zone `always`): the session's ticket keys from its MR/PR titles (glab-mr `mrs` / gh-pr `prs` per-session state, `sessionMrTitles`), else its branch, else its name (custom, else the terminal-reported `autoName`), else its cwd folder name — the first source with any key wins and may yield several (`sessionTicketKeys`/`findIssueKeys`); each renders as `KEY · Status` once the shared enrichment cache has it (`useEnrichedKeys`, `ChipView`). Where it shows is the session card layout's business (below), not a plugin setting.
+`<base-url>/browse/KEY`. It offers one session field, `jira.tickets` (inline, shown only where `sessionCard` places it): the session's ticket keys from its MR/PR titles (glab-mr `mrs` / gh-pr `prs` per-session state, `sessionMrTitles`), else its branch, else its name (custom, else the terminal-reported `autoName`), else its cwd folder name — the first source with any key wins and may yield several (`sessionTicketKeys`/`findIssueKeys`); each renders as `KEY · Status` once the shared enrichment cache has it (`useEnrichedKeys`, `ChipView`). Where it shows is the session card layout's business (below), not a plugin setting.
 
 The `git-inspect` plugin (`session-plugins/gitInspect.tsx`) is layered on
 `git-status` (titled `git` in Settings): `dependsOn: [{ id: 'git-status',
@@ -2481,11 +2514,13 @@ selected: [[ids]], hidden: [ids] }`) lays it out: a configured zone
 replaces that zone's default, a field placed explicitly anywhere is left
 out of default zones, unknown ids are skipped (a disabled plugin's fields
 vanish), blocks configured into the title row move to the selected zone,
-`core.name` is always in the title row, and every available field placed
-nowhere and not `hidden` falls back to its default zone — a newly enabled
-plugin is never invisible (`resolveCardLayout`). Without a layout the card
-is today's: name, title badges, status; summary + always fields; process,
-plugin blocks, tasks, progress (`defaultCardLayout`). `SessionItem`
+`core.name` is always in the title row, and a built-in field placed nowhere
+and not `hidden` falls back to its zone. A **plugin field shows only where a
+layout names it** (`resolveCardLayout`); its `zone` is only a hint. Each
+unset zone falls back to the shipped `DEFAULT_SESSION_CARD`, which lists
+today's card explicitly (git/MR/PR/vibe/worktree/persona badges, plugin
+blocks) and deliberately leaves out `tagging.tags` and `jira.tickets`; a
+new plugin's fields must be added there or to the user's `sessionCard`. `SessionItem`
 (`SessionPanel.tsx`) renders it. This replaced the per-plugin `renderRow`/
 `rowTip`/`render` hooks (and the short-lived `sessionLine`); external `.mjs`
 plugins declaring the old hooks still work — `pluginSessionFields` adapts
@@ -2865,5 +2900,7 @@ Attention lives in the session panel's toolbar: "N waiting" filters the list to 
 Numbers that are read, not clicked, do not go into the rail or its tooltips: the machine's meters (memory, swap) and the statistics of the rail tools (docker containers and VM, open merge requests, running scenarios, personas, …). A plugin publishes one group with `publishPanelStatus(pluginId, group)` (`app/panelStatus.ts`) from a component it keeps mounted — next to its rail item with the `PublishPanelStatus` helper (`app/PanelStatusSection.tsx`), or from the headless `panelStatus` hook of `SessionViewPlugin`, which ShellApp mounts while the plugin is enabled (also the place for a status plugin's app attention flag). A group with nothing to show is not published.
 
 `PanelStatusSection` draws the groups above the panel footer as a flat stack of top-level accordions, there is no parent header: one accordion per tool in rail order (`splitPanelStatus`), then "System" last, which collects the groups published with `system: true` (host metrics only; the docker VM belongs to Docker). A header is one line: chevron, icon (the plugin's `logo`, else the group's `icon`, a Lucide name), name and, while collapsed, the "label value" pairs that fit, warnings first. Expanded, each meter gets a bar or its explanation. The stack takes at most 40% of the panel height and scrolls on its own beyond that. Window state: `pluginData['axn-panel']` holds `systemExpanded` (System, default open) and `expandedGroups` (source ids of the open tool accordions, default none).
+
+Each publishing plugin's `statusDisplay` (plugins.yaml, Settings → Plugins → Status display; `resolveStatusDisplay` in `app/panelStatus.ts`) picks where its status shows: `panel` (its accordion) or `rail` (rail only — the `renderRailDetail` item where the plugin has one, else just its plain icon; the accordion is dropped via `hiddenStatusSources`). Unset/`auto` is the rail on touch devices for detailed items, the panel otherwise. Settings offers the choice for every plugin with a detailed rail item or a currently published group.
 
 Rail tooltips are short and appear to the right of the item (`data-tip-side="right"`, placed by `placeTooltip` in `app/tooltipPlacement.ts`, clamped to the window and kept out of the title-bar strip): the tool's name with its shortcut — "Docker (⌘3)" — and at most one status line (`RailItem`'s `status`, e.g. "2 waiting for you").

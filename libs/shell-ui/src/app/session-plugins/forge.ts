@@ -242,6 +242,23 @@ export function mrRole(people: MrPeople, me: string | undefined): MrRole | undef
   return 'other';
 }
 
+/**
+ * Splits fetched MRs/PRs by the viewer's role so each lands in one section:
+ * `author` → mine, `reviewer` → review; `other` is dropped. `people` maps an
+ * item to its `MrPeople` when the item's own fields are not the whole story.
+ */
+export function splitByRole<T extends { key: string } & MrPeople>(
+  mine: T[],
+  review: T[],
+  me: string,
+  people: (item: T) => MrPeople = (item) => item,
+): { mine: T[]; review: T[] } {
+  const byKey = new Map<string, T>();
+  for (const item of [...mine, ...review]) byKey.set(item.key, item);
+  const inRole = (role: MrRole) => [...byKey.values()].filter((m) => mrRole(people(m), me) === role);
+  return { mine: inRole('author'), review: inRole('reviewer') };
+}
+
 export interface MrUrl {
   forge: Forge;
   /** Lowercased host. */

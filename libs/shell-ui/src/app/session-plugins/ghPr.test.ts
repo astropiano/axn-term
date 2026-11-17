@@ -335,12 +335,13 @@ describe('refreshPrOverview', () => {
 
   it('loads mine/review from a graphql answer', async () => {
     const node = fixture.overviewNode;
+    const own = { ...node, number: 3489, author: { login: 'user9' } };
     runtime(async () =>
       JSON.stringify({
         data: {
           viewer: { login: 'user9' },
           assigned: { nodes: [] },
-          authored: { nodes: [node] },
+          authored: { nodes: [own] },
           review: { nodes: [node, null] },
         },
       }),
@@ -349,8 +350,8 @@ describe('refreshPrOverview', () => {
     const o = currentPrOverview();
     expect(o.status).toBe('ready');
     expect(o.failure).toBeUndefined();
-    expect(o.mine.map((p) => p.reference)).toEqual(['#3488']);
-    expect(o.review).toHaveLength(1);
+    expect(o.mine.map((p) => p.reference)).toEqual(['#3489']);
+    expect(o.review.map((p) => p.reference)).toEqual(['#3488']);
   });
 
   it.each([
