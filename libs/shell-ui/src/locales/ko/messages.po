@@ -894,11 +894,11 @@ msgstr "저장"
 msgid "Save workspace set"
 msgstr "워크스페이스 세트 저장"
 
-#: libs/shell-ui/src/app/TabStrip.tsx:73
+#: libs/shell-ui/src/app/TabStrip.tsx:75
 msgid "Scroll tabs left"
 msgstr "탭을 왼쪽으로 스크롤"
 
-#: libs/shell-ui/src/app/TabStrip.tsx:95
+#: libs/shell-ui/src/app/TabStrip.tsx:98
 msgid "Scroll tabs right"
 msgstr "탭을 오른쪽으로 스크롤"
 

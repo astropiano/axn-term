@@ -892,11 +892,11 @@ msgstr "Enregistrer"
 msgid "Save workspace set"
 msgstr "Enregistrer le jeu de workspaces"
 
-#: libs/shell-ui/src/app/TabStrip.tsx:73
+#: libs/shell-ui/src/app/TabStrip.tsx:75
 msgid "Scroll tabs left"
 msgstr "Faire défiler les onglets vers la gauche"
 
-#: libs/shell-ui/src/app/TabStrip.tsx:95
+#: libs/shell-ui/src/app/TabStrip.tsx:98
 msgid "Scroll tabs right"
 msgstr "Faire défiler les onglets vers la droite"
 

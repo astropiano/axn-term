@@ -892,11 +892,11 @@ msgstr "Salva"
 msgid "Save workspace set"
 msgstr "Salva set di workspace"
 
-#: libs/shell-ui/src/app/TabStrip.tsx:73
+#: libs/shell-ui/src/app/TabStrip.tsx:75
 msgid "Scroll tabs left"
 msgstr "Scorri le schede a sinistra"
 
-#: libs/shell-ui/src/app/TabStrip.tsx:95
+#: libs/shell-ui/src/app/TabStrip.tsx:98
 msgid "Scroll tabs right"
 msgstr "Scorri le schede a destra"
 

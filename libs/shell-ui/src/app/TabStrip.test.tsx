@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { I18nProvider } from '@lingui/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n } from '../i18n';
-import { TabStrip } from './TabStrip';
+import { TabStrip, tabStartScroll } from './TabStrip';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -58,15 +58,6 @@ describe('TabStrip', () => {
     expect(right.disabled).toBe(false);
   });
 
-  it('right arrow scrolls the tab row, not the page', () => {
-    mockScroller(900, 300, 0);
-    const scrollBy = vi.fn();
-    HTMLElement.prototype.scrollBy = scrollBy as never;
-    render();
-    act(() => arrows()[1].click());
-    expect(scrollBy).toHaveBeenCalledWith({ left: 240, behavior: 'smooth' });
-  });
-
   it('scrolls the active tab into view when it changes', () => {
     mockScroller(900, 300);
     const scrollIntoView = vi.fn();
@@ -76,5 +67,37 @@ describe('TabStrip', () => {
     render('b');
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(scrollIntoView.mock.contexts[0]).toBe(container.querySelector('[data-tab-id="b"]'));
+  });
+});
+
+/** Five 100px tabs starting at x=8 (the strip's padding), 4px apart. */
+function strip(scrollLeft: number, clientWidth = 250) {
+  const el = document.createElement('div');
+  for (let i = 0; i < 5; i++) {
+    const tab = document.createElement('div');
+    Object.defineProperty(tab, 'offsetLeft', { value: 8 + i * 104 });
+    Object.defineProperty(tab, 'offsetWidth', { value: 100 });
+    el.appendChild(tab);
+  }
+  Object.defineProperty(el, 'scrollLeft', { value: scrollLeft });
+  Object.defineProperty(el, 'clientWidth', { value: clientWidth });
+  Object.defineProperty(el, 'scrollWidth', { value: 8 + 5 * 104 + 4 });
+  return el;
+}
+
+describe('tabStartScroll', () => {
+  it('forward step reveals the cut tab whole and lands on a tab start', () => {
+    // View 0..250: tab 2 (216..316) is cut; it needs 324-250=74, next start is 104.
+    expect(tabStartScroll(strip(0), 1)).toBe(104);
+  });
+
+  it('backward step lands on the start of the tab cut off on the left', () => {
+    // View starts at 150: tab 1 (start 104) is cut on the left.
+    expect(tabStartScroll(strip(150), -1)).toBe(104);
+  });
+
+  it('never steps past either end', () => {
+    expect(tabStartScroll(strip(0), -1)).toBeUndefined();
+    expect(tabStartScroll(strip(536 - 250), 1)).toBeUndefined();
   });
 });
