@@ -19,6 +19,9 @@ rail items.
 - Host capability: `SessionViewPlugin.railEntries` lets any plugin contribute several rail items,
   each with its own view. Reusable beyond this plugin.
 - The `mr-dashboard` hub can be framed by axn-term when the user opts in.
+- One host API, `openView`, opens (and activates) a view at runtime. Anyone can drive it: a typed
+  or agent-run `axn-views open` command, the app-level control socket (like `agtermctl` for
+  agterm), and plugins through the plugin API.
 
 ## Non-goals
 
@@ -84,9 +87,14 @@ Chosen by the user: approach 1, viewer only.
 
 ### B. Plugin `external-views` (axn-term)
 
+- Two entry sources, one rail: **settings entries** (`views` list, persistent) and **runtime
+  entries** (created by `openView`, in memory only, gone when the window closes).
 - Settings: `views` list, edited through `renderSettings` (add, remove, edit title/URL/icon,
   reorder via rail drag). Accepts `http:`/`https:` URLs only; rejects everything else, including
-  `javascript:` and `data:`. Ids are generated and stable.
+  `javascript:` and `data:`. Ids are generated and stable. A settings entry may carry
+  `urlCommand` (e.g. `launchpad url mr`): run on open, its stdout is the iframe address, kept in
+  memory only — so a token never lands in `plugins.yaml` (desktop only; needs `exec`; web builds
+  use a plain `url`).
 - View: slim header (title, reload, open in browser) over `<iframe src=url>` with
   `sandbox="allow-scripts allow-same-origin allow-forms allow-popups"`.
 - Frames stay mounted after first open and are hidden while another view is active, so state
@@ -111,10 +119,33 @@ loads cannot carry `X-Launchpad-Token`, and the cookie will not ride a cross-sit
   commit `dashboard/app`.
 - `frame-ancestors` becomes `'self'` plus the origins in a new `frameAncestors` setting in
   `settings.json` next to `port` (validated as origins, default empty).
-- `launchpad url <dashboard>` prints `http://127.0.0.1:<port>/t/<token>/d/<id>/…` for pasting into
-  axn-term's settings.
+- `launchpad url <dashboard>` prints `http://127.0.0.1:<port>/t/<token>/d/<id>/…` (starting the hub
+  if needed) for `urlCommand`; `launchpad open <dashboard> --axn-term` is the push route (section D).
 - Security note for the MR: allowing an origin lets any page under it frame the dashboard; the
   token in a URL is a secret at rest wherever the URL is saved. Acceptable on localhost, opt-in.
+
+### D. `openView`: the one way to open a view at runtime
+
+`openView({ url, title?, logo?, key? })` creates or re-activates a runtime entry (same `key`, else
+same URL, activates instead of duplicating) and activates it. URLs are validated as for settings
+entries (`http(s)` only). It is exposed three ways, all calling the same host function:
+
+- **Hidden command** `axn-views open <url> [title]`, declared by the plugin like other owned
+  commands (`axn-workflow …`). Useful on its own: from any session, from agents through
+  `"$AXN_TERM_CLI" session command "axn-views open …"`, from `runCommand`.
+- **App-level control entry.** `control.rs` already has a message that needs no PTY secret
+  (`Incoming::Activate`, `control.rs:240`; the socket is 0600, user-only). Add a sibling that
+  carries a hidden-command line to the app (routed to the focused window, else `main`, as
+  `window::settings_target` does), and a CLI `axn-term command <line>` that sends it. Any local
+  process of the user can drive axn-term this way, the same as `agtermctl`.
+- **Plugin API.** `PluginApi.openView` for in-process plugins and an `openView` RPC in the sandbox
+  client (`AxnClient`). Capability: the existing `sessions` permission ("drive the app's sessions
+  and views": `openSession`, `openTab`, `openBrowser`, …), so `METHOD_PERMISSIONS.openView =
+  'sessions'`. No new permission and no need for `exec`, which `runCommand` requires.
+
+`mr-dashboard` side: `launchpad open <dashboard> --axn-term` builds the tokened URL the way
+`--agterm` does and calls `axn-term command "axn-views open …"`; the runtime entry holds the URL
+in memory only. From outside an axn-term install (socket absent) it falls back to the browser.
 
 ## Gating spike (first task of the plan)
 
@@ -147,6 +178,10 @@ user** (approach 2 returns to the table); do not build C around a guess.
 
 ## Tests
 
+- `openView`: validation (bad scheme refused), same key/URL re-activates instead of duplicating,
+  runtime entries are not persisted, the `sessions` permission gates the sandbox RPC (denied
+  without it), the control message reaches dispatch without a PTY secret and a wrong/absent window
+  answers an error, `axn-views open` end to end.
 - Unit: rail key parsing, `orderRailPlugins` with entries, `railViewIds` over entry slots, URL
   validation (valid, `javascript:`, `data:`, blank, relative), settings normalisation.
 - Component: a plugin with two entries renders two items; toggling one leaves the other mounted
