@@ -135,8 +135,10 @@ entries (`http(s)` only). It is exposed three ways, all calling the same host fu
   `"$AXN_TERM_CLI" session command "axn-views open …"`, from `runCommand`.
 - **App-level control entry.** `control.rs` already has a message that needs no PTY secret
   (`Incoming::Activate`, `control.rs:240`; the socket is 0600, user-only). Add a sibling that
-  carries a hidden-command line to the app (routed to the focused window, else `main`, as
-  `window::settings_target` does), and a CLI `axn-term command <line>` that sends it. Any local
+  carries a hidden-command line to the app, and a CLI `axn-term command [--window <id|label>] <line>`
+  that sends it. Default target is the window with focus, else `main` (as `window::settings_target`
+  does); `--window` picks another, and an unknown window is an error, not a fallback. Views are
+  per window (rail state is window state), so the target decides where the entry appears. Any local
   process of the user can drive axn-term this way, the same as `agtermctl`.
 - **Plugin API.** `PluginApi.openView` for in-process plugins and an `openView` RPC in the sandbox
   client (`AxnClient`). Capability: the existing `sessions` permission ("drive the app's sessions
