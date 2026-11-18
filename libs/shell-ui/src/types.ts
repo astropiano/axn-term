@@ -136,7 +136,7 @@ export interface EditorTab {
    * inspect view (`path` is the repo root), 'ide' a tree+editor composite
    * (`path` is the tree's root dir); default is a file editor.
    */
-  kind?: 'editor' | 'browser' | 'shell' | 'preview' | 'git' | 'ide' | 'broadcast';
+  kind?: 'editor' | 'browser' | 'shell' | 'preview' | 'git' | 'ide';
   /** For kind 'shell': the `sh -c` command; absent means an interactive sub-shell. */
   command?: string;
   /**

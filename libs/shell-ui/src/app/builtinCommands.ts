@@ -48,8 +48,6 @@ export interface BuiltinDeps {
   pathDeps: Parameters<typeof completePathArg>[0];
   /** `axn-session-window`; absent where windows can't be opened. */
   tearOffSession?: (sessionId: string) => Promise<string | null>;
-  /** `axn-broadcast-deck`; absent without a deck. */
-  openBroadcastDeck?: (sessionId: string) => void;
   /** `axn-session select`; absent without selection control. */
   selectSession?: (sessionId: string) => void;
 }
@@ -578,14 +576,6 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     },
     completeArg: ({ deps }, rest, lineHead) =>
       completeSessionName(deps.sessionsRef.current, rest, lineHead),
-  },
-  {
-    name: 'axn-broadcast-deck',
-    run: ({ deps, session }) => {
-      if (!deps.openBroadcastDeck) return false;
-      deps.openBroadcastDeck(session.id);
-      return false;
-    },
   },
   {
     name: 'axn-broadcast-clear',

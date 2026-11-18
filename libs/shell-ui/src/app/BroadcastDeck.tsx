@@ -1,6 +1,6 @@
 /**
- * Broadcast deck (`editors[].kind === 'broadcast'`, and the right-side
- * split while ≥2 sessions are selected): a labeled fan-out prompt on
+ * Broadcast deck (the right-side split while ≥2 sessions are selected):
+ * a labeled fan-out prompt on
  * top — styled like a shell line (prompt glyph, shell font, terminal
  * surface); Enter writes the buffer to every broadcast session via the
  * same `backend.write` path as `axn-broadcast <line>`, Shift+Enter adds
@@ -21,7 +21,6 @@ import { useBroadcastSet } from './broadcastSet';
 import { useSettings } from '../SettingsProvider';
 import { resolveShellFont } from '../themes';
 import { dangerCheck, type DangerHit } from './broadcastDanger';
-import { registerViewFocus } from './viewFocus';
 
 /**
  * Tile = the session's REAL current view (rendered by `renderView` — the
@@ -96,7 +95,6 @@ export function BroadcastDeck({
   targetSessions,
   renderView,
   onFocusSession,
-  focusId,
 }: {
   backend: SessionBackend;
   /** Sessions rendered as tiles (excludes the focused session — its real
@@ -108,8 +106,6 @@ export function BroadcastDeck({
    * ShellApp suppresses the below view for broadcast sessions). */
   renderView?: (session: ShellSession) => ReactNode;
   onFocusSession: (sessionId: string) => void;
-  /** Register the broadcast input as the tab's focus target. */
-  focusId?: string;
 }) {
   const markedIds = useBroadcastSet();
   const { settings } = useSettings();
@@ -121,12 +117,6 @@ export function BroadcastDeck({
   const [danger, setDanger] = useState<DangerHit | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // The tab's focus target for app navigation — typing goes to the
-  // broadcast input, which fans out to every target session.
-  useEffect(() => {
-    if (!focusId) return;
-    return registerViewFocus(focusId, () => inputRef.current?.focus());
-  }, [focusId]);
   /** Fan-out targets — every selected session, including the one focused
    * below (broadcast reaches it even though it has no tile). */
   const targets = useMemo(

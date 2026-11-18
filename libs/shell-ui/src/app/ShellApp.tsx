@@ -1547,24 +1547,6 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     },
     [activateSessionTab],
   );
-  const openBroadcastDeck = useCallback(
-    (sessionId: string) => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return;
-      const existing = session.editors?.find((e) => e.kind === 'broadcast');
-      updateSessionWith(sessionId, (latest) => ({
-        editors: existing
-          ? latest.editors
-          : [
-              ...(latest.editors ?? []),
-              { id: `bc-${Date.now().toString(36)}`, path: 'broadcast', kind: 'broadcast' as const },
-            ],
-        activeTab: existing ? existing.id : `bc-${Date.now().toString(36)}`,
-      }));
-    },
-    [updateSessionWith],
-  );
-
   const { handleSessionCommand, handleCompleteInput } = useSessionCommands({
     backend,
     platform,
@@ -1586,7 +1568,6 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     updateSession,
     pathDeps,
     tearOffSession: canTearOff ? tearOffSession : undefined,
-    openBroadcastDeck,
     selectSession: goToSession,
   });
 
@@ -2734,14 +2715,6 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         onCompleteInput={handleCompleteInput}
                         onUserInput={clearSessionAttention}
                       />
-                    ) : ed.kind === 'broadcast' ? (
-                      <BroadcastDeck
-                        backend={backend}
-                        sessions={sessionsRef.current}
-                        renderView={renderSessionTileView}
-                        onFocusSession={goToSession}
-                        focusId={ed.id}
-                      />
                     ) : ed.kind === 'ide' ? (
                       <IdeView
                         ref={(handle) => registerEditor(ed.id, handle)}
@@ -2995,7 +2968,6 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 plugins={enabledPlugins}
                 onOpenBrowser={openBrowser}
                 onOpenIde={openIde}
-                onOpenBroadcastDeck={openBroadcastDeck}
                 onOpenTab={openSessionTab}
                 pluginData={pluginData}
                 mergePluginData={mergePluginData}
