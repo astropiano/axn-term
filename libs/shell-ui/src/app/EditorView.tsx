@@ -3,6 +3,7 @@ import { Save, Search } from 'lucide-react';
 import { useSettings } from '../SettingsProvider';
 import { monaco, applyAxnMonacoTheme, languageForPath, AXN_MONACO_THEME } from './monacoSetup';
 import { resolvePath, type FileService } from './fileService';
+import { registerViewFocus } from './viewFocus';
 import { isMac } from '../platform';
 
 const saveTip = isMac ? 'Save (⌘S / Ctrl+S)' : 'Save (Ctrl+S)';
@@ -11,6 +12,9 @@ const findTip = isMac ? 'Find (⌘F / Ctrl+F)' : 'Find (Ctrl+F)';
 export interface EditorHandle {
   isDirty(): boolean;
   save(): Promise<boolean>;
+  focus(): void;
+  /** Focus the editor and open Monaco's find widget. */
+  find(): void;
 }
 
 interface EditorViewProps {
@@ -20,9 +24,16 @@ interface EditorViewProps {
   isVisible?: boolean;
   fileService: FileService;
   onDirtyChange?: (dirty: boolean) => void;
+  /** Register the editor as the tab's focus target for session/tab switching. */
+  focusId?: string;
+  /**
+   * Shift+find (`⇧⌘F`/`Ctrl+Shift+F`) — a container-wide search owned by the
+   * parent (the IDE view's folder tree); absent when there is none.
+   */
+  onGlobalSearch?: () => void;
 }
 
-export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChange }: EditorViewProps) {
+export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChange, focusId, onGlobalSearch }: EditorViewProps) {
   // Resolve relative paths once per file, against the directory at open time.
   // A session's live cwd is not part of an already-open buffer's identity.
   const fileRef = useRef({ path, resolvedPath: resolvePath(cwd, path) });
@@ -43,6 +54,8 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
   const savingRef = useRef(false);
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
+  const onGlobalSearchRef = useRef(onGlobalSearch);
+  onGlobalSearchRef.current = onGlobalSearch;
   // Callers build the FileService inline, so it changes identity on every
   // render; keep it in a ref so the mount effect below doesn't tear down
   // and recreate the editor on every parent re-render.
@@ -84,6 +97,13 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
   const handleRef = useRef<EditorHandle>({
     isDirty: () => dirtyRef.current,
     save: () => saveRef.current(),
+    focus: () => editorRef.current?.focus(),
+    find: () => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      editor.getAction('actions.find')?.run();
+    },
   });
   useImperativeHandle(ref, () => handleRef.current, []);
 
@@ -127,6 +147,12 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
     const saveKey = () => void saveRef.current();
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveKey);
     editor.addCommand(monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyS, saveKey);
+    // ⇧⌘F / Ctrl+Shift+F while typing bubbles out as the container-wide
+    // search (IDE folder tree) — standalone Monaco has no binding for it.
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF,
+      () => onGlobalSearchRef.current?.(),
+    );
 
     fileServiceRef.current
       .readFile(resolvedPath)
@@ -161,15 +187,31 @@ export function EditorView({ ref, path, cwd, isVisible, fileService, onDirtyChan
     }
   }, [isVisible]);
 
+  // The tab's focus target for app navigation — session/tab switching
+  // shortcuts land here instead of leaving focus in the panel.
+  useEffect(() => {
+    if (!focusId) return;
+    return registerViewFocus(focusId, () => editorRef.current?.focus());
+  }, [focusId]);
+
   return (
     <div
       className="flex h-full w-full flex-col bg-[var(--terminal-bg)]"
       // Monaco's own bindings only fire while its textarea is focused; this
-      // catches ⌘S/Ctrl+S pressed with focus anywhere else in the view.
+      // catches ⌘S/Ctrl+S and ⌘F/Ctrl+F pressed with focus anywhere else in
+      // the view (⇧⌘F delegates to the container-wide search, if any).
       onKeyDown={(event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        if (!event.metaKey && !event.ctrlKey) return;
+        const key = event.key.toLowerCase();
+        if (key === 's' && !event.shiftKey) {
           event.preventDefault();
           void saveRef.current();
+        } else if (key === 'f' && !event.shiftKey) {
+          event.preventDefault();
+          handleRef.current.find();
+        } else if (key === 'f' && event.shiftKey && onGlobalSearchRef.current) {
+          event.preventDefault();
+          onGlobalSearchRef.current();
         }
       }}
     >

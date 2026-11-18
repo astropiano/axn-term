@@ -118,3 +118,34 @@ export function isTextEntryTarget(target: EventTarget | null): boolean {
   if (el.isContentEditable) return true;
   return el.closest('input, textarea, select, [contenteditable="true"], .xterm') !== null;
 }
+
+/**
+ * Find in the open editor: `⌘F` on macOS, `Ctrl+F` elsewhere — the binding
+ * every editor and browser uses. Views handle it themselves (Monaco binds
+ * it natively while its textarea is focused); this is for when focus sits
+ * elsewhere in the view — the file tree, a toolbar.
+ */
+export function isFindShortcut(event: ShortcutKeyEvent, mac: boolean): boolean {
+  if (event.key.toLowerCase() !== 'f' || event.altKey || event.shiftKey) return false;
+  return mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+}
+
+/**
+ * Search the whole folder tree: `⇧⌘F` on macOS, `Ctrl+Shift+F` elsewhere —
+ * the IDE "search in files" chord. Scopes to the view that owns the tree;
+ * terminals never see it (it is handled inside the view's DOM only).
+ */
+export function isTreeSearchShortcut(event: ShortcutKeyEvent, mac: boolean): boolean {
+  if (event.key.toLowerCase() !== 'f' || !event.shiftKey || event.altKey) return false;
+  return mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+}
+
+/** The find shortcut as shown in tooltips. */
+export function findShortcutLabel(mac: boolean): string {
+  return mac ? '⌘F' : 'Ctrl+F';
+}
+
+/** The tree-search shortcut as shown in tooltips. */
+export function treeSearchShortcutLabel(mac: boolean): string {
+  return mac ? '⇧⌘F' : 'Ctrl+Shift+F';
+}

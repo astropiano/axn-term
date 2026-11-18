@@ -168,7 +168,7 @@ msgstr "クライアント: {0}"
 msgid "Close"
 msgstr "閉じる"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3134
+#: libs/shell-ui/src/app/ShellApp.tsx:3166
 msgid "Close tab"
 msgstr "タブを閉じる"
 

@@ -134,6 +134,7 @@ import {
   releaseHookSpec,
 } from './session-plugins/agentHookBridge';
 import { terminalInput } from '../terminalRegistry';
+import { focusView } from './viewFocus';
 import { RailItem, RailShortcutContext } from './RailItem';
 import { nextKeptViews } from './keptViews';
 import { publishActiveView, registerViewHost, setFrameOriginAllower, useRuntimeViews } from './viewHost';
@@ -2060,6 +2061,25 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     return () => window.removeEventListener('axn:menu-settings', onMenuSettings);
   }, []);
 
+  // Keyboard navigation hands focus to the destination view: the flag is
+  // armed in the keydown handler, the every-render effect below applies it
+  // once the selection commit has mounted the visible view.
+  const focusAfterNavRef = useRef(false);
+  const focusActiveSessionView = useCallback((session: ShellSession) => {
+    const activeTab = session.activeTab ?? 'shell';
+    const viewId = activeTab === 'shell' ? ptyIdOf(session) : activeTab;
+    const input = terminalInput(viewId);
+    if (input) input.focus();
+    else focusView(viewId);
+  }, []);
+
+  useEffect(() => {
+    if (!focusAfterNavRef.current) return;
+    focusAfterNavRef.current = false;
+    const session = selectedSessionRef.current;
+    if (session) focusActiveSessionView(session);
+  });
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!isAppNavigationShortcut(event)) return;
@@ -2068,10 +2088,12 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         if (event.key === 'ArrowDown') {
           event.preventDefault();
           setActivePluginView(null);
+          focusAfterNavRef.current = true;
           selectNextWorkspace();
         } else if (event.key === 'ArrowUp') {
           event.preventDefault();
           setActivePluginView(null);
+          focusAfterNavRef.current = true;
           selectPrevWorkspace();
         }
         return;
@@ -2080,16 +2102,20 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         setActivePluginView(null);
+        focusAfterNavRef.current = true;
         selectNextSession();
       } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         setActivePluginView(null);
+        focusAfterNavRef.current = true;
         selectPrevSession();
       } else if (event.key === 'ArrowLeft') {
         event.preventDefault();
+        focusAfterNavRef.current = true;
         selectAdjacentTab(-1);
       } else if (event.key === 'ArrowRight') {
         event.preventDefault();
+        focusAfterNavRef.current = true;
         selectAdjacentTab(1);
       }
     };
@@ -2663,6 +2689,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         cwd={session.cwd}
                         sessionId={session.id}
                         isVisible={visible}
+                        focusId={ed.id}
                         onOpenFile={(path) => openEditor(session.id, path)}
                         onPreviewFile={(path) => openPreview(session.id, path)}
                         onIdeRequest={(dirPath) => openIde(session.id, dirPath)}
@@ -2673,6 +2700,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         cwd={session.cwd}
                         sessionId={session.id}
                         isVisible={visible}
+                        focusId={ed.id}
                       />
                     ) : ed.kind === 'shell' ? (
                       <SubShellView
@@ -2696,6 +2724,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         sessions={sessionsRef.current}
                         renderView={renderSessionTileView}
                         onFocusSession={goToSession}
+                        focusId={ed.id}
                       />
                     ) : ed.kind === 'ide' ? (
                       <IdeView
@@ -2704,6 +2733,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         cwd={session.cwd}
                         sessionId={session.id}
                         isVisible={visible}
+                        focusId={ed.id}
                         fileService={backendFileService(backend, session.id)}
                         onDirtyChange={(dirty) => setEditorDirty(session.id, ed.id, dirty)}
                       />
@@ -2712,6 +2742,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         session={session}
                         tab={ed}
                         isVisible={visible}
+                        focusId={ed.id}
                         onOpenFile={(path) => openEditor(session.id, path)}
                         onOpenSubShell={(command, cwd, label, agent) =>
                           openSubShell(session.id, command, cwd, label, agent)
@@ -2723,6 +2754,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         path={ed.path}
                         cwd={session.cwd}
                         isVisible={visible}
+                        focusId={ed.id}
                         fileService={backendFileService(backend, session.id)}
                         onDirtyChange={(dirty) => setEditorDirty(session.id, ed.id, dirty)}
                       />
@@ -3295,6 +3327,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                       <BrowserView
                         path={ed.path}
                         isVisible={viewTab === ed.id}
+                        focusId={ed.id}
                         onOpenFile={(path) =>
                           openPluginTab(viewPlugin.id, { path, kind: 'editor' })
                         }
@@ -3303,12 +3336,13 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         }
                       />
                     ) : ed.kind === 'preview' ? (
-                      <PreviewView path={ed.path} isVisible={viewTab === ed.id} />
+                      <PreviewView path={ed.path} isVisible={viewTab === ed.id} focusId={ed.id} />
                     ) : (
                       <EditorView
                         ref={(handle) => registerEditor(ed.id, handle)}
                         path={ed.path}
                         isVisible={viewTab === ed.id}
+                        focusId={ed.id}
                         fileService={backendFileService(backend, resolveAnySessionId() ?? '')}
                         onDirtyChange={(dirty) =>
                           setPluginEditorDirty(viewPlugin.id, ed.id, dirty)

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { DirEntry } from '@axn-term/session-backend';
-import { flattenTree, sortEntries, type ChildListing } from './browserTree';
+import { flattenTree, searchTree, sortEntries, type ChildListing } from './browserTree';
 
 const dir = (name: string) => ({ name, isDirectory: true, isFile: false, isSymlink: false }) as DirEntry;
 const file = (name: string) => ({ name, isDirectory: false, isFile: true, isSymlink: false }) as DirEntry;
@@ -64,5 +64,70 @@ describe('sortEntries', () => {
       'a',
       'b',
     ]);
+  });
+});
+
+describe('searchTree', () => {
+  const tree = new Map<string, DirEntry[]>([
+    ['/repo', [dir('src'), dir('.git'), file('README.md')]],
+    ['/repo/src', [dir('app'), file('main.ts'), file('button.tsx')]],
+    ['/repo/src/app', [file('view.tsx'), file('buttonBar.tsx')]],
+    ['/repo/.git', [file('config')]],
+  ]);
+  const listDir = (dir: string) => Promise.resolve(tree.get(dir) ?? []);
+
+  it('matches files and folders by relative path, case-insensitively', async () => {
+    const { hits } = await searchTree(listDir, '/repo', 'BUTTON');
+    expect(hits).toEqual([
+      { path: '/repo/src/button.tsx', isDir: false },
+      { path: '/repo/src/app/buttonBar.tsx', isDir: false },
+    ]);
+  });
+
+  it('matches a path segment, not just the name', async () => {
+    const { hits } = await searchTree(listDir, '/repo', 'app/');
+    expect(hits).toEqual([{ path: '/repo/src/app/buttonBar.tsx', isDir: false }, { path: '/repo/src/app/view.tsx', isDir: false }]);
+  });
+
+  it('returns folders as matches too', async () => {
+    // 'src' is a path segment: the folder and everything under it matches.
+    const { hits } = await searchTree(listDir, '/repo', 'src');
+    expect(hits[0]).toEqual({ path: '/repo/src', isDir: true });
+    expect(hits).toContainEqual({ path: '/repo/src/app', isDir: true });
+    expect(hits).toContainEqual({ path: '/repo/src/app/view.tsx', isDir: false });
+  });
+
+  it('skips dot-entries when hidden files are off', async () => {
+    const hidden = await searchTree(listDir, '/repo', 'config', { showHidden: false });
+    expect(hidden.hits).toEqual([]);
+    const shown = await searchTree(listDir, '/repo', 'config', { showHidden: true });
+    expect(shown.hits).toEqual([{ path: '/repo/.git/config', isDir: false }]);
+  });
+
+  it('reports truncation at the result cap', async () => {
+    const { hits, truncated } = await searchTree(listDir, '/repo', '', { maxResults: 1 });
+    expect(hits).toEqual([]);
+    expect(truncated).toBe(false);
+    const r = await searchTree(listDir, '/repo', '.', { maxResults: 2 });
+    expect(r.hits).toHaveLength(2);
+    expect(r.truncated).toBe(true);
+  });
+
+  it('skips unreadable folders instead of failing', async () => {
+    const failing = (dir: string) =>
+      dir === '/repo/src' ? Promise.reject(new Error('denied')) : listDir(dir);
+    const { hits } = await searchTree(failing, '/repo', 'readme');
+    expect(hits).toEqual([{ path: '/repo/README.md', isDir: false }]);
+  });
+
+  it('stops listing once cancelled', async () => {
+    const listed: string[] = [];
+    const tracking = async (dir: string) => {
+      listed.push(dir);
+      return listDir(dir);
+    };
+    let calls = 0;
+    await searchTree(tracking, '/repo', 'x', { isCancelled: () => ++calls > 2 });
+    expect(listed).toEqual(['/repo', '/repo/.git']);
   });
 });

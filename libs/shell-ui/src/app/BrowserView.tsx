@@ -1,18 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import type { DirEntry } from '@axn-term/session-backend';
-import { FileText, Folder, FolderOpen, ChevronDown, ChevronLeft, ChevronRight, ArrowUp, RefreshCw, FilePlus, FolderPlus, Copy, FolderSearch, PanelLeft } from 'lucide-react';
+import { FileText, Folder, FolderOpen, ChevronDown, ChevronLeft, ChevronRight, ArrowUp, RefreshCw, FilePlus, FolderPlus, Copy, FolderSearch, PanelLeft, Search, X } from 'lucide-react';
 import { resolvePath } from './fileService';
-import { flattenTree, sortEntries, type ChildListing, type TreeRow } from './browserTree';
+import { flattenTree, searchTree, sortEntries, type ChildListing, type SearchHit, type TreeRow } from './browserTree';
+import { isTreeSearchShortcut, treeSearchShortcutLabel } from './shortcuts';
+import { registerViewFocus } from './viewFocus';
 import { appRuntime } from './appRuntime';
 import { ContextMenu, menuDividerClass, menuItemClass } from '../ContextMenu';
 import { PathActionMenu } from '../PathActionMenu';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
-import { revealLabel as platformRevealLabel } from '../platform';
+import { isMac, revealLabel as platformRevealLabel } from '../platform';
 import { useContextMenuTrigger } from '../useContextMenuTrigger';
 import { useCoarsePointer } from '../useMediaQuery';
 import type { MenuPosition } from '../useContextMenuTrigger';
 
+/** Imperative bits the IDE view drives on its embedded tree. */
+export interface BrowserHandle {
+  /** Open the folder-tree search bar (⇧⌘F / Ctrl+Shift+F). */
+  openSearch(): void;
+  /** Focus the list — the tree's keyboard-navigation surface. */
+  focus(): void;
+}
+
 interface BrowserViewProps {
+  ref?: Ref<BrowserHandle>;
   path: string;
   cwd?: string;
   isVisible?: boolean;
@@ -26,6 +37,8 @@ interface BrowserViewProps {
   openOnSelect?: boolean;
   /** Owning session's id; plugin-hosted tabs resolve any live session. */
   sessionId?: string;
+  /** Register the list as the tab's focus target for session/tab switching. */
+  focusId?: string;
 }
 
 type BrowserMenu =
@@ -45,6 +58,7 @@ const HISTORY_LIMIT = 20;
  * path action menu.
  */
 export function BrowserView({
+  ref,
   path,
   cwd,
   isVisible,
@@ -54,6 +68,7 @@ export function BrowserView({
   alwaysShowHidden,
   openOnSelect,
   sessionId: sessionIdProp,
+  focusId,
 }: BrowserViewProps) {
   const [currentPath, setCurrentPath] = useState<string>(() => resolvePath(cwd, path));
   const [entries, setEntries] = useState<DirEntry[]>([]);
@@ -370,8 +385,98 @@ export function BrowserView({
     }
   };
 
+  // —— Folder-tree search (⇧⌘F / Ctrl+Shift+F) ————————————————————
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchTruncated, setSearchTruncated] = useState(false);
+  // Arrow-key pick inside the results — Enter opens the indexed hit.
+  const [searchIndex, setSearchIndex] = useState(0);
+  // Bumped per run; a stale walk checking its generation drops its results.
+  const searchGenRef = useRef(0);
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchHits([]);
+    listRef.current?.focus();
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openSearch: () => setSearchOpen(true),
+      focus: () => listRef.current?.focus(),
+    }),
+    [],
+  );
+
+  // The tab's focus target for app navigation — session/tab switching
+  // shortcuts land on the list so the tree keeps working from the keys.
+  useEffect(() => {
+    if (!focusId) return;
+    return registerViewFocus(focusId, () => listRef.current?.focus());
+  }, [focusId]);
+
+  // Debounced lazy walk of the tree — the backend has no recursive find,
+  // so folders are listed on demand the way manual expansion lists them.
+  useEffect(() => {
+    if (!searchOpen) return;
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchHits([]);
+      setSearchTruncated(false);
+      setSearching(false);
+      return;
+    }
+    const gen = ++searchGenRef.current;
+    setSearching(true);
+    const timer = setTimeout(() => {
+      void searchTree(
+        (dir) => Promise.resolve(backend.listDir?.(sessionId, dir) ?? []),
+        currentPath,
+        q,
+        { showHidden, isCancelled: () => searchGenRef.current !== gen },
+      ).then(({ hits, truncated }) => {
+        if (searchGenRef.current !== gen) return;
+        setSearchHits(hits);
+        setSearchIndex(0);
+        setSearchTruncated(truncated);
+        setSearching(false);
+      });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [searchOpen, searchQuery, currentPath, sessionId, showHidden, backend]);
+
+  // Files open like a double-clicked row; folders navigate to their path.
+  const openSearchResult = (hit: SearchHit) => {
+    closeSearch();
+    if (hit.isDir) {
+      setSelected(null);
+      navigate(hit.path);
+    } else {
+      onOpenFile(hit.path);
+    }
+  };
+
+  const searchActive = searchOpen && searchQuery.trim().length > 0;
+  const searchRelLabel = (p: string) =>
+    p.startsWith(`${currentPath}/`) ? p.slice(currentPath.length + 1) : p;
+
   return (
-    <div className="flex h-full w-full flex-col bg-[var(--terminal-bg)]">
+    <div
+      className="flex h-full w-full flex-col bg-[var(--terminal-bg)]"
+      // ⇧⌘F / Ctrl+Shift+F anywhere in the view — list, toolbar — opens the
+      // tree search. Text inputs stopPropagation their own keys, so typing
+      // in the path bar or search field never reaches this.
+      onKeyDown={(e) => {
+        if (isTreeSearchShortcut(e, isMac)) {
+          e.preventDefault();
+          setSearchOpen(true);
+        }
+      }}
+    >
       <div className="flex h-7 shrink-0 items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
         <div className="flex shrink-0 items-center">
           <button
@@ -472,6 +577,46 @@ export function BrowserView({
           </label>
         </div>
       )}
+      {searchOpen && (
+        <div className="flex h-7 shrink-0 items-center gap-1.5 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
+          <Search className="h-3 w-3 shrink-0 text-[var(--text-secondary)]" />
+          <input
+            autoFocus
+            type="text"
+            value={searchQuery}
+            placeholder={`Search this tree (${treeSearchShortcutLabel(isMac)})`}
+            aria-label="Search this tree"
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Escape') closeSearch();
+              else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSearchIndex((i) => Math.min(i + 1, searchHits.length - 1));
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSearchIndex((i) => Math.max(i - 1, 0));
+              } else if (e.key === 'Enter' && searchHits[searchIndex]) {
+                openSearchResult(searchHits[searchIndex]);
+              }
+            }}
+            spellCheck={false}
+            className="min-w-0 flex-1 rounded border border-[var(--accent)] bg-[var(--bg)] px-1 font-mono text-[11px] text-[var(--text-primary)] outline-none"
+          />
+          {searching && (
+            <RefreshCw className="h-3 w-3 shrink-0 animate-spin text-[var(--text-secondary)]" />
+          )}
+          <button
+            type="button"
+            onClick={closeSearch}
+            data-tip="Close search"
+            aria-label="Close search"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-secondary)] transition hover:bg-[var(--surface)] hover:text-[var(--accent)]"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
       <div
         ref={listRef}
         tabIndex={0}
@@ -527,6 +672,42 @@ export function BrowserView({
             )}
           </div>
         )}
+        {searchActive ? (
+          <ul className="space-y-0.5">
+            {searching && searchHits.length === 0 && (
+              <li className="py-0.5 text-[11px] text-[var(--text-secondary)]">searching…</li>
+            )}
+            {searchHits.map((hit, i) => (
+              <li key={hit.path}>
+                <button
+                  type="button"
+                  onClick={() => openSearchResult(hit)}
+                  onMouseEnter={() => setSearchIndex(i)}
+                  className={`flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs transition hover:bg-[var(--surface)] ${
+                    i === searchIndex
+                      ? 'bg-[var(--fill-accent)] text-[var(--accent)]'
+                      : 'text-[var(--text-primary)]'
+                  }`}
+                >
+                  {hit.isDir ? (
+                    <Folder className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">{searchRelLabel(hit.path)}</span>
+                </button>
+              </li>
+            ))}
+            {!searching && searchHits.length === 0 && (
+              <li className="py-0.5 text-[11px] text-[var(--text-secondary)]">no matches</li>
+            )}
+            {searchTruncated && (
+              <li className="py-0.5 text-[11px] text-[var(--text-secondary)]">
+                showing the first matches only — refine the query
+              </li>
+            )}
+          </ul>
+        ) : (
         <ul className="space-y-0.5">
           {rows.map((row) =>
             row.kind === 'status' ? (
@@ -607,6 +788,7 @@ export function BrowserView({
             ),
           )}
         </ul>
+        )}
       </div>
       {menu?.kind === 'entry' && (
         <ContextMenu x={menu.x} y={menu.y} widthClass="w-72" onClose={() => setMenu(null)}>
