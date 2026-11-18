@@ -9,7 +9,16 @@ fn shell_commands_are_available_to_all_app_windows_only() {
     let capability: Capability =
         serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
     assert!(capability.local);
-    assert!(capability.remote.is_none());
+    // dev-hmr loads shell windows from the local vite server — remote urls
+    // exist for it, but only ever localhost dev ports, no real origins.
+    let remote = capability.remote.as_ref().expect("dev-hmr remote urls");
+    assert!(!remote.urls.is_empty());
+    for url in &remote.urls {
+        assert!(
+            url.starts_with("http://localhost:") || url.starts_with("http://127.0.0.1:"),
+            "remote capability url escapes localhost: {url}"
+        );
+    }
     let manifests =
         serde_json::from_str(include_str!("../gen/schemas/acl-manifests.json")).unwrap();
     let resolved = Resolved::resolve(
