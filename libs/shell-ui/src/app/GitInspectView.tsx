@@ -13,10 +13,25 @@ import {
   Hourglass,
   Save,
   Sparkles,
+  MessageSquare,
+  Send,
+  Check,
+  Pause,
+  Trash2,
+  Undo2,
 } from 'lucide-react';
 import { useSettings } from '../SettingsProvider';
 import { usePluginSettings } from './PluginSettingsProvider';
 import { ContextMenu, menuItemClass, menuDividerClass } from '../ContextMenu';
+import {
+  actionableComments,
+  buildCommentsPrompt,
+  captureAnchor,
+  nextCommentId,
+  reanchorComments,
+} from './diffComments';
+import { pickFromList } from './pickerHost';
+import { defaultTabLabel } from './subshellPromote';
 import {
   buildExplainPrompt,
   buildTalkPrompt,
@@ -49,7 +64,7 @@ import {
 } from './gitClient';
 import type { CommitFile, GitCommit, StatusFile, WorktreeStatus } from './gitClient';
 import { ptyIdOf } from '../types';
-import type { EditorTab, ShellSession } from '../types';
+import type { DiffComment, EditorTab, ShellSession } from '../types';
 import { isMac } from '../platform';
 
 const diffSaveTip = isMac ? 'Save (⌘S / Ctrl+S)' : 'Save (Ctrl+S)';
@@ -82,6 +97,8 @@ interface DiffContent {
 interface DiffEditorApi {
   /** Write pending modified-side edits to disk; resolves immediately when clean. */
   flush(): Promise<void>;
+  /** Center a line in the pane for `side` (comment navigation). */
+  reveal(side: 'old' | 'new', line: number): void;
 }
 
 /** A non-empty text selection in one of the diff editor's panes. */
@@ -99,6 +116,8 @@ function MonacoDiff({
   apiRef,
   onDirtyChange,
   onDiscuss,
+  onComment,
+  comments,
 }: {
   diff: DiffContent;
   sideBySide: boolean;
@@ -108,6 +127,10 @@ function MonacoDiff({
   onDirtyChange?: (dirty: boolean) => void;
   /** Open an agent conversation about the selected text (review-agent talk). */
   onDiscuss?: (sel: DiffSelection) => void;
+  /** Anchor a review comment to the selected lines. */
+  onComment?: (sel: DiffSelection) => void;
+  /** Comments anchored on this file — rendered as line markers + hovers. */
+  comments?: DiffComment[];
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
@@ -119,6 +142,10 @@ function MonacoDiff({
   const { services } = useShellServices();
   const [menu, setMenu] = useState<ViewMenu | null>(null);
   const dirtyRef = useRef(false);
+  const decorRef = useRef<{
+    orig: monaco.editor.IEditorDecorationsCollection;
+    mod: monaco.editor.IEditorDecorationsCollection;
+  } | null>(null);
   /** Swallow the content-change event a model swap produces. */
   const suppressDirty = useRef(false);
   const onDirtyChangeRef = useRef(onDirtyChange);
@@ -143,7 +170,17 @@ function MonacoDiff({
 
   useEffect(() => {
     if (!apiRef) return;
-    apiRef.current = { flush: () => saveRef.current() };
+    apiRef.current = {
+      flush: () => saveRef.current(),
+      reveal: (side, line) => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        const pane = side === 'new' ? editor.getModifiedEditor() : editor.getOriginalEditor();
+        pane.revealLineInCenter(line);
+        pane.setPosition({ lineNumber: line, column: 1 });
+        editor.getModifiedEditor().focus();
+      },
+    };
     return () => {
       apiRef.current = null;
     };
@@ -171,6 +208,10 @@ function MonacoDiff({
     });
     editorRef.current = editor;
     const modifiedEditor = editor.getModifiedEditor();
+    decorRef.current = {
+      orig: editor.getOriginalEditor().createDecorationsCollection(),
+      mod: modifiedEditor.createDecorationsCollection(),
+    };
     const changeSub = modifiedEditor.onDidChangeModelContent(() => {
       if (suppressDirty.current || dirtyRef.current || !editablePathRef.current) return;
       dirtyRef.current = true;
@@ -186,11 +227,35 @@ function MonacoDiff({
       modelsRef.current?.original.dispose();
       modelsRef.current?.modified.dispose();
       modelsRef.current = null;
+      decorRef.current = null;
       editor.dispose();
       editorRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Line markers + hovers for the file's anchored comments.
+  useEffect(() => {
+    const d = decorRef.current;
+    if (!d) return;
+    const toDecor = (side: 'old' | 'new') =>
+      (comments ?? [])
+        .filter((c) => c.side === side)
+        .map((c) => ({
+          range: new monaco.Range(c.range[0], 1, c.range[1], 1),
+          options: {
+            isWholeLine: true,
+            linesDecorationsClassName: `axn-cm axn-cm-${c.resolution}${
+              c.status === 'stale' ? ' axn-cm-stale' : ''
+            }`,
+            hoverMessage: {
+              value: `**${c.resolution}${c.status !== 'active' ? ` · ${c.status}` : ''}**\n\n${c.body}`,
+            },
+          },
+        }));
+    d.mod.set(toDecor('new'));
+    d.orig.set(toDecor('old'));
+  }, [comments]);
 
   useEffect(() => {
     applyAxnMonacoTheme(activeTheme);
@@ -272,10 +337,18 @@ function MonacoDiff({
             onClick: () => void services.copyText(original.getModel()?.getValue() ?? ''),
           },
         ];
+        if (onComment || onDiscuss) {
+          items.push({
+            label: 'Comment on selection',
+            divider: true,
+            disabled: !selInfo || !onComment,
+            onClick: () => selInfo && onComment?.(selInfo),
+          });
+        }
         if (onDiscuss) {
           items.push({
             label: 'Discuss this change',
-            divider: true,
+            divider: !onComment,
             disabled: !selInfo,
             onClick: () => selInfo && onDiscuss(selInfo),
           });
@@ -428,6 +501,7 @@ export function GitInspectView({
   isVisible,
   onOpenFile,
   onOpenSubShell,
+  onUpdateTab,
   focusId,
 }: {
   session: ShellSession;
@@ -437,6 +511,8 @@ export function GitInspectView({
   onOpenFile?: (path: string) => void;
   /** Opens a sub-shell tab running `command` in `cwd` (agent "talk" feature). */
   onOpenSubShell?: (command: string, cwd: string, label?: string, agent?: ReviewAgent) => void;
+  /** Persists tab fields — comments live on `tab.comments`. */
+  onUpdateTab?: (patch: Partial<EditorTab>) => void;
   /** Register the view as the tab's focus target for session switching. */
   focusId?: string;
 }) {
@@ -880,6 +956,107 @@ export function GitInspectView({
     },
     [selFile, sel, talkAbout],
   );
+
+  // -- anchored diff comments ------------------------------------------------
+  //
+  // Comments persist on the tab (state.json) and re-anchor by content on
+  // every diff refresh — the agent keeps editing, so line numbers drift.
+  // 'resolution' is user triage (open/done/deferred); 'status' is anchor
+  // health (active/moved/stale).
+
+  const comments = tab.comments ?? [];
+  const fileComments = selFile ? comments.filter((c) => c.path === selFile.path) : [];
+  const openCount = actionableComments(comments).length;
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [composer, setComposer] = useState<DiffSelection | null>(null);
+  const [composerBody, setComposerBody] = useState('');
+
+  const patchComments = useCallback(
+    (next: DiffComment[]) => onUpdateTab?.({ comments: next }),
+    [onUpdateTab],
+  );
+
+  // Re-anchor the viewed file's comments whenever its diff content changes.
+  useEffect(() => {
+    if (!selFile || !diff || comments.length === 0) return;
+    const next = reanchorComments(comments, selFile.path, {
+      original: diff.original,
+      modified: diff.modified,
+    });
+    if (next) patchComments(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diff, selFile?.path]);
+
+  const addComment = useCallback(() => {
+    if (!composer || !selFile) return;
+    const sideLines = (composer.side === 'new' ? diff?.modified : diff?.original)?.split('\n');
+    const body = composerBody.trim();
+    if (!sideLines?.length || !body) return;
+    const c: DiffComment = {
+      id: nextCommentId(),
+      path: selFile.path,
+      oldPath: selFile.oldPath,
+      side: composer.side,
+      range: [composer.startLine, composer.endLine],
+      anchor: captureAnchor(sideLines, composer.startLine, composer.endLine),
+      body,
+      status: 'active',
+      resolution: 'open',
+      createdAt: Date.now(),
+    };
+    patchComments([...comments, c]);
+    setComposer(null);
+    setComposerBody('');
+    setCommentsOpen(true);
+  }, [composer, composerBody, comments, diff, patchComments, selFile]);
+
+  const setResolution = useCallback(
+    (id: string, resolution: DiffComment['resolution']) => {
+      patchComments(comments.map((c) => (c.id === id ? { ...c, resolution } : c)));
+    },
+    [comments, patchComments],
+  );
+
+  const removeComment = useCallback(
+    (id: string) => patchComments(comments.filter((c) => c.id !== id)),
+    [comments, patchComments],
+  );
+
+  /**
+   * Send open + deferred comments into the session's agent sub-shell (picked
+   * via the list picker when several run). Bracketed paste keeps the
+   * multi-line prompt a single composer entry in the agent TUI; the closing
+   * \r submits it. No agent tab → seed a fresh review-agent talk tab.
+   */
+  const sendComments = useCallback(async () => {
+    const subject =
+      sel.kind === 'commit'
+        ? `commit ${sel.commit.hash.slice(0, 7)}`
+        : `worktree diff${base ? ` vs ${base}` : ''}`;
+    const prompt = buildCommentsPrompt(subject, comments);
+    if (!prompt) return;
+    const agentTabs = (session.editors ?? []).filter(
+      (e) => e.kind === 'shell' && (e.agent || e.agentActive),
+    );
+    let target: EditorTab | undefined = agentTabs[0];
+    if (agentTabs.length > 1) {
+      const key = await pickFromList({
+        title: 'Send comments to…',
+        items: agentTabs.map((t) => ({ key: t.id, label: t.label ?? defaultTabLabel(t) })),
+      });
+      target = key ? agentTabs.find((t) => t.id === key) : undefined;
+      if (!target) return; // dismissed
+    }
+    const payload = `\x1b[200~${prompt}\x1b[201~\r`;
+    if (target) {
+      const ok = backend.writeWhenRaw
+        ? await backend.writeWhenRaw(target.id, payload).catch(() => false)
+        : undefined;
+      if (ok !== true) backend.write(target.id, payload);
+    } else if (reviewAgent && onOpenSubShell) {
+      onOpenSubShell(talkCommand(reviewAgent, prompt), root, 'review comments', reviewAgent);
+    }
+  }, [backend, base, comments, onOpenSubShell, reviewAgent, root, sel, session.editors]);
 
   /**
    * How to fetch the diff for each explanation key — registered on render
@@ -1446,6 +1623,22 @@ export function GitInspectView({
                 </button>
               </>
             )}
+            {comments.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setCommentsOpen((v) => !v)}
+                data-tip={`${openCount} open comment${openCount === 1 ? '' : 's'} — show review comments`}
+                aria-label="Show review comments"
+                className={`flex h-5 shrink-0 items-center gap-0.5 rounded px-1 text-[10px] transition hover:bg-[var(--surface)] ${
+                  comments.some((c) => c.resolution === 'deferred')
+                    ? 'text-[var(--orange)]'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--accent)]'
+                }`}
+              >
+                <MessageSquare className="h-3 w-3" />
+                {openCount}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setSideBySide((v) => !v)}
@@ -1460,6 +1653,150 @@ export function GitInspectView({
               )}
             </button>
           </div>
+          {composer && selFile && (
+            <div className="shrink-0 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2 py-1.5">
+              <div className="mb-1 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+                comment on {selFile.path}:{composer.startLine}
+                {composer.endLine !== composer.startLine ? `-${composer.endLine}` : ''} (
+                {composer.side} side)
+              </div>
+              <div className="mb-1 max-h-20 overflow-y-auto whitespace-pre-wrap rounded bg-[var(--bg)] px-1.5 py-1 font-mono text-[10px] text-[var(--text-secondary)]">
+                {composer.text.length > 400 ? `${composer.text.slice(0, 400)}…` : composer.text}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={composerBody}
+                  onChange={(e) => setComposerBody(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') addComment();
+                    if (e.key === 'Escape') {
+                      setComposer(null);
+                      setComposerBody('');
+                    }
+                  }}
+                  placeholder="Comment for the agent…"
+                  className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-1.5 py-0.5 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                />
+                <button
+                  type="button"
+                  onClick={addComment}
+                  disabled={!composerBody.trim()}
+                  className="shrink-0 rounded bg-[var(--accent)]/15 px-2 py-0.5 text-[10px] text-[var(--accent)] transition hover:bg-[var(--accent)]/25 disabled:opacity-40"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComposer(null);
+                    setComposerBody('');
+                  }}
+                  className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)] transition hover:bg-[var(--surface)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {commentsOpen && comments.length > 0 && (
+            <div className="max-h-48 shrink-0 overflow-y-auto border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2 py-1">
+              <div className="mb-0.5 flex items-center gap-1.5">
+                <span className="flex-1 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                  Review comments ({comments.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void sendComments()}
+                  disabled={openCount === 0}
+                  data-tip="Send open + deferred comments into the agent's input"
+                  className="flex shrink-0 items-center gap-1 rounded bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] text-[var(--accent)] transition hover:bg-[var(--accent)]/25 disabled:opacity-40"
+                >
+                  <Send className="h-3 w-3" />
+                  Send {openCount} to agent
+                </button>
+              </div>
+              {comments.map((c) => (
+                <div
+                  key={c.id}
+                  className="mb-0.5 flex items-start gap-1.5 rounded px-1 py-0.5 text-[10px] hover:bg-[var(--surface)]"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      c.path === selFile?.path &&
+                      diffApiRef.current?.reveal(c.side, c.range[0])
+                    }
+                    data-tip={c.path}
+                    className={`max-w-40 shrink-0 truncate font-mono ${
+                      c.path === selFile?.path
+                        ? 'text-[var(--accent)] hover:underline'
+                        : 'text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    {c.path.split('/').pop()}:{c.range[0]}
+                    {c.range[1] !== c.range[0] ? `-${c.range[1]}` : ''}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <span
+                      className={`break-words ${
+                        c.resolution === 'done'
+                          ? 'text-[var(--text-secondary)] line-through'
+                          : 'text-[var(--text-primary)]'
+                      }`}
+                    >
+                      {c.body}
+                    </span>
+                    {c.status !== 'active' && (
+                      <span className="ml-1 text-[var(--orange)]">{c.status}</span>
+                    )}
+                    {c.resolution === 'deferred' && (
+                      <span className="ml-1 rounded bg-[var(--orange)]/20 px-1 text-[var(--orange)]">
+                        deferred
+                      </span>
+                    )}
+                  </div>
+                  {c.resolution === 'open' && (
+                    <button
+                      type="button"
+                      data-tip="Defer — should be done, just not now (keeps re-entering sends)"
+                      onClick={() => setResolution(c.id, 'deferred')}
+                      className="shrink-0 rounded p-0.5 text-[var(--text-secondary)] hover:text-[var(--orange)]"
+                    >
+                      <Pause className="h-3 w-3" />
+                    </button>
+                  )}
+                  {c.resolution !== 'done' ? (
+                    <button
+                      type="button"
+                      data-tip="Done"
+                      onClick={() => setResolution(c.id, 'done')}
+                      className="shrink-0 rounded p-0.5 text-[var(--text-secondary)] hover:text-[var(--green)]"
+                    >
+                      <Check className="h-3 w-3" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      data-tip="Reopen"
+                      onClick={() => setResolution(c.id, 'open')}
+                      className="shrink-0 rounded p-0.5 text-[var(--text-secondary)] hover:text-[var(--accent)]"
+                    >
+                      <Undo2 className="h-3 w-3" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    data-tip="Delete comment"
+                    onClick={() => removeComment(c.id)}
+                    className="shrink-0 rounded p-0.5 text-[var(--text-secondary)] hover:text-[var(--red)]"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="min-h-0 flex-1">
             {diff ? (
               <MonacoDiff
@@ -1469,6 +1806,10 @@ export function GitInspectView({
                 apiRef={diffApiRef}
                 onDirtyChange={setDiffDirty}
                 onDiscuss={canTalk && selFile ? discussSelection : undefined}
+                onComment={
+                  onUpdateTab && selFile ? (s) => setComposer(s) : undefined
+                }
+                comments={fileComments}
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[13px] text-[var(--text-secondary)]">

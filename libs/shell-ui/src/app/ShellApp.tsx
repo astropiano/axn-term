@@ -2768,6 +2768,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         onOpenSubShell={(command, cwd, label, agent) =>
                           openSubShell(session.id, command, cwd, label, agent)
                         }
+                        onUpdateTab={(patch) => updateEditorTab(session.id, ed.id, patch)}
                       />
                     ) : (
                       <EditorView

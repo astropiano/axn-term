@@ -193,6 +193,41 @@ export interface EditorTab {
    * semantics), e.g. `origin/develop` for a merge-request review worktree.
    */
   base?: string;
+  /**
+   * For kind 'git': anchored review comments on the diff — re-anchored by
+   * content on each refresh (`app/diffComments.ts`), sent to an agent tab
+   * as a review prompt.
+   */
+  comments?: DiffComment[];
+}
+
+/** An anchored review comment on a git-inspect diff. */
+export interface DiffComment {
+  id: string;
+  /** Repo-relative path (new name for renames). */
+  path: string;
+  /** Repo-relative source path for renames/copies. */
+  oldPath?: string;
+  /** Which diff side the comment anchors: 'new' = post-image/worktree. */
+  side: 'old' | 'new';
+  /** File-space line range at capture time (1-based, end inclusive). */
+  range: [number, number];
+  anchor: {
+    /** Exact text of `range`'s lines at capture time. */
+    text: string;
+    /** Context lines above/below `range`, for fuzzy re-anchoring. */
+    before: string[];
+    after: string[];
+    /** fnv1a of the side's file content when last verified — refresh skip. */
+    diffId?: string;
+  };
+  body: string;
+  /** Anchor health after the latest re-anchor pass. */
+  status: 'active' | 'moved' | 'stale';
+  /** Triage: 'deferred' = should be done, just not now — stays loud. */
+  resolution: 'open' | 'done' | 'deferred';
+  /** Epoch ms. */
+  createdAt: number;
 }
 
 /**
