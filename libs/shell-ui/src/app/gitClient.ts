@@ -244,6 +244,17 @@ const RECORD = '\x1e';
 /** `--format=` for `git log` matching `parseLog`. */
 export const LOG_FORMAT = `%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e`;
 
+/**
+ * Refs the history strip walks. Without a compare base it is every ref
+ * (`--all`) plus HEAD. With one (a review tab: `axn-git origin/develop`) it is
+ * HEAD and that base only — a worktree shares every ref of its clone, so
+ * `--all` would put unrelated branches (a local integration branch, other
+ * reviews) at the top of the graph and make their changes look like the MR's.
+ */
+export function historyRefs(base?: string | null): string[] {
+  return base ? ['HEAD', base] : ['--all', 'HEAD'];
+}
+
 export function parseLog(out: string): GitCommit[] {
   const commits: GitCommit[] = [];
   for (const rec of out.split(RECORD)) {

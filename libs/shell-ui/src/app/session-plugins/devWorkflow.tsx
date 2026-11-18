@@ -1,7 +1,7 @@
 import { t } from '@lingui/core/macro';
 import { PublishPanelStatus } from '../PanelStatusSection';
 import { i18n } from '../../i18n';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { load as loadYaml, dump as dumpYaml } from 'js-yaml';
 import { AlertTriangle, ChevronLeft, ChevronRight, Columns3, Loader2, Play, Workflow } from 'lucide-react';
 import type { ShellSession, Workspace } from '../../types';
@@ -28,9 +28,10 @@ import {
 } from './mrActions';
 import { MR_ROLES, type MrRole } from './forge';
 import { normalizeReviewAgent } from '../gitReview';
-import { checkoutsOf, localCheckouts, parseRepoRoots } from '../repoDirectory';
+import { checkoutsOf, localCheckouts, parseRepoRoots, remoteMatchesProject } from '../repoDirectory';
 import { ticketListKey, useTicketLists, type Ticket } from './ticketSources';
 import type { PluginSettings } from '../pluginSettings';
+import { shellServices } from '../../services';
 import {
   normPath,
   worktreeBranchFor,
@@ -2098,6 +2099,34 @@ async function resolveMainCheckout(api: Ctx, root: string): Promise<string> {
  * session there and bind this workflow with the MR vars pre-filled. The
  * originating session is never touched.
  */
+/**
+ * The open session whose repo hosts a review of `project` (any repo session
+ * for a project-less ref). Several clones of one repo are common
+ * (`ai-accelerator-1` … `-14`), so the order matters — the first match used to
+ * win, which put every review off the same arbitrary clone:
+ *   1. the session the click came from (`env.selectedSessionId`),
+ *   2. a session whose `origin` is exactly the project,
+ *   3. a session whose repo folder is named after the project,
+ *   4. a session whose remote merely contains the project path.
+ */
+export function mrReviewSession(env: MrRowEnv, project: string | undefined): ShellSession | undefined {
+  const projShort = project?.split('/').pop();
+  const inProject = (s: ShellSession) =>
+    project === undefined
+      ? Boolean(s.repo?.root)
+      : remoteMatchesProject(s.repo?.remote, project) ||
+        (projShort !== undefined && Boolean(s.repo?.root.endsWith(`/${projShort}`))) ||
+        Boolean(s.repo?.remote?.includes(project));
+  const selected = env.sessions.find((s) => s.id === env.selectedSessionId);
+  if (selected && inProject(selected)) return selected;
+  if (project === undefined) return env.sessions.find(inProject);
+  return (
+    env.sessions.find((s) => remoteMatchesProject(s.repo?.remote, project)) ??
+    env.sessions.find((s) => projShort !== undefined && s.repo?.root.endsWith(`/${projShort}`)) ??
+    env.sessions.find((s) => s.repo?.remote?.includes(project))
+  );
+}
+
 export async function startMrReview(
   mr: MrActionProps['mr'],
   def: WorkflowDef,
@@ -2106,7 +2135,6 @@ export async function startMrReview(
 ): Promise<string | undefined> {
   const ref = parseMrRef(mr.url);
   const project = mr.project ?? ref?.project;
-  const projShort = project?.split('/').pop();
   // A known project only accepts a session inside that project's repo —
   // falling back to any repo session would run the fetch (and possibly the
   // whole review) in the wrong repository: refs like merge-requests/N/head
@@ -2114,13 +2142,7 @@ export async function startMrReview(
   // misleading 'couldn't find remote ref' error. The any-repo fallback is
   // for project-less refs (session MR rows, bare `!N`), where the repo is
   // implied by the session the row lives on.
-  const sess = project
-    ? env.sessions.find(
-        (s) =>
-          s.repo?.remote?.includes(project) ||
-          (projShort !== undefined && s.repo?.root.endsWith(`/${projShort}`)),
-      )
-    : env.sessions.find((s) => s.repo?.root);
+  const sess = mrReviewSession(env, project);
   const api = sess ? env.apiFor(sess.id) : undefined;
   let root = sess?.repo?.root;
   let remote = sess?.repo?.remote;
@@ -2390,15 +2412,23 @@ export function backlogTickets(
 }
 
 /**
- * What clicking 'review' should do: launch straight into the workspace
- * hosting the MR repo (or, when the host has no workspaces to choose from,
- * wherever the session lands), or ask the user to pick one. Extracted so the
- * branch is unit-testable — a click that does none of these is a bug.
+ * What clicking 'review' should do: launch straight into the workspace the
+ * click came from (the selected session's), else the workspace hosting the MR
+ * repo (or, when the host has no workspaces to choose from, wherever the
+ * session lands), or ask the user to pick one. Extracted so the branch is
+ * unit-testable — a click that does none of these is a bug.
  */
 export function mrReviewLaunch(
   env: MrRowEnv,
   mr: MrRef,
 ): { kind: 'launch'; workspaceId?: string } | { kind: 'pick' } {
+  // The first workspace hosting the repo used to win, so reviews landed in
+  // whichever workspace happened to hold some clone of it (VectorDB rather
+  // than the one being worked in) — where nobody looked for them.
+  const from = env.sessions.find((s) => s.id === env.selectedSessionId)?.workspaceId;
+  if (from && (env.workspaces ?? []).some((w) => w.id === from)) {
+    return { kind: 'launch', workspaceId: from };
+  }
   const ws = mrWorkspace(env, mr);
   if (ws) return { kind: 'launch', workspaceId: ws.id };
   if ((env.workspaces ?? []).length === 0) return { kind: 'launch' };
@@ -2442,6 +2472,7 @@ function MrReviewButton({ mr, env }: MrActionProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [errOpen, setErrOpen] = useState(false);
+  const backdropDown = useRef(false);
   useEffect(() => {
     if (!errOpen) return;
     const key = (event: KeyboardEvent) => {
@@ -2534,7 +2565,16 @@ function MrReviewButton({ mr, env }: MrActionProps) {
       {err && errOpen && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
-          onClick={() => setErrOpen(false)}
+          // Close only on a click that starts AND ends on the backdrop: a
+          // text selection dragged out of the dialog ends on the backdrop too,
+          // and its click used to close the dialog mid-copy.
+          onMouseDown={(e) => {
+            backdropDown.current = e.target === e.currentTarget;
+          }}
+          onClick={(e) => {
+            if (backdropDown.current && e.target === e.currentTarget) setErrOpen(false);
+            backdropDown.current = false;
+          }}
         >
           <div
             role="dialog"
@@ -2551,11 +2591,16 @@ function MrReviewButton({ mr, env }: MrActionProps) {
             </p>
             <p
               role="alert"
-              className="my-3 break-all rounded border border-[var(--border)] bg-[var(--surface)] p-2 font-mono text-[13px] text-[var(--red)]"
+              className="my-3 select-text break-all rounded border border-[var(--border)] bg-[var(--surface)] p-2 font-mono text-[13px] text-[var(--red)]"
             >
               {err}
             </p>
             <div className="flex justify-end gap-3 text-sm">
+              {shellServices() && (
+                <button type="button" onClick={() => void shellServices()?.copyText(err)}>
+                  Copy
+                </button>
+              )}
               <button
                 autoFocus
                 type="button"

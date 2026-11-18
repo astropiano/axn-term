@@ -667,6 +667,11 @@ export function useShellSessions(
       if (!targetWorkspaceId) return undefined;
       const session = createDefaultSession(targetWorkspaceId);
       session.name = name?.trim() || `session-${sessionsRef.current.length + 1}`;
+      // A name the caller chose (plugin openSession — an MR review's
+      // "!753 title", a worktree slug, a persona; `axn-session -n`) is a custom
+      // name: the shell's terminal title must not replace it. The rename
+      // reset still falls back to the terminal-reported name.
+      if (name?.trim()) session.customName = name.trim();
       if (cwd) session.cwd = cwd;
       setSessionsWithRef((prev) => [...prev, session]);
       // `background` (agent-driven `axn-session --background`) leaves the

@@ -31,6 +31,7 @@ import {
   shellLine,
   shellTokens,
   mrReviewLaunch,
+  mrReviewSession,
   mrStartWorkflows,
   mainCheckoutOf,
   mrConditionMet,
@@ -1862,6 +1863,57 @@ describe('startMrReview', () => {
     expect(mrReviewLaunch({ ...env, workspaces: undefined }, MR)).toEqual({
       kind: 'launch',
       workspaceId: undefined,
+    });
+  });
+
+  it('mrReviewSession prefers the clicking session among several clones', () => {
+    const clone = (id: string, root: string, remote = 'git@gitlab.com:g/p.git') => ({
+      ...repoSession(),
+      id,
+      repo: { ...repoSession().repo!, root, remote },
+    });
+    const env: MrRowEnv = {
+      sessions: [
+        clone('c10', '/git/p-10'),
+        clone('c3', '/git/p-3'),
+        clone('other', '/git/q', 'git@gitlab.com:g/q.git'),
+      ],
+      apiFor: () => undefined,
+      selectSession: () => {},
+    };
+    // no click context: first exact remote match, as before
+    expect(mrReviewSession(env, 'g/p')?.id).toBe('c10');
+    // clicked from clone 3 → its repo hosts the review
+    expect(mrReviewSession({ ...env, selectedSessionId: 'c3' }, 'g/p')?.id).toBe('c3');
+    // clicked from a session in another repo → not that one
+    expect(mrReviewSession({ ...env, selectedSessionId: 'other' }, 'g/p')?.id).toBe('c10');
+    // a remote that merely contains the path loses to an exact one
+    const sloppy: MrRowEnv = {
+      ...env,
+      sessions: [clone('pp', '/git/pp', 'git@gitlab.com:g/p-tools.git'), clone('p', '/git/p-1')],
+    };
+    expect(mrReviewSession(sloppy, 'g/p')?.id).toBe('p');
+  });
+
+  it('mrReviewLaunch opens the review in the workspace the click came from', () => {
+    const env: MrRowEnv = {
+      sessions: [
+        { ...repoSession(), id: 'host', workspaceId: 'ws-repo' },
+        { ...repoSession(), id: 'mine', workspaceId: 'ws-mine', repo: undefined },
+      ],
+      workspaces: [
+        { id: 'ws-repo', name: 'VectorDB' },
+        { id: 'ws-mine', name: 'reviews' },
+      ],
+      apiFor: () => undefined,
+      selectSession: () => {},
+    };
+    // without click context: the first workspace hosting the repo
+    expect(mrReviewLaunch(env, MR)).toEqual({ kind: 'launch', workspaceId: 'ws-repo' });
+    // with it: where the user is
+    expect(mrReviewLaunch({ ...env, selectedSessionId: 'mine' }, MR)).toEqual({
+      kind: 'launch',
+      workspaceId: 'ws-mine',
     });
   });
 

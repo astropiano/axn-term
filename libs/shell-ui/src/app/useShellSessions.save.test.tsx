@@ -147,3 +147,27 @@ it('strips banners persisted by older versions on load', async () => {
   expect(slice.worktree).toEqual({ path: '/x' });
   expect(slice).not.toHaveProperty('banner');
 });
+
+it('keeps a name given to addSession when the terminal reports its own title', async () => {
+  const store: ShellStateStore = {
+    load: () => Promise.resolve(saved),
+    save: () => Promise.resolve(),
+    delete: () => Promise.resolve(),
+  };
+  await mount(store);
+  let named = '';
+  let plain = '';
+  await act(async () => {
+    named = hook.addSession('ws', '/repo/worktrees/repo-mr-753', '!753 fix the thing') ?? '';
+    plain = hook.addSession('ws', '/tmp') ?? '';
+  });
+  await act(async () => {
+    hook.applySessionAutoName(named, 'me@host:/repo/worktrees/repo-mr-753');
+    hook.applySessionAutoName(plain, 'me@host:/tmp');
+  });
+  const byId = (id: string) => hook.sessions.find((s) => s.id === id)!;
+  expect(byId(named).name).toBe('!753 fix the thing');
+  expect(byId(named).autoName).toBe('me@host:/repo/worktrees/repo-mr-753');
+  // Without a chosen name the terminal title still names the session.
+  expect(byId(plain).name).toBe('me@host:/tmp');
+});
