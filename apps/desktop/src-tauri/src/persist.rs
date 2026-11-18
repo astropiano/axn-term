@@ -473,6 +473,52 @@ pub(crate) fn read_external_plugin_file(dir: String, name: String) -> Result<Str
 }
 
 
+/// Folder for user themes: `<state dir>/themes` (`~/.axn-term/themes`).
+pub(crate) fn user_themes_dir() -> Result<PathBuf, String> {
+    Ok(state_dir()?.join("themes"))
+}
+
+/// Largest theme file read — a theme is a few KB; anything bigger is not one.
+const MAX_THEME_FILE_BYTES: u64 = 256 * 1024;
+
+#[derive(Serialize)]
+pub(crate) struct ThemeFile {
+    name: String,
+    content: String,
+}
+
+/// User theme files: every `*.yaml`/`*.yml`/`*.json` directly in the themes
+/// folder, sorted by name, with their text. A missing folder is no themes;
+/// unreadable or oversized files are skipped.
+#[tauri::command]
+pub(crate) fn list_user_themes() -> Result<Vec<ThemeFile>, String> {
+    let dir = user_themes_dir()?;
+    let mut files = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(&dir) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_ascii_lowercase());
+            if !matches!(ext.as_deref(), Some("yaml" | "yml" | "json")) || !path.is_file() {
+                continue;
+            }
+            if entry.metadata().map(|m| m.len() > MAX_THEME_FILE_BYTES).unwrap_or(true) {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()).map(str::to_string) else {
+                continue;
+            };
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                files.push(ThemeFile { name, content });
+            }
+        }
+    }
+    files.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(files)
+}
+
 #[tauri::command]
 pub(crate) fn write_plugins(content: String) -> Result<(), String> {
     let dir = state_dir().map_err(|e| {

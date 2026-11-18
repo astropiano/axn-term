@@ -186,6 +186,15 @@ Application state is stored under the user's home directory:
   - `sessions.json` — legacy single-window state (migrated into `state.json` on first read)
   - `kv.json` — generic key-value store behind `services.storage` (e.g. agent
     review explanations); desktop only, web uses `localStorage`
+  - `themes/` — user themes: every `*.yaml`/`*.yml`/`*.json` file directly in
+    it, in the same format as the built-in `libs/shell-ui/themes/*.yaml`
+    (`id`, `name`, `mode`, `colors`, optional `ui`/`tagColors`). Desktop reads
+    them with the `list_user_themes` command (files over 256 KB are skipped);
+    `SettingsProvider`'s `loadUserThemes` polls the folder every 3 s and
+    `setUserThemes` (`themes.ts`) merges them into the theme list — a user
+    file with a built-in's `id` replaces that theme, a file that does not
+    parse raises an `Invalid theme` app-attention flag. No rebuild needed;
+    web has no themes folder.
   - `plugins.yaml` — per-plugin configuration (e.g. `devin.restore-session`)
     via `platform.pluginSettingsStore` → `PluginSettingsProvider` (desktop:
     `read_plugins`/`write_plugins` Tauri commands). Like config.yaml, the
@@ -1635,6 +1644,15 @@ Application state is stored under the user's home directory:
   - `sessions.json` — legacy single-window state (migrated into `state.json` on first read)
   - `kv.json` — generic key-value store behind `services.storage` (e.g. agent
     review explanations); desktop only, web uses `localStorage`
+  - `themes/` — user themes: every `*.yaml`/`*.yml`/`*.json` file directly in
+    it, in the same format as the built-in `libs/shell-ui/themes/*.yaml`
+    (`id`, `name`, `mode`, `colors`, optional `ui`/`tagColors`). Desktop reads
+    them with the `list_user_themes` command (files over 256 KB are skipped);
+    `SettingsProvider`'s `loadUserThemes` polls the folder every 3 s and
+    `setUserThemes` (`themes.ts`) merges them into the theme list — a user
+    file with a built-in's `id` replaces that theme, a file that does not
+    parse raises an `Invalid theme` app-attention flag. No rebuild needed;
+    web has no themes folder.
   - `plugins.yaml` — per-plugin configuration (e.g. `devin.restore-session`)
     via `platform.pluginSettingsStore` → `PluginSettingsProvider` (desktop:
     `read_plugins`/`write_plugins` Tauri commands). Like config.yaml, the

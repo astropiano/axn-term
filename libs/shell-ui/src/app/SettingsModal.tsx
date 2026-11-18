@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { msg } from '@lingui/core/macro';
 import type { MessageDescriptor } from '@lingui/core';
 import { Trans, useLingui } from '@lingui/react/macro';
@@ -10,7 +10,7 @@ import { useSettings, settingsFromYaml, settingsToYaml } from '../SettingsProvid
 import { usePluginSettings } from './PluginSettingsProvider';
 import type { AppSettings, ThemeMode } from '../themes';
 import type { ShellSession, Workspace } from '../types';
-import { defaultShellLineHeight, themeDefinitions } from '../themes';
+import { defaultShellLineHeight, subscribeThemes, themeDefinitions, themesVersion } from '../themes';
 import { useSessionBackend, useShellPlatform } from '../services';
 import { availableLocales, localeNames } from '../i18n';
 import { getSessionViewPlugins, isPluginEnabled, pluginDependencies } from './session-plugins';
@@ -75,20 +75,20 @@ const modeOptions: { value: ThemeMode }[] = [
   { value: 'auto' },
 ];
 
-const lightThemes = themeDefinitions.filter((t) => t.mode === 'light');
-const darkThemes = themeDefinitions.filter((t) => t.mode === 'dark');
-
 function ThemeSelect({
   label,
   value,
   onChange,
-  themes,
+  mode,
 }: {
   label: string;
   value: string | undefined;
   onChange: (id: string) => void;
-  themes: typeof themeDefinitions;
+  mode: 'light' | 'dark';
 }) {
+  // User themes (~/.axn-term/themes) load after startup and on file changes.
+  useSyncExternalStore(subscribeThemes, themesVersion);
+  const themes = themeDefinitions.filter((t) => t.mode === mode);
   return (
     <div>
       <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">{label}</label>
@@ -414,7 +414,7 @@ function GeneralTab() {
                 label={t`Light theme`}
                 value={settings.lightTheme}
                 onChange={(id) => updateSettings({ lightTheme: id })}
-                themes={lightThemes}
+                mode="light"
               />
             )}
             {showDarkPicker && (
@@ -422,7 +422,7 @@ function GeneralTab() {
                 label={t`Dark theme`}
                 value={settings.darkTheme}
                 onChange={(id) => updateSettings({ darkTheme: id })}
-                themes={darkThemes}
+                mode="dark"
               />
             )}
           </div>

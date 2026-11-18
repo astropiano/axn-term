@@ -76,6 +76,8 @@ export interface ThemeDefinition {
   ui?: ThemeUi;
   /** Optional hex per tag slot; unset slots come from the terminal colours. */
   tagColors?: Partial<Record<TagSlot, string>>;
+  /** Loaded from the user's themes folder (`~/.axn-term/themes/`), not built in. */
+  user?: boolean;
 }
 
 export interface AppSettings {
@@ -313,22 +315,85 @@ const fallbackTheme: ThemeDefinition = {
   },
 };
 
-export const themeDefinitions: ThemeDefinition[] = Object.entries(themeFiles)
+/** Parse one theme file (`.json`, else YAML); null when it is not a theme. */
+export function parseThemeFile(name: string, content: string): ThemeDefinition | null {
+  const parsed = name.toLowerCase().endsWith('.json') ? JSON.parse(content) : loadYaml(content);
+  return normalizeTheme(parsed);
+}
+
+const builtinThemes: ThemeDefinition[] = Object.entries(themeFiles)
   .map(([path, content]) => {
     try {
-      const parsed =
-        path.endsWith('.json') ? JSON.parse(content) : loadYaml(content);
-      return normalizeTheme(parsed);
+      return parseThemeFile(path, content);
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error(`Failed to load theme ${path}:`, e);
       return null;
     }
   })
-  .filter((t): t is ThemeDefinition => t !== null)
-  .sort((a, b) => a.name.localeCompare(b.name));
+  .filter((t): t is ThemeDefinition => t !== null);
 
-export const themeMap = new Map(themeDefinitions.map((t) => [t.id, t]));
+/**
+ * Every theme, built-in and user, sorted by name. Mutated in place when user
+ * themes load, so module-level imports see the current list; React callers
+ * re-render through `subscribeThemes`/`themesVersion`.
+ */
+export const themeDefinitions: ThemeDefinition[] = [];
+export const themeMap = new Map<string, ThemeDefinition>();
+
+let themeVersion = 0;
+const themeListeners = new Set<() => void>();
+
+function rebuildThemes(user: ThemeDefinition[]) {
+  // A user theme with a built-in's id replaces it — that is how a shipped
+  // theme gets tweaked without a rebuild.
+  const byId = new Map(builtinThemes.map((t) => [t.id, t]));
+  for (const t of user) byId.set(t.id, t);
+  const all = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  themeDefinitions.splice(0, themeDefinitions.length, ...all);
+  themeMap.clear();
+  for (const t of all) themeMap.set(t.id, t);
+  themeVersion += 1;
+  for (const l of themeListeners) l();
+}
+rebuildThemes([]);
+
+/** Bumps whenever the theme list changes — a `useSyncExternalStore` snapshot. */
+export function themesVersion(): number {
+  return themeVersion;
+}
+
+export function subscribeThemes(listener: () => void): () => void {
+  themeListeners.add(listener);
+  return () => themeListeners.delete(listener);
+}
+
+/** A theme file as the platform hands it over: its file name and raw text. */
+export interface ThemeFile {
+  name: string;
+  content: string;
+}
+
+/**
+ * Replace the user themes with these files (`~/.axn-term/themes/*.{yaml,yml,
+ * json}` on desktop). Files that do not parse or lack `id`/`name`/`mode`/
+ * `colors` are skipped and reported. Returns what was loaded and what failed.
+ */
+export function setUserThemes(files: ThemeFile[]): { loaded: string[]; failed: string[] } {
+  const user: ThemeDefinition[] = [];
+  const failed: string[] = [];
+  for (const f of files) {
+    try {
+      const t = parseThemeFile(f.name, f.content);
+      if (t) user.push({ ...t, user: true });
+      else failed.push(f.name);
+    } catch {
+      failed.push(f.name);
+    }
+  }
+  rebuildThemes(user);
+  return { loaded: user.map((t) => t.id), failed };
+}
 
 export const defaultAutoDarkThemeId = 'axn-dark';
 export const defaultAutoLightThemeId = 'axn-light';
