@@ -3,6 +3,7 @@ import type { SessionStatus, ShellSession, Task } from '../../types';
 import { axnLog } from '../log';
 import { hookStatusOwned } from './agentHookBridge';
 import { claudeHookSpec } from './claudeHooks';
+import { declaredActive } from './declaredProgress';
 import { registerAgentLauncher } from './agentRegistry';
 import {
   agentResumeMenuItem,
@@ -126,12 +127,16 @@ function scanTodos(ctx: SessionViewContext & PluginApi): void {
   // then only contributes task content, not status guesses.
   const hooksOwn = hookStatusOwned(claudeHookSpec, session.id);
   const statusChanged = !hooksOwn && status !== (session.status ?? 'idle');
+  // An explicit axn-progress declaration owns the bar — the task list and
+  // status still update, the progress field does not.
+  const declared = declaredActive(session.id);
   if (
     tasksKey(simple) !== tasksKey(session.tasks ?? []) ||
-    progress !== (session.progress ?? 0) ||
+    (!declared && progress !== (session.progress ?? 0)) ||
     statusChanged
   ) {
-    const patch: Partial<ShellSession> = { tasks: simple, progress };
+    const patch: Partial<ShellSession> = { tasks: simple };
+    if (!declared) patch.progress = progress;
     if (!hooksOwn) patch.status = status;
     ctx.updateSession(session.id, patch);
   }
@@ -146,16 +151,18 @@ function clearTasks(ctx: SessionViewContext & PluginApi): void {
   const tasks = session.tasks ?? [];
   // A fully done run keeps its 'completed' badge — the "done" signal.
   const allDone = tasks.length > 0 && tasks.every((t) => t.done);
+  const declared = declaredActive(session.id);
   if (
     tasks.length > 0 ||
-    (session.progress ?? 0) !== 0 ||
+    (!declared && (session.progress ?? 0) !== 0) ||
     (session.status ?? 'idle') !== 'idle'
   ) {
-    ctx.updateSession(session.id, {
+    const patch: Partial<ShellSession> = {
       tasks: [],
-      progress: 0,
       status: allDone || session.status === 'completed' ? 'completed' : 'idle',
-    });
+    };
+    if (!declared) patch.progress = 0;
+    ctx.updateSession(session.id, patch);
   }
 }
 
@@ -538,12 +545,15 @@ export const claudePlugin: SessionViewPlugin = {
     const state0 = getState(ctx);
     if (state0.wroteTasks) ctx.updatePluginState({ wroteTasks: false });
     const live = ctx.getSession();
+    const declared = declaredActive(live.id);
     if (
       (live.tasks ?? []).length > 0 ||
-      (live.progress ?? 0) !== 0 ||
+      (!declared && (live.progress ?? 0) !== 0) ||
       (live.status ?? 'idle') !== 'idle'
     ) {
-      ctx.updateSession(live.id, { tasks: [], progress: 0, status: 'idle' });
+      const patch: Partial<ShellSession> = { tasks: [], status: 'idle' };
+      if (!declared) patch.progress = 0;
+      ctx.updateSession(live.id, patch);
     }
     exitCaptures.get(ctx.session.id)?.finish();
     cancelPendingRestore(ctx.session.id);

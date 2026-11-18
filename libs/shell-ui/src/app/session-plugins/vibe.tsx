@@ -4,6 +4,7 @@ import { axnLog } from '../log';
 import { sessionLastSelectedAt } from '../attention';
 import type { SessionAttention, SessionBanner, SessionStatus, ShellSession, Task } from '../../types';
 import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin';
+import { declaredActive } from './declaredProgress';
 import {
   agentResumeMenuItem,
   forgetLastAgentSession,
@@ -623,7 +624,12 @@ export const vibePlugin: SessionViewPlugin = {
     if (hasTasks || hasSessionProgress) {
       axnLog('debug', 'vibe', 'vibe process ended; clearing task list and progress');
       if (hasTasks) ctx.updatePluginState({ tasks: [] });
-      if (hasSessionProgress) {
+      if (declaredActive(ctx.session.id)) {
+        // The declaration owns the bar — release only the task list.
+        if ((ctx.session.tasks ?? []).length > 0) {
+          ctx.updateSession(ctx.session.id, { tasks: [] });
+        }
+      } else if (hasSessionProgress) {
         ctx.updateSession(ctx.session.id, { tasks: [], progress: 0 });
       }
     }
@@ -716,13 +722,16 @@ export const vibePlugin: SessionViewPlugin = {
       // A parsed task list owns the lifecycle badge while vibe runs —
       // blocked/running/completed; an empty list means idle.
       const nextStatus = status ?? 'idle';
+      const declared = declaredActive(ctx.session.id);
       if (
         tasksKey(simple) !== tasksKey(ctx.session.tasks ?? []) ||
-        progress !== (ctx.session.progress ?? 0) ||
+        (!declared && progress !== (ctx.session.progress ?? 0)) ||
         nextStatus !== (ctx.session.status ?? 'idle')
       ) {
         axnLog('debug', 'vibe', `updating session progress: ${progress}% status=${nextStatus}`);
-        ctx.updateSession(ctx.session.id, { tasks: simple, progress, status: nextStatus });
+        const patch2: Partial<ShellSession> = { tasks: simple, status: nextStatus };
+        if (!declared) patch2.progress = progress;
+        ctx.updateSession(ctx.session.id, patch2);
       }
     }
 
@@ -800,8 +809,11 @@ export const vibePlugin: SessionViewPlugin = {
     if (state.attention) {
       ctx.updatePluginState({ attention: undefined });
     }
-    if ((ctx.session.tasks ?? []).length > 0 || (ctx.session.progress ?? 0) > 0) {
-      ctx.updateSession(ctx.session.id, { tasks: [], progress: 0 });
+    const declared = declaredActive(ctx.session.id);
+    if ((ctx.session.tasks ?? []).length > 0 || (!declared && (ctx.session.progress ?? 0) > 0)) {
+      const patch: Partial<ShellSession> = { tasks: [] };
+      if (!declared) patch.progress = 0;
+      ctx.updateSession(ctx.session.id, patch);
     }
     if ((ctx.getSession().status ?? 'idle') !== 'idle') {
       ctx.updateSession(ctx.session.id, { status: 'idle' });
