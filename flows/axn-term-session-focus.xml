@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - session navigation hands focus to the terminal"
+        orchestrator="orchestrators/playwright.ts">
+    <description>
+      Two sessions in one workspace: Ctrl+Alt+Up/Down must move DOM focus to
+      the destination session's terminal — pressing it from inside the
+      focused terminal, and with focus sitting in the session panel — so
+      typing right after the shortcut lands in the selected shell instead of
+      going nowhere (regression: selection moved, focus stayed behind).
+    </description>
+    <tags>
+      <tag>axn-term</tag>
+    </tags>
+    <scenarios>
+      <!-- Project scenario scenarios/axn-term-online: axn-dev resolves global
+           (integration-repo) scenarios first and falls back to the current
+           repo's scenarios/, so run from inside this checkout. "shell" is the
+           named frontend-service (http://axn-term.<domain>:<port>) — Caddy
+           routes by host, so the bare caddy port would not reach the app. -->
+      <scenario name="axn-term-online" service="shell" adapter="tsAdapter">
+        <readiness service="shell" path="/" expected="200" />
+      </scenario>
+    </scenarios>
+    <setup>
+      <env>
+        <var name="TEST_USER" value="demo" />
+        <var name="TEST_PASSWORD" value="changeme" />
+        <!-- The flow needs hosted shell sessions: force the cloud path even
+             where the scenario is configured remote-only (axn-dev.yaml env).
+             Only effective when the flow itself starts the scenario — stop
+             a remote-only stack first. -->
+        <var name="AXN_REMOTE_ONLY" value="0" />
+        <var name="HUB_CLOUD_ENABLED" value="true" />
+        <!-- Keep the per-user session-host container names under DNS's
+             63-char label limit: the default <compose-project>-host prefix
+             overflows on long repo+branch+port names, and the gateway's
+             readiness probe then can't resolve its own session host. -->
+        <var name="SESSION_HOST_PREFIX" value="axn-flow-host" />
+      </env>
+    </setup>
+    <steps>
+      <step src="steps/login.ts"
+            description="Open the shell UI, log in with Keycloak, and wait for the container terminal prompt" />
+      <step src="steps/session-focus.ts"
+            description="Create a second session, switch sessions via Ctrl+Alt+arrows with the terminal focused and with focus in the panel, type markers without clicking, verify they reach the selected shell" />
+      <assert that="exitCode" value="0" />
+      <assert that="contains" value="Focus follows session navigation verified" />
+    </steps>
+  </flow>
+</flows>

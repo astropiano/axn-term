@@ -2067,17 +2067,33 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   const focusAfterNavRef = useRef(false);
   const focusActiveSessionView = useCallback((session: ShellSession) => {
     const activeTab = session.activeTab ?? 'shell';
-    const viewId = activeTab === 'shell' ? ptyIdOf(session) : activeTab;
+    // Registration ids: the main shell registers under the session id (its
+    // PTY may be a promoted sub-shell's — mainPtyId — while the input
+    // handle stays keyed by session), sub-shells and view focusers under
+    // the tab id.
+    const viewId = activeTab === 'shell' ? session.id : activeTab;
     const input = terminalInput(viewId);
-    if (input) input.focus();
-    else focusView(viewId);
+    if (input) {
+      input.focus();
+      return true;
+    }
+    return focusView(viewId);
   }, []);
 
   useEffect(() => {
     if (!focusAfterNavRef.current) return;
     focusAfterNavRef.current = false;
     const session = selectedSessionRef.current;
-    if (session) focusActiveSessionView(session);
+    if (!session) return;
+    // The destination view may still be mounting — a terminal registers
+    // its input only after the PTY attach — so retry briefly instead of
+    // giving up on the first empty lookup.
+    let tries = 0;
+    const attempt = () => {
+      if (focusActiveSessionView(session)) return;
+      if (++tries < 40) setTimeout(attempt, 50);
+    };
+    attempt();
   });
 
   useEffect(() => {
