@@ -11,6 +11,7 @@ import {
   settingsFromYaml,
   type ShellPlatform,
   type LogLevel,
+  type ThemeFile,
 } from '@axn-term/shell-ui';
 import type { Unsubscribe } from '@axn-term/session-backend';
 import { createRemoteAuth } from './remoteAuth';
@@ -18,6 +19,9 @@ import { desktopWorkspaceSetStorage } from './workspaceSetStorage';
 import { connectServer, pairingLink, serverStatus } from './remoteServer';
 
 const appWindow = getCurrentWindow();
+
+/** User theme files from `~/.axn-term/themes/` (the `list_user_themes` command). */
+export const loadUserThemes = (): Promise<ThemeFile[]> => invoke<ThemeFile[]>('list_user_themes');
 
 /** Turn Tauri's Promise<UnlistenFn> into a sync Unsubscribe. */
 function syncSub(sub: Promise<() => void>): Unsubscribe {

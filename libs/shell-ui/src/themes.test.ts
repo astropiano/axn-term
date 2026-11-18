@@ -154,3 +154,55 @@ describe('themeTagPalette', () => {
     expect(themeTagPalette(theme).red).not.toBe('rgb(1,2,3)');
   });
 });
+
+describe('user themes', () => {
+  const yaml = [
+    'id: test-user-dark',
+    'name: Test User Dark',
+    'mode: dark',
+    'colors:',
+    "  background: '#17151b'",
+    "  foreground: '#f5f4f6'",
+  ].join('\n');
+
+  it('adds valid files next to the built-ins and notifies subscribers', async () => {
+    const { setUserThemes, subscribeThemes, themesVersion } = await import('./themes');
+    const builtins = themeDefinitions.length;
+    let calls = 0;
+    const off = subscribeThemes(() => calls++);
+    const before = themesVersion();
+    const res = setUserThemes([
+      { name: 'test-user-dark.yaml', content: yaml },
+      { name: 'broken.yaml', content: 'id: [unclosed' },
+      { name: 'not-a-theme.json', content: '{"hello":1}' },
+    ]);
+    off();
+    expect(res).toEqual({ loaded: ['test-user-dark'], failed: ['broken.yaml', 'not-a-theme.json'] });
+    expect(themeDefinitions).toHaveLength(builtins + 1);
+    expect(themeMap.get('test-user-dark')).toMatchObject({ name: 'Test User Dark', user: true });
+    expect(calls).toBe(1);
+    expect(themesVersion()).toBe(before + 1);
+    // resolving a stored user theme id now finds it
+    expect(resolveTheme({ ...defaultSettings, theme: 'dark', darkTheme: 'test-user-dark' }).id).toBe(
+      'test-user-dark',
+    );
+    // replacing the set removes themes whose file is gone
+    setUserThemes([]);
+    expect(themeMap.has('test-user-dark')).toBe(false);
+    expect(themeDefinitions).toHaveLength(builtins);
+  });
+
+  it('lets a user file replace a built-in theme of the same id', async () => {
+    const { setUserThemes } = await import('./themes');
+    const builtin = themeMap.get('axn-dark')!;
+    setUserThemes([
+      {
+        name: 'axn-dark.json',
+        content: JSON.stringify({ ...builtin, user: undefined, name: 'My Axn Dark' }),
+      },
+    ]);
+    expect(themeMap.get('axn-dark')).toMatchObject({ name: 'My Axn Dark', user: true });
+    setUserThemes([]);
+    expect(themeMap.get('axn-dark')?.name).toBe(builtin.name);
+  });
+});

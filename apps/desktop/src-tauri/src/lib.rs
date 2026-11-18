@@ -441,6 +441,7 @@ pub fn run() {
             persist::list_external_plugins,
             persist::read_external_plugin,
             persist::list_external_plugin_dirs,
+            persist::list_user_themes,
             persist::read_external_plugin_file,
             pty::create_subshell,
             pty::set_subshell_parent,

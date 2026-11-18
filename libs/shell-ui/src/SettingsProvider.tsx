@@ -1,8 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { I18nProvider } from '@lingui/react';
 import { load as loadYaml, dump as dumpYaml } from 'js-yaml';
-import type { AppSettings, ThemeDefinition, ThemeMode } from './themes';
-import { applyTheme, applyUiFont, defaultSettings, resolveTheme, themeMap } from './themes';
+import type { AppSettings, ThemeDefinition, ThemeFile, ThemeMode } from './themes';
+import {
+  applyTheme,
+  applyUiFont,
+  defaultSettings,
+  resolveTheme,
+  setUserThemes,
+  subscribeThemes,
+  themeMap,
+} from './themes';
 import type { AppConfigStore } from './platform';
 import { setAppAttention } from './app/attention';
 import { activateLanguage, i18n } from './i18n';
@@ -99,13 +107,25 @@ function saveLocalStorage(settings: AppSettings) {
   }
 }
 
+/** App-level attention source key raised while a user theme file fails to load. */
+export const THEME_ATTENTION_SOURCE = 'Invalid theme';
+
+/** How often the user themes folder is re-read — a dropped-in file shows up without a restart. */
+const USER_THEMES_POLL_MS = 3000;
+
 export function SettingsProvider({
   children,
   configStore,
+  loadUserThemes,
 }: {
   children: React.ReactNode;
   /** On-disk config store — desktop ~/.axn-term/config.yaml; absent on web. */
   configStore?: AppConfigStore;
+  /**
+   * Reads the user's theme files — desktop `~/.axn-term/themes/*.{yaml,yml,
+   * json}`; absent where there is no themes folder (web).
+   */
+  loadUserThemes?: () => Promise<ThemeFile[]>;
 }) {
   const [settings, setSettings] = useState<AppSettings>(initialSettings);
   const settingsRef = useRef(settings);
@@ -231,6 +251,45 @@ export function SettingsProvider({
       saveLocalStorage(settings);
     }
   }, [settings, configStore]);
+
+  // User themes: load the folder, re-read it on a short poll and re-resolve
+  // the active theme whenever the list changes — a stored theme id that only
+  // a user file provides resolves to the mode's default until it has loaded.
+  useEffect(() => {
+    if (!loadUserThemes) return;
+    let cancelled = false;
+    let last: string | null = null;
+    const read = async () => {
+      const files = await loadUserThemes().catch(() => null);
+      if (cancelled || !files) return;
+      const sig = JSON.stringify(files);
+      if (sig === last) return;
+      last = sig;
+      const { failed } = setUserThemes(files);
+      setAppAttention(
+        THEME_ATTENTION_SOURCE,
+        failed.length > 0
+          ? { level: 'warning', message: `Theme file not loaded: ${failed.join(', ')}` }
+          : null,
+      );
+    };
+    void read();
+    const timer = window.setInterval(() => void read(), USER_THEMES_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loadUserThemes]);
+
+  useEffect(
+    () =>
+      subscribeThemes(() => {
+        const theme = resolveTheme(settingsRef.current);
+        setActiveTheme(theme);
+        applyTheme(theme);
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (settings.theme !== 'auto') return;

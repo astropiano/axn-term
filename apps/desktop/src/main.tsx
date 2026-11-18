@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import App from './app/App';
 import { SettingsProvider } from '@axn-term/shell-ui';
-import { desktopPlatform } from './app/platform';
+import { desktopPlatform, loadUserThemes } from './app/platform';
 import { initTitlebar } from './app/titlebar';
 import './styles.css';
 
@@ -14,7 +14,7 @@ const root = ReactDOM.createRoot(
 
 root.render(
   <StrictMode>
-    <SettingsProvider configStore={desktopPlatform.configStore}>
+    <SettingsProvider configStore={desktopPlatform.configStore} loadUserThemes={loadUserThemes}>
       <App />
     </SettingsProvider>
   </StrictMode>,

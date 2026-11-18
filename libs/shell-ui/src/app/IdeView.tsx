@@ -1,9 +1,10 @@
-import { useCallback, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useCallback, useImperativeHandle, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react';
 import { PanelLeft } from 'lucide-react';
 import { BrowserView } from './BrowserView';
 import { EditorView, type EditorHandle } from './EditorView';
 import type { FileService } from './fileService';
 import { useCoarsePointer, useMediaQuery } from '../useMediaQuery';
+import { IDE_TREE_DEFAULT_WIDTH, clampTreeWidth, storeTreeWidth, storedTreeWidth } from './ideTreeWidth';
 
 interface IdeViewProps {
   /**
@@ -23,7 +24,9 @@ interface IdeViewProps {
 
 /**
  * IDE-style composite tab: file tree left, editor right. The tree is an
- * inline column on `sm:` and up; on small screens it becomes a slide-over
+ * inline column on `sm:` and up, resizable by dragging its right edge (the
+ * width is remembered; a double-click resets it), so deep or wide folders
+ * fit; on small screens it becomes a slide-over
  * drawer (the session-panel pattern) toggled by a top-bar button — the
  * component owns its responsive layout so the tab model stays untouched.
  *
@@ -43,6 +46,8 @@ export function IdeView({
   const coarsePointer = useCoarsePointer();
   const wide = useMediaQuery('(min-width: 640px)');
   const [treeOpen, setTreeOpen] = useState(false);
+  const [treeWidth, setTreeWidth] = useState(storedTreeWidth);
+  const viewRef = useRef<HTMLDivElement>(null);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const handlesRef = useRef(new Map<string, EditorHandle>());
@@ -55,6 +60,37 @@ export function IdeView({
     setOpenFiles((files) => (files.includes(p) ? files : [...files, p]));
     setActiveFile(p);
     setTreeOpen(false);
+  }, []);
+
+  // Drag the tree's right edge: pointer capture keeps the drag alive over the
+  // editor (Monaco would otherwise swallow the moves).
+  const startTreeResize = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = treeWidth;
+    const viewWidth = viewRef.current?.getBoundingClientRect().width ?? 0;
+    let width = startWidth;
+    const move = (ev: PointerEvent) => {
+      width = clampTreeWidth(startWidth + ev.clientX - startX, viewWidth);
+      setTreeWidth(width);
+    };
+    const up = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      storeTreeWidth(width);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  }, [treeWidth]);
+
+  const resetTreeWidth = useCallback(() => {
+    setTreeWidth(IDE_TREE_DEFAULT_WIDTH);
+    storeTreeWidth(IDE_TREE_DEFAULT_WIDTH);
   }, []);
 
   const fileDirty = useCallback((p: string, dirty: boolean) => {
@@ -93,10 +129,23 @@ export function IdeView({
   );
 
   return (
-    <div className="relative flex h-full w-full bg-[var(--terminal-bg)]">
-      {/* Inline tree column on sm+ */}
+    <div ref={viewRef} className="relative flex h-full w-full bg-[var(--terminal-bg)]">
+      {/* Inline tree column on sm+, resizable from its right edge */}
       {wide && (
-        <div className="w-56 shrink-0 border-r border-[var(--border)]">{tree}</div>
+        <>
+          <div className="min-w-0 shrink-0" style={{ width: treeWidth }}>
+            {tree}
+          </div>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize file tree"
+            data-tip="Drag to resize · double-click to reset"
+            onPointerDown={startTreeResize}
+            onDoubleClick={resetTreeWidth}
+            className="w-1 shrink-0 cursor-ew-resize touch-none select-none border-r border-[var(--border)] transition-colors duration-[var(--dur-1)] hover:bg-[var(--fill-2)]"
+          />
+        </>
       )}
       {/* Slide-over drawer on small screens (session-panel pattern) */}
       {!wide && treeOpen && (
