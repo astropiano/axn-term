@@ -1,8 +1,11 @@
-import { useCallback, useImperativeHandle, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react';
 import { PanelLeft } from 'lucide-react';
-import { BrowserView } from './BrowserView';
+import { BrowserView, type BrowserHandle } from './BrowserView';
 import { EditorView, type EditorHandle } from './EditorView';
 import type { FileService } from './fileService';
+import { isFindShortcut, isTreeSearchShortcut } from './shortcuts';
+import { registerViewFocus } from './viewFocus';
+import { isMac } from '../platform';
 import { useCoarsePointer, useMediaQuery } from '../useMediaQuery';
 import { IDE_TREE_DEFAULT_WIDTH, clampTreeWidth, storeTreeWidth, storedTreeWidth } from './ideTreeWidth';
 
@@ -20,6 +23,8 @@ interface IdeViewProps {
   sessionId?: string;
   fileService: FileService;
   onDirtyChange?: (dirty: boolean) => void;
+  /** Register the view as the tab's focus target for session/tab switching. */
+  focusId?: string;
 }
 
 /**
@@ -42,6 +47,7 @@ export function IdeView({
   sessionId,
   fileService,
   onDirtyChange,
+  focusId,
 }: IdeViewProps) {
   const coarsePointer = useCoarsePointer();
   const wide = useMediaQuery('(min-width: 640px)');
@@ -53,8 +59,18 @@ export function IdeView({
   const handlesRef = useRef(new Map<string, EditorHandle>());
   const dirtyRef = useRef(new Map<string, boolean>());
   const anyDirtyRef = useRef(false);
+  const treeRef = useRef<BrowserHandle | null>(null);
+  const activeFileRef = useRef(activeFile);
+  activeFileRef.current = activeFile;
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
+
+  // ⇧⌘F / Ctrl+Shift+F — the IDE-wide search lives in the folder tree; on
+  // small screens it also slides the tree drawer open.
+  const openTreeSearch = useCallback(() => {
+    setTreeOpen(true);
+    treeRef.current?.openSearch();
+  }, []);
 
   const selectFile = useCallback((p: string) => {
     setOpenFiles((files) => (files.includes(p) ? files : [...files, p]));
@@ -113,11 +129,31 @@ export function IdeView({
       }
       return ok;
     },
+    // The IDE's own focus target: the active editor, or the tree when no
+    // file is open (used by the aggregate handle and the focus registry).
+    focus: () => {
+      const file = activeFileRef.current;
+      const handle = file ? handlesRef.current.get(file) : undefined;
+      if (handle) handle.focus();
+      else treeRef.current?.focus();
+    },
+    find: () => {
+      const file = activeFileRef.current;
+      if (file) handlesRef.current.get(file)?.find();
+    },
   });
   useImperativeHandle(ref, () => handleRef.current, []);
 
+  // The tab's focus target for app navigation — session/tab switching
+  // shortcuts land on the active editor (or the tree before a file exists).
+  useEffect(() => {
+    if (!focusId) return;
+    return registerViewFocus(focusId, () => handleRef.current.focus());
+  }, [focusId]);
+
   const tree = (
     <BrowserView
+      ref={treeRef}
       path={path}
       cwd={cwd}
       sessionId={sessionId}
@@ -129,7 +165,21 @@ export function IdeView({
   );
 
   return (
-    <div ref={viewRef} className="relative flex h-full w-full bg-[var(--terminal-bg)]">
+    <div
+      ref={viewRef}
+      className="relative flex h-full w-full bg-[var(--terminal-bg)]"
+      // ⌘F/Ctrl+F finds in the open file even when focus sits in the tree;
+      // ⇧⌘F/Ctrl+Shift+F searches the folder tree itself.
+      onKeyDown={(e) => {
+        if (isTreeSearchShortcut(e, isMac)) {
+          e.preventDefault();
+          openTreeSearch();
+        } else if (isFindShortcut(e, isMac)) {
+          e.preventDefault();
+          handleRef.current.find();
+        }
+      }}
+    >
       {/* Inline tree column on sm+, resizable from its right edge */}
       {wide && (
         <>
@@ -188,6 +238,7 @@ export function IdeView({
                 isVisible={isVisible && f === activeFile}
                 fileService={fileService}
                 onDirtyChange={(dirty) => fileDirty(f, dirty)}
+                onGlobalSearch={openTreeSearch}
               />
             </div>
           ))}

@@ -43,8 +43,6 @@ export interface SessionCommandDeps {
    * resolves an error message or null. Absent where windows can't be opened.
    */
   tearOffSession?: (sessionId: string) => Promise<string | null>;
-  /** Opens a broadcast-deck tab on the session (`axn-broadcast-deck`). */
-  openBroadcastDeck?: (sessionId: string) => void;
   /**
    * 'go to session' (`axn-session select`): focus a session and make it the
    * only selection — the broadcast tile button calls the same function.

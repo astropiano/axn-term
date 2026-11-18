@@ -74,7 +74,6 @@ interface SessionPanelProps {
   plugins: readonly SessionViewPlugin[];
   onOpenBrowser: (sessionId: string, path: string) => void;
   onOpenIde: (sessionId: string, path: string) => void;
-  onOpenBroadcastDeck?: (sessionId: string) => void;
   onOpenTab: (
     sessionId: string,
     tab: { path: string; kind: 'editor' | 'browser' | 'preview' | 'git' },
@@ -646,8 +645,6 @@ interface SessionContextMenuProps {
   onSubShell: () => void;
   onBrowse: () => void;
   onIde: () => void;
-  /** Opens the broadcast-deck tab for this session. */
-  onOpenBroadcastDeck?: () => void;
   /** Copies the shell's live working directory; absent where it can't be read. */
   onCopyPath?: () => void;
   onCloseSession: () => void;
@@ -670,7 +667,6 @@ function SessionContextMenu({
   onSubShell,
   onBrowse,
   onIde,
-  onOpenBroadcastDeck,
   onCopyPath,
   onCloseSession,
   onTurnIntoWorkspace,
@@ -889,19 +885,6 @@ function SessionContextMenu({
         IDE view
       </button>
 
-      {onOpenBroadcastDeck && (
-        <button
-          type="button"
-          onClick={() => {
-            onOpenBroadcastDeck();
-            onClose();
-          }}
-          className={itemClass}
-        >
-          <Radio className="h-3.5 w-3.5 shrink-0" />
-          Broadcast deck
-        </button>
-      )}
       {onCopyPath && (
         <button
           type="button"
@@ -1127,7 +1110,6 @@ export function SessionItem({
   plugins,
   onOpenBrowser,
   onOpenIde,
-  onOpenBroadcastDeck,
   onOpenTab,
   onAddSession,
   pluginData,
@@ -1176,7 +1158,6 @@ export function SessionItem({
   plugins: readonly SessionViewPlugin[];
   onOpenBrowser: (sessionId: string, path: string) => void;
   onOpenIde: (sessionId: string, path: string) => void;
-  onOpenBroadcastDeck?: () => void;
   onOpenTab: (
     sessionId: string,
     tab: { path: string; kind: 'editor' | 'browser' | 'preview' | 'git' },
@@ -1670,7 +1651,6 @@ export function SessionItem({
           session={session}
           bulkIds={bulkIds}
           onBulkClose={onBulkClose}
-          onOpenBroadcastDeck={onOpenBroadcastDeck}
           position={menuPos}
           onClose={() => setMenuOpen(false)}
           pluginItems={plugins.flatMap((plugin) => {
@@ -1783,7 +1763,6 @@ export function SessionPanel({
   plugins,
   onOpenBrowser,
   onOpenIde,
-  onOpenBroadcastDeck,
   onOpenTab,
   onOpenSubShell,
   onTurnIntoWorkspace,
@@ -2392,11 +2371,6 @@ export function SessionPanel({
                         plugins={plugins}
                         onOpenBrowser={onOpenBrowser}
                         onOpenIde={onOpenIde}
-                        onOpenBroadcastDeck={
-                          onOpenBroadcastDeck
-                            ? () => onOpenBroadcastDeck(session.id)
-                            : undefined
-                        }
                         onOpenTab={onOpenTab}
                         onOpenSubShell={onOpenSubShell}
                         onAddSession={onAddSession}

@@ -123,6 +123,18 @@
   display: none;
 }
 
+/* Below the sm breakpoint the session panel becomes an overlay drawer and
+   the title-bar spot is too small to hit — the toggle moves into the rail,
+   the same place it has in the no-overlay (Linux/Windows/fullscreen) case. */
+@media not all and (min-width: 40rem) {
+  :root[data-titlebar='overlay'] .axn-titlebar-only {
+    display: none;
+  }
+  :root[data-titlebar='overlay'] .axn-no-titlebar-only {
+    display: flex;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { resolvePath, backendFileService } from './fileService';
 import { useSessionBackend } from '../services';
@@ -7,6 +7,7 @@ import { usePluginSettings } from './PluginSettingsProvider';
 import { resolveFilePreviewPlugin } from './preview-plugins/plugin';
 import { HtmlPreview } from './preview-plugins/html';
 import type { FilePreviewContext } from './preview-plugins/plugin';
+import { registerViewFocus } from './viewFocus';
 
 function dirOf(path: string): string {
   return path.replace(/\/[^/]*$/, '') || '/';
@@ -18,6 +19,8 @@ interface PreviewViewProps {
   isVisible?: boolean;
   /** Owning session's id; plugin-hosted tabs resolve any live session. */
   sessionId?: string;
+  /** Register the scroll area as the tab's focus target for session switching. */
+  focusId?: string;
 }
 
 /**
@@ -25,7 +28,15 @@ interface PreviewViewProps {
  * preview plugin claiming the path renders the body; the text fallback
  * plugin always matches, so `body` is never truly empty.
  */
-export function PreviewView({ path, cwd, isVisible, sessionId: sessionIdProp }: PreviewViewProps) {
+export function PreviewView({ path, cwd, isVisible, sessionId: sessionIdProp, focusId }: PreviewViewProps) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // The tab's focus target for app navigation — focusing the scroll area
+  // keeps arrow/space scrolling working after a session switch.
+  useEffect(() => {
+    if (!focusId) return;
+    return registerViewFocus(focusId, () => scrollRef.current?.focus());
+  }, [focusId]);
   const backend = useSessionBackend();
   const sessionId = sessionIdProp ?? appRuntime()?.resolveSessionId() ?? '';
   const { pluginSettings } = usePluginSettings();
@@ -89,7 +100,7 @@ export function PreviewView({ path, cwd, isVisible, sessionId: sessionIdProp }: 
           <RefreshCw className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} tabIndex={-1} className="min-h-0 flex-1 overflow-auto">
         {plugin ? (
           <div key={`${resolvedPath}:${reloadKey}`} className="h-full">
             {typeof body === 'string' ? <HtmlPreview html={body} ctx={ctx} /> : body}

@@ -1,6 +1,6 @@
 /**
- * Broadcast deck (`editors[].kind === 'broadcast'`, and the right-side
- * split while ≥2 sessions are selected): a labeled fan-out prompt on
+ * Broadcast deck (the right-side split while ≥2 sessions are selected):
+ * a labeled fan-out prompt on
  * top — styled like a shell line (prompt glyph, shell font, terminal
  * surface); Enter writes the buffer to every broadcast session via the
  * same `backend.write` path as `axn-broadcast <line>`, Shift+Enter adds
@@ -116,6 +116,7 @@ export function BroadcastDeck({
   /** Set while a dangerous buffer awaits the confirm dialog. */
   const [danger, setDanger] = useState<DangerHit | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
   /** Fan-out targets — every selected session, including the one focused
    * below (broadcast reaches it even though it has no tile). */
   const targets = useMemo(

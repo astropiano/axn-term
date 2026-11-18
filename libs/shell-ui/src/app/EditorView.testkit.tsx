@@ -8,6 +8,7 @@ const { editors, createEditor } = vi.hoisted(() => {
     setValue: (text: string) => void;
     dispose: ReturnType<typeof vi.fn>;
     command?: () => void;
+    commands: Array<{ key: number; cb: () => void }>;
   }> = [];
   const createEditor = vi.fn(() => {
     let value = '';
@@ -16,8 +17,12 @@ const { editors, createEditor } = vi.hoisted(() => {
       getValue: () => value,
       setValue: (text: string) => { value = text; changed(); },
       onDidChangeModelContent: (cb: () => void) => { changed = cb; return { dispose: vi.fn() }; },
-      addCommand: (_key: number, cb: () => void) => { editor.command = cb; },
+      addCommand: (key: number, cb: () => void) => {
+        editor.command = cb;
+        editor.commands.push({ key, cb });
+      },
       command: undefined as (() => void) | undefined,
+      commands: [] as Array<{ key: number; cb: () => void }>,
       layout: vi.fn(),
       updateOptions: vi.fn(),
       dispose: vi.fn(),
@@ -29,7 +34,11 @@ const { editors, createEditor } = vi.hoisted(() => {
 });
 export { editors, createEditor };
 vi.mock('./monacoSetup', () => ({
-  monaco: { editor: { create: createEditor }, KeyMod: { CtrlCmd: 1, WinCtrl: 4 }, KeyCode: { KeyS: 2 } },
+  monaco: {
+    editor: { create: createEditor },
+    KeyMod: { CtrlCmd: 1, WinCtrl: 4, Shift: 8 },
+    KeyCode: { KeyS: 16, KeyF: 32 },
+  },
   applyAxnMonacoTheme: vi.fn(), languageForPath: () => 'text', AXN_MONACO_THEME: 'test',
 }));
 vi.mock('../SettingsProvider', () => ({ useSettings: () => ({ activeTheme: {} }) }));
@@ -52,5 +61,8 @@ export async function edit(text: string) {
   await act(async () => editors[editors.length - 1].setValue(text));
 }
 export async function saveEditor() {
-  await act(async () => editors[editors.length - 1].command?.());
+  const editor = editors[editors.length - 1];
+  // The editor binds several chords — save is the one carrying KeyS.
+  const cmd = editor.commands.find((c) => (c.key & 16) === 16);
+  await act(async () => (cmd ?? { cb: editor.command }).cb?.());
 }

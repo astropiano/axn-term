@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSessionBackend, useShellServices } from '../services';
+import { registerViewFocus } from './viewFocus';
 import {
   GitBranch,
   GitCompareArrows,
@@ -427,6 +428,7 @@ export function GitInspectView({
   isVisible,
   onOpenFile,
   onOpenSubShell,
+  focusId,
 }: {
   session: ShellSession;
   tab: EditorTab;
@@ -435,9 +437,20 @@ export function GitInspectView({
   onOpenFile?: (path: string) => void;
   /** Opens a sub-shell tab running `command` in `cwd` (agent "talk" feature). */
   onOpenSubShell?: (command: string, cwd: string, label?: string, agent?: ReviewAgent) => void;
+  /** Register the view as the tab's focus target for session switching. */
+  focusId?: string;
 }) {
   const backend = useSessionBackend();
   const { services } = useShellServices();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // The tab's focus target for app navigation — session/tab switching
+  // shortcuts land on the view so review keys keep going to this tab.
+  useEffect(() => {
+    if (!focusId) return;
+    return registerViewFocus(focusId, () => rootRef.current?.focus());
+  }, [focusId]);
+
   const root = tab.path;
   const base = tab.base?.trim() || undefined;
   const sessionId = session.id;
@@ -1136,7 +1149,7 @@ export function GitInspectView({
   // -- render -------------------------------------------------------------------
 
   return (
-    <div className="flex h-full w-full flex-col bg-[var(--terminal-bg)]">
+    <div ref={rootRef} tabIndex={-1} className="flex h-full w-full flex-col bg-[var(--terminal-bg)]">
       {/* toolbar */}
       <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] px-2">
         <GitBranch className="h-3.5 w-3.5 text-[var(--cyan)]" />
