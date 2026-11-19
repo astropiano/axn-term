@@ -45,13 +45,20 @@
   optional key-value `storage`
   (get/set — desktop: `kv_get`/`kv_set` Tauri commands over
   `~/.axn-term/kv.json`, web: `localStorage` under `axn-kv:`) and `FileReader`.
-  Desktop file ops go through `tauri-plugin-fs` scoped to `$HOME` (see
-  `src-tauri/capabilities/default.json`); tauri.conf.json sets
-  `plugins.fs.requireLiteralLeadingDot: false` because the Unix default
-  (`true`) makes `*`/`**` never match dot components — `.env`, `~/.config`,
-  `~/.axn-term` would all be `forbidden path` errors for `axn-edit`/
-  `axn-browse`/`axn-preview` and friends. Paths outside `$HOME` (e.g. repos
-  on an external volume) are granted at runtime from the `fileAccessRoots`
+  Desktop file ops split on read vs write. Reads
+  (`readFile`/`readBytes`/`listDir`/`fsExists`) bypass `tauri-plugin-fs`
+  entirely through the unscoped `fs_read_text`/`fs_read_bytes`/
+  `fs_read_dir`/`fs_exists` commands (`std::fs`, `~` + cwd resolution like
+  `stat_path`) — a terminal can `cat` anything anyway, so scoping reads
+  only produced `forbidden path` errors for previews and browsed paths
+  outside `$HOME` (/tmp, /Volumes, …). Writes (`writeFile`/`mkdir`) plus
+  `watch` stay on `tauri-plugin-fs` scoped to `$HOME` (see
+  `src-tauri/capabilities/default.json`) as an accident rail;
+  tauri.conf.json sets `plugins.fs.requireLiteralLeadingDot: false`
+  because the Unix default (`true`) makes `*`/`**` never match dot
+  components — `.env`, `~/.config`, `~/.axn-term` would all be
+  `forbidden path` write errors. Write access outside `$HOME` (e.g. repos
+  on an external volume) is granted at runtime from the `fileAccessRoots`
   list in `config.yaml` — desktop `App.tsx` passes it to the
   `allow_file_roots` command, which widens the fs scope; grants are
   additive, so a removed root stays allowed until restart.
@@ -1544,13 +1551,20 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
   optional key-value `storage`
   (get/set — desktop: `kv_get`/`kv_set` Tauri commands over
   `~/.axn-term/kv.json`, web: `localStorage` under `axn-kv:`) and `FileReader`.
-  Desktop file ops go through `tauri-plugin-fs` scoped to `$HOME` (see
-  `src-tauri/capabilities/default.json`); tauri.conf.json sets
-  `plugins.fs.requireLiteralLeadingDot: false` because the Unix default
-  (`true`) makes `*`/`**` never match dot components — `.env`, `~/.config`,
-  `~/.axn-term` would all be `forbidden path` errors for `axn-edit`/
-  `axn-browse`/`axn-preview` and friends. Paths outside `$HOME` (e.g. repos
-  on an external volume) are granted at runtime from the `fileAccessRoots`
+  Desktop file ops split on read vs write. Reads
+  (`readFile`/`readBytes`/`listDir`/`fsExists`) bypass `tauri-plugin-fs`
+  entirely through the unscoped `fs_read_text`/`fs_read_bytes`/
+  `fs_read_dir`/`fs_exists` commands (`std::fs`, `~` + cwd resolution like
+  `stat_path`) — a terminal can `cat` anything anyway, so scoping reads
+  only produced `forbidden path` errors for previews and browsed paths
+  outside `$HOME` (/tmp, /Volumes, …). Writes (`writeFile`/`mkdir`) plus
+  `watch` stay on `tauri-plugin-fs` scoped to `$HOME` (see
+  `src-tauri/capabilities/default.json`) as an accident rail;
+  tauri.conf.json sets `plugins.fs.requireLiteralLeadingDot: false`
+  because the Unix default (`true`) makes `*`/`**` never match dot
+  components — `.env`, `~/.config`, `~/.axn-term` would all be
+  `forbidden path` write errors. Write access outside `$HOME` (e.g. repos
+  on an external volume) is granted at runtime from the `fileAccessRoots`
   list in `config.yaml` — desktop `App.tsx` passes it to the
   `allow_file_roots` command, which widens the fs scope; grants are
   additive, so a removed root stays allowed until restart.

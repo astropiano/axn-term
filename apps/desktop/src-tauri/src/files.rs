@@ -4,6 +4,28 @@
 use std::path::PathBuf;
 use tauri_plugin_fs::FsExt;
 
+/// Resolve a frontend-supplied path: `~/` expands to the home directory,
+/// relative paths join `cwd` (absolute paths win). Returns `None` for a
+/// relative path without a usable cwd.
+fn resolve_fs_path(cwd: Option<&str>, path: &str) -> Option<PathBuf> {
+    let expanded = if let Some(rest) = path.strip_prefix("~/") {
+        match dirs::home_dir() {
+            Some(home) => home.join(rest),
+            None => PathBuf::from(path),
+        }
+    } else {
+        PathBuf::from(path)
+    };
+    if expanded.is_absolute() {
+        Some(expanded)
+    } else {
+        match cwd {
+            Some(c) if !c.is_empty() => Some(std::path::Path::new(c).join(&expanded)),
+            _ => None,
+        }
+    }
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PathStat {
@@ -14,23 +36,7 @@ pub(crate) struct PathStat {
 
 #[tauri::command]
 pub(crate) fn stat_path(cwd: Option<String>, path: String) -> Option<PathStat> {
-    let expanded = if let Some(rest) = path.strip_prefix("~/") {
-        match dirs::home_dir() {
-            Some(home) => home.join(rest).to_string_lossy().into_owned(),
-            None => path.clone(),
-        }
-    } else {
-        path
-    };
-    let p = std::path::PathBuf::from(&expanded);
-    let resolved = if p.is_absolute() {
-        p
-    } else {
-        match cwd {
-            Some(c) if !c.is_empty() => std::path::Path::new(&c).join(&p),
-            _ => return None,
-        }
-    };
+    let resolved = resolve_fs_path(cwd.as_deref(), &path)?;
     let meta = std::fs::metadata(&resolved).ok()?;
     if !meta.is_file() && !meta.is_dir() {
         return None;
@@ -40,6 +46,66 @@ pub(crate) fn stat_path(cwd: Option<String>, path: String) -> Option<PathStat> {
         is_file: meta.is_file(),
         is_dir: meta.is_dir(),
     })
+}
+
+/// `readdir` entry for `fs_read_dir` — serialized like the frontend's
+/// `DirEntry` (name/isFile/isDirectory/isSymlink).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FsDirEntry {
+    name: String,
+    is_file: bool,
+    is_directory: bool,
+    is_symlink: bool,
+}
+
+// Unscoped reads. The fs-plugin scope ($HOME + fileAccessRoots) only remains
+// as a write rail: the app is a terminal — the webview already reads
+// anything via the PTY (`cat`), so gating reads only produced
+// `forbidden path` errors for previews and browsed paths outside $HOME
+// (/tmp, /Volumes, ...). writeFile/mkdir stay on the plugin scope.
+
+#[tauri::command]
+pub(crate) fn fs_read_text(cwd: Option<String>, path: String) -> Result<String, String> {
+    let p = resolve_fs_path(cwd.as_deref(), &path).ok_or("path is not absolute")?;
+    std::fs::read_to_string(&p).map_err(|e| format!("{}: {}", p.display(), e))
+}
+
+/// Raw IPC response (no JSON/base64 copy) — previews read multi-MB images.
+#[tauri::command]
+pub(crate) fn fs_read_bytes(
+    cwd: Option<String>,
+    path: String,
+) -> Result<tauri::ipc::Response, String> {
+    let p = resolve_fs_path(cwd.as_deref(), &path).ok_or("path is not absolute")?;
+    std::fs::read(&p)
+        .map(tauri::ipc::Response::new)
+        .map_err(|e| format!("{}: {}", p.display(), e))
+}
+
+#[tauri::command]
+pub(crate) fn fs_read_dir(cwd: Option<String>, path: String) -> Result<Vec<FsDirEntry>, String> {
+    let p = resolve_fs_path(cwd.as_deref(), &path).ok_or("path is not absolute")?;
+    let rd = std::fs::read_dir(&p).map_err(|e| format!("{}: {}", p.display(), e))?;
+    let mut out = Vec::new();
+    for entry in rd {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let ft = entry.file_type().map_err(|e| e.to_string())?;
+        out.push(FsDirEntry {
+            name: entry.file_name().to_string_lossy().into_owned(),
+            is_file: ft.is_file(),
+            is_directory: ft.is_dir(),
+            is_symlink: ft.is_symlink(),
+        });
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub(crate) fn fs_exists(cwd: Option<String>, path: String) -> bool {
+    resolve_fs_path(cwd.as_deref(), &path)
+        .map(|p| p.exists())
+        .unwrap_or(false)
 }
 
 #[tauri::command]
