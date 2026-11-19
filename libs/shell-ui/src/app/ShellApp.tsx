@@ -28,6 +28,7 @@ import { useEditorClose } from './useEditorClose';
 import { BrowserView } from './BrowserView';
 import { SubShellView } from './SubShellView';
 import { PreviewView } from './PreviewView';
+import { AcpSessionTab } from './acp/AcpSessionTab';
 import { backendFileService, resolvePath } from './fileService';
 import { useShellSessions, MAX_OUTPUT_LENGTH } from './useShellSessions';
 import { useAgentTasks } from './useAgentTasks';
@@ -122,7 +123,7 @@ import { browserTabPatch, ideTabPatch, resolveSessionPath } from './shellCommand
 import { BroadcastDeck } from './BroadcastDeck';
 import { broadcastSet, useBroadcastSet } from './broadcastSet';
 import { installDropGuard } from './dropGuard';
-import type { AgentCli, EditorTab, SessionAttention, ShellSession, WindowState } from '../types';
+import type { AgentCli, EditorTab, SessionAttention, SessionMainView, ShellSession, WindowState } from '../types';
 import type { AppSettings } from '../themes';
 import type { SessionViewPlugin } from './session-plugins/plugin';
 import { pushSandboxViewData, sandboxRuntime, syncSandboxes } from './session-plugins/sandbox';
@@ -733,21 +734,59 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     [updateSessionWith]
   );
 
+  // Open an agent-chat (ACP) tab: `acpCommand` is the agent executable +
+  // argv the backend spawns and pipes NDJSON to (`axn-acp <cmd> [args]`).
+  const openAcpTab = useCallback(
+    (sessionId: string, acpCommand: string[], cwd?: string, label?: string) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return undefined;
+      const id = `acp-${crypto.randomUUID()}`;
+      updateSession(sessionId, {
+        editors: [
+          ...(session.editors ?? []),
+          { id, path: '', kind: 'acp', acpCommand, cwd, label },
+        ],
+        activeTab: id,
+      });
+      return id;
+    },
+    [updateSession]
+  );
+
   // Opening a session — plugin api, `axn-session`, the panel's New button —
   // selects it and dismisses a covering plugin view so the user lands on it.
   // `background` (`axn-session --background`, plugin openSession) does
   // neither — the session spawns without taking focus.
+  // `opts.mainView` picks the pinned main view; absent, it resolves
+  // workspace.mainView → settings.sessionDefaults.mainView → 'shell'.
   const openSession = useCallback(
-    (workspaceId?: string, cwd?: string, name?: string, background?: boolean) => {
+    (
+      workspaceId?: string,
+      cwd?: string,
+      name?: string,
+      background?: boolean,
+      opts?: { mainView?: SessionMainView; acpCommand?: string[] },
+    ) => {
       if (!background) setActivePluginView(null);
-      const id = addSession(workspaceId, cwd, name, background);
+      const ws = [workspaceId, selectedWorkspaceIdRef.current, workspacesRef.current[0]?.id]
+        .map((id) => workspacesRef.current.find((w) => w.id === id))
+        .find(Boolean);
+      const agent =
+        opts?.acpCommand ??
+        ws?.acpAgent?.split(/\s+/).filter(Boolean) ??
+        settings.sessionDefaults?.acpAgent?.split(/\s+/).filter(Boolean);
+      const mainView = opts?.mainView ?? ws?.mainView ?? settings.sessionDefaults?.mainView;
+      const id = addSession(workspaceId, cwd, name, background, {
+        mainView: mainView && (mainView !== 'agent' || agent?.length) ? mainView : undefined,
+        acpCommand: opts?.acpCommand ?? agent,
+      });
       // Opening a session navigates to it — like a panel click it becomes
       // the only selection, otherwise a live broadcast set would leave it
       // stranded beneath the broadcast view.
       if (id && !background) broadcastSet.replaceAll([id]);
       return id;
     },
-    [addSession],
+    [addSession, settings],
   );
 
   // Activate one of a session's tabs ('shell' = the main terminal) and bring
@@ -1560,6 +1599,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       pluginSettingsRef.current[(plugin.settingsKey ?? plugin.id) as keyof typeof pluginSettings],
     openSession,
     openSubShell,
+    openAcpTab,
     addWorkspace,
     moveSessionToWorkspace,
     moveWorkspace,
@@ -2726,6 +2766,16 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                         fileService={backendFileService(backend, session.id)}
                         onDirtyChange={(dirty) => setEditorDirty(session.id, ed.id, dirty)}
                       />
+                    ) : ed.kind === 'acp' ? (
+                      <AcpSessionTab
+                        session={session}
+                        tab={ed}
+                        backend={backend}
+                        isVisible={visible}
+                        onUpdateTab={(patch) => updateEditorTab(session.id, ed.id, patch)}
+                        notify={services.notify}
+                        onAxnCommand={(line) => Promise.resolve(handleSessionCommand(session.id, line))}
+                      />
                     ) : ed.kind === 'git' ? (
                       <GitInspectView
                         session={session}
@@ -2957,6 +3007,9 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                 onToggleWorkspace={toggleWorkspaceCollapsed}
                 updateWorkspace={updateWorkspace}
                 onAddSession={openSession}
+                onNewAgentSession={(ws, cwd, argv) =>
+                  openSession(ws, cwd, undefined, undefined, { mainView: 'agent', acpCommand: argv })
+                }
                 onMoveSession={moveSessionToWorkspace}
                 onRequestMoveSession={setMoveDialogSessionId}
                 onReorderWorkspace={reorderWorkspace}
@@ -3107,6 +3160,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                   <SessionTabStrip
                   editors={editors}
                   activeTab={activeTab}
+                  mainView={session.mainView}
+                  mainLabel={session.acpCommand?.[0]}
                   onSelect={(tabId) => updateSession(session.id, { activeTab: tabId })}
                   onTabMenu={(tab, x, y) => setTabMenu({ session, tab, x, y })}
                   onReorder={(dragId, targetId) => reorderTab(session, dragId, targetId)}
@@ -3120,6 +3175,36 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                     activeTab === 'shell' ? 'relative h-full w-full' : 'hidden'
                   }
                 >
+                  {session.mainView === 'agent' ? (
+                    // Agent-first session: the pinned main view is the ACP
+                    // chat — no session PTY; shells live as sub-shell tabs.
+                    <AcpSessionTab
+                      session={session}
+                      tab={{
+                        id: `acp-main-${session.id}`,
+                        path: '',
+                        kind: 'acp',
+                        acpCommand: session.acpCommand,
+                        acpSessionId: session.acpSessionId,
+                        cwd: session.cwd,
+                      }}
+                      backend={backend}
+                      isVisible={isVisible && activeTab === 'shell'}
+                      onUpdateTab={(patch) => {
+                        const sp: Partial<ShellSession> = {};
+                        if ('hookStatus' in patch) sp.status = patch.hookStatus ?? 'idle';
+                        if ('hookAttention' in patch)
+                          sp.agentAttention = patch.hookAttention ?? null;
+                        if ('tasks' in patch && patch.tasks) sp.tasks = patch.tasks;
+                        if ('progress' in patch) sp.progress = patch.progress ?? 0;
+                        if ('acpSessionId' in patch) sp.acpSessionId = patch.acpSessionId;
+                        if (Object.keys(sp).length) updateSession(session.id, sp);
+                      }}
+                      notify={services.notify}
+                      onAxnCommand={(line) => Promise.resolve(handleSessionCommand(session.id, line))}
+                    />
+                  ) : (
+                  <>
                   <ShellTerminal
                     session={session}
                     backend={backend}
@@ -3140,6 +3225,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
                       labels={restoringLabels[session.id]}
                       onDismiss={() => clearSessionRestoring(session.id)}
                     />
+                  )}
+                  </>
                   )}
                 </div>
                 {editors.map((ed) => (
@@ -3360,12 +3447,14 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           position={{ x: tabMenu.x, y: tabMenu.y }}
           onClose={() => setTabMenu(null)}
           onRename={
-            tabMenu.session && tabMenu.tab.kind === 'shell'
+            tabMenu.session && (tabMenu.tab.kind === 'shell' || tabMenu.tab.kind === 'acp')
               ? (label) => renameTab(tabMenu.session!.id, tabMenu.tab.id, label)
               : undefined
           }
           onMakeMain={
-            tabMenu.session && tabMenu.tab.kind === 'shell'
+            tabMenu.session &&
+            tabMenu.session.mainView !== 'agent' &&
+            tabMenu.tab.kind === 'shell'
               ? () => promoteSubShell(tabMenu.session!.id, tabMenu.tab.id)
               : undefined
           }
@@ -3392,8 +3481,10 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
           }
           moveTargets={
             tabMenu.session
-              ? // Sub-shell and git inspect tabs stay bound to their session.
-                tabMenu.tab.kind === 'shell' || tabMenu.tab.kind === 'git'
+              ? // Sub-shell, acp chat and git inspect tabs stay bound to their session.
+                tabMenu.tab.kind === 'shell' ||
+                  tabMenu.tab.kind === 'acp' ||
+                  tabMenu.tab.kind === 'git'
                 ? []
                 : enabledPlugins
                     .filter((p) => p.hostsTabs && p.renderView)

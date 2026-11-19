@@ -86,6 +86,14 @@ const pendingLaunches = new Map<string, AgentPersona[]>();
 
 /** Spawn a fresh session named after the persona and seed its launch line. */
 function launchPersonaSession(ctx: Ctx, persona: AgentPersona, cwd?: string): void {
+  // ACP personas open an agent-first session — no shell to type into.
+  if (persona.acp) {
+    ctx.openSession(cwd ?? ctx.session.cwd, persona.name, undefined, undefined, {
+      mainView: 'agent',
+      acpCommand: persona.acp.split(/\s+/).filter(Boolean),
+    });
+    return;
+  }
   const queue = pendingLaunches.get(persona.name) ?? [];
   queue.push(persona);
   pendingLaunches.set(persona.name, queue);

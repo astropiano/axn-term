@@ -138,6 +138,13 @@ export interface AppSettings {
   /** UI language — one of the locales bundled in libs/shell-ui (`en`, `ko`). */
   language?: 'system' | 'en' | 'ko' | 'de' | 'fr' | 'it' | 'nl' | 'zh' | 'ja';
   /**
+   * Defaults for newly created sessions: `mainView` picks the pinned main
+   * view ('shell' hosts the PTY, 'agent' an ACP chat), `acpAgent` the
+   * agent command used when a session/workspace selects 'agent' without
+   * its own command (space-split, e.g. `claude-agent-acp`).
+   */
+  sessionDefaults?: { mainView?: 'shell' | 'agent'; acpAgent?: string };
+  /**
    * Extra directories (absolute or `~/…`) the desktop file views — axn-edit,
    * axn-browse, axn-preview — may read and write, on top of `$HOME`. Applied
    * live when added; a removed root stays allowed until the app restarts.

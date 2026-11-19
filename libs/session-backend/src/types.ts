@@ -59,6 +59,18 @@ export interface SubshellSpawnOptions {
   rows: number;
 }
 
+/**
+ * A line-based pipe to a non-PTY child process (e.g. an ACP agent's stdio
+ * carrying newline-delimited JSON-RPC): `write` appends one line to stdin,
+ * `onLine` delivers stdout lines, `close` kills the child.
+ */
+export interface ProcessPipe {
+  write(line: string): void;
+  onLine(cb: (line: string) => void): void;
+  onExit?(cb: (code: number | null) => void): void;
+  close(): void;
+}
+
 export interface FsResult {
   ok: boolean;
   contents?: string;
@@ -183,6 +195,14 @@ export interface SessionBackend {
    * on explicit actions.
    */
   watchDir?(sessionId: string, path: string, cb: () => void): Unsubscribe | Promise<Unsubscribe>;
+
+  /**
+   * Spawn a non-PTY child process with piped stdin/stdout, line-based —
+   * e.g. an ACP agent's newline-delimited JSON-RPC stdio. Absent on
+   * backends without a host process spawner (web): surfaces needing it
+   * (agent chat) check for it and stay hidden.
+   */
+  spawnProcess?(command: string, args: string[], cwd?: string): Promise<ProcessPipe>;
 
   /**
    * Spawn a sibling PTY for a sub-shell tab. `command` runs as `sh -c`;

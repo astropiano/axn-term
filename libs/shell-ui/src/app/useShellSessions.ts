@@ -653,7 +653,13 @@ export function useShellSessions(
   );
 
   const addSession = useCallback(
-    (workspaceId?: string, cwd?: string, name?: string, background?: boolean) => {
+    (
+      workspaceId?: string,
+      cwd?: string,
+      name?: string,
+      background?: boolean,
+      opts?: { mainView?: 'shell' | 'agent'; acpCommand?: string[] },
+    ) => {
       // Only ids that exist right now — a stale/unknown id would create a
       // session no workspace lists (invisible, yet selected), which surfaces
       // as "click → nothing happened" (MR review hit this).
@@ -673,6 +679,8 @@ export function useShellSessions(
       // reset still falls back to the terminal-reported name.
       if (name?.trim()) session.customName = name.trim();
       if (cwd) session.cwd = cwd;
+      if (opts?.mainView) session.mainView = opts.mainView;
+      if (opts?.acpCommand) session.acpCommand = opts.acpCommand;
       setSessionsWithRef((prev) => [...prev, session]);
       // `background` (agent-driven `axn-session --background`) leaves the
       // user's selection alone — the session spawns silently in its workspace.

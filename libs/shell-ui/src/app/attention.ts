@@ -22,8 +22,10 @@ export function sessionAttention(
     if (attention && typeof attention === 'object') out[plugin.id] = attention;
   }
   for (const tab of session.editors ?? []) {
-    if (tab.kind === 'shell' && tab.hookAttention) out[`tab:${tab.label ?? tab.id}`] = tab.hookAttention;
+    if ((tab.kind === 'shell' || tab.kind === 'acp') && tab.hookAttention)
+      out[`tab:${tab.label ?? tab.id}`] = tab.hookAttention;
   }
+  if (session.agentAttention) out.agent = session.agentAttention;
   return out;
 }
 

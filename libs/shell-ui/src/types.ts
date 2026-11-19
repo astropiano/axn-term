@@ -98,9 +98,20 @@ export interface Workspace {
    * context menu.
    */
   defaultFolder?: string;
+  /**
+   * Which view fills new sessions' main slot in this workspace: 'shell'
+   * (default) hosts the session PTY, 'agent' hosts an ACP agent chat —
+   * overridden per session at creation and by `sessionDefaults.mainView`.
+   */
+  mainView?: SessionMainView;
+  /** For `mainView: 'agent'`: default agent command (space-split at use), e.g. `claude-agent-acp`. */
+  acpAgent?: string;
   /** Per-plugin state, keyed by plugin `settingsKey`; follows the workspace. */
   pluginState?: Record<string, unknown>;
 }
+
+/** Which view fills a session's main slot — a shell PTY or an agent (ACP) chat. */
+export type SessionMainView = 'shell' | 'agent';
 
 /** Agent CLIs whose conversations a sub-shell tab can host and resume. */
 export type AgentCli = 'devin' | 'claude' | 'agy' | 'codex' | 'opencode';
@@ -134,9 +145,10 @@ export interface EditorTab {
    * 'browser' is a directory tree, 'shell' a sub-shell PTY, 'preview' a
    * read-only file preview rendered by a preview plugin, 'git' the repo
    * inspect view (`path` is the repo root), 'ide' a tree+editor composite
-   * (`path` is the tree's root dir); default is a file editor.
+   * (`path` is the tree's root dir), 'acp' an agent-chat view over
+   * the Agent Client Protocol; default is a file editor.
    */
-  kind?: 'editor' | 'browser' | 'shell' | 'preview' | 'git' | 'ide';
+  kind?: 'editor' | 'browser' | 'shell' | 'preview' | 'git' | 'ide' | 'acp';
   /** For kind 'shell': the `sh -c` command; absent means an interactive sub-shell. */
   command?: string;
   /**
@@ -167,24 +179,36 @@ export interface EditorTab {
    */
   agentResume?: string;
   /**
-   * For kind 'shell': status reported by the hooks of the agent running in
-   * this tab (`app/subShellHooks.ts`) — the tab-level counterpart of
-   * `session.status`. 'completed' outlives the agent; anything else clears
-   * when it exits.
+   * For kinds 'shell'/'acp': agent status for this tab — for 'shell' from
+   * the agent's hooks (`app/subShellHooks.ts`), for 'acp' from the ACP
+   * turn lifecycle. The tab-level counterpart of `session.status`;
+   * 'completed' outlives the agent, anything else clears when it exits.
    */
   hookStatus?: SessionStatus;
-  /** For kind 'shell': the tab agent's hook-raised flag — rolls up into the session's attention. */
+  /** For kinds 'shell'/'acp': the tab agent's raised flag — rolls up into the session's attention. */
   hookAttention?: SessionAttention | null;
   /**
-   * For kind 'shell': the task list of the agent running in this tab, read
-   * from the tab's screen (`app/subShellTasks.ts`), and its done share 0–100.
+   * For kinds 'shell'/'acp': the task list of the agent running in this
+   * tab — for 'shell' read from the tab's screen (`app/subShellTasks.ts`),
+   * for 'acp' the agent's ACP plan — and its done share 0–100.
    */
   tasks?: Task[];
   progress?: number;
-  /** For kind 'shell': working directory override; defaults to the session's live cwd. */
+  /** For kinds 'shell'/'acp': working directory override; defaults to the session's live cwd. */
   cwd?: string;
-  /** For kind 'shell': custom tab label; absent falls back to the command/dir default. */
+  /** For kinds 'shell'/'acp': custom tab label; absent falls back to the command/dir default. */
   label?: string;
+  /**
+   * For kind 'acp': the agent executable + argv to spawn (e.g.
+   * `['npx', '-y', '@agentclientprotocol/claude-agent-acp']`).
+   */
+  acpCommand?: string[];
+  /**
+   * For kind 'acp': the agent's ACP session id assigned by `session/new`
+   * (or restored by `session/load`) — persisted so a remount can resume
+   * the conversation instead of starting fresh.
+   */
+  acpSessionId?: string;
   /**
    * For kind 'git': compare ref — the inspect view adds a "Changes vs
    * `<base>`" section diffing merge-base(base, HEAD) against HEAD (three-dot
@@ -250,6 +274,19 @@ export interface ShellSession {
    * pluginState, accumulated output — stays on `id`.
    */
   mainPtyId?: string;
+  /**
+   * The pinned main view: 'shell' (default/absent) hosts the session PTY,
+   * 'agent' hosts an ACP agent chat — the session then has no main PTY
+   * and shells exist only as sub-shell tabs. `activeTab: 'shell'` selects
+   * the main slot either way.
+   */
+  mainView?: SessionMainView;
+  /** For mainView 'agent': the agent executable + argv (e.g. `['claude-agent-acp']`). */
+  acpCommand?: string[];
+  /** For mainView 'agent': the ACP session id, for `session/load` on remount. */
+  acpSessionId?: string;
+  /** For mainView 'agent': the agent's raised flag — rolls into the session's attention. */
+  agentAttention?: SessionAttention | null;
   name: string;
   customName?: string;
   autoName?: string;

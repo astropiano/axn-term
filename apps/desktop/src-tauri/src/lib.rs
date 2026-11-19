@@ -1,3 +1,4 @@
+mod acp;
 mod announce;
 pub mod cli;
 #[cfg(unix)]
@@ -463,6 +464,9 @@ pub fn run() {
             devhmr::dev_hmr_stop,
             devhmr::dev_hmr_install,
             devhmr::dev_hmr_open_main,
+            acp::acp_spawn,
+            acp::acp_write,
+            acp::acp_close,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -29,8 +29,21 @@ export interface SessionCommandDeps {
   /** A plugin's settings section — the ctx of app-level (`appRun`) commands. */
   pluginSettingsOf?: (plugin: SessionViewPlugin) => unknown;
   /** Returns the new session's id (undefined when no valid workspace). */
-  openSession: (workspaceId: string, cwd?: string, name?: string, background?: boolean) => string | undefined;
+  openSession: (
+    workspaceId: string,
+    cwd?: string,
+    name?: string,
+    background?: boolean,
+    opts?: { mainView?: 'shell' | 'agent'; acpCommand?: string[] },
+  ) => string | undefined;
   openSubShell: (sessionId: string, command?: string, cwd?: string) => string | undefined;
+  /** Open an agent-chat (ACP) tab — `argv` is the agent executable + args (`axn-acp`). */
+  openAcpTab: (
+    sessionId: string,
+    argv: string[],
+    cwd?: string,
+    label?: string,
+  ) => string | undefined;
   addWorkspace: (name: string) => string;
   moveSessionToWorkspace: (sessionId: string, workspaceId: string, beforeSessionId?: string | null) => void;
   moveWorkspace: (workspaceId: string, delta: -1 | 1) => void;
