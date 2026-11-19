@@ -1,14 +1,6 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import {
-  exists,
-  mkdir,
-  readDir,
-  readFile as readBinaryFile,
-  readTextFile,
-  watch,
-  writeTextFile,
-} from '@tauri-apps/plugin-fs';
+import { mkdir, watch, writeTextFile } from '@tauri-apps/plugin-fs';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
@@ -172,9 +164,11 @@ export class TauriBackend implements SessionBackend {
     return invoke<PathStat | null>('stat_path', { cwd, path });
   }
 
+  // Reads bypass the fs-plugin scope via our own commands — a terminal can
+  // `cat` anything anyway; the plugin scope remains as the write rail only.
   async readFile(_sessionId: string, path: string): Promise<FsResult> {
     try {
-      return { ok: true, contents: await readTextFile(path), resolved: path };
+      return { ok: true, contents: await invoke<string>('fs_read_text', { path }), resolved: path };
     } catch (e) {
       return { ok: false, error: String(e), resolved: path };
     }
@@ -198,13 +192,7 @@ export class TauriBackend implements SessionBackend {
   }
 
   async listDir(_sessionId: string, path: string): Promise<DirEntry[]> {
-    const entries = await readDir(path);
-    return entries.map((e) => ({
-      name: e.name,
-      isFile: e.isFile,
-      isDirectory: e.isDirectory,
-      isSymlink: e.isSymlink,
-    }));
+    return invoke<DirEntry[]>('fs_read_dir', { path });
   }
 
   async mkdir(_sessionId: string, path: string): Promise<void> {
@@ -212,7 +200,8 @@ export class TauriBackend implements SessionBackend {
   }
 
   async readBytes(_sessionId: string, path: string): Promise<Uint8Array> {
-    return new Uint8Array(await readBinaryFile(path));
+    // Raw IPC body — resolves to an ArrayBuffer (or a byte array on older IPC).
+    return new Uint8Array(await invoke<ArrayBuffer | number[]>('fs_read_bytes', { path }));
   }
 
   saveDroppedFile(_sessionId: string, name: string, bytes: Uint8Array): Promise<string> {
@@ -301,7 +290,7 @@ export class TauriBackend implements SessionBackend {
 
   /** True when the path exists (host filesystem). */
   async fsExists(_sessionId: string, path: string): Promise<boolean> {
-    return exists(path);
+    return invoke<boolean>('fs_exists', { path });
   }
 }
 
@@ -362,8 +351,11 @@ export function tauriFileReader(cwd?: string): FileReader {
     return `/${out.join('/')}`;
   };
   return {
-    readText: (p) => readTextFile(resolve(p)),
-    readBytes: (p) => readBinaryFile(resolve(p)).then((b) => new Uint8Array(b)),
+    readText: (p) => invoke<string>('fs_read_text', { path: resolve(p) }),
+    readBytes: (p) =>
+      invoke<ArrayBuffer | number[]>('fs_read_bytes', { path: resolve(p) }).then(
+        (b) => new Uint8Array(b),
+      ),
     writeText: (p, c) => writeTextFile(resolve(p), c),
   };
 }
