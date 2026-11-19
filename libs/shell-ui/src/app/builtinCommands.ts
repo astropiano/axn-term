@@ -38,8 +38,21 @@ export interface BuiltinDeps {
   platform: ShellPlatform;
   sessionsRef: MutableRefObject<ShellSession[]>;
   workspacesRef: MutableRefObject<Workspace[]>;
-  openSession: (workspaceId: string, cwd?: string, name?: string, background?: boolean) => string | undefined;
+  openSession: (
+    workspaceId: string,
+    cwd?: string,
+    name?: string,
+    background?: boolean,
+    opts?: { mainView?: 'shell' | 'agent'; acpCommand?: string[] },
+  ) => string | undefined;
   openSubShell: (sessionId: string, command?: string, cwd?: string) => string | undefined;
+  /** Open an agent-chat (ACP) tab — `argv` is the agent executable + args (`axn-acp`). */
+  openAcpTab: (
+    sessionId: string,
+    argv: string[],
+    cwd?: string,
+    label?: string,
+  ) => string | undefined;
   addWorkspace: (name: string) => string;
   moveSessionToWorkspace: (sessionId: string, workspaceId: string, beforeSessionId?: string | null) => void;
   moveWorkspace: (workspaceId: string, delta: -1 | 1) => void;
@@ -158,6 +171,38 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
       return false;
     },
     completeArg: (ctx, rest, lineHead) => completePath(ctx, rest, lineHead, false),
+  },
+  {
+    // `axn-acp-session <agent-cmd>` — a new session whose main view is an
+    // agent (ACP) chat instead of a shell PTY, in the caller's live cwd.
+    name: 'axn-acp-session',
+    takesArg: true,
+    run: async ({ deps, session, originPty }, argRaw) => {
+      const arg = argRaw ? unquote(argRaw).trim() : '';
+      if (!arg) {
+        return 'echo "usage: axn-acp-session <agent-command> [args…]  (e.g. axn-acp-session claude-agent-acp)"';
+      }
+      const liveCwd =
+        (await deps.backend.getCwd?.(originPty).catch(() => null)) ?? session.cwd;
+      deps.openSession(session.workspaceId, liveCwd ?? undefined, undefined, undefined, {
+        mainView: 'agent',
+        acpCommand: arg.split(/\s+/),
+      });
+      return false;
+    },
+  },
+  {
+    // `axn-acp <agent-cmd>` — an agent-chat (ACP) tab inside this session.
+    name: 'axn-acp',
+    takesArg: true,
+    run: ({ deps, session }, argRaw) => {
+      const arg = argRaw ? unquote(argRaw).trim() : '';
+      if (!arg) {
+        return 'echo "usage: axn-acp <agent-command> [args…]  (e.g. axn-acp claude-agent-acp)"';
+      }
+      deps.openAcpTab(session.id, arg.split(/\s+/));
+      return false;
+    },
   },
   {
     name: 'axn-install',

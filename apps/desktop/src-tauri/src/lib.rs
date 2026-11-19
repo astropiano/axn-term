@@ -1,3 +1,4 @@
+mod acp;
 mod announce;
 pub mod cli;
 #[cfg(unix)]
@@ -474,6 +475,9 @@ pub fn run() {
             devhmr::dev_hmr_install,
             devhmr::dev_hmr_open_main,
             perf_trace::perf_mark,
+            acp::acp_spawn,
+            acp::acp_write,
+            acp::acp_close,
         ])
         .on_page_load(|webview, payload| {
             let name = match payload.event() {

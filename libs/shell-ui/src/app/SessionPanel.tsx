@@ -34,6 +34,7 @@ import { sessionDisplayName, ptyIdOf } from '../types';
 import type { RepoMenuItem, SessionViewPlugin } from './session-plugins/plugin';
 import type { TaskStateSnapshot } from './useAgentTasks';
 import { SetDefaultFolderModal } from './SetDefaultFolderModal';
+import { pickAcpAgent } from './acp/acpAgentPicker';
 import { EditSessionSummaryModal } from './EditSessionSummaryModal';
 import { InvalidDefaultFolderModal } from './InvalidDefaultFolderModal';
 import { DeleteWorkspaceModal } from './DeleteWorkspaceModal';
@@ -61,6 +62,8 @@ interface SessionPanelProps {
   onToggleWorkspace: (id: string) => void;
   updateWorkspace: (workspaceId: string, patch: Partial<Workspace>) => void;
   onAddSession: (workspaceId?: string, cwd?: string, name?: string) => void;
+  /** Starts an agent (`mainView:'agent'`) session with argv from the agent picker; absent where no process backend exists. */
+  onNewAgentSession?: (workspaceId: string, cwd: string | undefined, acpCommand: string[]) => void;
   onMoveSession: (sessionId: string, workspaceId: string, beforeSessionId?: string | null) => void;
   /** Opens the "Move to workspace" picker for a session (menu row). */
   onRequestMoveSession?: (sessionId: string) => void;
@@ -303,6 +306,7 @@ function WorkspaceContextMenu({
   onSetDefaultFolder,
   onClearDefaultFolder,
   hasSession,
+  onNewAgentSession,
   pluginItems,
 }: {
   workspace: Workspace;
@@ -321,6 +325,8 @@ function WorkspaceContextMenu({
   onClearDefaultFolder: () => void;
   /** False when the workspace has no sessions — folder-from-session hidden. */
   hasSession: boolean;
+  /** Opens the agent picker and starts a `mainView:'agent'` session; absent where no process backend exists. */
+  onNewAgentSession?: () => void;
   /** Rows contributed by enabled plugins via `workspaceMenuItems`. */
   pluginItems?: RepoMenuItem[];
 }) {
@@ -423,6 +429,19 @@ function WorkspaceContextMenu({
         <ChevronDown className="h-3.5 w-3.5 shrink-0" />
         Move down
       </button>
+      {onNewAgentSession && (
+        <button
+          type="button"
+          onClick={() => {
+            onNewAgentSession();
+            onClose();
+          }}
+          className={itemClass}
+        >
+          <Bot className="h-3.5 w-3.5 shrink-0" />
+          New agent session…
+        </button>
+      )}
       {pluginItems && pluginItems.length > 0 && (
         <>
           <div className="my-1 h-px bg-[var(--hairline)]" />
@@ -477,6 +496,7 @@ function WorkspaceHeader({
   onSetDefaultFolder,
   onClearDefaultFolder,
   hasSession,
+  onNewAgentSession,
   pluginItems,
   searchQuery,
   onDragStart,
@@ -497,6 +517,8 @@ function WorkspaceHeader({
   onSetDefaultFolder: () => void;
   onClearDefaultFolder: () => void;
   hasSession: boolean;
+  /** Starts an agent session in this workspace with the picked argv; absent where no process backend exists. */
+  onNewAgentSession?: (acpCommand: string[]) => void;
   pluginItems?: RepoMenuItem[];
   /** Active panel filter — matched name substring is highlighted. */
   searchQuery?: string;
@@ -620,6 +642,14 @@ function WorkspaceHeader({
           onSetDefaultFolder={onSetDefaultFolder}
           onClearDefaultFolder={onClearDefaultFolder}
           hasSession={hasSession}
+          onNewAgentSession={
+            onNewAgentSession
+              ? () =>
+                  void pickAcpAgent().then(
+                    (argv) => argv && onNewAgentSession(argv),
+                  )
+              : undefined
+          }
           pluginItems={pluginItems}
         />
       )}
@@ -643,6 +673,8 @@ interface SessionContextMenuProps {
   /** Moves the session into a new window; absent hides the row. */
   onMoveToNewWindow?: () => void;
   onSubShell: () => void;
+  /** Opens the agent picker and starts a `mainView:'agent'` session; absent where no process backend exists. */
+  onNewAgentSession?: () => void;
   onBrowse: () => void;
   onIde: () => void;
   /** Copies the shell's live working directory; absent where it can't be read. */
@@ -665,6 +697,7 @@ function SessionContextMenu({
   onRequestMove,
   onMoveToNewWindow,
   onSubShell,
+  onNewAgentSession,
   onBrowse,
   onIde,
   onCopyPath,
@@ -849,6 +882,19 @@ function SessionContextMenu({
         <SquareTerminal className="h-3.5 w-3.5 shrink-0" />
         New sub-shell
       </button>
+      {onNewAgentSession && (
+        <button
+          type="button"
+          onClick={() => {
+            onNewAgentSession();
+            onClose();
+          }}
+          className={itemClass}
+        >
+          <Bot className="h-3.5 w-3.5 shrink-0" />
+          New agent session…
+        </button>
+      )}
       {onTurnIntoWorkspace && (
         <button
           type="button"
@@ -1107,6 +1153,7 @@ export function SessionItem({
   onOpenIde,
   onOpenTab,
   onAddSession,
+  onNewAgentSession,
   pluginData,
   mergePluginData,
   isDragging,
@@ -1147,6 +1194,8 @@ export function SessionItem({
     agent?: AgentCli,
   ) => string | undefined;
   onAddSession: (workspaceId?: string, cwd?: string, name?: string) => void;
+  /** Starts an agent (`mainView:'agent'`) session with the picked argv; absent where no process backend exists. */
+  onNewAgentSession?: (acpCommand: string[]) => void;
   onTurnIntoWorkspace: (sessionId: string) => void;
   updateSession: (sessionId: string, patch: Partial<ShellSession>) => void;
   mergePluginState: (sessionId: string, stateKey: string, patch: Record<string, unknown>) => void;
@@ -1675,6 +1724,14 @@ export function SessionItem({
           onMoveToNewWindow={onMoveToNewWindow}
           onCloseSession={onCloseSession}
           onSubShell={() => onOpenSubShell(session.id)}
+          onNewAgentSession={
+            onNewAgentSession
+              ? () =>
+                  void pickAcpAgent().then(
+                    (argv) => argv && onNewAgentSession(argv),
+                  )
+              : undefined
+          }
           onTurnIntoWorkspace={
             // Only offered when the session actually has sub-shell tabs.
             (session.editors ?? []).some((e) => e.kind === 'shell')
@@ -1746,6 +1803,7 @@ export function SessionPanel({
   onToggleWorkspace,
   updateWorkspace,
   onAddSession,
+  onNewAgentSession,
   onMoveSession,
   onRequestMoveSession,
   onReorderWorkspace,
@@ -2403,6 +2461,11 @@ export function SessionPanel({
                     updateWorkspace(workspace.id, { defaultFolder: undefined })
                   }
                   hasSession={representativeSession(workspace) !== undefined}
+                  onNewAgentSession={
+                    backend.spawnProcess && onNewAgentSession
+                      ? (argv) => onNewAgentSession(workspace.id, workspace.defaultFolder, argv)
+                      : undefined
+                  }
                   pluginItems={workspacePluginItems(workspace)}
                   searchQuery={q}
                   onDragStart={(e) => handleWorkspaceDragStart(e, workspace.id)}
@@ -2449,6 +2512,12 @@ export function SessionPanel({
                         onOpenTab={onOpenTab}
                         onOpenSubShell={onOpenSubShell}
                         onAddSession={onAddSession}
+                        onNewAgentSession={
+                          backend.spawnProcess && onNewAgentSession
+                            ? (argv) =>
+                                onNewAgentSession(session.workspaceId, session.cwd, argv)
+                            : undefined
+                        }
                         onTurnIntoWorkspace={onTurnIntoWorkspace}
                         pluginData={pluginData}
                         mergePluginData={mergePluginData}
