@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { useShellPlatform } from '../services';
-import { fontStackAvailable } from '../themes';
+import { cssFontFamily, fontStackAvailable } from '../themes';
 
 /** Names that are (very likely) Nerd Font patched families. */
 export function isNerdFontName(name: string): boolean {
@@ -240,7 +240,7 @@ export function FontPicker({
         aria-hidden
         className="mt-1.5 truncate rounded-[var(--radius-sm)] bg-[var(--bg)] px-2 py-1 text-[13px] leading-5 text-[var(--text-secondary)] shadow-[inset_0_0_0_1px_var(--hairline)]"
         style={{
-          fontFamily: previewFamily ? `${previewFamily}, ${sampleFallback}` : sampleFallback,
+          fontFamily: previewFamily ? `${cssFontFamily(previewFamily)}, ${sampleFallback}` : sampleFallback,
           fontVariantLigatures: 'normal',
         }}
         data-tip={t`Preview`}

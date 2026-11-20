@@ -420,7 +420,12 @@ export function resolveTheme(settings: AppSettings): ThemeDefinition {
 }
 
 export const defaultShellFontFamily =
-  '"Monaspace Neon Var", "Monaspace Neon", "Monaspace Argon Var", "Monaspace Argon", "Fira Code", "Cascadia Code", "Source Code Pro", monospace';
+  '"Monaspace Neon Var", "Monaspace Neon", "Monaspace Argon Var", "Monaspace Argon", "Fira Code", "Cascadia Code", "Source Code Pro", ' +
+  // Icon-font tail: WebKitGTK does no fontconfig per-glyph fallback for
+  // private-use codepoints (unlike VTE/GNOME Terminal), so Powerline/Nerd/
+  // Awesome prompt icons only render when an icon font is in the CSS family
+  // list. Absent families are skipped, so listing the common ones is free.
+  '"Symbols Nerd Font Mono", "Symbols Nerd Font", "NerdFontsSymbols Nerd Font Mono", "SourceCodePro+Powerline+Awesome Regular", monospace';
 export const defaultShellFontSize = 14;
 /**
  * xterm lineHeight multiplier. 1.0 packed rows too tightly once Monaspace
@@ -589,6 +594,25 @@ export function applyUiFont(settings: AppSettings) {
   else root.style.removeProperty('--font-ui-user');
 }
 
+/** Convert a stored font-family list into a valid CSS `font-family` value.
+ *  Names that contain whitespace or non-identifier characters must be quoted
+ *  so the browser/xterm.js treat them as a single family instead of a stack
+ *  of non-existent families (e.g. `DejaVuSansMono Nerd Font Mono`).
+ */
+export function cssFontFamily(stack: string): string {
+  return stack
+    .split(',')
+    .map((n) => n.trim().replace(/^["']|["']$/g, ''))
+    .filter(Boolean)
+    .map((n) => {
+      // CSS identifiers may contain letters, digits, hyphen, underscore.
+      // Quote everything else, and always quote names with whitespace.
+      if (/^[a-zA-Z0-9_-]+$/.test(n)) return n;
+      return `"${n.replace(/"/g, '\\"')}"`;
+    })
+    .join(', ');
+}
+
 /** Resolve the shell terminal font from settings (defaults in parens). */
 export function resolveShellFont(settings: AppSettings): {
   family: string;
@@ -597,9 +621,11 @@ export function resolveShellFont(settings: AppSettings): {
 } {
   const family = settings.shellFontFamily?.trim();
   return {
-    // A configured font only applies when it actually exists — otherwise
-    // every config.yaml typo would restyle the terminal in fallback serif.
-    family: family && fontStackAvailable(family) ? family : defaultShellFontFamily,
+    // Lead with the configured family; append the built-in stack so a
+    // config.yaml typo (or a font the DOM probe cannot see yet) falls back
+    // to Monaspace rather than serif. Multi-word family names must be
+    // CSS-quoted for xterm.js.
+    family: family ? `${cssFontFamily(family)}, ${defaultShellFontFamily}` : defaultShellFontFamily,
     // xterm fontSize wants integer px.
     size: Math.round(
       (settings.shellFontSize && settings.shellFontSize > 0

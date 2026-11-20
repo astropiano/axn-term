@@ -98,11 +98,20 @@ describe('font existence probe', () => {
     expect(fontStackAvailable('')).toBe(false);
   });
 
-  it('the terminal keeps the built-in stack for a font that does not exist', () => {
+  it('resolveShellFont leads with the configured font, built-in stack as fallback', () => {
     expect(resolveShellFont({ ...defaultSettings, shellFontFamily: 'FiraCodeNerdFont-Retina' }).family).toBe(
-      defaultShellFontFamily,
+      `FiraCodeNerdFont-Retina, ${defaultShellFontFamily}`,
     );
-    expect(resolveShellFont({ ...defaultSettings, shellFontFamily: 'Fira Code' }).family).toBe('Fira Code');
+    expect(resolveShellFont({ ...defaultSettings, shellFontFamily: 'Fira Code' }).family).toBe(
+      `"Fira Code", ${defaultShellFontFamily}`,
+    );
+    // A comma stack with quoted and unquoted names is normalized to valid CSS.
+    expect(
+      resolveShellFont({
+        ...defaultSettings,
+        shellFontFamily: 'DejaVuSansMono Nerd Font Mono, SourceCodePro+Powerline+Awesome Regular',
+      }).family,
+    ).toBe(`"DejaVuSansMono Nerd Font Mono", "SourceCodePro+Powerline+Awesome Regular", ${defaultShellFontFamily}`);
   });
 
   it('stays permissive without a layout engine', () => {
