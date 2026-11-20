@@ -1,4 +1,13 @@
 import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin';
+import {
+  declareProgress,
+  declaredActive,
+  declaredProgress,
+  declaredValue,
+  describeDeclaration,
+  parseProgressArgs,
+  type DeclaredProgress,
+} from './declaredProgress';
 
 /**
  * Generic progress provider.
@@ -110,6 +119,10 @@ interface ProgressRuntime {
   reported?: number;
   scanTimer?: ReturnType<typeof setTimeout>;
   debounceTimer?: ReturnType<typeof setTimeout>;
+  /** 1s ticker gliding a declared ETA toward its target. */
+  etaTimer?: ReturnType<typeof setInterval>;
+  /** Release timer for a `done` declaration's brief 100% flash. */
+  doneTimer?: ReturnType<typeof setTimeout>;
 }
 
 const runtimes = new Map<string, ProgressRuntime>();
@@ -260,8 +273,8 @@ function reset(ctx: SessionViewContext & PluginApi, rt: ProgressRuntime): void {
   if (rt.reported === undefined) return;
   rt.reported = undefined;
   ctx.updatePluginState({ progress: undefined, wrote: false });
-  // Never clobber a value a task provider wrote over ours.
-  if (ctx.isProgressHandled()) return;
+  // Never clobber a value a task provider or a declaration wrote over ours.
+  if (ctx.isProgressHandled() || declaredActive(ctx.session.id)) return;
   if ((ctx.getSession().progress ?? 0) !== 0) {
     ctx.updateSession(ctx.session.id, { progress: 0 });
   }
@@ -281,6 +294,11 @@ function scan(ctx: SessionViewContext & PluginApi): void {
     isProcessExcluded(session.process, settings?.excludeProcesses) ||
     ctx.isProgressHandled()
   ) {
+    reset(ctx, rt);
+    return;
+  }
+
+  if (declaredActive(session.id)) {
     reset(ctx, rt);
     return;
   }
@@ -329,6 +347,157 @@ function teardown(ctx: SessionViewContext & PluginApi): void {
   reset(ctx, rt);
 }
 
+
+// —— Declared progress (`axn-progress`) ————————————————————————————
+
+/** How long a `done` declaration holds 100% before releasing. */
+const DONE_LINGER_MS = 4000;
+/** ETA glide resolution — writes only on integer changes, so this is cheap. */
+const ETA_TICK_MS = 1000;
+
+function stopEtaTimer(rt: ProgressRuntime): void {
+  if (rt.etaTimer !== undefined) {
+    clearInterval(rt.etaTimer);
+    rt.etaTimer = undefined;
+  }
+  if (rt.doneTimer !== undefined) {
+    clearTimeout(rt.doneTimer);
+    rt.doneTimer = undefined;
+  }
+}
+
+/** Withdraw the declaration, its timers, and a raised ETA flag. */
+function clearDeclared(ctx: SessionViewContext & PluginApi): void {
+  const rt = runtimeFor(ctx.session.id);
+  stopEtaTimer(rt);
+  declareProgress(ctx.session.id, null);
+  ctx.setAttention(null);
+  // The bar was ours while declared — release it; the next task/screen
+  // update republishes from its own source.
+  if ((ctx.getSession().progress ?? 0) !== 0) {
+    ctx.updateSession(ctx.session.id, { progress: 0 });
+  }
+}
+
+/**
+ * Apply a declaration: last write wins. An ETA gets a 1s glide ticker that
+ * parks at 100 and raises the "ETA reached" warning once; `done` flashes
+ * 100 and releases itself; a bare percentage just sits until replaced.
+ */
+function applyDeclaration(
+  ctx: SessionViewContext & PluginApi,
+  spec: Omit<DeclaredProgress, 'startedAt' | 'declaringProcess' | 'startPct'> & {
+    startPct?: number;
+    etaMs?: number;
+  },
+): DeclaredProgress {
+  const session = ctx.getSession();
+  const rt = runtimeFor(session.id);
+  stopEtaTimer(rt);
+  const now = Date.now();
+  const d: DeclaredProgress = {
+    startPct: spec.startPct ?? (session.progress ?? 0),
+    startedAt: now,
+    etaAt: spec.etaMs !== undefined ? now + spec.etaMs : undefined,
+    targetPct: spec.targetPct,
+    label: spec.label,
+    done: spec.done,
+    declaringProcess: session.process,
+  };
+  declareProgress(session.id, d);
+  ctx.setAttention(null);
+
+  if (d.done) {
+    // Brief completion flash, then release the bar.
+    ctx.updateSession(session.id, { progress: 100 });
+    rt.doneTimer = setTimeout(() => clearDeclared(ctx), DONE_LINGER_MS);
+    return d;
+  }
+
+  const publish = () => {
+    const live = ctx.getSession();
+    const cur = declaredProgress(session.id);
+    if (!cur) {
+      stopEtaTimer(rt);
+      return;
+    }
+    const now2 = Date.now();
+    const v = declaredValue(cur, now2);
+    if (v !== (live.progress ?? 0)) ctx.updateSession(live.id, { progress: v });
+    if (cur.etaAt !== undefined && now2 >= cur.etaAt) {
+      stopEtaTimer(rt);
+      ctx.setAttention({
+        level: 'warning',
+        message: `ETA reached${cur.label ? ` — ${cur.label}` : ''}`,
+      });
+    }
+  };
+  publish();
+  if (d.etaAt !== undefined) rt.etaTimer = setInterval(publish, ETA_TICK_MS);
+  return d;
+}
+
+/** `axn-progress` — bare/`--json` reports state; the rest declares it. */
+function progressReport(ctx: SessionViewContext & PluginApi, json: boolean): string {
+  const session = ctx.getSession();
+  const d = declaredProgress(session.id);
+  const now = Date.now();
+  const displayed = session.progress ?? 0;
+  const source = d ? 'declared' : (session.tasks ?? []).length > 0 ? 'tasks' : 'screen';
+  if (json) {
+    return `echo ${JSON.stringify(
+      JSON.stringify({
+        progress: displayed,
+        source,
+        declared: d
+          ? {
+              pct: declaredValue(d, now),
+              startPct: d.startPct,
+              startedAt: d.startedAt,
+              etaAt: d.etaAt,
+              targetPct: d.targetPct,
+              label: d.label,
+              done: d.done,
+            }
+          : null,
+      }),
+    )}`;
+  }
+  return `echo ${JSON.stringify(
+    d
+      ? describeDeclaration(d, now)
+      : `${displayed}%${(session.tasks ?? []).length > 0 ? ' (task list)' : displayed > 0 ? ' (detected)' : ' (no progress)'}`,
+  )}`;
+}
+
+const progressCommand = (
+  ctx: SessionViewContext & PluginApi,
+  arg: string | undefined,
+): string | false | undefined => {
+  const parsed = parseProgressArgs(arg);
+  if (parsed.kind === 'error') {
+    return `echo ${JSON.stringify(`axn-progress: ${parsed.message}`)}`;
+  }
+  if (parsed.kind === 'query') return progressReport(ctx, parsed.json);
+  if (parsed.kind === 'clear') {
+    clearDeclared(ctx);
+    return `echo "progress cleared"`;
+  }
+  const d = applyDeclaration(ctx, parsed.spec);
+  return `echo ${JSON.stringify(describeDeclaration(d, Date.now()))}`;
+};
+
+/**
+ * A declaration dies with the process that was foreground when it was made:
+ * an agent's progress ends when the agent exits; a user's `--eta` reminder
+ * (typed with the shell foreground) survives short commands and only ends
+ * with the shell itself.
+ */
+function declaredProcessEnded(ctx: SessionViewContext & PluginApi): void {
+  const d = declaredProgress(ctx.session.id);
+  if (d && d.declaringProcess !== ctx.getSession().process) clearDeclared(ctx);
+}
+
 export const progressPlugin: SessionViewPlugin = {
   id: 'progress',
   title: 'progress',
@@ -340,16 +509,22 @@ export const progressPlugin: SessionViewPlugin = {
 
   // A freshly spawned session has no running process — clear any persisted
   // progress so a stale 100% bar does not reappear after an app restart.
+  commands: [{ name: 'axn-progress', takesArg: true, run: progressCommand }],
+
   onSessionOpen: (ctx) => {
     const state = (ctx.pluginState as ProgressPluginState | undefined) ?? {};
     teardown(ctx);
+    clearDeclared(ctx);
     if (state.wrote || (ctx.session.progress ?? 0) !== 0) {
       ctx.updatePluginState({ progress: undefined, wrote: false });
       ctx.updateSession(ctx.session.id, { progress: 0 });
     }
   },
 
-  onProcessEnd: teardown,
+  onProcessEnd: (ctx) => {
+    teardown(ctx);
+    declaredProcessEnded(ctx);
+  },
 
   onOutput: (ctx) => {
     // The terminal buffer lags the chunk slightly (term.write is queued), so
@@ -365,6 +540,7 @@ export const progressPlugin: SessionViewPlugin = {
 
   onClose: (ctx) => {
     teardown(ctx);
+    clearDeclared(ctx);
     runtimes.delete(ctx.session.id);
   },
 };
