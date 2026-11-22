@@ -1035,12 +1035,7 @@ export function SessionIconGlyph({
   const svg = useMemo(() => (isSvgString(value) ? sanitizeSvgIcon(value) : null), [value]);
 
   if (svg !== null) {
-    return (
-      <span
-        className={`${className} text-[var(--text-primary)]`}
-        dangerouslySetInnerHTML={{ __html: svg }}
-      />
-    );
+    return <span className={className} dangerouslySetInnerHTML={{ __html: svg }} />;
   }
 
   const IconComponent = DynamicIcon ?? SquareTerminal;

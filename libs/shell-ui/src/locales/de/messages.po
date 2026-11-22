@@ -18,7 +18,7 @@ msgstr "{0} laufende {1} werden beendet"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} läuft im Haupt-Checkout — in einem Worktree isolieren?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2241
+#: libs/shell-ui/src/app/SessionPanel.tsx:2236
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} wartend"
 
@@ -603,7 +603,7 @@ msgstr "In Workspace verschieben…"
 msgid "needs attention"
 msgstr "braucht Aufmerksamkeit"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1589
+#: libs/shell-ui/src/app/SessionPanel.tsx:1584
 msgid "Needs you"
 msgstr "Wartet auf dich"
 
@@ -611,7 +611,7 @@ msgstr "Wartet auf dich"
 msgid "New name for {name}"
 msgstr "Neuer Name für {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2415
+#: libs/shell-ui/src/app/SessionPanel.tsx:2410
 msgid "New session"
 msgstr "Neue Session"
 
@@ -619,7 +619,7 @@ msgstr "Neue Session"
 msgid "New session button"
 msgstr "Schaltfläche „Neue Sitzung“"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2539
+#: libs/shell-ui/src/app/SessionPanel.tsx:2534
 msgid "New session in folder…"
 msgstr "Neue Session im Ordner…"
 
@@ -748,7 +748,7 @@ msgstr "Öffnen"
 msgid "Open {title}"
 msgstr "{title} öffnen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2519
+#: libs/shell-ui/src/app/SessionPanel.tsx:2514
 msgid "Open a saved workspace set file"
 msgstr "Gespeicherte Workspace-Set-Datei öffnen"
 
@@ -782,11 +782,11 @@ msgstr "Log-Ordner öffnen…"
 msgid "Open preview in a tab"
 msgstr "Vorschau in einem Tab öffnen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2527
+#: libs/shell-ui/src/app/SessionPanel.tsx:2522
 msgid "Open workspace set from file…"
 msgstr "Workspace-Set aus Datei öffnen…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2206
+#: libs/shell-ui/src/app/SessionPanel.tsx:2201
 msgid "Open…"
 msgstr "Öffnen…"
 
@@ -832,7 +832,7 @@ msgstr "Berechtigungen:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "Handys und Browser mit demselben Konto können sich verbinden"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2534
+#: libs/shell-ui/src/app/SessionPanel.tsx:2529
 msgid "Pick a folder — the new session starts in it"
 msgstr "Ordner wählen — die neue Session startet darin"
 
@@ -940,7 +940,7 @@ msgstr "Worktree entfernen"
 msgid "Rename {name}"
 msgstr "{name} umbenennen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1529
+#: libs/shell-ui/src/app/SessionPanel.tsx:1524
 msgid "Rename session"
 msgstr "Session umbenennen"
 
@@ -1004,7 +1004,7 @@ msgstr "In einem Shell-Tab ausführen"
 msgid "Run the login in a shell, then check again."
 msgstr "Anmeldung in einer Shell ausführen, dann erneut prüfen."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2478
+#: libs/shell-ui/src/app/SessionPanel.tsx:2473
 msgid "Running"
 msgstr "Aktiv"
 
@@ -1018,7 +1018,7 @@ msgstr "sandboxed — keine Berechtigungen (kein Shell-, Datei- oder Terminalzug
 msgid "Save"
 msgstr "Speichern"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2202
+#: libs/shell-ui/src/app/SessionPanel.tsx:2197
 msgid "Save workspace set"
 msgstr "Workspace-Set speichern"
 
@@ -1064,8 +1064,8 @@ msgstr "Serveradresse"
 #~ msgid "Server URL"
 #~ msgstr "Server-URL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1565
-#: libs/shell-ui/src/app/SessionPanel.tsx:1567
+#: libs/shell-ui/src/app/SessionPanel.tsx:1560
+#: libs/shell-ui/src/app/SessionPanel.tsx:1562
 msgid "Session actions"
 msgstr "Session-Aktionen"
 
@@ -1097,7 +1097,7 @@ msgstr "Session-Zusammenfassung"
 msgid "Session: {0}"
 msgstr "Sitzung: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2473
+#: libs/shell-ui/src/app/SessionPanel.tsx:2468
 msgid "Sessions"
 msgstr "Sessions"
 
@@ -1131,11 +1131,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell-Schrift"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2234
+#: libs/shell-ui/src/app/SessionPanel.tsx:2229
 msgid "Show all sessions"
 msgstr "Alle Sessions anzeigen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2234
+#: libs/shell-ui/src/app/SessionPanel.tsx:2229
 msgid "Show only sessions that need you"
 msgstr "Nur Sessions anzeigen, die auf dich warten"
 
