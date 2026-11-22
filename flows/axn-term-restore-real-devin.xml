@@ -7,11 +7,11 @@
     </tags>
     <setup>
       <env>
-        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_BINARY" value="${AXN_TERM_BINARY:-target/release/axn-term}" />
         <var name="AXN_TERM_USE_REAL_DEVIN" value="true" />
-        <var name="AXN_TERM_DEVIN_WAIT_FOR" value="Devin CLI" />
+        <var name="AXN_TERM_DEVIN_WAIT_FOR" value="${AXN_TERM_DEVIN_WAIT_FOR:-Devin CLI}" />
         <var name="AXN_TERM_TEST_VARIANT" value="second-workspace" />
-        <var name="AXN_TERM_DEVIN_CWD" value="/home/dev/axn-term" />
+        <var name="AXN_TERM_DEVIN_CWD" value="${AXN_TERM_DEVIN_CWD:-/home/dev/axn-term}" />
       </env>
     </setup>
     <steps>
