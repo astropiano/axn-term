@@ -18,7 +18,7 @@ msgstr "{0} actieve {1} worden beëindigd"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} draait in de hoofd-checkout — isoleren in een worktree?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2241
+#: libs/shell-ui/src/app/SessionPanel.tsx:2236
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} wachtend"
 
@@ -603,7 +603,7 @@ msgstr "Naar workspace verplaatsen…"
 msgid "needs attention"
 msgstr "vraagt aandacht"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1589
+#: libs/shell-ui/src/app/SessionPanel.tsx:1584
 msgid "Needs you"
 msgstr "Wacht op jou"
 
@@ -611,7 +611,7 @@ msgstr "Wacht op jou"
 msgid "New name for {name}"
 msgstr "Nieuwe naam voor {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2415
+#: libs/shell-ui/src/app/SessionPanel.tsx:2410
 msgid "New session"
 msgstr "Nieuwe sessie"
 
@@ -619,7 +619,7 @@ msgstr "Nieuwe sessie"
 msgid "New session button"
 msgstr "Knop nieuwe sessie"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2539
+#: libs/shell-ui/src/app/SessionPanel.tsx:2534
 msgid "New session in folder…"
 msgstr "Nieuwe sessie in map…"
 
@@ -748,7 +748,7 @@ msgstr "Openen"
 msgid "Open {title}"
 msgstr "{title} openen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2519
+#: libs/shell-ui/src/app/SessionPanel.tsx:2514
 msgid "Open a saved workspace set file"
 msgstr "Opgeslagen workspace-setbestand openen"
 
@@ -782,11 +782,11 @@ msgstr "Logmap openen…"
 msgid "Open preview in a tab"
 msgstr "Voorbeeld in een tabblad openen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2527
+#: libs/shell-ui/src/app/SessionPanel.tsx:2522
 msgid "Open workspace set from file…"
 msgstr "Workspace-set uit bestand openen…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2206
+#: libs/shell-ui/src/app/SessionPanel.tsx:2201
 msgid "Open…"
 msgstr "Openen…"
 
@@ -832,7 +832,7 @@ msgstr "machtigingen:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "telefoons en browsers met hetzelfde account kunnen meekijken"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2534
+#: libs/shell-ui/src/app/SessionPanel.tsx:2529
 msgid "Pick a folder — the new session starts in it"
 msgstr "Kies een map — de nieuwe sessie start daarin"
 
@@ -940,7 +940,7 @@ msgstr "Worktree verwijderen"
 msgid "Rename {name}"
 msgstr "{name} hernoemen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1529
+#: libs/shell-ui/src/app/SessionPanel.tsx:1524
 msgid "Rename session"
 msgstr "Sessie hernoemen"
 
@@ -1004,7 +1004,7 @@ msgstr "Uitvoeren in een shell-tabblad"
 msgid "Run the login in a shell, then check again."
 msgstr "Voer de aanmelding uit in een shell en controleer daarna opnieuw."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2478
+#: libs/shell-ui/src/app/SessionPanel.tsx:2473
 msgid "Running"
 msgstr "Actief"
 
@@ -1018,7 +1018,7 @@ msgstr "gesandboxt — geen machtigingen (geen shell-, bestands- of terminaltoeg
 msgid "Save"
 msgstr "Opslaan"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2202
+#: libs/shell-ui/src/app/SessionPanel.tsx:2197
 msgid "Save workspace set"
 msgstr "Workspace-set opslaan"
 
@@ -1064,8 +1064,8 @@ msgstr "Serveradres"
 #~ msgid "Server URL"
 #~ msgstr "Server-URL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1565
-#: libs/shell-ui/src/app/SessionPanel.tsx:1567
+#: libs/shell-ui/src/app/SessionPanel.tsx:1560
+#: libs/shell-ui/src/app/SessionPanel.tsx:1562
 msgid "Session actions"
 msgstr "Sessieacties"
 
@@ -1097,7 +1097,7 @@ msgstr "Sessiesamenvatting"
 msgid "Session: {0}"
 msgstr "Sessie: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2473
+#: libs/shell-ui/src/app/SessionPanel.tsx:2468
 msgid "Sessions"
 msgstr "Sessies"
 
@@ -1131,11 +1131,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell-lettertype"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2234
+#: libs/shell-ui/src/app/SessionPanel.tsx:2229
 msgid "Show all sessions"
 msgstr "Alle sessies tonen"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2234
+#: libs/shell-ui/src/app/SessionPanel.tsx:2229
 msgid "Show only sessions that need you"
 msgstr "Alleen sessies tonen die op jou wachten"
 

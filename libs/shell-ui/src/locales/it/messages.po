@@ -18,7 +18,7 @@ msgstr "{0} {1} in esecuzione verranno terminati"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} è in esecuzione nel checkout principale — isolarlo in un worktree?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2241
+#: libs/shell-ui/src/app/SessionPanel.tsx:2236
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} in attesa"
 
@@ -603,7 +603,7 @@ msgstr "Sposta nel workspace…"
 msgid "needs attention"
 msgstr "richiede attenzione"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1589
+#: libs/shell-ui/src/app/SessionPanel.tsx:1584
 msgid "Needs you"
 msgstr "Ti aspetta"
 
@@ -611,7 +611,7 @@ msgstr "Ti aspetta"
 msgid "New name for {name}"
 msgstr "Nuovo nome per {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2415
+#: libs/shell-ui/src/app/SessionPanel.tsx:2410
 msgid "New session"
 msgstr "Nuova sessione"
 
@@ -619,7 +619,7 @@ msgstr "Nuova sessione"
 msgid "New session button"
 msgstr "Pulsante nuova sessione"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2539
+#: libs/shell-ui/src/app/SessionPanel.tsx:2534
 msgid "New session in folder…"
 msgstr "Nuova sessione nella cartella…"
 
@@ -748,7 +748,7 @@ msgstr "Apri"
 msgid "Open {title}"
 msgstr "Apri {title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2519
+#: libs/shell-ui/src/app/SessionPanel.tsx:2514
 msgid "Open a saved workspace set file"
 msgstr "Apri un file di set di workspace salvato"
 
@@ -782,11 +782,11 @@ msgstr "Apri cartella dei log…"
 msgid "Open preview in a tab"
 msgstr "Apri l'anteprima in una scheda"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2527
+#: libs/shell-ui/src/app/SessionPanel.tsx:2522
 msgid "Open workspace set from file…"
 msgstr "Apri set di workspace da file…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2206
+#: libs/shell-ui/src/app/SessionPanel.tsx:2201
 msgid "Open…"
 msgstr "Apri…"
 
@@ -832,7 +832,7 @@ msgstr "permessi:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "telefoni e browser con lo stesso account possono collegarsi"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2534
+#: libs/shell-ui/src/app/SessionPanel.tsx:2529
 msgid "Pick a folder — the new session starts in it"
 msgstr "Scegli una cartella — la nuova sessione si avvia lì"
 
@@ -940,7 +940,7 @@ msgstr "Rimuovi worktree"
 msgid "Rename {name}"
 msgstr "Rinomina {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1529
+#: libs/shell-ui/src/app/SessionPanel.tsx:1524
 msgid "Rename session"
 msgstr "Rinomina sessione"
 
@@ -1004,7 +1004,7 @@ msgstr "Esegui in una scheda shell"
 msgid "Run the login in a shell, then check again."
 msgstr "Esegui l'accesso in una shell, poi controlla di nuovo."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2478
+#: libs/shell-ui/src/app/SessionPanel.tsx:2473
 msgid "Running"
 msgstr "Attive"
 
@@ -1018,7 +1018,7 @@ msgstr "in sandbox — nessun permesso (nessun accesso a shell, file o terminale
 msgid "Save"
 msgstr "Salva"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2202
+#: libs/shell-ui/src/app/SessionPanel.tsx:2197
 msgid "Save workspace set"
 msgstr "Salva set di workspace"
 
@@ -1064,8 +1064,8 @@ msgstr "Indirizzo del server"
 #~ msgid "Server URL"
 #~ msgstr "URL del server"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1565
-#: libs/shell-ui/src/app/SessionPanel.tsx:1567
+#: libs/shell-ui/src/app/SessionPanel.tsx:1560
+#: libs/shell-ui/src/app/SessionPanel.tsx:1562
 msgid "Session actions"
 msgstr "Azioni sessione"
 
@@ -1097,7 +1097,7 @@ msgstr "Riepilogo della sessione"
 msgid "Session: {0}"
 msgstr "Sessione: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2473
+#: libs/shell-ui/src/app/SessionPanel.tsx:2468
 msgid "Sessions"
 msgstr "Sessioni"
 
@@ -1131,11 +1131,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Font della shell"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2234
+#: libs/shell-ui/src/app/SessionPanel.tsx:2229
 msgid "Show all sessions"
 msgstr "Mostra tutte le sessioni"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2234
+#: libs/shell-ui/src/app/SessionPanel.tsx:2229
 msgid "Show only sessions that need you"
 msgstr "Mostra solo le sessioni che ti aspettano"
 
