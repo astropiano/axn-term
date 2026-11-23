@@ -34,6 +34,10 @@ tiny_http = "0.12"
 mdns-sd = "0.13"
 reqwest = { version = "0.13.5", default-features = false, features = ["native-tls"] }
 
+[dev-dependencies]
+# `tauri::test::mock_app` for command guards that need an AppHandle.
+tauri = { version = "2", features = ["test"] }
+
 [target.'cfg(unix)'.dependencies]
 # termios (VERASE) and process-group kill — Unix only.
 nix = { version = "0.28", features = ["term", "signal", "process"] }
