@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Terminal } from '@xterm/xterm';
-import { handleClipboardWrites, parseOsc52, registerTerminalElement, terminalSelection } from './terminalRegistry';
+import { handleClipboardWrites, OSC52_MAX_PAYLOAD, parseOsc52, registerTerminalElement, terminalHasFocus, terminalSelection } from './terminalRegistry';
 
 /** Just enough xterm: a selection the test sets and a change listener. */
 function fakeTerm() {
@@ -91,5 +91,55 @@ describe('OSC 52 clipboard writes', () => {
     expect(handler(`c;${b64('selected in the TUI')}`)).toBe(true);
     expect(copied).toEqual(['selected in the TUI']);
     expect(terminalSelection(term)).toBe('selected in the TUI');
+  });
+
+  it('refuses payloads over the cap', () => {
+    expect(parseOsc52(`c;${'A'.repeat(OSC52_MAX_PAYLOAD + 4)}`)).toBeUndefined();
+    expect(parseOsc52(`c;${b64('x'.repeat(1024))}`)).toBe('x'.repeat(1024));
+  });
+
+  it('swallows writes the gate refuses, without copying', () => {
+    let handler: (data: string) => boolean = () => false;
+    const { term } = fakeTerm();
+    (term as unknown as { parser: unknown }).parser = {
+      registerOscHandler: (_ident: number, cb: (data: string) => boolean) => {
+        handler = cb;
+        return { dispose: () => {} };
+      },
+    };
+    const copied: string[] = [];
+    let allowed = false;
+    handleClipboardWrites(term, (text) => copied.push(text), () => allowed);
+    expect(handler(`c;${b64('from a background cat')}`)).toBe(true);
+    expect(copied).toEqual([]);
+    expect(terminalSelection(term)).toBe('');
+    allowed = true;
+    handler(`c;${b64('user copy')}`);
+    expect(copied).toEqual(['user copy']);
+  });
+
+  it('treats a terminal as focused only while its element holds focus', () => {
+    const el = document.createElement('div');
+    const input = document.createElement('textarea');
+    el.appendChild(input);
+    document.body.appendChild(el);
+    const outside = document.createElement('input');
+    document.body.appendChild(outside);
+    const term = { element: el } as unknown as Terminal;
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    try {
+      input.focus();
+      expect(terminalHasFocus(term)).toBe(true);
+      outside.focus();
+      expect(terminalHasFocus(term)).toBe(false);
+      input.focus();
+      hasFocus.mockReturnValue(false);
+      expect(terminalHasFocus(term)).toBe(false);
+      expect(terminalHasFocus({ element: undefined } as unknown as Terminal)).toBe(false);
+    } finally {
+      hasFocus.mockRestore();
+      el.remove();
+      outside.remove();
+    }
   });
 });

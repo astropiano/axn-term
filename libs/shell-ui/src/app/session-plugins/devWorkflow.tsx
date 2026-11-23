@@ -1487,6 +1487,16 @@ function affordanceKey(ctx: Ctx, def: WorkflowDef, state: string, checks?: Recor
 const pendingChecks = new Map<string, { sessionId: string; state: string; name: string }>();
 
 /**
+ * Wrap `text` in bracketed-paste markers for an agent's input. ESC (and the
+ * 8-bit CSI) are dropped from the text first: a prompt — possibly from a
+ * repo's `promptFile` — carrying `ESC[201~` would otherwise end the paste
+ * early and the rest would arrive as raw keystrokes.
+ */
+export function bracketedPaste(text: string): string {
+  return `\x1b[200~${text.replace(/[\x1b\x9b]/g, '')}\x1b[201~`;
+}
+
+/**
  * Execute the Run action for one named action. `shell` actions type the
  * launch command at a free prompt; when the action's agent already owns the
  * terminal the prompt is injected via bracketed paste + CR (a busy agent
@@ -1585,7 +1595,7 @@ async function runAction(
       axnLog('warn', 'dev-workflow', `run '${action.name}': no prompt to send to '${process}'`);
       return;
     }
-    await ctx.writeToSession(`\x1b[200~${prompt}\x1b[201~\r`).catch(() => {});
+    await ctx.writeToSession(`${bracketedPaste(prompt)}\r`).catch(() => {});
     return;
   }
   try {

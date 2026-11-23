@@ -2,6 +2,7 @@ import { useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEve
 import DOMPurify, { type DOMPurify as Purifier } from 'dompurify';
 import { shellServices } from '../../services';
 import { useSettings } from '../../SettingsProvider';
+import { containInlineStyle } from '../sanitizeSvg';
 import { renderMermaidInto } from './mermaidRender';
 import type { FilePreviewContext } from './plugin';
 
@@ -38,18 +39,7 @@ function previewPurifier(): Purifier {
   if (purifier) return purifier;
   // own instance, so the hook does not affect other DOMPurify users
   const p = DOMPurify(window);
-  p.addHook('afterSanitizeAttributes', (node) => {
-    if (!(node as Element).hasAttribute?.('style')) return;
-    const style = (node as HTMLElement).style as CSSStyleDeclaration | undefined;
-    if (!style) {
-      (node as Element).removeAttribute('style');
-      return;
-    }
-    if (/fixed|sticky/i.test(style.getPropertyValue('position'))) style.removeProperty('position');
-    // keep only what the engine parsed, so no unparsed text slips through
-    if (style.length) (node as Element).setAttribute('style', style.cssText);
-    else (node as Element).removeAttribute('style');
-  });
+  p.addHook('afterSanitizeAttributes', (node) => containInlineStyle(node as Element));
   purifier = p;
   return p;
 }

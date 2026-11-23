@@ -14,6 +14,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 import {
   actionRunInfo,
   agentCommand,
+  bracketedPaste,
   agentLaunchLine,
   decodeState,
   devWorkflowPlugin,
@@ -1036,6 +1037,11 @@ describe('commands', () => {
       devWorkflowPlugin.onBannerAction?.(h.ctx, 'run:default');
       await vi.waitFor(() => expect(h.writes.length).toBeGreaterThan(0));
       expect(h.writes.at(-1)).toBe('\x1b[200~Plan it.\x1b[201~\r');
+    });
+
+    it('strips escapes so a prompt cannot end the bracketed paste early', () => {
+      expect(bracketedPaste('a\x1b[201~rm -rf ~\r\x9b201~b')).toBe('\x1b[200~a[201~rm -rf ~\r201~b\x1b[201~');
+      expect(bracketedPaste('Plan it.')).toBe('\x1b[200~Plan it.\x1b[201~');
     });
 
     it('refuses to type into a foreign process', async () => {

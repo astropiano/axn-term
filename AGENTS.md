@@ -98,7 +98,10 @@
   forgotten on a left click or typing — and terminals honour OSC 52 clipboard
   writes via `handleClipboardWrites`, because TUIs with their own mouse
   selection such as Claude Code copy that way and leave xterm with no
-  selection; reads (`?`) are refused — and OSC 10/11/12 color reports that
+  selection; reads (`?`) are refused, payloads over 1 MiB are dropped, and
+  a write only lands while that terminal is visible and focused
+  (`terminalHasFocus`) — `terminalClipboardWrites: off` in config.yaml turns
+  them off entirely — and OSC 10/11/12 color reports that
   xterm.js emits on the input channel are routed by the per-PTY ordered
   writer `createTerminalInput` (`terminalRenderer.ts`, shared by
   `ShellTerminal` and `SubShellView`; *every* write to that PTY — keys,
@@ -1597,7 +1600,10 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
   forgotten on a left click or typing — and terminals honour OSC 52 clipboard
   writes via `handleClipboardWrites`, because TUIs with their own mouse
   selection such as Claude Code copy that way and leave xterm with no
-  selection; reads (`?`) are refused), Cut/Copy/Paste/
+  selection; reads (`?`) are refused, payloads over 1 MiB are dropped, and
+  a write only lands while that terminal is visible and focused
+  (`terminalHasFocus`) — `terminalClipboardWrites: off` in config.yaml turns
+  them off entirely), Cut/Copy/Paste/
   Select all for text fields, plus "Reload window" (also `⌘⇧R`/`Ctrl+Shift+R`,
   `isReloadShortcut` — terminals let it through; it saves state first and,
   running no React cleanup, keeps the PTYs, which the reloaded window

@@ -135,6 +135,12 @@ export interface AppSettings {
    * including WebGL context loss), `webgl`, `canvas`, or `dom` to force.
    */
   terminalRenderer?: 'auto' | 'webgl' | 'canvas' | 'dom';
+  /**
+   * OSC 52 clipboard writes from programs in a terminal (Claude Code and
+   * other TUIs copy this way): `focused` (default) honours them only from
+   * the visible terminal the user is in, `off` ignores them all.
+   */
+  terminalClipboardWrites?: 'focused' | 'off';
   /** UI language — one of the locales bundled in libs/shell-ui (`en`, `ko`). */
   language?: 'system' | 'en' | 'ko' | 'de' | 'fr' | 'it' | 'nl' | 'zh' | 'ja';
   /**

@@ -221,6 +221,9 @@ export function registerTerminalElement(el: Element, term: Terminal): () => void
   };
 }
 
+/** Largest OSC 52 base64 payload honoured (~768 KB of text). */
+export const OSC52_MAX_PAYLOAD = 1024 * 1024;
+
 /**
  * OSC 52 "set clipboard" — the payload of `ESC ] 52 ; <targets> ; <base64>`
  * as the text to copy. Read requests (`?`), clears (empty) and malformed or
@@ -231,7 +234,7 @@ export function parseOsc52(data: string): string | undefined {
   const sep = data.indexOf(';');
   if (sep < 0) return undefined;
   const payload = data.slice(sep + 1);
-  if (!payload || payload === '?' || payload.length > 4 * 1024 * 1024) return undefined;
+  if (!payload || payload === '?' || payload.length > OSC52_MAX_PAYLOAD) return undefined;
   try {
     const bytes = Uint8Array.from(atob(payload), (c) => c.charCodeAt(0));
     return new TextDecoder().decode(bytes) || undefined;
@@ -241,15 +244,34 @@ export function parseOsc52(data: string): string | undefined {
 }
 
 /**
+ * Whether the user is in this terminal right now: the app window has focus
+ * and xterm's input (or anything else inside the terminal) is the active
+ * element. Gates OSC 52 so output from a background or unfocused terminal
+ * (`cat` of a hostile file, ssh, curl) cannot rewrite the clipboard.
+ */
+export function terminalHasFocus(term: Terminal): boolean {
+  const el = term.element;
+  if (!el) return false;
+  const doc = el.ownerDocument;
+  const active = doc.activeElement;
+  return !!active && el.contains(active) && doc.hasFocus();
+}
+
+/**
  * Honour OSC 52 writes from the program in the terminal. TUIs that track the
  * mouse themselves (Claude Code) draw their own selection and copy it this
  * way — xterm has no selection of its own then, so the text is also what
- * the context menu's Copy offers.
+ * the context menu's Copy offers. `allow` is asked per write (setting +
+ * focus); a refused write is swallowed so it never reaches the screen.
  */
-export function handleClipboardWrites(term: Terminal, copy: (text: string) => void): { dispose(): void } {
+export function handleClipboardWrites(
+  term: Terminal,
+  copy: (text: string) => void,
+  allow: () => boolean = () => true,
+): { dispose(): void } {
   return term.parser.registerOscHandler(52, (data) => {
     const text = parseOsc52(data);
-    if (text) {
+    if (text && allow()) {
       copy(text);
       lastSelections.set(term, text);
     }
