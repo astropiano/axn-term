@@ -18,7 +18,7 @@ msgstr "{0} {1} in esecuzione verranno terminati"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} è in esecuzione nel checkout principale — isolarlo in un worktree?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2236
+#: libs/shell-ui/src/app/SessionPanel.tsx:2304
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} in attesa"
 
@@ -47,7 +47,7 @@ msgstr "Un nome di icona Lucide (es. <0>GitFork</0>) o un tag SVG inline, es. <1
 msgid "Add icon"
 msgstr "Aggiungi icona"
 
-#: libs/shell-ui/src/app/TagModal.tsx:177
+#: libs/shell-ui/src/app/TagModal.tsx:178
 msgid "Add tag “{typed}”"
 msgstr "Aggiungi tag “{typed}”"
 
@@ -59,6 +59,10 @@ msgstr "Aggiungi vista"
 msgid "Advanced"
 msgstr "Avanzate"
 
+#: libs/shell-ui/src/app/session-plugins/TagFilter.tsx:66
+msgid "All"
+msgstr "Tutti"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:1088
 msgid "Also used as the session icon while this process is foreground."
 msgstr "Usato anche come icona della sessione mentre questo processo è in primo piano."
@@ -67,7 +71,7 @@ msgstr "Usato anche come icona della sessione mentre questo processo è in primo
 msgid "Applies immediately to the running app. Logs rotate in the OS log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides."
 msgstr "Si applica immediatamente all'app in esecuzione. I log ruotano nella cartella dei log di sistema (~/Library/Logs/axn-term); la variabile d'ambiente LOG_LEVEL ha la precedenza."
 
-#: libs/shell-ui/src/app/TagModal.tsx:191
+#: libs/shell-ui/src/app/TagModal.tsx:192
 msgid "Apply"
 msgstr "Applica"
 
@@ -124,13 +128,17 @@ msgstr "Font integrato"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
 #: libs/shell-ui/src/app/SettingsModal.tsx:1270
-#: libs/shell-ui/src/app/TagModal.tsx:184
+#: libs/shell-ui/src/app/TagModal.tsx:185
 msgid "Cancel"
 msgstr "Annulla"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:653
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "Renderer a celle per i terminali. Auto usa la GPU (WebGL) con fallback automatico. Forza canvas/DOM in caso di artefatti."
+
+#: libs/shell-ui/src/app/TagModal.tsx:119
+msgid "Change colour"
+msgstr "Cambia colore"
 
 #: libs/shell-ui/src/app/TagModal.tsx:118
 msgid "Change colour of {name}"
@@ -185,11 +193,11 @@ msgstr "Chiudi questa vista"
 msgid "Collapse"
 msgstr "Comprimi"
 
-#: libs/shell-ui/src/app/TagModal.tsx:127
+#: libs/shell-ui/src/app/TagModal.tsx:128
 msgid "Colour of {name}"
 msgstr "Colore di {name}"
 
-#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:56
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:59
 msgid "Colour of {tag}"
 msgstr "Colore di {tag}"
 
@@ -321,7 +329,7 @@ msgstr "Shell predefinita"
 msgid "Delete {0}"
 msgstr "Elimina {0}"
 
-#: libs/shell-ui/src/app/TagModal.tsx:160
+#: libs/shell-ui/src/app/TagModal.tsx:161
 msgid "Delete {name}"
 msgstr "Elimina {name}"
 
@@ -433,6 +441,10 @@ msgstr "anteprima file"
 #: libs/shell-ui/src/app/SettingsModal.tsx:831
 msgid "File previews"
 msgstr "Anteprime file"
+
+#: libs/shell-ui/src/app/session-plugins/TagFilter.tsx:80
+msgid "Filter by tag: {tag}"
+msgstr "Filtra per tag: {tag}"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:873
 msgid "Filter plugins…"
@@ -611,11 +623,11 @@ msgstr "richiede attenzione"
 msgid "Needs you"
 msgstr "Ti aspetta"
 
-#: libs/shell-ui/src/app/TagModal.tsx:135
+#: libs/shell-ui/src/app/TagModal.tsx:136
 msgid "New name for {name}"
 msgstr "Nuovo nome per {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2410
+#: libs/shell-ui/src/app/SessionPanel.tsx:2490
 msgid "New session"
 msgstr "Nuova sessione"
 
@@ -623,7 +635,7 @@ msgstr "Nuova sessione"
 msgid "New session button"
 msgstr "Pulsante nuova sessione"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2534
+#: libs/shell-ui/src/app/SessionPanel.tsx:2614
 msgid "New session in folder…"
 msgstr "Nuova sessione nella cartella…"
 
@@ -641,7 +653,7 @@ msgstr "Nuova sessione con agente…"
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "Le nuove sessioni in «{0}» partono in questa cartella. Lascia vuoto per la home."
 
-#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:84
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:87
 msgid "New tag colour"
 msgstr "Nuovo colore del tag"
 
@@ -684,13 +696,17 @@ msgstr "Nessuna sessione all'interno."
 msgid "No such path: {path}"
 msgstr "Percorso inesistente: {path}"
 
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:50
+msgid "No tags yet — right-click a session or workspace and choose Tag…."
+msgstr "Ancora nessun tag — fai clic con il tasto destro su una sessione o un workspace e scegli Tagga…."
+
 #: libs/shell-ui/src/app/TagModal.tsx:100
 msgid "No tags yet — type one above."
 msgstr "Nessun tag — scrivine uno qui sopra."
 
 #: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:47
-msgid "No tags yet."
-msgstr "Ancora nessun tag."
+#~ msgid "No tags yet."
+#~ msgstr "Ancora nessun tag."
 
 #: libs/shell-ui/src/WorkspacePicker.tsx:51
 msgid "no workspaces"
@@ -760,7 +776,7 @@ msgstr "Apri"
 msgid "Open {title}"
 msgstr "Apri {title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2514
+#: libs/shell-ui/src/app/SessionPanel.tsx:2594
 msgid "Open a saved workspace set file"
 msgstr "Apri un file di set di workspace salvato"
 
@@ -794,11 +810,11 @@ msgstr "Apri cartella dei log…"
 msgid "Open preview in a tab"
 msgstr "Apri l'anteprima in una scheda"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2522
+#: libs/shell-ui/src/app/SessionPanel.tsx:2602
 msgid "Open workspace set from file…"
 msgstr "Apri set di workspace da file…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2201
+#: libs/shell-ui/src/app/SessionPanel.tsx:2269
 msgid "Open…"
 msgstr "Apri…"
 
@@ -844,7 +860,7 @@ msgstr "permessi:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "telefoni e browser con lo stesso account possono collegarsi"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2529
+#: libs/shell-ui/src/app/SessionPanel.tsx:2609
 msgid "Pick a folder — the new session starts in it"
 msgstr "Scegli una cartella — la nuova sessione si avvia lì"
 
@@ -952,7 +968,7 @@ msgstr "Rimuovi icona"
 msgid "Remove worktree"
 msgstr "Rimuovi worktree"
 
-#: libs/shell-ui/src/app/TagModal.tsx:152
+#: libs/shell-ui/src/app/TagModal.tsx:153
 msgid "Rename {name}"
 msgstr "Rinomina {name}"
 
@@ -970,12 +986,12 @@ msgstr "Mostra i riepiloghi delle sessioni (via axn-session-summary)"
 msgid "requires {0}{1}"
 msgstr "richiede {0}{1}"
 
-#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:63
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:66
 msgid "Reset colour of {tag}"
 msgstr "Reimposta il colore di {tag}"
 
 #. placeholder {0}: tagColor(tag)
-#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:64
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:67
 msgid "Reset to derived colour ({0})"
 msgstr "Ripristina il colore derivato ({0})"
 
@@ -1020,7 +1036,7 @@ msgstr "Esegui in una scheda shell"
 msgid "Run the login in a shell, then check again."
 msgstr "Esegui l'accesso in una shell, poi controlla di nuovo."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2473
+#: libs/shell-ui/src/app/SessionPanel.tsx:2553
 msgid "Running"
 msgstr "Attive"
 
@@ -1034,7 +1050,7 @@ msgstr "in sandbox — nessun permesso (nessun accesso a shell, file o terminale
 msgid "Save"
 msgstr "Salva"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2197
+#: libs/shell-ui/src/app/SessionPanel.tsx:2265
 msgid "Save workspace set"
 msgstr "Salva set di workspace"
 
@@ -1113,7 +1129,7 @@ msgstr "Riepilogo della sessione"
 msgid "Session: {0}"
 msgstr "Sessione: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2468
+#: libs/shell-ui/src/app/SessionPanel.tsx:2548
 msgid "Sessions"
 msgstr "Sessioni"
 
@@ -1147,11 +1163,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Font della shell"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2229
+#: libs/shell-ui/src/app/SessionPanel.tsx:2297
 msgid "Show all sessions"
 msgstr "Mostra tutte le sessioni"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2229
+#: libs/shell-ui/src/app/SessionPanel.tsx:2297
 msgid "Show only sessions that need you"
 msgstr "Mostra solo le sessioni che ti aspettano"
 
@@ -1220,7 +1236,7 @@ msgid "System font"
 msgstr "Font di sistema"
 
 #. placeholder {0}: scope.targets.length
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:91
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:114
 msgid "Tag {0} sessions"
 msgstr "Tagga {0} sessioni"
 
@@ -1228,26 +1244,38 @@ msgstr "Tagga {0} sessioni"
 msgid "Tag colours"
 msgstr "Colori dei tag"
 
-#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:77
+#: libs/shell-ui/src/app/session-plugins/TagFilter.tsx:55
+msgid "Tag filter"
+msgstr "Filtro tag"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:80
 msgid "Tag name"
 msgstr "Nome del tag"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:91
+#: libs/shell-ui/src/app/session-plugins/TagFilter.tsx:112
+msgid "Tag no longer in use — click to clear"
+msgstr "Tag non più in uso — clicca per cancellare"
+
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:114
 msgid "Tag session"
 msgstr "Tagga sessione"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:109
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:132
 msgid "Tag workspace"
 msgstr "Tagga workspace"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:86
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:106
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:109
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:129
 msgid "Tag…"
 msgstr "Tagga…"
 
 #: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:43
-msgid "Tags in use in this window. A tag without a set colour gets one derived from its name."
-msgstr "Tag in uso in questa finestra. Un tag senza colore impostato riceve un colore derivato dal nome."
+msgid "Tags in use in this window — create one by choosing Tag… on a session or workspace. A tag without a set colour gets one derived from its name."
+msgstr "Tag in uso in questa finestra — creane uno scegliendo Tagga… su una sessione o un workspace. Un tag senza colore impostato riceve un colore derivato dal nome."
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:43
+#~ msgid "Tags in use in this window. A tag without a set colour gets one derived from its name."
+#~ msgstr "Tag in uso in questa finestra. Un tag senza colore impostato riceve un colore derivato dal nome."
 
 #: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:32
 #~ msgid "Tags without an entry here get a colour derived from their name."

@@ -18,7 +18,7 @@ msgstr "将终止 {0} 个运行中的{1}"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} 正在主检出中运行 — 要隔离到 worktree 吗？"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2236
+#: libs/shell-ui/src/app/SessionPanel.tsx:2304
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} 个等待中"
 
@@ -47,7 +47,7 @@ msgstr "一个 Lucide 图标名称（如 <0>GitFork</0>）或内联 SVG 标签�
 msgid "Add icon"
 msgstr "添加图标"
 
-#: libs/shell-ui/src/app/TagModal.tsx:177
+#: libs/shell-ui/src/app/TagModal.tsx:178
 msgid "Add tag “{typed}”"
 msgstr "添加标签“{typed}”"
 
@@ -59,6 +59,10 @@ msgstr "添加视图"
 msgid "Advanced"
 msgstr "高级"
 
+#: libs/shell-ui/src/app/session-plugins/TagFilter.tsx:66
+msgid "All"
+msgstr "全部"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:1088
 msgid "Also used as the session icon while this process is foreground."
 msgstr "此进程位于前台时也用作会话图标。"
@@ -67,7 +71,7 @@ msgstr "此进程位于前台时也用作会话图标。"
 msgid "Applies immediately to the running app. Logs rotate in the OS log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides."
 msgstr "立即应用于正在运行的应用。日志在系统日志文件夹 (~/Library/Logs/axn-term) 中轮转；LOG_LEVEL 环境变量优先生效。"
 
-#: libs/shell-ui/src/app/TagModal.tsx:191
+#: libs/shell-ui/src/app/TagModal.tsx:192
 msgid "Apply"
 msgstr "应用"
 
@@ -124,13 +128,17 @@ msgstr "内置字体"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
 #: libs/shell-ui/src/app/SettingsModal.tsx:1270
-#: libs/shell-ui/src/app/TagModal.tsx:184
+#: libs/shell-ui/src/app/TagModal.tsx:185
 msgid "Cancel"
 msgstr "取消"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:653
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "终端的单元格渲染器。“自动”使用 GPU（WebGL）并自动回退。如遇到渲染故障可强制使用 canvas/DOM。"
+
+#: libs/shell-ui/src/app/TagModal.tsx:119
+msgid "Change colour"
+msgstr "更改颜色"
 
 #: libs/shell-ui/src/app/TagModal.tsx:118
 msgid "Change colour of {name}"
@@ -185,11 +193,11 @@ msgstr "关闭此视图"
 msgid "Collapse"
 msgstr "折叠"
 
-#: libs/shell-ui/src/app/TagModal.tsx:127
+#: libs/shell-ui/src/app/TagModal.tsx:128
 msgid "Colour of {name}"
 msgstr "{name} 的颜色"
 
-#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:56
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:59
 msgid "Colour of {tag}"
 msgstr "{tag} 的颜色"
 
@@ -321,7 +329,7 @@ msgstr "默认 Shell"
 msgid "Delete {0}"
 msgstr "删除 {0}"
 
-#: libs/shell-ui/src/app/TagModal.tsx:160
+#: libs/shell-ui/src/app/TagModal.tsx:161
 msgid "Delete {name}"
 msgstr "删除 {name}"
 
@@ -433,6 +441,10 @@ msgstr "文件预览"
 #: libs/shell-ui/src/app/SettingsModal.tsx:831
 msgid "File previews"
 msgstr "文件预览"
+
+#: libs/shell-ui/src/app/session-plugins/TagFilter.tsx:80
+msgid "Filter by tag: {tag}"
+msgstr "按标签筛选：{tag}"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:873
 msgid "Filter plugins…"
@@ -611,11 +623,11 @@ msgstr "需要处理"
 msgid "Needs you"
 msgstr "需要处理"
 
-#: libs/shell-ui/src/app/TagModal.tsx:135
+#: libs/shell-ui/src/app/TagModal.tsx:136
 msgid "New name for {name}"
 msgstr "{name} 的新名称"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2410
+#: libs/shell-ui/src/app/SessionPanel.tsx:2490
 msgid "New session"
 msgstr "新建会话"
 
@@ -623,7 +635,7 @@ msgstr "新建会话"
 msgid "New session button"
 msgstr "新建会话按钮"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2534
+#: libs/shell-ui/src/app/SessionPanel.tsx:2614
 msgid "New session in folder…"
 msgstr "在文件夹中新建会话…"
 
@@ -641,7 +653,7 @@ msgstr "新建代理会话…"
 msgid "New sessions in “{0}” start in this folder. Leave empty for your home directory."
 msgstr "“{0}”中的新会话将在此文件夹中启动。留空则使用主目录。"
 
-#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:84
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:87
 msgid "New tag colour"
 msgstr "新标签颜色"
 
@@ -684,13 +696,17 @@ msgstr "其中没有会话。"
 msgid "No such path: {path}"
 msgstr "路径不存在：{path}"
 
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:50
+msgid "No tags yet — right-click a session or workspace and choose Tag…."
+msgstr "还没有标签 — 右键点击会话或工作区并选择“标签…”。"
+
 #: libs/shell-ui/src/app/TagModal.tsx:100
 msgid "No tags yet — type one above."
 msgstr "还没有标签 — 请在上方输入。"
 
 #: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:47
-msgid "No tags yet."
-msgstr "还没有标签。"
+#~ msgid "No tags yet."
+#~ msgstr "还没有标签。"
 
 #: libs/shell-ui/src/WorkspacePicker.tsx:51
 msgid "no workspaces"
@@ -760,7 +776,7 @@ msgstr "打开"
 msgid "Open {title}"
 msgstr "打开{title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2514
+#: libs/shell-ui/src/app/SessionPanel.tsx:2594
 msgid "Open a saved workspace set file"
 msgstr "打开已保存的工作区集文件"
 
@@ -794,11 +810,11 @@ msgstr "打开日志文件夹…"
 msgid "Open preview in a tab"
 msgstr "在标签页中打开预览"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2522
+#: libs/shell-ui/src/app/SessionPanel.tsx:2602
 msgid "Open workspace set from file…"
 msgstr "从文件打开工作区集…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2201
+#: libs/shell-ui/src/app/SessionPanel.tsx:2269
 msgid "Open…"
 msgstr "打开…"
 
@@ -844,7 +860,7 @@ msgstr "权限："
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "使用同一账号登录的手机和浏览器可以连接"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2529
+#: libs/shell-ui/src/app/SessionPanel.tsx:2609
 msgid "Pick a folder — the new session starts in it"
 msgstr "选择文件夹 — 新会话在其中启动"
 
@@ -952,7 +968,7 @@ msgstr "移除图标"
 msgid "Remove worktree"
 msgstr "移除 worktree"
 
-#: libs/shell-ui/src/app/TagModal.tsx:152
+#: libs/shell-ui/src/app/TagModal.tsx:153
 msgid "Rename {name}"
 msgstr "重命名 {name}"
 
@@ -970,12 +986,12 @@ msgstr "显示会话摘要（通过 axn-session-summary 设置）"
 msgid "requires {0}{1}"
 msgstr "需要 {0}{1}"
 
-#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:63
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:66
 msgid "Reset colour of {tag}"
 msgstr "重置 {tag} 的颜色"
 
 #. placeholder {0}: tagColor(tag)
-#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:64
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:67
 msgid "Reset to derived colour ({0})"
 msgstr "恢复为推导颜色 ({0})"
 
@@ -1020,7 +1036,7 @@ msgstr "在 Shell 标签页中运行"
 msgid "Run the login in a shell, then check again."
 msgstr "在 Shell 中运行登录命令，然后重新检查。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2473
+#: libs/shell-ui/src/app/SessionPanel.tsx:2553
 msgid "Running"
 msgstr "运行中"
 
@@ -1034,7 +1050,7 @@ msgstr "已沙箱化 — 无权限（无 shell、文件或终端访问）"
 msgid "Save"
 msgstr "保存"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2197
+#: libs/shell-ui/src/app/SessionPanel.tsx:2265
 msgid "Save workspace set"
 msgstr "保存工作区集"
 
@@ -1113,7 +1129,7 @@ msgstr "会话摘要"
 msgid "Session: {0}"
 msgstr "会话：{0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2468
+#: libs/shell-ui/src/app/SessionPanel.tsx:2548
 msgid "Sessions"
 msgstr "会话"
 
@@ -1147,11 +1163,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell 字体"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2229
+#: libs/shell-ui/src/app/SessionPanel.tsx:2297
 msgid "Show all sessions"
 msgstr "显示所有会话"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2229
+#: libs/shell-ui/src/app/SessionPanel.tsx:2297
 msgid "Show only sessions that need you"
 msgstr "仅显示需要处理的会话"
 
@@ -1220,7 +1236,7 @@ msgid "System font"
 msgstr "系统字体"
 
 #. placeholder {0}: scope.targets.length
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:91
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:114
 msgid "Tag {0} sessions"
 msgstr "为 {0} 个会话添加标签"
 
@@ -1228,26 +1244,38 @@ msgstr "为 {0} 个会话添加标签"
 msgid "Tag colours"
 msgstr "标签颜色"
 
-#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:77
+#: libs/shell-ui/src/app/session-plugins/TagFilter.tsx:55
+msgid "Tag filter"
+msgstr "标签筛选"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:80
 msgid "Tag name"
 msgstr "标签名称"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:91
+#: libs/shell-ui/src/app/session-plugins/TagFilter.tsx:112
+msgid "Tag no longer in use — click to clear"
+msgstr "标签已不再使用 — 点击清除"
+
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:114
 msgid "Tag session"
 msgstr "为会话添加标签"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:109
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:132
 msgid "Tag workspace"
 msgstr "为工作区添加标签"
 
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:86
-#: libs/shell-ui/src/app/session-plugins/tagging.tsx:106
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:109
+#: libs/shell-ui/src/app/session-plugins/tagging.tsx:129
 msgid "Tag…"
 msgstr "标签…"
 
 #: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:43
-msgid "Tags in use in this window. A tag without a set colour gets one derived from its name."
-msgstr "此窗口中使用的标签。未设置颜色的标签将使用根据名称推导的颜色。"
+msgid "Tags in use in this window — create one by choosing Tag… on a session or workspace. A tag without a set colour gets one derived from its name."
+msgstr "此窗口中使用的标签 — 在会话或工作区上选择“标签…”即可创建。未设置颜色的标签将使用根据名称推导的颜色。"
+
+#: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:43
+#~ msgid "Tags in use in this window. A tag without a set colour gets one derived from its name."
+#~ msgstr "此窗口中使用的标签。未设置颜色的标签将使用根据名称推导的颜色。"
 
 #: libs/shell-ui/src/app/session-plugins/TagColorSettings.tsx:32
 #~ msgid "Tags without an entry here get a colour derived from their name."
