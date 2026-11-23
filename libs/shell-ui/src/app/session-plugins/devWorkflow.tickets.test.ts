@@ -105,4 +105,16 @@ describe('ticketWorktreeScript', () => {
     expect(git(dir, 'rev-parse', 'HEAD')).toBe(git(repo, 'rev-parse', 'origin/main'));
     execFileSync('/bin/sh', ['-c', script]); // second start: reuse, no error
   });
+
+  it('keeps a hostile branch name out of the shell', () => {
+    const base = mkdtempSync(path.join(tmpdir(), 'axn-ticket-'));
+    const repo = path.join(base, 'repo');
+    execFileSync('git', ['init', '-q', '-b', 'main', repo]);
+    git(repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'init');
+    const branch = 'wt/x$(touch${IFS}pwned)';
+    const dir = path.join(base, 'worktrees', 'repo-x');
+    execFileSync('/bin/sh', ['-c', ticketWorktreeScript(repo, dir, branch)], { cwd: base });
+    expect(existsSync(path.join(base, 'pwned'))).toBe(false);
+    expect(git(dir, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe(branch);
+  });
 });

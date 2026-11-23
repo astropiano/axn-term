@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { findSessionField } from './plugin';
 import type { ShellSession, Workspace } from '../../types';
 import type { PluginApi, SessionViewContext } from './plugin';
@@ -12,6 +13,7 @@ import {
   addWorktreeCmd,
   removeWorktreeCmd,
   deleteBranchCmd,
+  nameAgentCmd,
 } from './worktrees';
 import { shellQuote } from '../../shellQuote';
 
@@ -569,5 +571,19 @@ describe('rowTip', () => {
 
   it('returns null without a worktree', () => {
     expect(findSessionField(worktreesPlugin, 'worktree')!.tip!(makeHarness().ctx)).toBeNull();
+  });
+});
+
+describe('nameAgentCmd', () => {
+  it('passes a hostile MR title to the agent as one inert prompt word', () => {
+    const title = 'fix $(touch pwned) `id` "q" \\ it\'s';
+    const cmd = nameAgentCmd(`printf '%s\\n'`, '!12', title);
+    expect(cmd.startsWith(`printf '%s\\n' -p '`)).toBe(true);
+    const out = execFileSync('/bin/sh', ['-c', cmd], { encoding: 'utf8' });
+    expect(out).toBe(`-p\nreply with only a short kebab-case git branch slug for merge request !12: ${title}\n`);
+  });
+
+  it('keeps a user agent command with flags as-is', () => {
+    expect(nameAgentCmd('claude --model haiku', '#3', 'x')).toMatch(/^claude --model haiku -p '/);
   });
 });
