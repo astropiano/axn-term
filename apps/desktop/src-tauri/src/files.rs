@@ -258,23 +258,87 @@ pub(crate) fn reveal_path(path: String) -> Result<(), String> {
 /// Widen the fs plugin scope by the user's `fileAccessRoots` setting — the
 /// static capability only covers `$HOME`. Grants are additive: the fs scope
 /// cannot revoke an allow without a permanent forbid, so a root removed from
-/// the setting stays readable until restart.
+/// the setting stays readable until restart. Each root is canonicalized and
+/// checked by `file_access_root` first; rejected roots are skipped (the
+/// others are still granted) and reported in the error.
 #[tauri::command]
 pub(crate) fn allow_file_roots(app: tauri::AppHandle, roots: Vec<String>) -> Result<(), String> {
     let scope = app.fs_scope();
+    let home = dirs::home_dir().ok_or("no home directory")?;
+    let mut rejected = Vec::new();
     for root in roots {
-        let root = root.trim();
-        let path = match root.strip_prefix("~/") {
-            Some(rest) => dirs::home_dir().ok_or("no home directory")?.join(rest),
-            None if root == "~" => dirs::home_dir().ok_or("no home directory")?,
-            None => PathBuf::from(root),
-        };
-        if !path.is_absolute() {
-            return Err(format!("fileAccessRoots entry must be absolute: {}", root));
+        match file_access_root(&root, &home) {
+            Ok(path) => scope.allow_directory(&path, true).map_err(|e| e.to_string())?,
+            Err(e) => rejected.push(e),
         }
-        scope.allow_directory(&path, true).map_err(|e| e.to_string())?;
     }
-    Ok(())
+    if rejected.is_empty() {
+        Ok(())
+    } else {
+        Err(rejected.join("; "))
+    }
+}
+
+/// System locations a `fileAccessRoots` entry may not be (or be inside):
+/// granting them would let the webview write OS files through the fs plugin.
+/// `/var` is deliberately absent — macOS keeps per-user temp dirs
+/// (`$TMPDIR`) under `/var/folders`.
+const FORBIDDEN_FILE_ROOTS: &[&str] = &[
+    "/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/libx32", "/proc", "/root",
+    "/run", "/sbin", "/sys", "/usr", "/System", "/Library", "/private/etc",
+];
+
+/// One `fileAccessRoots` entry → the directory to grant: `~` expanded, no
+/// `..`, symlinks resolved (a not-yet-existing tail — an unmounted volume —
+/// is kept as written below its nearest existing ancestor), and never a
+/// filesystem root, an ancestor of `$HOME` (`/home`, `/Users`) or a system
+/// directory.
+pub(crate) fn file_access_root(raw: &str, home: &std::path::Path) -> Result<PathBuf, String> {
+    use std::path::Component;
+    let root = raw.trim();
+    let path = match root.strip_prefix("~/") {
+        Some(rest) => home.join(rest),
+        None if root == "~" => home.to_path_buf(),
+        None => PathBuf::from(root),
+    };
+    if !path.is_absolute() {
+        return Err(format!("fileAccessRoots entry must be absolute: {root}"));
+    }
+    if path.components().any(|c| c == Component::ParentDir) {
+        return Err(format!("fileAccessRoots entry must not contain `..`: {root}"));
+    }
+    let path = canonicalize_existing_prefix(&path);
+    let home = canonicalize_existing_prefix(home);
+    if path.parent().is_none() {
+        return Err(format!("fileAccessRoots entry must not be a filesystem root: {root}"));
+    }
+    if home.starts_with(&path) && path != home {
+        return Err(format!("fileAccessRoots entry must not contain the home directory: {root}"));
+    }
+    if FORBIDDEN_FILE_ROOTS.iter().any(|dir| path.starts_with(dir)) {
+        return Err(format!("fileAccessRoots entry is a system directory: {root} ({})", path.display()));
+    }
+    Ok(path)
+}
+
+/// `path` with every symlink in its longest existing prefix resolved; the
+/// missing remainder (no `..` left — the caller rejects those) is appended
+/// unchanged.
+fn canonicalize_existing_prefix(path: &std::path::Path) -> PathBuf {
+    let mut existing = path;
+    let mut tail = Vec::new();
+    loop {
+        if let Ok(real) = std::fs::canonicalize(existing) {
+            return tail.iter().rev().fold(real, |acc: PathBuf, part| acc.join(part));
+        }
+        match (existing.parent(), existing.file_name()) {
+            (Some(parent), Some(name)) => {
+                tail.push(name.to_os_string());
+                existing = parent;
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
 }
 
 
@@ -517,6 +581,55 @@ mod file_drop_tests {
             assert_eq!(mode & 0o777, 0o700);
         }
         let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
+#[cfg(test)]
+mod file_root_tests {
+    use super::file_access_root;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn roots_are_expanded_and_canonicalized() {
+        let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+        let home = tmp.join(format!("axn-root-home-{}", std::process::id()));
+        std::fs::create_dir_all(home.join("repos")).unwrap();
+        assert_eq!(file_access_root("~", &home).unwrap(), home);
+        assert_eq!(file_access_root(" ~/repos ", &home).unwrap(), home.join("repos"));
+        // Not mounted yet: kept as written under its existing ancestor.
+        assert_eq!(
+            file_access_root(&home.join("vol/later").to_string_lossy(), &home).unwrap(),
+            home.join("vol/later")
+        );
+        #[cfg(unix)]
+        {
+            let link = home.join("etc-link");
+            let _ = std::fs::remove_file(&link);
+            std::os::unix::fs::symlink("/etc", &link).unwrap();
+            assert!(file_access_root(&link.to_string_lossy(), &home).is_err());
+        }
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn broad_relative_and_system_roots_are_rejected() {
+        let home = PathBuf::from("/home/axn-root-test-user");
+        for bad in [
+            "/",
+            "relative/dir",
+            "/tmp/../etc",
+            "~/../..",
+            "/home",
+            "/etc",
+            "/etc/ssh",
+            "/usr/local",
+            "/System/Library",
+            "/Library/LaunchDaemons",
+        ] {
+            assert!(file_access_root(bad, &home).is_err(), "{bad}");
+        }
+        assert!(file_access_root("/Volumes/external/repos", Path::new("/Users/me")).is_ok());
+        assert!(file_access_root("/mnt/data", &home).is_ok());
     }
 }
 

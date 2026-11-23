@@ -103,7 +103,7 @@ export function DevHmrWindow() {
         <span>{status ? VITE_LABEL[status.vite] : '…'}</span>
         {status?.port && (
           <span className="font-mono text-[var(--text-secondary)]">
-            http://localhost:{status.port}
+            http://127.0.0.1:{status.port}
           </span>
         )}
         <span className="flex-1" />

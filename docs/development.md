@@ -98,8 +98,13 @@ Inside the app, the **`#axn-dev` settings window** (repo picker, vite
 status/log tail, start/stop/install) controls the spawned `pnpm exec vite
 --port 5914 --strictPort` in the picked checkout's `apps/desktop`. The
 port is fixed because the IPC ACL pins the exact origin
-(`capabilities/… remote.urls http://localhost:5914*`, plus
-`window.rs::is_dev_hmr_navigation` for navigation).
+`http://127.0.0.1:5914` (the hmr conf's `frontendDist`, plus the hmr-only
+`capabilities/dev-hmr.json` remote url and
+`window.rs::is_dev_hmr_navigation` for navigation). The shipped
+`tauri.conf.json` enables only the `default` capability, so a release
+build never trusts a localhost dev origin. Running the same code path
+under `tauri dev` with `AXN_TERM_HMR=1` needs `-c
+src-tauri/tauri.term-hmr.conf.json` for that grant.
 
 Isolation is deliberate: state lives under `~/.axn-term-hmr` and window
 state is kept **in memory** — no `state.json` is written, so the dev app

@@ -56,7 +56,8 @@ pub(crate) struct DevHmrState {
     status: Mutex<ViteStatus>,
     /// Error text for the settings page (spawn/readiness failures).
     error: Mutex<Option<String>>,
-    /// The port vite was launched on — the external webview origin.
+    /// The port our running vite serves on — the external webview origin.
+    /// `None` until vite is ready and again once it exits.
     port: Mutex<Option<u16>>,
 }
 
@@ -168,10 +169,16 @@ fn resolve_pnpm() -> Option<String> {
 }
 
 /// The vite dev server's port — FIXED, not picked at spawn: the IPC ACL
-/// (`remote.urls` in capabilities) is declared at build time and must name
-/// the exact origin, so a dynamically assigned port would never match.
+/// (`frontendDist` in tauri.term-hmr.conf.json, `remote.urls` in
+/// capabilities/dev-hmr.json) is declared at build time and must name the
+/// exact origin, so a dynamically assigned port would never match.
 /// `--strictPort` fails loudly when it is taken — the log shows it.
-const AXN_HMR_PORT: u16 = 5914;
+pub(crate) const AXN_HMR_PORT: u16 = 5914;
+
+/// The host vite binds (`--host`) and windows load — the literal loopback
+/// address, never `localhost`: that name may resolve to `::1` first, where
+/// vite is not listening and any other local process could be.
+pub(crate) const AXN_HMR_HOST: &str = "127.0.0.1";
 
 /// `'…'` quoting for the login-shell spawn.
 fn shq(s: &str) -> String {
@@ -200,12 +207,12 @@ fn vite_dir(repo: &Path) -> PathBuf {
     repo.join("apps/desktop")
 }
 
-/// The origin session windows load in dev mode — set as soon as a port is
-/// assigned, so a window opened while vite is still starting loads it as
-/// soon as the server binds.
+/// The origin session windows load in dev mode — set once vite announced
+/// itself on its port and cleared when it exits, so no window is pointed at
+/// a port some other process holds.
 pub(crate) fn vite_origin(state: &DevHmrState) -> Option<tauri::Url> {
     let port = (*state.port.lock().unwrap())?;
-    tauri::Url::parse(&format!("http://localhost:{port}")).ok()
+    tauri::Url::parse(&format!("http://{AXN_HMR_HOST}:{port}")).ok()
 }
 
 /// Spawn `pnpm exec vite --port N --strictPort` in `<repo>/apps/desktop`,
@@ -231,9 +238,10 @@ pub(crate) fn start_vite(app: AppHandle, state: &DevHmrState) -> Result<(), Stri
     let mut child = login_shell_command(
         &repo,
         &format!(
-            "{} --dir {} exec vite --host 127.0.0.1 --port {} --strictPort",
+            "{} --dir {} exec vite --host {} --port {} --strictPort",
             shq(&pnpm),
             shq(&vite_dir(&repo).to_string_lossy()),
+            AXN_HMR_HOST,
             port
         ),
     )
@@ -245,7 +253,6 @@ pub(crate) fn start_vite(app: AppHandle, state: &DevHmrState) -> Result<(), Stri
             set_status(&app, state, ViteStatus::Exited, Some(e.to_string()));
             format!("failed to spawn vite: {e}")
         })?;
-    *state.port.lock().unwrap() = Some(port);
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     *state.child.lock().unwrap() = Some(child);
@@ -265,6 +272,9 @@ pub(crate) fn start_vite(app: AppHandle, state: &DevHmrState) -> Result<(), Stri
                 if line.contains("ready in") || line.contains("Local:") {
                     let state = app.state::<DevHmrState>();
                     if *state.status.lock().unwrap() == ViteStatus::Starting {
+                        // Only now is the port known to be OUR vite — a
+                        // squatter makes `--strictPort` exit before this line.
+                        *state.port.lock().unwrap() = Some(port);
                         set_status(&app, &state, ViteStatus::Running, None);
                         open_main_window(&app);
                     }
@@ -284,13 +294,18 @@ pub(crate) fn start_vite(app: AppHandle, state: &DevHmrState) -> Result<(), Stri
             let state = app2.state::<DevHmrState>();
             let done = {
                 let mut guard = state.child.lock().unwrap();
-                match guard.as_mut() {
+                let exited = match guard.as_mut() {
                     Some(c) => c.try_wait().ok().flatten().is_some(),
-                    None => true,
+                    None => true, // stop_vite took it (and cleared the port)
+                };
+                if exited && guard.take().is_some() {
+                    // vite is gone: forget its origin under the same lock, so
+                    // no window is pointed at whatever binds the port next.
+                    *state.port.lock().unwrap() = None;
                 }
+                exited
             };
             if done {
-                state.child.lock().unwrap().take();
                 if *state.status.lock().unwrap() != ViteStatus::Idle {
                     set_status(&app2, &state, ViteStatus::Exited, None);
                 }
