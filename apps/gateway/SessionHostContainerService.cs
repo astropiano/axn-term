@@ -292,8 +292,9 @@ public sealed class SessionHostContainerService : IDisposable
         if (userDataDir is not null)
         {
             // Mount only the user's own data directory, at the same path so
-            // shell paths are familiar. Docker creates it root-owned on first
-            // use; the entrypoint (root mode) hands it to the session user.
+            // shell paths are familiar. It is pre-created with the session
+            // user as owner below — docker would create it root-owned, and
+            // a non-root session host (the compose default) could not write it.
             binds.Add($"{userDataDir}:{userDataDir}");
             ptyCwd = userDataDir;
 
@@ -305,6 +306,11 @@ public sealed class SessionHostContainerService : IDisposable
                 binds.Add($"{nixDir}:/home/{userId}/.config/nix");
                 nixManaged = true;
             }
+        }
+
+        if (userDataDir is not null)
+        {
+            await EnsureUserDataDirAsync(userId, nixManaged, cancellationToken);
         }
 
         var env = new List<string>
@@ -402,6 +408,95 @@ public sealed class SessionHostContainerService : IDisposable
             _logger.LogError(ex, "Docker start failed for {ContainerName}: {StatusCode} {ResponseBody}", containerName, ex.StatusCode, ex.Message);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Creates &lt;DATA_MOUNT&gt;/&lt;userId&gt; (and its nix/ subdir) owned by the
+    /// session user, via a short-lived root helper container from the
+    /// session-host image: the gateway does not mount DATA_MOUNT itself.
+    /// The helper sees all of DATA_MOUNT but only runs the fixed script
+    /// below, without network; existing entries are left untouched, and a
+    /// symlink the user planted at nix/ is never followed. A failure is
+    /// logged, not fatal — docker then creates the dir root-owned and a
+    /// root-mode entrypoint still hands it over.
+    /// </summary>
+    private async Task EnsureUserDataDirAsync(string userId, bool withNix, CancellationToken cancellationToken)
+    {
+        const string script = """
+            d="/data/$1"
+            if [ ! -e "$d" ] && [ ! -L "$d" ]; then
+                mkdir "$d" && chown "$2" "$d" || exit 1
+            fi
+            if [ "$3" = 1 ] && [ -d "$d" ] && [ ! -L "$d" ] \
+                && [ ! -e "$d/nix" ] && [ ! -L "$d/nix" ]; then
+                mkdir "$d/nix" && chown "$2" "$d/nix" || exit 1
+            fi
+            """;
+        var owner = DataDirOwner(_user, _puid, _pgid);
+        var dataMountRoot = _dataMount!.TrimEnd('/');
+        string? helperId = null;
+        try
+        {
+            var created = await _docker.Containers.CreateContainerAsync(
+                new CreateContainerParameters
+                {
+                    Image = _image,
+                    User = "0:0",
+                    Entrypoint = new List<string> { "/bin/sh", "-c", script, "sh", userId, owner, withNix ? "1" : "0" },
+                    Labels = new Dictionary<string, string> { ["axn-term-user"] = userId },
+                    HostConfig = new HostConfig
+                    {
+                        NetworkMode = "none",
+                        Binds = new List<string> { $"{(dataMountRoot.Length == 0 ? "/" : dataMountRoot)}:/data" },
+                    },
+                },
+                cancellationToken);
+            helperId = created.ID;
+            await _docker.Containers.StartContainerAsync(helperId, new ContainerStartParameters(), cancellationToken);
+            var result = await _docker.Containers.WaitContainerAsync(helperId, cancellationToken);
+            if (result.StatusCode != 0)
+            {
+                _logger.LogWarning("Preparing the data dir for {UserId} exited with {StatusCode}", userId, result.StatusCode);
+            }
+        }
+        catch (DockerApiException ex)
+        {
+            _logger.LogWarning(ex, "Could not prepare the data dir for {UserId}", userId);
+        }
+        finally
+        {
+            if (helperId is not null)
+            {
+                try
+                {
+                    await _docker.Containers.RemoveContainerAsync(
+                        helperId,
+                        new ContainerRemoveParameters { Force = true },
+                        CancellationToken.None);
+                }
+                catch (DockerApiException ex)
+                {
+                    _logger.LogWarning(ex, "Could not remove data dir helper {ContainerId}", helperId);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Owner ("uid:gid") for a user's data dir: the session host's numeric
+    /// non-root SESSION_HOST_USER when set, else PUID:PGID — which is also
+    /// the uid the entrypoint pins the session account to in root mode.
+    /// </summary>
+    public static string DataDirOwner(string sessionHostUser, string puid, string pgid)
+    {
+        var parts = sessionHostUser.Split(':');
+        var numeric = parts.Length is 1 or 2 && parts.All(p => p.Length > 0 && p.All(char.IsAsciiDigit));
+        if (numeric && parts[0] != "0")
+        {
+            return parts.Length == 2 ? sessionHostUser : $"{parts[0]}:{pgid}";
+        }
+
+        return $"{puid}:{pgid}";
     }
 
     private async Task EnsureVolumeAsync(string name, string userId, CancellationToken cancellationToken)

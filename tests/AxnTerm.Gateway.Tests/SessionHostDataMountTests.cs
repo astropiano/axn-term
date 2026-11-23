@@ -56,4 +56,19 @@ public class SessionHostDataMountTests
 
         Assert.NotEqual(alice, bob);
     }
+
+    [Theory]
+    // Compose default: SESSION_HOST_USER empty → container runs as PUID:PGID.
+    [InlineData("1000:1000", "1000", "1000", "1000:1000")]
+    [InlineData("1001:1002", "1000", "1000", "1001:1002")]
+    [InlineData("1001", "1000", "1000", "1001:1000")]
+    // Root mode: the entrypoint pins the session account to PUID:PGID.
+    [InlineData("0:0", "1000", "1000", "1000:1000")]
+    [InlineData("0", "1000", "1000", "1000:1000")]
+    [InlineData("root", "1500", "1500", "1500:1500")]
+    [InlineData("someone:staff", "1000", "1000", "1000:1000")]
+    public void DataDirIsOwnedByTheSessionUser(string sessionHostUser, string puid, string pgid, string expected)
+    {
+        Assert.Equal(expected, SessionHostContainerService.DataDirOwner(sessionHostUser, puid, pgid));
+    }
 }
