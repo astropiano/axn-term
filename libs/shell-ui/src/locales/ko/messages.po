@@ -14,7 +14,7 @@ msgstr "{0} · {1} 경유"
 msgid "{0} running {1} will be terminated"
 msgstr "실행 중인 {1} {0}개가 종료됩니다"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:537
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:544
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent}이(가) 메인 체크아웃에서 실행 중 — 워크트리로 격리할까요?"
 
@@ -313,7 +313,7 @@ msgid "Default shell"
 msgstr "기본 셸"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:563
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:570
 msgid "Delete {0}"
 msgstr "{0} 삭제"
 
@@ -339,7 +339,7 @@ msgstr "디렉터리"
 msgid "disabled"
 msgstr "비활성화됨"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:539
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
 msgid "Don't ask again"
 msgstr "다시 묻지 않기"
 
@@ -466,7 +466,7 @@ msgstr "글꼴 크기 (px)"
 msgid "For launchers such as the MR dashboard: `axn-term command axn-session create … --command`. Any program running as you can then start a command here, as with agterm."
 msgstr "MR 대시보드 같은 런처용: `axn-term command axn-session create … --command`. 내 계정으로 실행되는 모든 프로그램이 agterm처럼 여기서 명령을 시작할 수 있게 됩니다."
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:554
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:561
 msgid "Force remove"
 msgstr "강제 삭제"
 
@@ -653,7 +653,7 @@ msgstr "이 창에 새 워크스페이스 “{name}”"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "이 창에 새 워크스페이스 “{trimmed}”"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:538
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:545
 msgid "New worktree session"
 msgstr "새 워크트리 세션"
 
@@ -934,7 +934,7 @@ msgstr "제거"
 msgid "Remove icon"
 msgstr "아이콘 제거"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:455
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:462
 msgid "Remove worktree"
 msgstr "워크트리 삭제"
 
@@ -994,7 +994,7 @@ msgstr "지금 다시 시도"
 msgid "Retrying…"
 msgstr "재시도 중…"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:451
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:458
 msgid "Review worktree changes"
 msgstr "워크트리 변경 사항 검토"
 
@@ -1372,11 +1372,11 @@ msgid "Workspace header"
 msgstr "작업 공간 헤더"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:553
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:560
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "워크트리 삭제 실패 (변경 사항 있음?): {0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:562
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:569
 msgid "worktree removed — branch {0} kept"
 msgstr "워크트리 삭제됨 — 브랜치 {0} 유지"
