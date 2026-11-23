@@ -501,6 +501,61 @@ export interface PluginSettingsViewContext {
   workspaces: readonly Workspace[];
 }
 
+/** ctx handed to a plugin's `searchFilter.renderUI` search filter view. */
+export interface PluginSearchFilterRenderContext<T = unknown> {
+  /** The current filter value. `null` or `undefined` when no filter is active. */
+  value: T;
+  /** Set or clear the filter value. */
+  onChange: (value: T) => void;
+  /** Live sessions in the current window. */
+  sessions: readonly ShellSession[];
+  /** Workspaces in the current window. */
+  workspaces: readonly Workspace[];
+  /** The plugin's normalized settings section. */
+  pluginSettings: unknown;
+}
+
+/**
+ * Capability that ships a filter for the panel search:
+ * an additional filter predicate for sessions/workspaces and a separate UI.
+ */
+export interface PluginSearchFilter<T = unknown> {
+  /** Optional identifier for the search filter. */
+  id?: string;
+  /**
+   * Whether this search filter is enabled (e.g. from plugin settings).
+   * When omitted or returning true, the filter UI is rendered and its predicate applied.
+   */
+  enabled?: (settings: unknown) => boolean;
+  /**
+   * Returns true if `value` represents an active filter (e.g. non-null, non-empty).
+   */
+  isActive: (value: T) => boolean;
+  /**
+   * Filter predicate for a session.
+   * Return true if the session matches the filter.
+   */
+  matchesSession?: (
+    session: ShellSession,
+    workspace: Workspace | undefined,
+    value: T,
+    ctx: { pluginSettings: unknown },
+  ) => boolean;
+  /**
+   * Filter predicate for a workspace.
+   * Return true if the workspace itself satisfies the filter.
+   */
+  matchesWorkspace?: (
+    workspace: Workspace,
+    value: T,
+    ctx: { pluginSettings: unknown },
+  ) => boolean;
+  /**
+   * Renders the separate filter UI in the panel search area.
+   */
+  renderUI: (ctx: PluginSearchFilterRenderContext<T>) => ReactNode;
+}
+
 /**
  * One piece of session information a plugin offers the session panel (see
  * `SessionViewPlugin.sessionFields`). The plugin only provides it — where
@@ -941,6 +996,11 @@ export interface SessionViewPlugin {
    * into the plugin's plugins.yaml section and persists it.
    */
   renderSettings?: (ctx: PluginSettingsViewContext) => ReactNode;
+  /**
+   * Ships a filter for the panel search: an additional filter predicate
+   * applied to workspaces and sessions, and a separate UI.
+   */
+  searchFilter?: PluginSearchFilter<any>;
 }
 
 /**

@@ -332,6 +332,15 @@ hex can be typed or pasted, `parseHexColor`); a workspace's tint paints the whol
 (`openTagModal` in `app/tagHost.tsx`, mounted as `TagHost` in `ShellApp`); the
 `tagging.tags` card field shows only where `sessionCard` places it (the default
 layout shows no tag name; the tint stays). Design: `docs/superpowers/specs/2026-11-17-tagging-plugin-design.md`.
+Plugins can also declare a panel search filter capability via `searchFilter?:
+PluginSearchFilter<T>` — shipping a separate UI in the panel search area
+(`renderUI`), an `enabled` toggle gate, and session/workspace filter predicates
+(`matchesSession`, `matchesWorkspace`) applied alongside text search and
+waiting filters. The `tagging` plugin uses this for its `tagFilter` setting:
+when enabled in plugins.yaml or Settings → Plugins → Tags, a tag chip row
+(`TagFilter.tsx`) renders under the search bar; selecting a tag shows
+workspaces with all their sessions IF they have the tag on the workspace,
+and sessions if they have the tag or live in a tagged workspace.
 
 Plugins can declare hidden commands via `commands?: (string | PluginCommand)[]`
 — they join the built-in `axn-*` names for Tab completion. A plain string is

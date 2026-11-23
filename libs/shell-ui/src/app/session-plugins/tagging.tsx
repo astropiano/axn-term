@@ -1,7 +1,6 @@
 import { i18n } from '../../i18n';
 import { t } from '@lingui/core/macro';
 import { Tag } from 'lucide-react';
-import type { ShellSession, Workspace } from '../../types';
 import { openTagModal } from '../tagHost';
 import type { SessionViewPlugin } from './plugin';
 import { TAGGING, tagColor, tagColorOverrides } from './taggingModel';
@@ -10,13 +9,12 @@ import { themeTagPalette } from '../../themes';
 import { contrastText, resolveColour } from './tint';
 import { TagColorSettings } from './TagColorSettings';
 
-const tagsOf = (state: unknown): string[] => {
-  const tags = (state as { tags?: unknown } | null | undefined)?.tags;
-  return Array.isArray(tags) ? tags.filter((x): x is string => typeof x === 'string') : [];
-};
+import { TagFilter, sessionTags, workspaceTags, tagsOf } from './TagFilter';
 
-const sessionTags = (session: ShellSession): string[] => tagsOf(session.pluginState?.[TAGGING.id]);
-const workspaceTags = (workspace: Workspace): string[] => tagsOf(workspace.pluginState?.[TAGGING.id]);
+const hasTag = (tags: readonly string[], target: string): boolean => {
+  const key = target.trim().toLowerCase();
+  return tags.some((t) => t.trim().toLowerCase() === key);
+};
 
 function TagChip({ tag, colour }: { tag: string; colour: string }) {
   const { activeTheme } = useSettings();
@@ -80,6 +78,31 @@ export const taggingPlugin: SessionViewPlugin = {
       },
     },
   ],
+  settings: [
+    {
+      key: 'tagFilter',
+      label: 'Tag filter',
+      description: 'Filter workspaces and sessions by tag in the session panel.',
+      type: 'boolean',
+      default: false,
+    },
+  ],
+  searchFilter: {
+    id: 'tagFilter',
+    enabled: (settings) => Boolean((settings as { tagFilter?: boolean } | null | undefined)?.tagFilter),
+    isActive: (tag: string | null) => Boolean(tag && typeof tag === 'string' && tag.trim().length > 0),
+    matchesSession: (session, workspace, tag) => {
+      if (!tag) return true;
+      if (hasTag(sessionTags(session), tag)) return true;
+      if (workspace && hasTag(workspaceTags(workspace), tag)) return true;
+      return false;
+    },
+    matchesWorkspace: (workspace, tag) => {
+      if (!tag) return true;
+      return hasTag(workspaceTags(workspace), tag);
+    },
+    renderUI: (ctx) => <TagFilter {...ctx} />,
+  },
   renderSettings: (ctx) => <TagColorSettings {...ctx} />,
   sessionMenuItems: (_ctx, scope) => [
     {

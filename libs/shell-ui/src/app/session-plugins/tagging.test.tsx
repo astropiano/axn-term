@@ -106,3 +106,50 @@ it('shows the tag name only where the sessionCard layout places it', () => {
   expect(resolveCardLayout({ always: [['tagging.tags']] }, meta).always).toEqual([['tagging.tags']]);
   expect(all(resolveCardLayout({ hidden: ['tagging.tags'], title: ['tagging.tags'] }, meta))).not.toContain('tagging.tags');
 });
+
+it('declares tagFilter setting and searchFilter capability', () => {
+  expect(taggingPlugin.settings).toEqual([
+    expect.objectContaining({
+      key: 'tagFilter',
+      type: 'boolean',
+      default: false,
+    }),
+  ]);
+  expect(taggingPlugin.searchFilter).toBeDefined();
+  expect(taggingPlugin.searchFilter?.id).toBe('tagFilter');
+});
+
+it('enables searchFilter only when tagFilter setting is true', () => {
+  const sf = taggingPlugin.searchFilter!;
+  expect(sf.enabled?.({})).toBe(false);
+  expect(sf.enabled?.(undefined)).toBe(false);
+  expect(sf.enabled?.({ tagFilter: false })).toBe(false);
+  expect(sf.enabled?.({ tagFilter: true })).toBe(true);
+});
+
+it('filters workspaces and sessions by tag with workspace inheritance', () => {
+  const sf = taggingPlugin.searchFilter!;
+  const w1 = ws('w1', ['frontend']);
+  const w2 = ws('w2', ['backend']);
+  const s1 = session('s1', ['frontend']);
+  const s2 = session('s2', []); // untagged session
+  const s3 = session('s3', ['frontend']);
+  const s4 = session('s4', ['backend']);
+
+  expect(sf.isActive(null)).toBe(false);
+  expect(sf.isActive('')).toBe(false);
+  expect(sf.isActive('   ')).toBe(false);
+  expect(sf.isActive('frontend')).toBe(true);
+
+  // Workspace matches when it has the tag (case-insensitive)
+  expect(sf.matchesWorkspace?.(w1, 'frontend', { pluginSettings: {} })).toBe(true);
+  expect(sf.matchesWorkspace?.(w2, 'frontend', { pluginSettings: {} })).toBe(false);
+  expect(sf.matchesWorkspace?.(w1, 'FRONTEND', { pluginSettings: {} })).toBe(true);
+
+  // Sessions are shown if they have the tag OR their workspace has the tag
+  expect(sf.matchesSession?.(s1, w1, 'frontend', { pluginSettings: {} })).toBe(true);
+  expect(sf.matchesSession?.(s2, w1, 'frontend', { pluginSettings: {} })).toBe(true); // in w1 which has tag
+  expect(sf.matchesSession?.(s2, w2, 'frontend', { pluginSettings: {} })).toBe(false); // in w2 which does not
+  expect(sf.matchesSession?.(s3, w2, 'frontend', { pluginSettings: {} })).toBe(true); // s3 has tag even though w2 doesn't
+  expect(sf.matchesSession?.(s4, w2, 'frontend', { pluginSettings: {} })).toBe(false);
+});

@@ -1855,11 +1855,22 @@ export function SessionPanel({
   useEffect(() => {
     if (attentionCount === 0) setAttentionOnly(false);
   }, [attentionCount]);
-  const filtering = q !== '' || attentionOnly;
-  // Field-aware text match (name, branch, MR/Jira fields…) plus the
-  // "only sessions that need you" gate when the waiting filter is on.
-  const sessionVisible = (session: ShellSession) =>
-    sessionMatches(session) && (!attentionOnly || attentionIds.has(session.id));
+  const [filterValues, setFilterValues] = useState<Record<string, unknown>>({});
+
+  const activeSearchFilters = useMemo(() => {
+    return plugins.flatMap((p) => {
+      if (!p.searchFilter) return [];
+      const settings = pluginSettings[p.settingsKey ?? p.id];
+      if (p.searchFilter.enabled && !p.searchFilter.enabled(settings)) return [];
+      return [{ plugin: p, filter: p.searchFilter, settings }];
+    });
+  }, [plugins, pluginSettings]);
+
+  const hasActiveSearchFilter = activeSearchFilters.some((item) =>
+    item.filter.isActive(filterValues[item.plugin.id]),
+  );
+
+  const filtering = q !== '' || attentionOnly || hasActiveSearchFilter;
 
   // The open button's dropdown — the bare FolderOpen icon reads as "open a
   // folder", so the click opens labeled rows instead of a file dialog.
@@ -2138,15 +2149,72 @@ export function SessionPanel({
       return hit;
     };
   })();
+  const sessionWorkspace = (session: ShellSession): Workspace | undefined =>
+    workspaces.find((w) => w.id === session.workspaceId);
+
+  const sessionMatchesSearchFilters = (session: ShellSession, ws?: Workspace) => {
+    for (const item of activeSearchFilters) {
+      const val = filterValues[item.plugin.id];
+      if (!item.filter.isActive(val)) continue;
+      if (
+        item.filter.matchesSession &&
+        !item.filter.matchesSession(session, ws, val, { pluginSettings: item.settings })
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const workspaceMatchesSearchFilters = (workspace: Workspace) => {
+    for (const item of activeSearchFilters) {
+      const val = filterValues[item.plugin.id];
+      if (!item.filter.isActive(val)) continue;
+      const wsDirectMatch =
+        item.filter.matchesWorkspace?.(workspace, val, { pluginSettings: item.settings }) ?? false;
+      if (wsDirectMatch) continue;
+      const hasMatchingSession = sessions.some(
+        (s) =>
+          s.workspaceId === workspace.id &&
+          (item.filter.matchesSession
+            ? item.filter.matchesSession(s, workspace, val, { pluginSettings: item.settings })
+            : true),
+      );
+      if (!hasMatchingSession) return false;
+    }
+    return true;
+  };
+
+  // Field-aware text match (name, branch, MR/Jira fields…), waiting gate,
+  // and active plugin search filters.
+  const sessionVisible = (session: ShellSession) => {
+    const ws = sessionWorkspace(session);
+    return (
+      sessionMatches(session) &&
+      (!attentionOnly || attentionIds.has(session.id)) &&
+      sessionMatchesSearchFilters(session, ws)
+    );
+  };
+
   // A workspace stays listed when its own name matches or it hosts a matching
-  // session.
+  // session, provided it satisfies any active search filters.
   const visibleWorkspaces = filtering
-    ? workspaces.filter(
-        (ws) =>
-          // A matching workspace name only counts for the text filter.
-          (q !== '' && !attentionOnly && matchesFilter(ws.name)) ||
-          sessions.some((s) => s.workspaceId === ws.id && sessionVisible(s)),
-      )
+    ? workspaces.filter((ws) => {
+        if (!workspaceMatchesSearchFilters(ws)) return false;
+        if (q !== '' && !attentionOnly && matchesFilter(ws.name)) return true;
+        if (sessions.some((s) => s.workspaceId === ws.id && sessionVisible(s))) return true;
+        if (q === '' && !attentionOnly) {
+          const directMatch = activeSearchFilters.every((item) => {
+            const val = filterValues[item.plugin.id];
+            if (!item.filter.isActive(val)) return true;
+            return (
+              item.filter.matchesWorkspace?.(ws, val, { pluginSettings: item.settings }) ?? false
+            );
+          });
+          if (directMatch) return true;
+        }
+        return false;
+      })
     : workspaces;
 
   // The session backend fs calls (listDir/statPath) are routed through:
@@ -2238,8 +2306,20 @@ export function SessionPanel({
           )}
         </div>
       </div>
-      <div className="flex shrink-0 px-2.5 pb-2">
+      <div className="flex shrink-0 flex-col gap-1.5 px-2.5 pb-2">
         <PanelSearch value={query} onChange={setQuery} />
+        {activeSearchFilters.map(({ plugin, filter, settings: filterPluginSettings }) => (
+          <Fragment key={plugin.id}>
+            {filter.renderUI({
+              value: filterValues[plugin.id],
+              onChange: (next) =>
+                setFilterValues((prev) => ({ ...prev, [plugin.id]: next })),
+              sessions,
+              workspaces,
+              pluginSettings: filterPluginSettings,
+            })}
+          </Fragment>
+        ))}
       </div>
 
       {/* panelFontSize scales the list only — the toolbar row must keep its
