@@ -38,9 +38,15 @@ export function TagFilter({
     ]);
   }, [sessions, workspaces]);
 
-  if (tags.length === 0) return null;
+  const needle = value?.trim() ?? '';
+  const activeKey = needle === '' ? null : needle.toLowerCase();
+  // A selected tag that vanished (untagged or closed everywhere) keeps a
+  // dimmed chip so the active filter stays visible and clearable.
+  const stale = activeKey !== null && !tags.some((tag) => tag.trim().toLowerCase() === activeKey);
+  const staleHex = stale ? resolveColour(tagColor(needle, colors), palette) : undefined;
+  const staleText = staleHex ? contrastText(staleHex) : undefined;
 
-  const activeKey = value ? value.trim().toLowerCase() : null;
+  if (tags.length === 0 && !stale) return null;
 
   return (
     <div
@@ -98,6 +104,31 @@ export function TagFilter({
           </button>
         );
       })}
+      {stale && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          aria-pressed="true"
+          data-tip={t`Tag no longer in use — click to clear`}
+          className="flex h-5 max-w-full min-w-0 items-center gap-1 rounded-full px-2 text-[10px] font-medium opacity-60 transition-all duration-[var(--dur-1)]"
+          style={
+            staleHex && staleText
+              ? {
+                  backgroundColor: staleHex,
+                  color: staleText,
+                  boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${staleText} 25%, transparent)`,
+                }
+              : {
+                  backgroundColor: 'var(--fill-1)',
+                  color: 'var(--text-secondary)',
+                  boxShadow: 'inset 0 0 0 1px var(--hairline)',
+                }
+          }
+        >
+          <Tag className="h-2.5 w-2.5 shrink-0" />
+          <span className="truncate">{needle}</span>
+        </button>
+      )}
     </div>
   );
 }

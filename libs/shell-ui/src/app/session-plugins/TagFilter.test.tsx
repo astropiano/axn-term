@@ -108,3 +108,36 @@ it('clicking "All" deselects the current tag', async () => {
   await act(async () => allBtn?.click());
   expect(onChange).toHaveBeenCalledWith(null);
 });
+
+it('keeps a dimmed, clearable chip for a selected tag that is no longer in use', async () => {
+  const onChange = vi.fn();
+  const { container } = await renderFilter({
+    value: 'gone',
+    sessions: [session('s1', ['frontend'])],
+    onChange,
+  });
+  const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('gone'));
+  expect(chip).toBeDefined();
+  expect(chip?.getAttribute('aria-pressed')).toBe('true');
+  expect(chip?.className).toContain('opacity-60');
+  await act(async () => chip?.click());
+  expect(onChange).toHaveBeenCalledWith(null);
+});
+
+it('still renders the row when the last tag vanishes while selected', async () => {
+  const { container } = await renderFilter({
+    value: 'gone',
+    sessions: [session('s1', [])],
+  });
+  const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('gone'));
+  expect(chip).toBeDefined();
+});
+
+it('treats a whitespace-only filter value as no selection', async () => {
+  const { container } = await renderFilter({
+    value: '   ',
+    sessions: [session('s1', ['frontend'])],
+  });
+  const buttons = [...container.querySelectorAll('button')];
+  expect(buttons.map((b) => b.textContent?.trim())).toEqual(['All', 'frontend']);
+});
