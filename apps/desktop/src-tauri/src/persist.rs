@@ -36,8 +36,57 @@ pub(crate) fn backup_file() -> Result<PathBuf, String> {
     Ok(state_dir()?.join("state.json.bak"))
 }
 
-pub(crate) fn failed_state_file() -> Result<PathBuf, String> {
-    Ok(state_dir()?.join("state.json.failed"))
+/// Move a file that could not be parsed aside as `<name>.failed` — or
+/// `<name>.failed.<n>` when that name is taken — so it is kept for diagnosis
+/// and never overwrites an earlier quarantined file. Returns the new file
+/// name. The hard link fails atomically on an existing name, so a
+/// quarantine never clobbers another; where links are unsupported a plain
+/// rename to a free name is used.
+pub(crate) fn quarantine_file(path: &Path) -> Result<String, String> {
+    let mut n = 0u32;
+    let target = loop {
+        let target = if n == 0 {
+            with_suffix(path, ".failed")
+        } else {
+            with_suffix(path, &format!(".failed.{}", n))
+        };
+        n += 1;
+        match std::fs::hard_link(path, &target) {
+            Ok(()) => {
+                if let Err(e) = std::fs::remove_file(path) {
+                    eprintln!("could not remove quarantined {}: {}", path.display(), e);
+                }
+                break target;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) if target.symlink_metadata().is_err() => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    return Err(format!("could not quarantine {}: {}", path.display(), e));
+                }
+                std::fs::rename(path, &target).map_err(|e| {
+                    format!("could not quarantine {} as {}: {}", path.display(), target.display(), e)
+                })?;
+                break target;
+            }
+            Err(_) => continue,
+        }
+    };
+    sync_parent_dir(path);
+    Ok(target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default())
+}
+
+/// Read `path` as text: `Ok(None)` when it does not exist, `Err` for any
+/// other I/O error (EMFILE, permissions, …) — callers must not mistake a
+/// transient read failure for a missing or corrupt file and write over it.
+pub(crate) fn read_optional(path: &Path) -> Result<Option<String>, String> {
+    match std::fs::read_to_string(path) {
+        Ok(raw) => Ok(Some(raw)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("failed to read {}: {}", path.display(), e)),
+    }
 }
 
 pub(crate) fn legacy_file() -> Result<PathBuf, String> {
@@ -64,74 +113,73 @@ pub(crate) struct LoadedShellState {
     pub(crate) current_valid: bool,
 }
 
+/// Load state.json. A missing file falls through to the legacy
+/// sessions.json, then to an empty state. A file that cannot be parsed is
+/// quarantined under a unique name and the last-good backup is loaded. Any
+/// other I/O error is returned as `Err` without touching a file — callers
+/// that save must abort rather than overwrite state they could not read.
 pub(crate) fn read_shell_state() -> Result<LoadedShellState, String> {
     let path = state_file()?;
-    if path.exists() {
-        match std::fs::read_to_string(&path) {
-            Ok(raw) => match serde_json::from_str(&raw) {
-                Ok(state) => return Ok(LoadedShellState {
-                    state,
-                    current_valid: true,
-                    ..Default::default()
-                }),
-                Err(e) => eprintln!("state.json is corrupt ({}), trying backup", e),
-            },
-            Err(e) => eprintln!("failed to read state.json ({}), trying backup", e),
+    if let Some(raw) = read_optional(&path)? {
+        match serde_json::from_str(&raw) {
+            Ok(state) => return Ok(LoadedShellState {
+                state,
+                current_valid: true,
+                ..Default::default()
+            }),
+            Err(e) => eprintln!("state.json is corrupt ({}), trying backup", e),
         }
 
-        // Preserve the failed file as state.json.failed so the user can
-        // inspect what could not be loaded, then fall back to the backup of
-        // the last successfully written state.
-        let failed = failed_state_file()?;
-        if let Err(e) = std::fs::rename(&path, &failed) {
-            eprintln!("could not preserve failed state.json as {:?}: {}", failed, e);
-        }
-        let backup = backup_file()?;
-        if backup.exists() {
-            match std::fs::read_to_string(&backup) {
-                Ok(raw) => match serde_json::from_str(&raw) {
-                    Ok(state) => {
-                        eprintln!("restored state from backup state.json.bak");
-                        return Ok(LoadedShellState {
-                            state,
-                            restored_from_backup: true,
-                            failed_file: Some("state.json.failed".to_string()),
-                            current_valid: false,
-                        });
-                    }
-                    Err(e) => eprintln!("state.json.bak is corrupt: {}", e),
-                },
-                Err(e) => eprintln!("failed to read state.json.bak: {}", e),
-            }
+        // Read the backup of the last successfully written state first: an
+        // I/O error there aborts before anything is moved.
+        let backup = match read_optional(&backup_file()?)? {
+            Some(raw) => match serde_json::from_str::<ShellState>(&raw) {
+                Ok(state) => Some(state),
+                Err(e) => {
+                    eprintln!("state.json.bak is corrupt: {}", e);
+                    None
+                }
+            },
+            None => None,
+        };
+        // Preserve the corrupt file so the user can inspect what could not
+        // be loaded; if it cannot be moved aside, fail rather than let the
+        // next save overwrite it.
+        let failed = quarantine_file(&path)?;
+        eprintln!("quarantined corrupt state.json as {}", failed);
+        if let Some(state) = backup {
+            eprintln!("restored state from backup state.json.bak");
+            return Ok(LoadedShellState {
+                state,
+                restored_from_backup: true,
+                failed_file: Some(failed),
+                current_valid: false,
+            });
         }
     }
 
-    let legacy = legacy_file()?;
-    if legacy.exists() {
-        match std::fs::read_to_string(&legacy) {
-            Ok(raw) => match serde_json::from_str::<JsonValue>(&raw) {
-                Ok(mut value) => {
-                    let mut window = serde_json::json!({
-                        "id": "main",
-                        "name": "main",
-                    });
-                    if let Some(obj) = value.as_object_mut() {
-                        for key in ["workspaces", "sessions", "selectedWorkspaceId", "selectedSessionId"] {
-                            if let Some(v) = obj.remove(key) {
-                                if let Some(w) = window.as_object_mut() {
-                                    w.insert(key.to_string(), v);
-                                }
+    if let Some(raw) = read_optional(&legacy_file()?)? {
+        match serde_json::from_str::<JsonValue>(&raw) {
+            Ok(mut value) => {
+                let mut window = serde_json::json!({
+                    "id": "main",
+                    "name": "main",
+                });
+                if let Some(obj) = value.as_object_mut() {
+                    for key in ["workspaces", "sessions", "selectedWorkspaceId", "selectedSessionId"] {
+                        if let Some(v) = obj.remove(key) {
+                            if let Some(w) = window.as_object_mut() {
+                                w.insert(key.to_string(), v);
                             }
                         }
                     }
-                    return Ok(LoadedShellState {
-                        state: ShellState { windows: vec![window] },
-                        ..Default::default()
-                    });
                 }
-                Err(e) => eprintln!("legacy sessions.json is corrupt: {}", e),
-            },
-            Err(e) => eprintln!("failed to read legacy sessions.json: {}", e),
+                return Ok(LoadedShellState {
+                    state: ShellState { windows: vec![window] },
+                    ..Default::default()
+                });
+            }
+            Err(e) => eprintln!("legacy sessions.json is corrupt: {}", e),
         }
     }
 
@@ -339,7 +387,12 @@ pub(crate) fn save_window_state_blocking(
         return Err(e.to_string());
     }
 
-    let loaded = read_shell_state().unwrap_or_default();
+    // A failed read must abort the save: merging into an empty or older
+    // state would drop or roll back the other windows.
+    let loaded = read_shell_state().map_err(|e| {
+        eprintln!("save_window_state read error: {}", e);
+        e
+    })?;
     let mut shell_state = loaded.state;
     let target = JsonValue::String(window_id);
     shell_state.windows.retain(|w| w.get("id") != Some(&target));
@@ -369,7 +422,12 @@ pub(crate) fn delete_window_state_sync(state: &AppState, window_id: &str) -> Res
         return Err(e.to_string());
     }
 
-    let loaded = read_shell_state().unwrap_or_default();
+    // A failed read must abort the save: merging into an empty or older
+    // state would drop or roll back the other windows.
+    let loaded = read_shell_state().map_err(|e| {
+        eprintln!("delete_window_state read error: {}", e);
+        e
+    })?;
     let mut shell_state = loaded.state;
     let target = JsonValue::String(window_id.to_string());
     shell_state.windows.retain(|w| w.get("id") != Some(&target));
@@ -575,15 +633,27 @@ pub(crate) fn kv_file() -> Result<PathBuf, String> {
     Ok(state_dir()?.join("kv.json"))
 }
 
-pub(crate) fn read_kv_store() -> serde_json::Map<String, JsonValue> {
-    let Ok(path) = kv_file() else {
-        return serde_json::Map::new();
+/// Load kv.json. A missing file is an empty store; a file that does not
+/// hold a JSON object is quarantined under a unique name (kept for
+/// diagnosis) and treated as empty. Any other I/O error is returned, so
+/// `kv_set` never writes a store it could not read over the real one.
+pub(crate) fn read_kv_store() -> Result<serde_json::Map<String, JsonValue>, String> {
+    let path = kv_file()?;
+    let Some(raw) = read_optional(&path)? else {
+        return Ok(serde_json::Map::new());
     };
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|raw| serde_json::from_str::<JsonValue>(&raw).ok())
-        .and_then(|v| v.as_object().cloned())
-        .unwrap_or_default()
+    match serde_json::from_str::<JsonValue>(&raw) {
+        Ok(JsonValue::Object(map)) => Ok(map),
+        parsed => {
+            let reason = match parsed {
+                Err(e) => e.to_string(),
+                Ok(_) => "not a JSON object".to_string(),
+            };
+            let failed = quarantine_file(&path)?;
+            eprintln!("kv.json is corrupt ({}), quarantined as {}", reason, failed);
+            Ok(serde_json::Map::new())
+        }
+    }
 }
 
 pub(crate) fn write_kv_store(store: &serde_json::Map<String, JsonValue>) -> Result<(), String> {
@@ -596,14 +666,14 @@ pub(crate) fn write_kv_store(store: &serde_json::Map<String, JsonValue>) -> Resu
 
 #[tauri::command]
 pub(crate) fn kv_get(key: String) -> Result<Option<String>, String> {
-    Ok(read_kv_store()
+    Ok(read_kv_store()?
         .get(&key)
         .and_then(|v| v.as_str().map(|s| s.to_string())))
 }
 
 #[tauri::command]
 pub(crate) fn kv_set(key: String, value: Option<String>) -> Result<(), String> {
-    let mut store = read_kv_store();
+    let mut store = read_kv_store()?;
     match value {
         Some(v) => {
             store.insert(key, JsonValue::String(v));
@@ -646,21 +716,33 @@ pub(crate) fn secure_set(key: String, value: Option<String>) -> Result<(), Strin
 mod state_backup_tests {
     use super::*;
 
-    /// Exercises the whole backup/fallback lifecycle in one test — the
-    /// AXN_TERM_STATE_DIR env override is process-global, so these steps must
-    /// not run in parallel with other state tests.
-    #[test]
-    fn corrupt_state_falls_back_to_last_good_backup() {
+    /// AXN_TERM_STATE_DIR is process-global: tests that set it hold this
+    /// lock so they never run against each other's directory.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// A fresh temp dir set as the state dir; the guard serializes callers.
+    fn temp_state_dir(tag: &str) -> (std::sync::MutexGuard<'static, ()>, PathBuf) {
+        let guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!(
-            "axn-term-state-test-{}-{}",
+            "axn-term-{}-test-{}-{}",
+            tag,
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
-        std::env::set_var("AXN_TERM_STATE_DIR", &dir);
         std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("AXN_TERM_STATE_DIR", &dir);
+        (guard, dir)
+    }
+
+    /// Exercises the whole backup/fallback lifecycle in one test — the
+    /// AXN_TERM_STATE_DIR env override is process-global, so these steps must
+    /// not run in parallel with other state tests.
+    #[test]
+    fn corrupt_state_falls_back_to_last_good_backup() {
+        let (_guard, dir) = temp_state_dir("state");
 
         let state_file = dir.join("state.json");
         let backup = dir.join("state.json.bak");
@@ -724,11 +806,98 @@ mod state_backup_tests {
         assert!(!state_file.exists(), "corrupt file was quarantined");
 
         // With no backup either, the read falls through to a default state.
+        // The second corrupt file gets its own name — the first is kept.
         std::fs::write(&state_file, "still broken").unwrap();
         std::fs::remove_file(&backup).unwrap();
         let loaded = read_shell_state().unwrap();
         assert!(!loaded.restored_from_backup);
         assert!(loaded.state.windows.is_empty());
+        assert_eq!(std::fs::read_to_string(&failed).unwrap(), "{ not json");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("state.json.failed.1")).unwrap(),
+            "still broken"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn state_read_error_aborts_save_without_touching_files() {
+        let (_guard, dir) = temp_state_dir("state-io");
+        let app = crate::AppState::new(false);
+        let state_file = dir.join("state.json");
+
+        save_window_state_blocking(&app, "a".into(), serde_json::json!({"n": 1})).unwrap();
+        save_window_state_blocking(&app, "b".into(), serde_json::json!({"n": 2})).unwrap();
+        let good = std::fs::read_to_string(&state_file).unwrap();
+
+        // Simulate an I/O error that is not NotFound (EMFILE, EACCES, …):
+        // state.json is moved aside and a directory sits in its place.
+        let saved = dir.join("state.json.saved");
+        std::fs::rename(&state_file, &saved).unwrap();
+        std::fs::create_dir(&state_file).unwrap();
+
+        assert!(read_shell_state().is_err());
+        assert!(load_window_state_blocking(&app, "a".into()).is_err());
+        assert!(
+            save_window_state_blocking(&app, "a".into(), serde_json::json!({"n": 3})).is_err(),
+            "a save must not merge into a state it could not read"
+        );
+        assert!(delete_window_state_sync(&app, "b").is_err());
+        assert!(state_file.is_dir(), "nothing written over the unreadable state");
+        assert!(!dir.join("state.json.failed").exists(), "an I/O error is not corruption");
+
+        // Once readable again, both windows are still there.
+        std::fs::remove_dir(&state_file).unwrap();
+        std::fs::rename(&saved, &state_file).unwrap();
+        assert_eq!(std::fs::read_to_string(&state_file).unwrap(), good);
+        assert_eq!(
+            load_window_state_blocking(&app, "b".into()).unwrap().unwrap()["n"],
+            serde_json::json!(2)
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn kv_store_missing_corrupt_and_unreadable() {
+        let (_guard, dir) = temp_state_dir("kv");
+        let kv = dir.join("kv.json");
+
+        // Missing file: empty store, first write creates it.
+        assert_eq!(kv_get("a".into()).unwrap(), None);
+        kv_set("a".into(), Some("1".into())).unwrap();
+        kv_set("b".into(), Some("2".into())).unwrap();
+        assert_eq!(kv_get("a".into()).unwrap().as_deref(), Some("1"));
+        kv_set("b".into(), None).unwrap();
+        assert_eq!(kv_get("b".into()).unwrap(), None);
+
+        // Unreadable (not NotFound): reads and writes fail, nothing replaced.
+        let saved = dir.join("kv.json.saved");
+        std::fs::rename(&kv, &saved).unwrap();
+        std::fs::create_dir(&kv).unwrap();
+        assert!(kv_get("a".into()).is_err());
+        assert!(kv_set("c".into(), Some("3".into())).is_err());
+        assert!(kv.is_dir(), "kv_set did not write over an unreadable store");
+        assert!(!dir.join("kv.json.failed").exists(), "an I/O error is not corruption");
+        std::fs::remove_dir(&kv).unwrap();
+        std::fs::rename(&saved, &kv).unwrap();
+        assert_eq!(kv_get("a".into()).unwrap().as_deref(), Some("1"), "store survived");
+
+        // Corrupt: quarantined under a unique name, store starts empty.
+        std::fs::write(&kv, "{ broken").unwrap();
+        kv_set("c".into(), Some("3".into())).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("kv.json.failed")).unwrap(), "{ broken");
+        assert_eq!(kv_get("c".into()).unwrap().as_deref(), Some("3"));
+        assert_eq!(kv_get("a".into()).unwrap(), None);
+
+        // Valid JSON that is not an object is corrupt too; the earlier
+        // quarantined file is kept.
+        std::fs::write(&kv, "[1]").unwrap();
+        assert_eq!(kv_get("c".into()).unwrap(), None);
+        assert_eq!(std::fs::read_to_string(dir.join("kv.json.failed")).unwrap(), "{ broken");
+        assert_eq!(std::fs::read_to_string(dir.join("kv.json.failed.1")).unwrap(), "[1]");
+        assert!(!kv.exists());
 
         std::fs::remove_dir_all(&dir).ok();
     }
