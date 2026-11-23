@@ -187,6 +187,18 @@ describe('normalizePr', () => {
     expect(item.reviewDecision).toBe('review_required');
   });
 
+  it('treats legacy approving reviews as approval too', () => {
+    const item = normalizePr({
+      number: 5,
+      reviewDecision: null,
+      author: { login: 'bob' },
+      reviews: { nodes: [{ author: { login: 'carol' } }] },
+    });
+    expect(item.approved).toBe(true);
+    expect(item.reviewDecision).toBe('approved');
+    expect(item.approvedBy).toEqual(['carol']);
+  });
+
   it('treats APPROVED decision as approved', () => {
     const item = normalizePr({ number: 1, reviewDecision: 'APPROVED' });
     expect(item.approved).toBe(true);
@@ -549,7 +561,7 @@ describe('refreshPrOverview on GitHub-specific answers', () => {
     const o = currentPrOverview();
     expect(o.status).toBe('ready');
     expect(o.mine.map((p) => p.reference)).toEqual(['#9']);
-    expect(o.warning).toBe('2 results could not be loaded: Resource protected by organization SAML enforcement.');
+    expect(o.warning).toBe('Some pull requests could not be loaded (2 errors): Resource protected by organization SAML enforcement.');
   });
 
   it('fails when the errors leave no viewer at all', async () => {

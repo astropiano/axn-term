@@ -711,16 +711,16 @@ export function normalizePr(raw: RawGqlPr): GhPrItem {
   const project = raw.repository?.nameWithOwner ?? '';
   const number = Number(raw.number ?? 0);
   const author = raw.author?.login ?? '';
-  const opinionated = raw.latestOpinionatedReviews?.nodes;
-  const reviews = (
-    opinionated
-      ? opinionated.filter((r) => (r?.state ?? '').toUpperCase() === 'APPROVED')
-      : (raw.reviews?.nodes ?? [])
-  )
+  // Older snapshots/fixtures carry approving reviews only — treat each as APPROVED.
+  const reviewNodes =
+    raw.latestOpinionatedReviews?.nodes ??
+    (raw.reviews?.nodes ?? []).map((n) => ({ state: 'APPROVED', author: n?.author }));
+  const reviews = reviewNodes
+    .filter((r) => (r?.state ?? '').toUpperCase() === 'APPROVED')
     .map((r) => r?.author?.login ?? '')
     .filter(Boolean);
   // reviewDecision is null unless branch protection requires reviews.
-  const decision = raw.reviewDecision || (opinionated ? decisionFromReviews(opinionated, author) : '');
+  const decision = raw.reviewDecision || decisionFromReviews(reviewNodes, author);
   const rollup =
     raw.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ?? null;
   return {
@@ -806,7 +806,7 @@ export function refreshPrOverview(settings?: {
       // org withholds its PRs as FORBIDDEN): keep what came back, warn.
       if (!user) throw new Error(errors[0] ?? 'no viewer — run `gh auth login`');
       const warning = errors.length
-        ? `${errors.length} result${errors.length === 1 ? '' : 's'} could not be loaded: ${compactCliError([...new Set(errors)].join(' '))}`
+        ? `Some pull requests could not be loaded (${errors.length} error${errors.length === 1 ? '' : 's'}): ${compactCliError([...new Set(errors)].join(' '))}`
         : undefined;
       const me = user.login ?? '';
       const nodes = (c?: { nodes?: (RawGqlPr | null)[] }) =>
