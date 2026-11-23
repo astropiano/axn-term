@@ -86,19 +86,27 @@ export function olderThan(entries: DraftEntry[], ageMs: number, now = Date.now()
 }
 
 /**
- * A `sh -c` script that moves `paths` to the trash: `gio trash` where it
- * exists, else a move into `~/.Trash` (macOS) or the XDG trash folder, with a
- * suffix when the name is taken. Paths are single-quoted. Prints how many
- * files were trashed.
+ * A `sh -c` script that moves `paths` to the trash, keeping the origin the
+ * OS needs for "Put Back" where it can: the `trash` CLI when found, else
+ * Finder through `osascript` (macOS — asks once for Automation access to
+ * Finder), else `gio trash` (Linux), else a plain move into `~/.Trash` / the
+ * XDG trash folder with a suffix when the name is taken. Paths are
+ * single-quoted. Prints how many files were trashed.
  */
 export function trashScript(paths: string[]): string {
   const calls = paths.map((p) => `trash_one ${shellQuote(p)}`).join('\n');
+  const finder =
+    `osascript -e 'on run argv' -e 'tell application "Finder" to delete (POSIX file (item 1 of argv) as alias)' -e 'end run' "$1"`;
   return [
+    'PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"',
     'if [ "$(uname)" = Darwin ]; then d="$HOME/.Trash"; else d="${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files"; fi',
     'n=0',
+    'done_one() { [ ! -e "$1" ] && n=$((n+1)); }',
     'trash_one() {',
     '  [ -e "$1" ] || return 0',
-    '  if [ "$(uname)" != Darwin ] && command -v gio >/dev/null 2>&1 && gio trash -- "$1" 2>/dev/null; then n=$((n+1)); return 0; fi',
+    '  if command -v trash >/dev/null 2>&1 && trash "$1" >/dev/null 2>&1 && done_one "$1"; then return 0; fi',
+    `  if [ "$(uname)" = Darwin ] && command -v osascript >/dev/null 2>&1 && ${finder} >/dev/null 2>&1 && done_one "$1"; then return 0; fi`,
+    '  if [ "$(uname)" != Darwin ] && command -v gio >/dev/null 2>&1 && gio trash -- "$1" 2>/dev/null && done_one "$1"; then return 0; fi',
     '  mkdir -p "$d" || return 1',
     '  b=$(basename "$1"); dest="$d/$b"; i=0',
     '  while [ -e "$dest" ]; do i=$((i+1)); dest="$d/$b.$(date +%s).$i"; done',

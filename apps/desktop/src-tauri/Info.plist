@@ -12,6 +12,8 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>axn-term runs shells and tools that need to reach devices on your local network.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>axn-term moves old scratchpad drafts to the Trash through Finder, so Put Back keeps working.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_http._tcp</string>

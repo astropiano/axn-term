@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -70,8 +70,15 @@ describe('trashScript', () => {
     const trash = process.platform === 'darwin' ? join(home, '.Trash') : join(home, 'Trash', 'files');
     mkdirSync(trash, { recursive: true });
     writeFileSync(join(trash, 'c.md'), 'already there');
-    const run = spawnSync('sh', ['-c', trashScript([join(src, 'a b.md'), join(src, 'c.md'), join(src, 'missing.md')])], {
-      env: { PATH: '/usr/bin:/bin', HOME: home, XDG_DATA_HOME: join(home) },
+    // A PATH with only the plain tools: no trash/osascript/gio, so the test
+    // never touches the real trash or Finder.
+    const bin = mkdtempSync(join(tmpdir(), 'axn-bin-'));
+    for (const tool of ['uname', 'mkdir', 'basename', 'mv', 'date']) {
+      const found = spawnSync('sh', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).stdout.trim();
+      symlinkSync(found, join(bin, tool));
+    }
+    const run = spawnSync('/bin/sh', ['-c', trashScript([join(src, 'a b.md'), join(src, 'c.md'), join(src, 'missing.md')])], {
+      env: { PATH: bin, HOME: home, XDG_DATA_HOME: join(home) },
       encoding: 'utf8',
     });
     expect(run.stdout.trim()).toBe('2');
@@ -79,6 +86,17 @@ describe('trashScript', () => {
     const names = readdirSync(trash);
     expect(names).toContain('a b.md');
     expect(names.filter((n) => n.startsWith('c.md'))).toHaveLength(2);
+  });
+});
+
+describe('trashScript order', () => {
+  it('prefers the trash CLI, then Finder, then gio, before a plain move', () => {
+    const script = trashScript(['/a']);
+    const at = (needle: string) => script.indexOf(needle);
+    expect(at('command -v trash')).toBeGreaterThan(-1);
+    expect(at('command -v trash')).toBeLessThan(at('osascript'));
+    expect(at('osascript')).toBeLessThan(at('gio trash'));
+    expect(at('gio trash')).toBeLessThan(at('mv --'));
   });
 });
 
