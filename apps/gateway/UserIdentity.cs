@@ -19,6 +19,28 @@ public static class UserIdentity
     private static readonly Regex HashedIdShape = new(
         "^[a-z](?:[a-z0-9_-]{0,21}[a-z0-9])?-[0-9a-f]{8}$", RegexOptions.CultureInvariant);
 
+    /// <summary>What the session-host entrypoint accepts as an account name
+    /// (it falls back to "axn" otherwise, while the PTY still targets the
+    /// id). Clean names already exclude a leading '_'/'-'.</summary>
+    private static readonly Regex LinuxUserName = new(
+        "^[a-z][a-z0-9_-]{0,31}$", RegexOptions.CultureInvariant);
+
+    /// <summary>Accounts and groups that already exist in the session-host
+    /// image: the entrypoint reuses an existing account instead of creating
+    /// one, so passing e.g. "root" through would hand out a root PTY. Keep
+    /// in sync with the image's /etc/passwd and /etc/group.</summary>
+    private static readonly HashSet<string> ReservedNames = new(StringComparer.Ordinal)
+    {
+        // /etc/passwd
+        "root", "daemon", "bin", "sys", "sync", "games", "man", "lp", "mail",
+        "news", "uucp", "proxy", "www-data", "backup", "list", "irc", "gnats",
+        "nobody", "ubuntu", "app",
+        // /etc/group
+        "adm", "tty", "disk", "kmem", "dialout", "fax", "voice", "cdrom",
+        "floppy", "tape", "sudo", "audio", "dip", "operator", "src", "shadow",
+        "utmp", "video", "sasl", "plugdev", "staff", "users", "nogroup", "docker",
+    };
+
     /// <summary>
     /// The token's user name (preferred_username, then sub) mapped through
     /// <see cref="ToUserId"/>; null when the token carries no identity claim —
@@ -56,13 +78,20 @@ public static class UserIdentity
     /// A clean name that has exactly the shape of a hashed id (e.g.
     /// "johndoe-30f69670") is hashed as well — otherwise a user could pick
     /// the hashed id of someone else ("john.doe") as their name and get
-    /// that user's container and home. Only names of that exact shape
-    /// change; every other clean name keeps its id.
+    /// that user's container and home.
+    /// Clean names that are not a valid Linux user name (longer than 32
+    /// chars, or not starting with a letter, e.g. "2fa-tester") or that name
+    /// an account/group of the session-host image ("root", "daemon", …) are
+    /// hashed too: the entrypoint could not create that account, or would
+    /// reuse the existing system one. Every other clean name keeps its id.
     /// </summary>
     public static string ToUserId(string rawName)
     {
         var sanitized = SanitizeAscii(rawName);
-        if (sanitized == rawName && !HashedIdShape.IsMatch(rawName))
+        if (sanitized == rawName
+            && LinuxUserName.IsMatch(rawName)
+            && !ReservedNames.Contains(rawName)
+            && !HashedIdShape.IsMatch(rawName))
         {
             return rawName;
         }

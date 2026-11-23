@@ -41,8 +41,9 @@ env:
   AXN_DOMAIN: "localhost"
   KEYCLOAK_REALM: "axn-term"
   KEYCLOAK_CLIENT_ID: "axn-term"
-  # bind-mounted into every session host at the same path; shells land
-  # there and axn state goes to <DATA_MOUNT>/.axn-term. Set a real host
+  # each session host gets its own <DATA_MOUNT>/<user> bind-mounted at the
+  # same path; shells land there and axn state goes to
+  # <DATA_MOUNT>/<user>/.axn-term. Set a real host
   # path in .env — unset falls back to /tmp inside the session hosts.
   # DATA_MOUNT: "/mnt/extended/axn-term"
   # kata only when the Docker host has the kata runtime installed; this dev

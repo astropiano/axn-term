@@ -15,7 +15,8 @@ public class UserIdentityTests
     [InlineData("alice")]
     [InlineData("bob_smith")]
     [InlineData("dev-1")]
-    [InlineData("3f2c9a1e-8b7d-4c6e-9f00-1a2b3c4d5e6f")]
+    [InlineData("rooter")]
+    [InlineData("a2345678901234567890123456789012")]
     public void CleanNamesStayUnchanged(string name)
     {
         Assert.Equal(name, UserIdentity.ToUserId(name));
@@ -67,12 +68,36 @@ public class UserIdentityTests
     [InlineData("build-1234567")]
     [InlineData("build-123456789")]
     [InlineData("abc-1234567g")]
-    [InlineData("1abc-30f69670")]
     [InlineData("abc_30f69670")]
-    [InlineData("averyveryveryverylongname1-30f69670")]
     public void CleanNamesOutsideTheHashedShapeKeepTheirId(string name)
     {
         Assert.Equal(name, UserIdentity.ToUserId(name));
+    }
+
+    [Theory]
+    // Clean, but not a Linux user name: leading digit, longer than 32.
+    [InlineData("2fa-tester")]
+    [InlineData("1abc-30f69670")]
+    [InlineData("a23456789012345678901234567890123")]
+    [InlineData("averyveryveryverylongname1-30f69670")]
+    [InlineData("3f2c9a1e-8b7d-4c6e-9f00-1a2b3c4d5e6f")]
+    // Clean, but an existing account or group in the session-host image.
+    [InlineData("root")]
+    [InlineData("daemon")]
+    [InlineData("nobody")]
+    [InlineData("ubuntu")]
+    [InlineData("sudo")]
+    [InlineData("docker")]
+    public void InvalidOrReservedCleanNamesAreHashed(string name)
+    {
+        var id = UserIdentity.ToUserId(name);
+
+        Assert.NotEqual(name, id);
+        Assert.Matches(LinuxUserName, id);
+        Assert.Matches("-[0-9a-f]{8}$", id);
+        Assert.Equal(id, UserIdentity.ToUserId(name));
+        // Picking the hashed id as a name does not land on it either.
+        Assert.NotEqual(id, UserIdentity.ToUserId(id));
     }
 
     [Theory]
@@ -101,9 +126,14 @@ public class UserIdentityTests
     [Fact]
     public void FallsBackToSub()
     {
-        var user = Principal(new Claim("sub", "3f2c9a1e-8b7d-4c6e-9f00-1a2b3c4d5e6f"));
+        const string sub = "3f2c9a1e-8b7d-4c6e-9f00-1a2b3c4d5e6f";
+        var user = Principal(new Claim("sub", sub));
 
-        Assert.Equal("3f2c9a1e-8b7d-4c6e-9f00-1a2b3c4d5e6f", UserIdentity.Resolve(user));
+        // A UUID sub is 36 chars — too long for a Linux user name, so it
+        // goes through the hashing branch.
+        var id = UserIdentity.Resolve(user);
+        Assert.Equal(UserIdentity.ToUserId(sub), id);
+        Assert.Matches(LinuxUserName, id!);
     }
 
     [Fact]
