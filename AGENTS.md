@@ -182,10 +182,13 @@ Application state is stored under the user's home directory:
     flush. Saves are serialized through `saveChainRef` so bursts never write
     `state.json.tmp` concurrently.
   - `state.json.bak` — backup of the last previously valid `state.json`, rotated on each successful save (writes go through `state.json.tmp` + rename, so a failed save never clobbers the good state)
-  - `state.json.failed` — a `state.json` that could not be parsed is quarantined here for diagnosis; on startup the backup is loaded instead and the window state carries `restoredFromBackup`/`failedStateFile` markers (stripped again on save) so the frontend can show a banner
+  - `state.json.failed` — a `state.json` that could not be parsed is quarantined here for diagnosis (`.failed.1`, `.failed.2`, … when the name is taken — an earlier quarantined file is never overwritten); on startup the backup is loaded instead and the window state carries `restoredFromBackup`/`failedStateFile` markers (stripped again on save) so the frontend can show a banner. Any other read error (EMFILE, permissions) is not corruption: load/save/delete return the error and write nothing, so a save never merges into empty or older state
   - `sessions.json` — legacy single-window state (migrated into `state.json` on first read)
   - `kv.json` — generic key-value store behind `services.storage` (e.g. agent
-    review explanations); desktop only, web uses `localStorage`
+    review explanations); desktop only, web uses `localStorage`. A missing
+    file is an empty store; an unparseable one is quarantined as
+    `kv.json.failed[.<n>]`; any other read error fails `kv_get`/`kv_set`
+    without writing
   - `themes/` — user themes: every `*.yaml`/`*.yml`/`*.json` file directly in
     it, in the same format as the built-in `libs/shell-ui/themes/*.yaml`
     (`id`, `name`, `mode`, `colors`, optional `ui`/`tagColors`). Desktop reads
@@ -1643,10 +1646,13 @@ Application state is stored under the user's home directory:
     flush. Saves are serialized through `saveChainRef` so bursts never write
     `state.json.tmp` concurrently.
   - `state.json.bak` — backup of the last previously valid `state.json`, rotated on each successful save (writes go through `state.json.tmp` + rename, so a failed save never clobbers the good state)
-  - `state.json.failed` — a `state.json` that could not be parsed is quarantined here for diagnosis; on startup the backup is loaded instead and the window state carries `restoredFromBackup`/`failedStateFile` markers (stripped again on save) so the frontend can show a banner
+  - `state.json.failed` — a `state.json` that could not be parsed is quarantined here for diagnosis (`.failed.1`, `.failed.2`, … when the name is taken — an earlier quarantined file is never overwritten); on startup the backup is loaded instead and the window state carries `restoredFromBackup`/`failedStateFile` markers (stripped again on save) so the frontend can show a banner. Any other read error (EMFILE, permissions) is not corruption: load/save/delete return the error and write nothing, so a save never merges into empty or older state
   - `sessions.json` — legacy single-window state (migrated into `state.json` on first read)
   - `kv.json` — generic key-value store behind `services.storage` (e.g. agent
-    review explanations); desktop only, web uses `localStorage`
+    review explanations); desktop only, web uses `localStorage`. A missing
+    file is an empty store; an unparseable one is quarantined as
+    `kv.json.failed[.<n>]`; any other read error fails `kv_get`/`kv_set`
+    without writing
   - `themes/` — user themes: every `*.yaml`/`*.yml`/`*.json` file directly in
     it, in the same format as the built-in `libs/shell-ui/themes/*.yaml`
     (`id`, `name`, `mode`, `colors`, optional `ui`/`tagColors`). Desktop reads
