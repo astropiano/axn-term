@@ -8,7 +8,6 @@ import { appRuntime } from '../appRuntime';
 import {
   GitPullRequest,
   Globe,
-  MessageSquare,
   RefreshCw,
   Text,
   X,
@@ -57,7 +56,11 @@ import {
   mrNeedsAction,
   mrWaitingForMe,
   openThreads,
+  summarizeOpenThreads,
+  ThreadIndicator,
   type GlabMrItem,
+  type MrDiscussion,
+  type MrThreadSummary,
 } from './glabMr';
 
 // ---------------------------------------------------------------------------
@@ -88,6 +91,8 @@ interface SessionPr {
   discussionsResolved: boolean;
   /** Unresolved review threads; absent when the threads fetch failed. */
   openThreads?: number;
+  /** Who commented last on the open threads; absent when the fetch failed. */
+  threadSummary?: MrThreadSummary;
   /** mergeStateStatus, lowercased (e.g. `clean`, `blocked`, `behind`). */
   mergeStatus: string;
   /** Aggregated statusCheckRollup, lowercased; null when no checks exist. */
@@ -103,7 +108,10 @@ interface SessionPr {
  * "Needs action" for a PR I own: the GitLab rules plus CHANGES_REQUESTED,
  * which GitHub reports as a review decision rather than a thread flag.
  */
-export function prNeedsAction(pr: Pick<GhPrItem, 'conflicts' | 'approved' | 'pipeline' | 'discussions' | 'reviewDecision'>): boolean {
+export function prNeedsAction(
+  pr: Pick<GhPrItem, 'conflicts' | 'approved' | 'pipeline' | 'discussions' | 'reviewDecision'> &
+    Partial<Pick<GhPrItem, 'threadSummary' | 'mergeStatus' | 'openThreadCount'>>,
+): boolean {
   return pr.reviewDecision === 'changes_requested' || mrNeedsAction(pr);
 }
 
@@ -251,8 +259,16 @@ interface RawThreadsResponse {
   data?: {
     repository?: Record<
       string,
-      { reviewThreads?: { nodes?: { isResolved?: boolean }[] } } | null
+      {
+        reviewThreads?: {
+          nodes?: {
+            isResolved?: boolean;
+            comments?: { nodes?: { createdAt?: string; author?: { login?: string } | null }[] };
+          }[];
+        };
+      } | null
     >;
+    viewer?: { login?: string };
   };
 }
 
@@ -266,19 +282,25 @@ export function threadsCommand(numbers: number[]): string {
   const body = numbers
     .map(
       (_, i) =>
-        `p${i}: pullRequest(number: $n${i}) { reviewThreads(first: 100) { nodes { isResolved } } }`,
+        `p${i}: pullRequest(number: $n${i}) { reviewThreads(first: 100) { nodes { isResolved comments(last: 20) { nodes { createdAt author { login } } } } } }`,
     )
     .join(' ');
   const varArgs = numbers.map((n, i) => `-F n${i}=${Math.trunc(n)}`).join(' ');
-  const query = `query($owner: String!, $name: String!, ${vars}) { repository(owner: $owner, name: $name) { ${body} } }`;
+  const query = `query($owner: String!, $name: String!, ${vars}) { viewer { login } repository(owner: $owner, name: $name) { ${body} } }`;
   return forgeCliCommand(
     'gh',
     `api graphql -F 'owner={owner}' -F 'name={repo}' ${varArgs} -f query=${shellQuote(query)}`,
   );
 }
 
+/** Open-thread count and who commented last, per PR number. */
+interface OpenThreads {
+  open: number;
+  summary?: MrThreadSummary;
+}
+
 /**
- * Unresolved-thread count per PR number, one batched graphql call — `gh pr
+ * Open threads per PR number, one batched graphql call — `gh pr
  * list`/`view` don't expose reviewThreads (resolution is GraphQL-only) and
  * placeholders only substitute in `-F` values, so the numbers ride as
  * variables. On any failure the map stays empty → threads read as resolved.
@@ -287,15 +309,23 @@ async function fetchOpenThreads(
   ctx: SessionViewContext & PluginApi,
   root: string,
   numbers: number[],
-): Promise<Map<number, number>> {
-  const open = new Map<number, number>();
+): Promise<Map<number, OpenThreads>> {
+  const open = new Map<number, OpenThreads>();
   if (numbers.length === 0) return open;
   try {
     const out = await ctx.exec(threadsCommand(numbers), root);
-    const repo = (JSON.parse(out) as RawThreadsResponse).data?.repository ?? {};
+    const data = (JSON.parse(out) as RawThreadsResponse).data;
+    const repo = data?.repository ?? {};
+    const me = data?.viewer?.login ?? '';
     numbers.forEach((n, i) => {
       const nodes = repo[`p${i}`]?.reviewThreads?.nodes;
-      if (nodes) open.set(n, nodes.filter((t) => !t.isResolved).length);
+      if (!nodes) return;
+      open.set(n, {
+        open: nodes.filter((t) => !t.isResolved).length,
+        summary: me
+          ? summarizeOpenThreads({ discussions: nodes.map(normalizeThread) }, me)
+          : undefined,
+      });
     });
   } catch {
     // gh missing/unauth'd/non-GitHub — threads read as resolved
@@ -343,7 +373,8 @@ async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
   );
   for (const item of top) if (item.url) prPeople.fill(item.url, cliPrPeople(item));
   const prs = top.map((item): SessionPr => {
-    const openThreads = openThreadCounts.get(item.number ?? 0);
+    const found = openThreadCounts.get(item.number ?? 0);
+    const openThreads = found?.open;
     return {
       number: item.number ?? 0,
       reference: `#${item.number}`,
@@ -353,6 +384,7 @@ async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
       conflicts: item.mergeable === 'CONFLICTING',
       discussionsResolved: openThreads === undefined ? true : openThreads === 0,
       openThreads,
+      threadSummary: found?.summary,
       mergeStatus: (item.mergeStateStatus ?? '').toLowerCase(),
       checks: rollupStatus(item.statusCheckRollup),
       reviewDecision: (item.reviewDecision || decisionFromReviews(item.latestReviews ?? [])).toLowerCase(),
@@ -555,7 +587,7 @@ async function prWatchTick(args: {
 // threads × 20 comments ≈ 120k nodes; threads(100) × comments(50) was 620k
 // and failed every refresh). `comments(last:)`: mrWaitingForMe looks at the
 // newest note of a thread.
-const PR_FRAGMENT = `... on PullRequest { number title bodyText url isDraft mergeable headRefName baseRefName updatedAt reviewDecision author { login } assignees(first: 20) { nodes { login } } reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } } repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } reviewThreads(first: 50) { nodes { isResolved comments(last: 20) { nodes { author { login } } } } } latestOpinionatedReviews(first: 30) { nodes { state author { login } } } }`;
+const PR_FRAGMENT = `... on PullRequest { number title bodyText url isDraft mergeable headRefName baseRefName updatedAt reviewDecision author { login } assignees(first: 20) { nodes { login } } reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } } repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } reviewThreads(first: 50) { nodes { isResolved comments(last: 20) { nodes { createdAt author { login } } } } } latestOpinionatedReviews(first: 30) { nodes { state author { login } } } }`;
 
 const PR_OVERVIEW_QUERY = `query {
   viewer { login }
@@ -652,7 +684,7 @@ interface RawGqlPr {
   reviewThreads?: {
     nodes?: {
       isResolved?: boolean;
-      comments?: { nodes?: { author?: { login?: string } | null }[] };
+      comments?: { nodes?: { createdAt?: string; author?: { login?: string } | null }[] };
     }[];
   };
   /** Older snapshots/fixtures: approving reviews only. */
@@ -663,6 +695,17 @@ interface RawGqlPr {
 
 const logins = (conn?: { nodes?: ({ login?: string } | null)[] }) =>
   (conn?.nodes ?? []).map((n) => n?.login ?? '').filter(Boolean);
+
+/** One GraphQL review thread as the shared discussion shape. */
+function normalizeThread(t: NonNullable<NonNullable<RawGqlPr['reviewThreads']>['nodes']>[number]): MrDiscussion {
+  const notes = t.comments?.nodes ?? [];
+  return {
+    resolvable: true,
+    resolved: t.isResolved ?? false,
+    notes: notes.map((n) => n?.author?.login ?? ''),
+    lastAt: notes[notes.length - 1]?.createdAt,
+  };
+}
 
 export function normalizePr(raw: RawGqlPr): GhPrItem {
   const project = raw.repository?.nameWithOwner ?? '';
@@ -702,11 +745,7 @@ export function normalizePr(raw: RawGqlPr): GhPrItem {
       .map((n) => n?.requestedReviewer?.login ?? '')
       .filter(Boolean),
     updatedAt: raw.updatedAt ?? '',
-    discussions: (raw.reviewThreads?.nodes ?? []).map((t) => ({
-      resolvable: true,
-      resolved: t.isResolved ?? false,
-      notes: (t.comments?.nodes ?? []).map((n) => n?.author?.login ?? ''),
-    })),
+    discussions: (raw.reviewThreads?.nodes ?? []).map(normalizeThread),
     reviewDecision: decision.toLowerCase(),
   };
 }
@@ -771,7 +810,10 @@ export function refreshPrOverview(settings?: {
         : undefined;
       const me = user.login ?? '';
       const nodes = (c?: { nodes?: (RawGqlPr | null)[] }) =>
-        (c?.nodes ?? []).filter((n): n is RawGqlPr => !!n).map(normalizePr);
+        (c?.nodes ?? [])
+          .filter((n): n is RawGqlPr => !!n)
+          .map(normalizePr)
+          .map((pr) => ({ ...pr, threadSummary: summarizeOpenThreads(pr, me) }));
       const assigned = nodes(parsed.data?.assigned);
       const authored = nodes(parsed.data?.authored);
       const review = nodes(parsed.data?.review);
@@ -903,10 +945,9 @@ function SessionPrs({ ctx }: { ctx: SessionViewContext & PluginApi }) {
                   </span>
                 )}
                 {threadLabel && (
-                  <span className="flex items-center gap-0.5 text-[var(--orange)]">
-                    <MessageSquare className="h-3 w-3" />
+                  <ThreadIndicator open={pr.openThreads ?? 0} summary={pr.threadSummary}>
                     {threadLabel}
-                  </span>
+                  </ThreadIndicator>
                 )}
                 {pr.checks && <ChecksChip status={pr.checks} />}
               </div>
@@ -1090,10 +1131,9 @@ function PrRow({ pr, badge, env, showDescription = true }: { showDescription?: b
             </span>
           )}
           {threads > 0 && (
-            <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--orange)]">
-              <MessageSquare className="h-3 w-3" />
+            <ThreadIndicator open={threads} summary={pr.threadSummary}>
               {threads}
-            </span>
+            </ThreadIndicator>
           )}
           {pr.pipeline && (
             <span className="shrink-0 text-[10px]">

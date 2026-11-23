@@ -1093,7 +1093,7 @@ function threadSummaryColor(summary?: MrThreadSummary): string {
   return 'var(--orange)';
 }
 
-function ThreadIndicator({
+export function ThreadIndicator({
   open,
   summary,
   children,

@@ -211,6 +211,48 @@ describe('prNeedsAction', () => {
   });
 });
 
+describe('prNeedsAction with a thread summary', () => {
+  const sum = (waitingForMe: number, waitingForOther: number) => ({ waitingForMe, waitingForOther });
+  it('only threads waiting on me make an open PR an action', () => {
+    const base = { discussions: [thread(['bob'])] };
+    expect(prNeedsAction(pr({ ...base, threadSummary: sum(1, 0) }))).toBe(true);
+    expect(prNeedsAction(pr({ ...base, threadSummary: sum(0, 1) }))).toBe(false);
+  });
+  it('approved and waiting on others to resolve is not an action unless mergeable', () => {
+    const base = { approved: true, discussions: [thread(['me'])], threadSummary: sum(0, 1) };
+    expect(prNeedsAction(pr({ ...base, mergeStatus: 'unknown' }))).toBe(false);
+    expect(prNeedsAction(pr({ ...base, mergeStatus: 'mergeable' }))).toBe(true);
+  });
+});
+
+describe('review thread data', () => {
+  it('normalizePr keeps the newest comment time of a thread', () => {
+    const item = normalizePr({
+      number: 1,
+      reviewThreads: {
+        nodes: [
+          {
+            isResolved: false,
+            comments: {
+              nodes: [
+                { createdAt: '2026-11-22T09:00:00Z', author: { login: 'me' } },
+                { createdAt: '2026-11-23T09:00:00Z', author: { login: 'bob' } },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    expect(item.discussions[0]).toMatchObject({ notes: ['me', 'bob'], lastAt: '2026-11-23T09:00:00Z' });
+  });
+  it('the session threads query asks for the viewer and comment times', () => {
+    const argv = argvOf(threadsCommand([7]));
+    const query = argv.find((a) => a.startsWith('query'))?.slice('query='.length) ?? argv.join(' ');
+    expect(query).toContain('viewer { login }');
+    expect(query).toContain('createdAt author { login }');
+  });
+});
+
 function ctx(
   pluginSettings: unknown,
   prs = [
