@@ -13,6 +13,7 @@ import {
 import type {
   PluginApi,
   RepoMenuItem,
+  SessionIdentifier,
   SessionViewContext,
   SessionViewPlugin,
 } from './plugin';
@@ -117,6 +118,8 @@ interface ScratchpadSettings {
   patterns?: string;
   defaultExt?: string;
   gitignoreDrafts?: boolean;
+  recentDraftHours?: number;
+  showCurrentDrafts?: boolean;
 }
 
 function settingsOf(ctx: Ctx): ScratchpadSettings {
@@ -194,6 +197,30 @@ export interface DraftFile {
   name: string;
   /** Absolute path. */
   path: string;
+  modifiedAt?: number;
+}
+
+export function draftMatchesIdentifier(name: string, identifier: string): boolean {
+  const escaped = identifier.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escaped.length > 0 && new RegExp(`(^|[^A-Za-z0-9])${escaped}(?=$|[^A-Za-z0-9])`, 'i').test(name);
+}
+
+export function currentDrafts(
+  drafts: DraftFile[],
+  identifiers: SessionIdentifier[],
+  recentHours: number,
+  now = Date.now(),
+): DraftFile[] {
+  if (identifiers.length === 0 || !Number.isFinite(recentHours) || recentHours <= 0) return [];
+  const cutoff = now - recentHours * 60 * 60 * 1000;
+  return drafts
+    .filter(
+      (draft) =>
+        draft.modifiedAt !== undefined &&
+        draft.modifiedAt >= cutoff &&
+        identifiers.some((identifier) => draftMatchesIdentifier(draft.name, identifier.value)),
+    )
+    .sort((a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0));
 }
 
 export async function listDrafts(
@@ -205,7 +232,9 @@ export async function listDrafts(
     const entries = await ctx.listDir(dir, loc.repoRoot).catch(() => null);
     for (const e of entries ?? []) {
       if (e.isFile && e.name !== '.gitignore') {
-        out.push({ dir, name: e.name, path: `${loc.repoRoot}/${dir}/${e.name}` });
+        const path = `${loc.repoRoot}/${dir}/${e.name}`;
+        const modifiedAt = (await ctx.statPath(path).catch(() => null))?.modifiedAt;
+        out.push({ dir, name: e.name, path, modifiedAt });
       }
     }
   }
@@ -292,6 +321,7 @@ function agentHintPrompt(loc: ScratchpadLocation): string {
 
 interface ScratchpadState {
   dirs?: string[];
+  currentDrafts?: DraftFile[];
 }
 
 function stateOf(ctx: Ctx): ScratchpadState {
@@ -299,19 +329,34 @@ function stateOf(ctx: Ctx): ScratchpadState {
 }
 
 const refreshTimers = new Map<string, number>();
+const closedSessions = new Set<string>();
 const REFRESH_DELAY_MS = 800;
+const CURRENT_DRAFTS_REFRESH_MS = 30_000;
 
 async function refreshDirs(ctx: Ctx): Promise<void> {
   const loc = await resolveScratchpad(ctx);
   const next = loc?.dirs ?? [];
-  if (JSON.stringify(stateOf(ctx).dirs ?? []) !== JSON.stringify(next)) {
-    ctx.updatePluginState({ dirs: next });
+  const identifiers = ctx.getSessionIdentifiers();
+  const drafts = loc && identifiers.length
+    ? currentDrafts(
+        await listDrafts(ctx, loc),
+        identifiers,
+        settingsOf(ctx).recentDraftHours ?? 0.5,
+      )
+    : [];
+  const state = stateOf(ctx);
+  if (
+    JSON.stringify(state.dirs ?? []) !== JSON.stringify(next) ||
+    JSON.stringify(state.currentDrafts ?? []) !== JSON.stringify(drafts)
+  ) {
+    ctx.updatePluginState({ dirs: next, currentDrafts: drafts });
   }
 }
 
 /** Output settles → the session may have cd'd to another repo → re-resolve. */
 function scheduleRefresh(ctx: Ctx): void {
   const id = ctx.session.id;
+  if (closedSessions.has(id)) return;
   const existing = refreshTimers.get(id);
   if (existing !== undefined) window.clearTimeout(existing);
   refreshTimers.set(
@@ -319,6 +364,9 @@ function scheduleRefresh(ctx: Ctx): void {
     window.setTimeout(() => {
       refreshTimers.delete(id);
       void refreshDirs(ctx);
+      if (!closedSessions.has(id)) {
+        window.setTimeout(() => scheduleRefresh(ctx), CURRENT_DRAFTS_REFRESH_MS);
+      }
     }, REFRESH_DELAY_MS),
   );
 }
@@ -634,6 +682,28 @@ function ScratchpadView({
   );
 }
 
+function CurrentDrafts({ ctx }: { ctx: Ctx }) {
+  const drafts = stateOf(ctx).currentDrafts ?? [];
+  if (drafts.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[11px] text-[var(--text-secondary)]">current drafts</span>
+      {drafts.map((draft) => (
+        <button
+          key={draft.path}
+          type="button"
+          onClick={() => ctx.openTab({ path: draft.path, kind: 'preview' })}
+          data-tip={draft.path}
+          className="flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] text-[var(--accent)] hover:bg-[var(--surface)] hover:underline"
+        >
+          <FileText className="h-3 w-3 shrink-0" />
+          <span className="min-w-0 truncate">{draft.name}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Plugin definition
 // ---------------------------------------------------------------------------
@@ -667,6 +737,20 @@ export const scratchpadPlugin: SessionViewPlugin = {
       label: 'Auto-gitignore draft folders',
       description:
         'When the plugin creates a draft folder it seeds a `*` .gitignore, so drafts never pollute `git status`.',
+      type: 'boolean',
+      default: true,
+    },
+    {
+      key: 'recentDraftHours',
+      label: 'Recent drafts window (hours)',
+      description: 'Current drafts match identifiers in filenames modified within this window. Default: 0.5 hours.',
+      type: 'number',
+      default: 0.5,
+    },
+    {
+      key: 'showCurrentDrafts',
+      label: 'Show current drafts in session cards',
+      description: 'Shows recent identifier-matching drafts as preview buttons on the selected session card.',
       type: 'boolean',
       default: true,
     },
@@ -708,12 +792,15 @@ export const scratchpadPlugin: SessionViewPlugin = {
     return items;
   },
   onSessionOpen: (ctx) => {
+    closedSessions.delete(ctx.session.id);
     void refreshDirs(ctx);
+    scheduleRefresh(ctx);
   },
   onOutput: (ctx) => {
     scheduleRefresh(ctx);
   },
   onClose: (ctx) => {
+    closedSessions.add(ctx.session.id);
     const timer = refreshTimers.get(ctx.session.id);
     if (timer !== undefined) window.clearTimeout(timer);
     refreshTimers.delete(ctx.session.id);
@@ -731,4 +818,18 @@ export const scratchpadPlugin: SessionViewPlugin = {
       close={close}
     />
   ),
+  sessionFields: [
+    {
+      id: 'currentDrafts',
+      label: 'Current drafts',
+      kind: 'block',
+      zone: 'selected',
+      search: (ctx) => {
+        if (settingsOf(ctx).showCurrentDrafts === false) return null;
+        return (stateOf(ctx).currentDrafts ?? []).map((draft) => draft.name);
+      },
+      value: (ctx) =>
+        settingsOf(ctx).showCurrentDrafts === false ? null : <CurrentDrafts ctx={ctx} />,
+    },
+  ],
 };

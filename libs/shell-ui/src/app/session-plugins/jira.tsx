@@ -17,7 +17,13 @@ import { PanelHeader } from '../PanelHeader';
 import { RailItem } from '../RailItem';
 import { PluginIcon } from '../SessionPanel';
 import { sessionDisplayName, type ShellSession } from '../../types';
-import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
+import type {
+  PluginApi,
+  SessionIdentifier,
+  SessionIdentifierContext,
+  SessionViewContext,
+  SessionViewPlugin,
+} from './plugin';
 import { registerTicketSource, type Ticket } from './ticketSources';
 
 /**
@@ -515,20 +521,33 @@ function SessionTickets({ keys }: { keys: string[] }) {
 }
 
 /** The session's ticket keys when the plugin is active, else none. */
-function ticketsOf(ctx: SessionViewContext & PluginApi): string[] {
-  const result = jiraConfig(ctx.pluginSettings as PluginSettingsSection | undefined);
+function ticketKeysForSession(
+  session: ShellSession,
+  settings: unknown,
+): string[] {
+  const result = jiraConfig(settings as PluginSettingsSection | undefined);
   if (!result.ok) return [];
-  const s = ctx.session;
   return sessionTicketKeys(
     {
-      mrTitles: sessionMrTitles(s.pluginState as Record<string, unknown> | undefined),
-      branch: s.repo?.branch,
-      // The custom name, else the terminal-reported one (an agent's title).
-      name: s.name?.trim() || s.autoName,
-      cwd: s.cwd,
+      mrTitles: sessionMrTitles(session.pluginState as Record<string, unknown> | undefined),
+      branch: session.repo?.branch,
+      name: session.name?.trim() || session.autoName,
+      cwd: session.cwd,
     },
     result.config.projectKeys,
   );
+}
+
+function ticketsOf(ctx: SessionViewContext & PluginApi): string[] {
+  return ticketKeysForSession(ctx.session, ctx.pluginSettings);
+}
+
+function jiraIdentifiers(ctx: SessionIdentifierContext): SessionIdentifier[] {
+  return ticketKeysForSession(ctx.session, ctx.pluginSettings).map((value) => ({
+    value,
+    source: 'jira',
+    label: 'Jira',
+  }));
 }
 
 /** Live sessions grouped under the ticket keys they carry, in first-seen order. */
@@ -667,6 +686,7 @@ export const jiraPlugin: SessionViewPlugin = {
   logo: 'Ticket',
   version: '0.1.0',
   defaultEnabled: false,
+  sessionIdentifiers: jiraIdentifiers,
   renderRail: ({ sessions, pluginSettings, viewActive, toggleView }) => (
     <JiraRail
       sessions={sessions}

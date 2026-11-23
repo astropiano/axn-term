@@ -12,6 +12,8 @@ import {
   findDraft,
   resolveScratchpad,
   listDrafts,
+  currentDrafts,
+  draftMatchesIdentifier,
   runScratch,
   agentHintLines,
   type ScratchpadLocation,
@@ -112,6 +114,7 @@ function makeHarness(
     pluginSettings,
     getSession: () => session,
     getSessionCount: () => 1,
+    getSessionIdentifiers: () => [],
     exec: async (command: string, cwd?: string) => {
       if (command.includes('rev-parse --show-toplevel')) return cwd ?? REPO;
       if (command.includes('remote get-url')) return 'git@gitlab.example.com:axn/axn-term.git';
@@ -248,6 +251,30 @@ describe('findDraft', () => {
     expect(findDraft(drafts, 'b notes.md')?.name).toBe('b notes.md');
     expect(findDraft(drafts, 'b notes')?.name).toBe('b notes.md');
     expect(findDraft(drafts, 'nope')).toBeUndefined();
+  });
+});
+
+describe('currentDrafts', () => {
+  const now = 1_000_000;
+  const id = { value: 'AIACC-123', source: 'jira' };
+  it('matches identifiers in filenames and orders recent files newest first', () => {
+    const drafts = [
+      { dir: 'drafts', name: 'AIACC-123-old.md', path: '/r/drafts/old.md', modifiedAt: now - 10_000 },
+      { dir: 'drafts', name: 'notes-AIACC-123.md', path: '/r/drafts/new.md', modifiedAt: now - 1_000 },
+      { dir: 'drafts', name: 'AIACC-1234.md', path: '/r/drafts/wrong.md', modifiedAt: now - 500 },
+      { dir: 'drafts', name: 'AIACC-123-stale.md', path: '/r/drafts/stale.md', modifiedAt: now - 2_000_000 },
+    ];
+    expect(currentDrafts(drafts, [id], 0.5, now).map((d) => d.name)).toEqual([
+      'notes-AIACC-123.md',
+      'AIACC-123-old.md',
+    ]);
+  });
+
+  it('returns nothing without identifiers or modification times', () => {
+    expect(draftMatchesIdentifier('AIACC-123.md', 'AIACC-123')).toBe(true);
+    expect(draftMatchesIdentifier('AIACC-1234.md', 'AIACC-123')).toBe(false);
+    expect(currentDrafts([{ dir: 'drafts', name: 'AIACC-123.md', path: '/x' }], [id], 0.5, now)).toEqual([]);
+    expect(currentDrafts([], [], 0.5, now)).toEqual([]);
   });
 });
 
