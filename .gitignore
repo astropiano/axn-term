@@ -51,3 +51,6 @@ scenarios/**/certs/
 
 # Container build artifacts (apps/mobile/build/android/build.sh)
 /apps/mobile/build/artifacts
+
+# Local worktrees
+worktrees/

@@ -116,6 +116,7 @@ export function TagModal({
                 <button
                   type="button"
                   aria-label={t`Change colour of ${name}`}
+                  data-tip={t`Change colour`}
                   onClick={() => setColouring(colouring === name ? null : name)}
                   className="h-3 w-3 shrink-0 rounded-full ring-offset-1 ring-offset-[var(--elevated)] hover:ring-1 hover:ring-[var(--text-secondary)]"
                   style={{ backgroundColor: cssColour(tagColor(name, colors)) }}

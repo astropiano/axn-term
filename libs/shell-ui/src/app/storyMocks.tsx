@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { MemoryStats, SessionBackend, ShellServices } from '@axn-term/session-backend';
 import type { ShellPlatform } from '../platform';
 import { Settings } from 'lucide-react';
@@ -333,11 +333,14 @@ export function unbindStoryRuntime() {
 export function StoryShellProviders({
   children,
   configYaml,
+  pluginsYaml,
 }: {
   children: ReactNode;
   /** Canned config.yaml — seeds the SettingsProvider (e.g. `remoteEnabled:
    * true` so the Remote rail item and its accordion render). */
   configYaml?: string;
+  /** Canned plugins.yaml — seeds the PluginSettingsProvider (e.g. `tagging: { tagFilter: true }`). */
+  pluginsYaml?: string;
 }) {
   // A canned config would otherwise re-apply the default theme over the
   // toolbar's choice once it loads.
@@ -346,12 +349,22 @@ export function StoryShellProviders({
   const configStore = seeded
     ? { load: () => Promise.resolve(seeded), save: () => Promise.resolve() }
     : undefined;
+  const pluginSettingsStore = useMemo(
+    () =>
+      pluginsYaml !== undefined
+        ? {
+            read: () => Promise.resolve(pluginsYaml),
+            write: () => Promise.resolve(),
+          }
+        : storyPlatform.pluginSettingsStore,
+    [pluginsYaml],
+  );
   return (
     <SessionBackendProvider backend={storyBackend}>
       <ShellPlatformProvider platform={storyPlatform}>
         <ShellServicesProvider services={storyServices} fileReader={() => undefined}>
           <SettingsProvider configStore={configStore}>
-            <PluginSettingsProvider store={storyPlatform.pluginSettingsStore}>
+            <PluginSettingsProvider store={pluginSettingsStore}>
               {children}
             </PluginSettingsProvider>
           </SettingsProvider>
