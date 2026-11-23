@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { echoReply } from '../../shellQuote';
 import type { RepoInfo, ShellSession } from '../../types';
 import type { RepoMenuContext, SessionViewContext, PluginApi } from './plugin';
 import { pluginCommands } from './plugin';
@@ -75,7 +76,7 @@ describe('git-inspect plugin', () => {
       gitExec.mockClear();
       gitExec.mockRejectedValue(new Error('not a repo'));
       const out = await axnGit().run?.(ctx('/tmp', []), undefined, 'axn-git');
-      expect(out).toBe('echo "axn-git: not inside a git repository"');
+      expect(out).toBe(echoReply('axn-git: not inside a git repository'));
     });
   });
 });

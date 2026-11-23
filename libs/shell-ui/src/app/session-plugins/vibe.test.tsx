@@ -331,7 +331,7 @@ describe('vibe plugin session restore', () => {
     const h = makeCtx(s, store);
     const declared = pluginCommands(vibePlugin).find((c) => c.name === 'axn-vibe-resume');
     const cmd = await declared?.run?.(h.ctx, undefined, 'axn-vibe-resume');
-    expect(cmd).toBe(`echo "axn-vibe-resume: no remembered vibe session"`);
+    expect(cmd).toBe(`echo 'axn-vibe-resume: no remembered vibe session'`);
   });
 });
 

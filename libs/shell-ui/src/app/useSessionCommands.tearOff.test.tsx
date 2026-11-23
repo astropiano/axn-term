@@ -6,6 +6,7 @@ import type { SessionBackend } from '@axn-term/session-backend';
 import type { ShellPlatform } from '../platform';
 import type { ShellSession, Workspace } from '../types';
 import { useSessionCommands, type SessionCommandDeps } from './useSessionCommands';
+import { echoReply } from '../shellQuote';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -66,7 +67,7 @@ it('axn-session-window explains itself for the only session in a window', async 
   const tearOff = vi.fn(async () => null);
   await mount([session('s-1')], tearOff);
   await expect(Promise.resolve(dispatch('s-1', 'axn-session-window'))).resolves.toBe(
-    'echo "axn-session-window: this is the only session in its window"',
+    echoReply('axn-session-window: this is the only session in its window'),
   );
   expect(tearOff).not.toHaveBeenCalled();
 });
@@ -74,6 +75,6 @@ it('axn-session-window explains itself for the only session in a window', async 
 it('axn-session-window says so where new windows are not available (web)', async () => {
   await mount([session('s-1'), session('s-2')]);
   await expect(Promise.resolve(dispatch('s-1', 'axn-session-window'))).resolves.toBe(
-    'echo "axn-session-window: new windows are not available here"',
+    echoReply('axn-session-window: new windows are not available here'),
   );
 });

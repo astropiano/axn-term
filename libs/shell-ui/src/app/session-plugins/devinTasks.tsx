@@ -11,7 +11,7 @@ import {
 } from './agentResume';
 import { agentResumePanel } from './agentResumePanel';
 import { agentCommand } from './devWorkflow';
-import { shellQuote } from '../../shellQuote';
+import { echoReply, shellQuote } from '../../shellQuote';
 
 type DevinTaskStatus = 'pending' | 'running' | 'completed' | 'blocked';
 
@@ -750,7 +750,7 @@ export const devinPlugin: SessionViewPlugin = {
         const remembered = rememberedDevinSession(ctx);
         if (!remembered) {
           axnLog('warn', 'devin-resume', 'no remembered devin session');
-          return `echo "axn-devin-resume: no remembered devin session"`;
+          return echoReply('axn-devin-resume: no remembered devin session');
         }
         ctx.updatePluginState({
           devinSessionName: remembered.name,

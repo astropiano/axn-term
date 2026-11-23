@@ -10,7 +10,7 @@ import { RailItem } from '../RailItem';
 import { usePluginSettings } from '../PluginSettingsProvider';
 import { WorkspacePicker } from '../../WorkspacePicker';
 import { axnLog } from '../log';
-import { promptArg, shellQuote, shellWord } from '../../shellQuote';
+import { echoReply, promptArg, shellQuote, shellWord } from '../../shellQuote';
 import { shellTokens } from '../shellCommandSupport';
 import { forgeOfRemote } from './forge';
 import { pickFromList } from '../pickerHost';
@@ -1931,7 +1931,7 @@ function scheduleReconcile(ctx: Ctx): void {
 // Commands + menu items
 // ---------------------------------------------------------------------------
 
-const echo = (msg: string) => `echo ${JSON.stringify(msg)}`;
+const echo = (msg: string) => echoReply(msg);
 
 /** Shell-ish tokenizer for command args — honours single/double quotes. */
 export { shellTokens };

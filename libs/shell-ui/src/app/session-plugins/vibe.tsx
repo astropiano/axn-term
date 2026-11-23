@@ -10,7 +10,7 @@ import {
   rememberLastAgentSession,
 } from './agentResume';
 import { agentResumePanel } from './agentResumePanel';
-import { shellQuote } from '../../shellQuote';
+import { echoReply, shellQuote } from '../../shellQuote';
 
 // Anchored: session.process is the argv-derived basename, so 'vibe' and
 // 'vibe-agent' match while 'python -m vibe' (module launch) does not.
@@ -553,7 +553,7 @@ export const vibePlugin: SessionViewPlugin = {
         const remembered = rememberedVibeSession(ctx);
         if (!remembered) {
           axnLog('warn', 'vibe-resume', 'no remembered vibe session');
-          return `echo "axn-vibe-resume: no remembered vibe session"`;
+          return echoReply('axn-vibe-resume: no remembered vibe session');
         }
         ctx.updatePluginState({
           vibeSessionName: remembered.name,

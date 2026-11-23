@@ -4,6 +4,7 @@ import { ExternalLink, Globe, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { shellServices } from '../../services';
 import { EmptyState } from '../EmptyState';
 import { PanelHeader } from '../PanelHeader';
+import { echoReply } from '../../shellQuote';
 import { fieldClass, ghostButtonClass, secondaryButtonClass } from '../chromeStyles';
 import { viewKey } from '../railOrder';
 import {
@@ -266,7 +267,7 @@ function ExternalViewsSettings({
 }
 
 const USAGE = 'usage: axn-views open <url> [title] | select <key|title> | close <key> | current';
-const echo = (text: string) => `echo ${JSON.stringify(text)}`;
+const echo = (text: string) => echoReply(text);
 
 /** `axn-views …` — app level, so `axn-term command` can drive it from any process. */
 async function axnViews(ctx: PluginAppCommandContext, arg: string | undefined): Promise<string> {

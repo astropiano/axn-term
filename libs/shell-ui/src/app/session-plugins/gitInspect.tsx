@@ -1,4 +1,5 @@
 import { git } from '../gitClient';
+import { echoReply } from '../../shellQuote';
 import type { SessionViewPlugin } from './plugin';
 
 /**
@@ -46,7 +47,7 @@ export const gitInspectPlugin: SessionViewPlugin = {
       takesArg: true,
       run: async (ctx, arg) => {
         const cwd = (await ctx.getCwd()) ?? ctx.session.cwd;
-        if (!cwd) return `echo ${JSON.stringify('axn-git: no working directory')}`;
+        if (!cwd) return echoReply('axn-git: no working directory');
         try {
           const root = (
             await git(ctx.session.id, cwd, ['rev-parse', '--show-toplevel'])
@@ -70,9 +71,9 @@ export const gitInspectPlugin: SessionViewPlugin = {
             }
           }
           ctx.openTab({ path: root, kind: 'git', base });
-          return warn ? `echo ${JSON.stringify(warn)}` : false;
+          return warn ? echoReply(warn) : false;
         } catch {
-          return `echo ${JSON.stringify('axn-git: not inside a git repository')}`;
+          return echoReply('axn-git: not inside a git repository');
         }
       },
     },

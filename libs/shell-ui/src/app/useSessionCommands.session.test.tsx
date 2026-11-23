@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SessionBackend } from '@axn-term/session-backend';
 import type { ShellPlatform } from '../platform';
 import type { ShellSession, Workspace } from '../types';
+import { echoReply } from '../shellQuote';
 import { useSessionCommands, type SessionCommandDeps } from './useSessionCommands';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -73,26 +74,26 @@ const dispatch = (sessionId: string, line: string) =>
 
 it('axn-session opens a session in the current workspace at the live cwd', async () => {
   await mount([session('s-1')]);
-  await expect(dispatch('s-1', 'axn-session')).resolves.toBe('echo "axn-session: opened \'session\' in workspace \'api\' at /home/u/proj"');
+  await expect(dispatch('s-1', 'axn-session')).resolves.toBe(echoReply("axn-session: opened 'session' in workspace 'api' at /home/u/proj"));
   expect(deps.openSession).toHaveBeenCalledWith('ws-1', '/home/u/proj', undefined, undefined);
 });
 
 it('axn-session still opens at a directory path', async () => {
   await mount([session('s-1')]);
-  await expect(dispatch('s-1', 'axn-session src')).resolves.toBe('echo "axn-session: opened \'session\' in workspace \'api\' at /home/u/proj/src"');
+  await expect(dispatch('s-1', 'axn-session src')).resolves.toBe(echoReply("axn-session: opened 'session' in workspace 'api' at /home/u/proj/src"));
   expect(deps.openSession).toHaveBeenCalledWith('ws-1', '/home/u/proj/src', undefined, undefined);
 });
 
 it('axn-session -w opens the session in a named workspace', async () => {
   await mount([session('s-1')]);
-  await expect(dispatch('s-1', 'axn-session -w vlavla')).resolves.toBe('echo "axn-session: opened \'session\' in workspace \'vlavla\' at /home/u/proj"');
+  await expect(dispatch('s-1', 'axn-session -w vlavla')).resolves.toBe(echoReply("axn-session: opened 'session' in workspace 'vlavla' at /home/u/proj"));
   expect(deps.openSession).toHaveBeenCalledWith('ws-2', '/home/u/proj', undefined, undefined);
 });
 
 it('axn-session --workspace errors on a missing workspace without --create-ws', async () => {
   await mount([session('s-1')]);
   await expect(dispatch('s-1', 'axn-session --workspace "fresh ws"')).resolves.toBe(
-    'echo "axn-session: no such workspace: fresh ws (use --create-ws to create it)"',
+    echoReply("axn-session: no such workspace: fresh ws (use --create-ws to create it)"),
   );
   expect(deps.addWorkspace).not.toHaveBeenCalled();
   expect(deps.openSession).not.toHaveBeenCalled();
@@ -102,33 +103,33 @@ it('axn-session --workspace --create-ws creates a missing workspace', async () =
   await mount([session('s-1')]);
   await expect(
     dispatch('s-1', 'axn-session --workspace "fresh ws" --create-ws'),
-  ).resolves.toBe('echo "axn-session: opened \'session\' in workspace \'ws-3\' at /home/u/proj"');
+  ).resolves.toBe(echoReply("axn-session: opened 'session' in workspace 'ws-3' at /home/u/proj"));
   expect(deps.addWorkspace).toHaveBeenCalledWith('fresh ws');
   expect(deps.openSession).toHaveBeenCalledWith('ws-3', '/home/u/proj', undefined, undefined);
 });
 
 it('axn-session -n names the new session and combines with -w and a path', async () => {
   await mount([session('s-1')]);
-  await expect(dispatch('s-1', 'axn-session -w vlavla -n "fix the bug" src')).resolves.toBe('echo "axn-session: opened \'fix the bug\' in workspace \'vlavla\' at /home/u/proj/src"');
+  await expect(dispatch('s-1', 'axn-session -w vlavla -n "fix the bug" src')).resolves.toBe(echoReply("axn-session: opened 'fix the bug' in workspace 'vlavla' at /home/u/proj/src"));
   expect(deps.openSession).toHaveBeenCalledWith('ws-2', '/home/u/proj/src', 'fix the bug', undefined);
 });
 
 it('axn-session keeps unquoted multi-word paths working', async () => {
   await mount([session('s-1')]);
-  await expect(dispatch('s-1', 'axn-session my dir')).resolves.toBe('echo "axn-session: opened \'session\' in workspace \'api\' at /home/u/proj/my dir"');
+  await expect(dispatch('s-1', 'axn-session my dir')).resolves.toBe(echoReply("axn-session: opened 'session' in workspace 'api' at /home/u/proj/my dir"));
   expect(deps.backend.statPath).toHaveBeenCalledWith('s-1', '/home/u/proj', 'my dir');
 });
 
 it('axn-session --background passes background through to openSession', async () => {
   await mount([session('s-1')]);
-  await expect(dispatch('s-1', 'axn-session -w vlavla --background')).resolves.toBe('echo "axn-session: opened \'session\' in workspace \'vlavla\' at /home/u/proj"');
+  await expect(dispatch('s-1', 'axn-session -w vlavla --background')).resolves.toBe(echoReply("axn-session: opened 'session' in workspace 'vlavla' at /home/u/proj"));
   expect(deps.openSession).toHaveBeenCalledWith('ws-2', '/home/u/proj', undefined, true);
 });
 
 it('axn-session -w without a value echoes an error', async () => {
   await mount([session('s-1')]);
   await expect(dispatch('s-1', 'axn-session -w')).resolves.toBe(
-    'echo "axn-session: -w needs a value"',
+    echoReply("axn-session: -w needs a value"),
   );
   expect(deps.openSession).not.toHaveBeenCalled();
 });
@@ -181,7 +182,7 @@ it('axn-session set completes only its own flags', async () => {
 it('axn-session create behaves like the implicit form', async () => {
   await mount([session('s-1')]);
   await expect(dispatch('s-1', 'axn-session create src -n "fix the bug"')).resolves.toBe(
-    'echo "axn-session: opened \'fix the bug\' in workspace \'api\' at /home/u/proj/src"',
+    echoReply("axn-session: opened 'fix the bug' in workspace 'api' at /home/u/proj/src"),
   );
   expect(deps.openSession).toHaveBeenCalledWith('ws-1', '/home/u/proj/src', 'fix the bug', undefined);
 });
@@ -196,7 +197,7 @@ it('axn-session --summary sets the summary on the new session', async () => {
 it('axn-session set --summary updates the session summary', async () => {
   await mount([session('s-1')]);
   await expect(dispatch('s-1', 'axn-session set --summary "wip on api"')).resolves.toBe(
-    'echo "axn-session: summary updated"',
+    echoReply("axn-session: summary updated"),
   );
   expect(deps.updateSession).toHaveBeenCalledWith('s-1', { summary: 'wip on api' });
 });
@@ -212,7 +213,7 @@ it('axn-session set --name and --title rename the session', async () => {
 it('axn-session set without flags echoes usage', async () => {
   await mount([session('s-1')]);
   await expect(dispatch('s-1', 'axn-session set')).resolves.toBe(
-    'echo "axn-session: usage: axn-session set [--summary <text>] [--name|--title <name>]"',
+    echoReply("axn-session: usage: axn-session set [--summary <text>] [--name|--title <name>]"),
   );
 });
 
@@ -223,7 +224,7 @@ it('axn-broadcast writes the line to every marked session', async () => {
   broadcastSet.mark('s-1');
   broadcastSet.mark('s-3');
   await expect(dispatch('s-1', 'axn-broadcast ls -la')).resolves.toBe(
-    'echo "axn-broadcast: sent to 2 sessions"',
+    echoReply("axn-broadcast: sent to 2 sessions"),
   );
   const write = deps.backend.write as ReturnType<typeof vi.fn>;
   expect(write).toHaveBeenCalledWith('s-1', 'ls -la\r');
@@ -237,19 +238,19 @@ it('axn-broadcast-add/-rm/-clear manage the set, axn-broadcasts lists it', async
   broadcastSet.clear();
   await mount([session('s-1'), session('s-2')]);
   await expect(dispatch('s-1', 'axn-broadcast-add s-2')).resolves.toBe(
-    'echo "axn-broadcast-add: marked \'s-2\'"',
+    echoReply("axn-broadcast-add: marked 's-2'"),
   );
   expect(broadcastSet.has('s-2')).toBe(true);
   await expect(dispatch('s-1', 'axn-broadcasts')).resolves.toContain('s-2');
   await expect(dispatch('s-1', 'axn-broadcast-rm s-2')).resolves.toBe(
-    'echo "axn-broadcast-rm: unmarked \'s-2\'"',
+    echoReply("axn-broadcast-rm: unmarked 's-2'"),
   );
   expect(broadcastSet.size()).toBe(0);
   await expect(dispatch('s-1', 'axn-broadcast-add')).resolves.toBe(
-    'echo "axn-broadcast-add: marked \'s-1\'"',
+    echoReply("axn-broadcast-add: marked 's-1'"),
   );
   await expect(dispatch('s-1', 'axn-broadcast-clear')).resolves.toBe(
-    'echo "axn-broadcast-clear: 1 session unmarked"',
+    echoReply("axn-broadcast-clear: 1 session unmarked"),
   );
 });
 
@@ -258,7 +259,7 @@ it('axn-broadcast with an empty set explains how to mark', async () => {
   broadcastSet.clear();
   await mount([session('s-1')]);
   await expect(dispatch('s-1', 'axn-broadcast hi')).resolves.toBe(
-    'echo "axn-broadcast: broadcast set is empty (axn-broadcast-add marks sessions)"',
+    echoReply("axn-broadcast: broadcast set is empty (axn-broadcast-add marks sessions)"),
   );
   expect(deps.backend.write).not.toHaveBeenCalled();
 });
@@ -266,7 +267,7 @@ it('axn-broadcast with an empty set explains how to mark', async () => {
 it('axn-session list shows every session, * on the one that ran it', async () => {
   await mount([session('s-1'), session('s-2'), { ...session('s-3'), workspaceId: 'ws-2' }]);
   await expect(dispatch('s-1', 'axn-session list')).resolves.toBe(
-    'echo "* s-1 (api)\\n  s-2 (api)\\n  s-3 (vlavla)"',
+    echoReply('* s-1 (api)\n  s-2 (api)\n  s-3 (vlavla)'),
   );
 });
 
@@ -282,7 +283,7 @@ it('axn-session select completes session names', async () => {
 it('axn-broadcast --to sends the line verbatim to one named session', async () => {
   await mount([session('s-1'), session('s-2'), session('s-3')]);
   await expect(dispatch('s-1', 'axn-broadcast --to s-2 make -j')).resolves.toBe(
-    'echo "axn-broadcast: sent to \'s-2\'"',
+    echoReply("axn-broadcast: sent to 's-2'"),
   );
   const write = deps.backend.write as ReturnType<typeof vi.fn>;
   expect(write).toHaveBeenCalledWith('s-2', 'make -j\r');
@@ -298,10 +299,10 @@ it('axn-broadcast -t is the short flag', async () => {
 it('axn-broadcast --to errors on a missing target or unknown session', async () => {
   await mount([session('s-1'), session('s-2')]);
   await expect(dispatch('s-1', 'axn-broadcast --to')).resolves.toBe(
-    'echo "axn-broadcast: --to needs a session (name or id)"',
+    echoReply("axn-broadcast: --to needs a session (name or id)"),
   );
   await expect(dispatch('s-1', 'axn-broadcast --to nobody hi')).resolves.toBe(
-    'echo "axn-broadcast: no such session: nobody"',
+    echoReply("axn-broadcast: no such session: nobody"),
   );
   expect(deps.backend.write).not.toHaveBeenCalled();
 });
@@ -324,7 +325,7 @@ it('axn-tell wraps the message with the sender session name', async () => {
     async () => 'claude',
   );
   await expect(dispatch('s-1', 'axn-tell s-2 review the diff')).resolves.toBe(
-    'echo "axn-tell: sent to \'s-2\'"',
+    echoReply("axn-tell: sent to 's-2'"),
   );
   expect(deps.backend.write).toHaveBeenCalledWith(
     's-2',
@@ -365,13 +366,13 @@ it('axn-tell resolves quoted and prefix session names', async () => {
 it('axn-tell echoes usage/errors without writing', async () => {
   await mount([session('s-1'), session('s-2')]);
   await expect(dispatch('s-1', 'axn-tell')).resolves.toBe(
-    'echo "usage: axn-tell <session> <message>"',
+    echoReply("usage: axn-tell <session> <message>"),
   );
   await expect(dispatch('s-1', 'axn-tell s-2')).resolves.toBe(
-    'echo "usage: axn-tell <session> <message>"',
+    echoReply("usage: axn-tell <session> <message>"),
   );
   await expect(dispatch('s-1', 'axn-tell nobody hi')).resolves.toBe(
-    'echo "axn-tell: no such session: nobody"',
+    echoReply("axn-tell: no such session: nobody"),
   );
   expect(deps.backend.write).not.toHaveBeenCalled();
 });
@@ -390,9 +391,9 @@ it('axn-tell completes session names for the target', async () => {
 it('a typed app-level command runs its appRun without a session ctx', async () => {
   await mount([session('s-1')]);
   deps.enabledPluginsRef.current = [
-    { id: 'p', title: 'P', commands: [{ name: 'axn-app', appRun: (_ctx, arg) => `echo ${JSON.stringify(`app ${arg}`)}` }] },
+    { id: 'p', title: 'P', commands: [{ name: 'axn-app', appRun: (_ctx, arg) => echoReply(`app ${arg}`) }] },
   ];
-  await expect(dispatch('s-1', 'axn-app hi')).resolves.toBe('echo "app hi"');
+  await expect(dispatch('s-1', 'axn-app hi')).resolves.toBe(echoReply("app hi"));
   expect(deps.buildPluginApi).not.toHaveBeenCalled();
 });
 

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { checkReachable, externalViewsPlugin, normalizeViews, resolveEntryUrl } from './externalViews';
 import { openView, resetViewHostForTests, runtimeViews } from '../viewHost';
 import { pluginViewApi } from './plugin';
+import { echoReply } from '../../shellQuote';
 
 beforeEach(() => resetViewHostForTests());
 
@@ -117,10 +118,10 @@ describe('axn-views commands', () => {
   it('open adds a runtime view and replies with its key', async () => {
     const out = await cmd('axn-views').appRun!(ctx, 'open http://127.0.0.1:1/x MR dashboard', 'axn-views open http://127.0.0.1:1/x MR dashboard');
     expect(runtimeViews()[0].title).toBe('MR dashboard');
-    expect(out).toBe(`echo ${JSON.stringify(`external-views/${runtimeViews()[0].id}`)}`);
+    expect(out).toBe(echoReply(`external-views/${runtimeViews()[0].id}`));
   });
   it('current replies with the active view as JSON', async () => {
     const out = await cmd('axn-views').appRun!(ctx, 'current', 'axn-views current');
-    expect(out).toBe(`echo ${JSON.stringify('null')}`);
+    expect(out).toBe(echoReply('null'));
   });
 });

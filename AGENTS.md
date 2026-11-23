@@ -286,8 +286,10 @@ once it resolves. The outcome of a hidden-command line follows one
 procedure (`applySessionCommandResult` in `app/hiddenCommands.ts`): a
 handler returning `undefined` submits the line to the shell unchanged;
 `false` swallows it silently; a plain string replaces the line and runs in
-the shell (e.g. `devin -r <name>`); and the `echo "<msg>"` shape is the
-feedback convention — a message for the user, not a command. With the
+the shell (e.g. `devin -r <name>`); and the `echo '<msg>'` shape is the
+feedback convention — a message for the user, not a command (`echoReply`,
+POSIX single-quoted so the payload can't expand `$(…)`/backticks when it
+is typed into a session; the legacy `echo "<json>"` form is still parsed). With the
 terminal's `writeDisplay` channel the typed line stays on screen and
 `<msg>` is drawn below it like real command output (the `\x15` kill goes
 to the PTY after the display write so the shell's line erase lands on the
@@ -1774,8 +1776,10 @@ once it resolves. The outcome of a hidden-command line follows one
 procedure (`applySessionCommandResult` in `app/hiddenCommands.ts`): a
 handler returning `undefined` submits the line to the shell unchanged;
 `false` swallows it silently; a plain string replaces the line and runs in
-the shell (e.g. `devin -r <name>`); and the `echo "<msg>"` shape is the
-feedback convention — a message for the user, not a command. With the
+the shell (e.g. `devin -r <name>`); and the `echo '<msg>'` shape is the
+feedback convention — a message for the user, not a command (`echoReply`,
+POSIX single-quoted so the payload can't expand `$(…)`/backticks when it
+is typed into a session; the legacy `echo "<json>"` form is still parsed). With the
 terminal's `writeDisplay` channel the typed line stays on screen and
 `<msg>` is drawn below it like real command output (the `\x15` kill goes
 to the PTY after the display write so the shell's line erase lands on the

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { controlReply, dispatchAppCommand, sessionForPty } from './controlCommands';
+import { echoReply } from '../shellQuote';
 import type { SessionViewPlugin } from './session-plugins/plugin';
 import type { ShellSession } from '../types';
 
@@ -45,7 +46,7 @@ describe('dispatchAppCommand', () => {
     dispatchAppCommand(plugins, line, () => undefined);
 
   it('runs a command declaring appRun, without a session', async () => {
-    const reply = await run([plugin([{ name: 'axn-x', appRun: (_ctx, arg) => `echo ${JSON.stringify(`got ${arg}`)}` }])], 'axn-x hi');
+    const reply = await run([plugin([{ name: 'axn-x', appRun: (_ctx, arg) => echoReply(`got ${arg}`) }])], 'axn-x hi');
     expect(reply).toEqual({ ok: true, message: 'got hi' });
   });
   it('refuses a session-only command', async () => {
