@@ -62,3 +62,39 @@ export function sh(strings: TemplateStringsArray, ...values: Array<string | numb
     return out + word + s;
   }, '');
 }
+
+/**
+ * The `axn-*` feedback convention: a command result of `echo '…'` either
+ * prints the message at the shell or is parsed back by `controlReply` /
+ * `parseFeedbackEcho` (display channel). Single-quoted on purpose: the
+ * earlier `echo "<json>"` form left `$()`, backticks and `\` inside the
+ * payload (a page title, a branch name) live for command substitution when
+ * the line was typed into a session.
+ */
+export function echoReply(msg: string): string {
+  return `echo ${shellQuote(msg)}`;
+}
+
+/** Matches an `echo` feedback line — the current `'…'` form and the
+ * legacy JSON `"…"` form external plugins may still emit. */
+const ECHO_REPLY_RE = /^echo\s+('(?:[^']|'\\'')*'|"(?:[^"\\]|\\.)*")\s*$/;
+
+/**
+ * The message an `echo` feedback line carries, or `undefined` when the
+ * line is not a feedback echo. Accepts both quote styles: `'…'` unescapes
+ * POSIX `'\''`, `"…"` parses as one JSON string (the old protocol).
+ */
+export function parseEchoReply(result: string | false | undefined): string | undefined {
+  if (typeof result !== 'string') return undefined;
+  const m = ECHO_REPLY_RE.exec(result);
+  if (!m) return undefined;
+  const quoted = m[1];
+  if (quoted.startsWith(`'`)) {
+    return quoted.slice(1, -1).replace(/'\\''/g, `'`);
+  }
+  try {
+    return JSON.parse(quoted) as string;
+  } catch {
+    return undefined;
+  }
+}

@@ -51,7 +51,7 @@ msgstr "Ajouter une icône"
 msgid "Add tag “{typed}”"
 msgstr "Ajouter le tag « {typed} »"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:262
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:263
 msgid "Add view"
 msgstr "Ajouter une vue"
 
@@ -100,8 +100,8 @@ msgstr "axn-term a rencontré une erreur inattendue"
 #~ msgid "axn-term-desktop (default)"
 #~ msgstr "axn-term-desktop (par défaut)"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:188
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:188
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:189
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:189
 msgid "Back to the session"
 msgstr "Retour à la session"
 
@@ -176,8 +176,8 @@ msgstr "Fermer"
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:181
 #: libs/shell-ui/src/app/session-plugins/externalViews.tsx:182
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:183
 msgid "Close this view"
 msgstr "Fermer cette vue"
 
@@ -276,7 +276,7 @@ msgid "Copy URL"
 msgstr "Copier l'URL"
 
 #. placeholder {0}: entry.title
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:194
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:195
 msgid "Could not open {0}"
 msgstr "Impossible d’ouvrir {0}"
 
@@ -351,7 +351,7 @@ msgstr "Ne plus demander"
 msgid "done"
 msgstr "terminé"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:237
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:238
 msgid "Each view gets its own rail item. Give a URL, or a command that prints one when the view opens (for addresses carrying a token — it is never saved)."
 msgstr "Chaque vue a son propre élément dans la barre. Indiquez une URL, ou une commande qui en affiche une à l’ouverture (pour les adresses avec jeton — elle n’est jamais enregistrée)."
 
@@ -494,7 +494,7 @@ msgstr "Général"
 msgid "Hub URL"
 msgstr "URL du hub"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:246
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
 msgid "Icon"
 msgstr "Icône"
 
@@ -631,8 +631,8 @@ msgstr "Nouvelle session dans un dossier…"
 msgid "New session in workspace"
 msgstr "Nouvelle session dans le workspace"
 
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:398
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:410
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:399
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:411
 msgid "New session with agent…"
 msgstr "Nouvelle session avec agent…"
 
@@ -712,7 +712,7 @@ msgstr "non connecté — saisissez l'adresse du serveur ci-dessus"
 #~ msgstr "Non publi\\u00e9"
 
 #. placeholder {0}: dropped.join(', ')
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:257
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:258
 msgid "Not shown (needs an http(s) URL or a command): {0}"
 msgstr "Non affichées (URL http(s) ou commande requise) : {0}"
 
@@ -768,9 +768,9 @@ msgstr "Ouvrir un fichier de jeu de workspaces enregistré"
 msgid "Open file"
 msgstr "Ouvrir un fichier"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:170
 #: libs/shell-ui/src/app/session-plugins/externalViews.tsx:171
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:201
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:172
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:202
 msgid "Open in browser"
 msgstr "Ouvrir dans le navigateur"
 
@@ -807,7 +807,7 @@ msgstr "Ouvrir…"
 #~ msgid "optional"
 #~ msgstr "facultatif"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:252
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:253
 msgid "or a command printing the URL, e.g. launchpad url mr"
 msgstr "ou une commande qui affiche l’URL, p. ex. launchpad url mr"
 
@@ -895,8 +895,8 @@ msgstr "Icône du rail seule"
 msgid "Rail item"
 msgstr "Élément de la barre"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:164
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:164
 msgid "Reload"
 msgstr "Recharger"
 
@@ -939,8 +939,8 @@ msgstr "Accès distant"
 #~ msgid "Remote control"
 #~ msgstr "Contr\\u00f4le \\u00e0 distance"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:248
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:248
 msgid "Remove"
 msgstr "Supprimer"
 
@@ -996,7 +996,7 @@ msgstr "Reprendre la session {agent}{0}"
 msgid "Resume viewport"
 msgstr "Reprendre la vue"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:197
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:198
 msgid "Retry"
 msgstr "Réessayer"
 
@@ -1324,7 +1324,7 @@ msgstr "Cette vue liste les requêtes qui vous attendent sur {forgeName}. Elle l
 msgid "This window"
 msgstr "Cette fenêtre"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:245
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:246
 msgid "Title"
 msgstr "Titre"
 

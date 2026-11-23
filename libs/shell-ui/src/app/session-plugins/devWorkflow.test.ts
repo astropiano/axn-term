@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { pickFromList } from '../pickerHost';
+import { echoReply, parseEchoReply } from '../../shellQuote';
 
 vi.mock('../pickerHost', () => ({ pickFromList: vi.fn(async () => null) }));
 import type { ShellSession } from '../../types';
@@ -481,7 +482,7 @@ describe('commands', () => {
     it('errors when no workflows are defined', async () => {
       const h = makeCtx({ settings: {} });
       const out = await wf('start').run?.(h.ctx, undefined, 'axn-workflow-start');
-      expect(out).toMatch(/echo "axn-workflow start: no workflows defined/);
+      expect(out).toMatch(/echo 'axn-workflow start: no workflows defined/);
     });
 
     it('requires an arg when several workflows exist', async () => {
@@ -498,7 +499,7 @@ describe('commands', () => {
       };
       const h = makeCtx({ settings });
       const out = await wf('start').run?.(h.ctx, undefined, 'axn-workflow-start');
-      expect(out).toMatch(/workflow 'only' started — state 'a'/);
+      expect(parseEchoReply(out as string)).toBe("workflow 'only' started — state 'a'");
       expect(h.writes).toHaveLength(0); // transitions never type into the PTY
       expect((h.stateStore['dev-workflow'] as { state?: string }).state).toBe('a');
       expect(h.banners.at(-1)).toMatchObject({ level: 'info' });
@@ -619,7 +620,7 @@ describe('commands', () => {
       });
       await wf('start').run?.(h.ctx, 'speckit', 'x');
       const out = await wf('move').run?.(h.ctx, 'plan-review', 'x');
-      expect(out).toBe('echo "workflow \'speckit\' → plan-review"');
+      expect(out).toBe(echoReply(`workflow 'speckit' → plan-review`));
       expect(decodeState(h.files['/repo/.axn/workflow.yaml'] ?? '')?.state).toBe('plan-review');
     });
 
@@ -741,10 +742,10 @@ describe('commands', () => {
       });
       await wf('start').run?.(h.ctx, 'offices', 'x');
       expect(await cmd('axn-workflow').run?.(h.ctx, undefined, 'axn-workflow')).toBe(
-        'echo "offices: think"',
+        echoReply('offices: think'),
       );
       expect(await wf('stop').run?.(h.ctx, undefined, 'axn-workflow-stop')).toBe(
-        'echo "workflow \'offices\' stopped"',
+        echoReply(`workflow 'offices' stopped`),
       );
       expect((h.stateStore['dev-workflow'] as { workflow?: string }).workflow).toBeUndefined();
       expect(h.appStore.instances).toEqual({});
@@ -1449,7 +1450,7 @@ describe('workflow vars — start args, set command, marker, env', () => {
     const h = makeCtx({ execImpl: inWorktree(114), settings: MR_SETTINGS });
     const url = 'https://gitlab.com/g/p/-/merge_requests/114';
     const out = await wf('start').run(h.ctx, `mr-review ${url}`, 'x');
-    expect(String(out)).toContain("started — state 'fetch'");
+    expect(parseEchoReply(out as string)).toContain("started — state 'fetch'");
     expect(varsOf(h)).toMatchObject({
       mr: url,
       mr_iid: '114',

@@ -1,3 +1,5 @@
+import { parseEchoReply } from '../shellQuote';
+
 /** Matches terminalRenderer's OSC_COLOR_REPORT_RE — kept local so this
  * module stays free of the xterm import chain (its tests run in node). */
 const OSC_COLOR_REPORT_RE = /^(\x1b\]1[012];[^\x07\x1b]+(?:\x07|\x1b\\))+$/;
@@ -133,7 +135,7 @@ export function runCommandChain<T>(
 }
 
 /**
- * The `echo "<msg>"` feedback convention: `onSessionCommand` results of
+ * The `echo '<msg>'` feedback convention: `onSessionCommand` results of
  * that shape are messages for the user, not commands for the shell — the
  * remote CLI path (`controlReply`) parses the same pattern. Returns the
  * unquoted message or `undefined` for non-feedback results.
@@ -141,14 +143,7 @@ export function runCommandChain<T>(
 export function parseFeedbackEcho(
   result: string | false | undefined,
 ): string | undefined {
-  if (typeof result !== 'string') return undefined;
-  const m = /^echo\s+("(?:[^"\\]|\\.)*")\s*$/.exec(result);
-  if (!m) return undefined;
-  try {
-    return JSON.parse(m[1]) as string;
-  } catch {
-    return undefined;
-  }
+  return parseEchoReply(result);
 }
 
 /**
@@ -157,7 +152,7 @@ export function parseFeedbackEcho(
  * - `undefined` submits it as typed (the Enter goes through)
  * - `false` swallows it — silent command: the typed line stays on screen
  *   and a fresh prompt follows, like running `true`
- * - an `echo "<msg>"` string is user feedback: the typed line stays on
+ * - an `echo '<msg>'` string is user feedback: the typed line stays on
  *   screen and `<msg>` appears below it as the command's output
  * - any other string replaces the line and is submitted to the shell
  *

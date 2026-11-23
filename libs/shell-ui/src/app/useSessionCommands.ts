@@ -4,6 +4,7 @@ import type { ShellPlatform } from '../platform';
 import { ptyIdOf, type ShellSession, type Workspace } from '../types';
 import { axnLog } from './log';
 import { runCommandChain } from './hiddenCommands';
+import { echoReply } from '../shellQuote';
 import { controlReply, dispatchAppCommand, sessionForPty, type ControlReply } from './controlCommands';
 import { AXN_VIEW_COMMANDS, completePathArg, parseSessionArgs } from './shellCommandSupport';
 import {
@@ -123,7 +124,7 @@ export function useSessionCommands(input: SessionCommandDeps) {
               | Promise<string | false | undefined>;
           } catch (e) {
             console.warn(`[plugin:${plugin.id}] command ${word} failed:`, e);
-            return `echo ${JSON.stringify(`${word}: command failed`)}`;
+            return echoReply(`${word}: command failed`);
           }
         }
         if (word.startsWith('axn-')) {

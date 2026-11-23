@@ -26,11 +26,11 @@ const ALLOWED: Record<string, string[]> = {
   'awesomeList.tsx': ["typeof res === 'string' ? res : item.path"],
   // workflow lines: env via envPrefix (shellWord), cmd via renderCommandTemplate;
   // prompt goes into the agent as a bracketed paste, not to a shell
-  'devWorkflow.tsx': ['env', 'cmd', 'prompt', "shellLine(action, state, line, bindingOf(ctx).token ?? '')"],
+  'devWorkflow.tsx': ['env', 'cmd', 'bracketedPaste(prompt)', "shellLine(action, state, line, bindingOf(ctx).token ?? '')"],
   // `b` is shellQuote(`branch.${branch}`)
   'ghPr.tsx': ['b'],
   // numeric MR iids (Math.trunc(Number(…)))
-  'glabMr.tsx': ['iid', 'mr.iid'],
+  'glabMr.tsx': ['iid', 'mr.iid', 'page'],
   // fixed op union; container id from `docker ps` (hex)
   'dockerView.tsx': ['op', 'c.id'],
 };

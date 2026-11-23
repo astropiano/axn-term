@@ -51,7 +51,7 @@ msgstr "添加图标"
 msgid "Add tag “{typed}”"
 msgstr "添加标签“{typed}”"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:262
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:263
 msgid "Add view"
 msgstr "添加视图"
 
@@ -100,8 +100,8 @@ msgstr "axn-term 遇到了意外错误"
 #~ msgid "axn-term-desktop (default)"
 #~ msgstr "axn-term-desktop（默认）"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:188
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:188
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:189
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:189
 msgid "Back to the session"
 msgstr "返回会话"
 
@@ -176,8 +176,8 @@ msgstr "关闭"
 msgid "Close tab"
 msgstr "关闭标签页"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:181
 #: libs/shell-ui/src/app/session-plugins/externalViews.tsx:182
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:183
 msgid "Close this view"
 msgstr "关闭此视图"
 
@@ -276,7 +276,7 @@ msgid "Copy URL"
 msgstr "复制 URL"
 
 #. placeholder {0}: entry.title
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:194
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:195
 msgid "Could not open {0}"
 msgstr "无法打开 {0}"
 
@@ -351,7 +351,7 @@ msgstr "不再询问"
 msgid "done"
 msgstr "已完成"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:237
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:238
 msgid "Each view gets its own rail item. Give a URL, or a command that prints one when the view opens (for addresses carrying a token — it is never saved)."
 msgstr "每个视图在侧栏中都有自己的项目。请填写 URL，或填写在打开时输出 URL 的命令（用于带令牌的地址——不会被保存）。"
 
@@ -494,7 +494,7 @@ msgstr "常规"
 msgid "Hub URL"
 msgstr "Hub \\u5730\\u5740"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:246
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
 msgid "Icon"
 msgstr "图标"
 
@@ -631,8 +631,8 @@ msgstr "在文件夹中新建会话…"
 msgid "New session in workspace"
 msgstr "在工作区中新建会话"
 
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:398
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:410
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:399
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:411
 msgid "New session with agent…"
 msgstr "新建代理会话…"
 
@@ -712,7 +712,7 @@ msgstr "未连接——请在上方输入服务器地址"
 #~ msgstr "\\u672a\\u53d1\\u5e03"
 
 #. placeholder {0}: dropped.join(', ')
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:257
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:258
 msgid "Not shown (needs an http(s) URL or a command): {0}"
 msgstr "未显示（需要 http(s) URL 或命令）：{0}"
 
@@ -768,9 +768,9 @@ msgstr "打开已保存的工作区集文件"
 msgid "Open file"
 msgstr "打开文件"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:170
 #: libs/shell-ui/src/app/session-plugins/externalViews.tsx:171
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:201
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:172
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:202
 msgid "Open in browser"
 msgstr "在浏览器中打开"
 
@@ -807,7 +807,7 @@ msgstr "打开…"
 #~ msgid "optional"
 #~ msgstr "\\u53ef\\u9009"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:252
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:253
 msgid "or a command printing the URL, e.g. launchpad url mr"
 msgstr "或输出 URL 的命令，例如 launchpad url mr"
 
@@ -895,8 +895,8 @@ msgstr "仅侧栏图标"
 msgid "Rail item"
 msgstr "边栏项"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:163
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:164
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:164
 msgid "Reload"
 msgstr "重新加载"
 
@@ -939,8 +939,8 @@ msgstr "远程访问"
 #~ msgid "Remote control"
 #~ msgstr "\\u8fdc\\u7a0b\\u63a7\\u5236"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:247
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:248
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:248
 msgid "Remove"
 msgstr "移除"
 
@@ -996,7 +996,7 @@ msgstr "恢复 {agent} 会话{0}"
 msgid "Resume viewport"
 msgstr "恢复视口"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:197
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:198
 msgid "Retry"
 msgstr "重试"
 
@@ -1324,7 +1324,7 @@ msgstr "此视图列出 {forgeName} 上等待你处理的请求，通过命令�
 msgid "This window"
 msgstr "此窗口"
 
-#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:245
+#: libs/shell-ui/src/app/session-plugins/externalViews.tsx:246
 msgid "Title"
 msgstr "标题"
 

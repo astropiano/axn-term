@@ -4,6 +4,7 @@ import { i18n } from '../../i18n';
 import { Bot, Play } from 'lucide-react';
 import type { ShellSession, Workspace } from '../../types';
 import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
+import { echoReply } from '../../shellQuote';
 import { axnLog } from '../log';
 import { pickFromList } from '../pickerHost';
 import { SessionIconGlyph } from '../SessionPanel';
@@ -63,7 +64,7 @@ function resolvePersonas(settings: unknown, appState: unknown): AgentPersona[] {
   return ((appState as { personas?: AgentPersona[] } | undefined)?.personas ?? local);
 }
 
-const echo = (msg: string) => `echo ${JSON.stringify(msg)}`;
+const echo = (msg: string) => echoReply(msg);
 
 /**
  * The launch line for a persona — inline prompt, else prompt-file text —

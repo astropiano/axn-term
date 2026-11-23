@@ -4,6 +4,7 @@ import type { ShellPlatform } from '../platform';
 import { activeTabAcceptsInput, ptyIdOf, type ShellSession, type Workspace } from '../types';
 import { parseSessionSummary, SESSION_SUMMARY_MAX, type SessionCommandResult } from './hiddenCommands';
 import { broadcastSet } from './broadcastSet';
+import { echoReply } from '../shellQuote';
 import { createWaitForSessionOutput } from './session-plugins/plugin';
 import {
   AXN_BROADCAST_FLAGS,
@@ -23,7 +24,7 @@ import {
 /**
  * The session-level built-in `axn-*` commands, one entry each. The dispatch
  * (`useSessionCommands`) matches a line's first word to `name`; `run`
- * returns the usual outcome — a string replaces the typed line (`echo "…"`
+ * returns the usual outcome — a string replaces the typed line (`echo '…'`
  * feeds back to the user), `false` swallows it, `undefined` passes it to
  * the shell. The same table drives word + arg Tab-completion, so a new
  * command is exactly one entry — no regex, name list or completion branch
@@ -104,7 +105,7 @@ function typeWhenStarted(deps: BuiltinDeps, sessionId: string, command: string):
 function sendLine(deps: BuiltinDeps, targets: ShellSession[], text: string): SessionCommandResult {
   const blocked = targets.filter((t) => !activeTabAcceptsInput(t));
   if (blocked.length) {
-    return `echo ${JSON.stringify(`axn-broadcast: blocked — ${blocked.map((t) => t.name).join(', ')} on a view that takes no input`)}`;
+    return echoReply(`axn-broadcast: blocked — ${blocked.map((t) => t.name).join(', ')} on a view that takes no input`);
   }
   for (const t of targets) {
     void deps.backend.write(ptyIdOf(t), `${text}\r`);
@@ -188,7 +189,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
             s.workspaceId;
           return `${s.id === session.id ? '*' : ' '} ${s.name} (${ws})`;
         });
-        return `echo ${JSON.stringify(lines.join('\n'))}`;
+        return echoReply(lines.join('\n'));
       }
       if (sub === 'select') {
         // `axn-session select <name|id>` — 'go to session': focus the
@@ -197,17 +198,17 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
         const needle = unquote(rest.slice(6).trim());
         const target = needle ? findSessionByName(deps.sessionsRef.current, needle) : undefined;
         if (!target) {
-          return `echo ${JSON.stringify(`axn-session: no such session: ${needle || '(missing)'}`)}`;
+          return echoReply(`axn-session: no such session: ${needle || '(missing)'}`);
         }
         if (deps.selectSession) {
           deps.selectSession(target.id);
-          return `echo ${JSON.stringify(`axn-session: selected '${target.name}'`)}`;
+          return echoReply(`axn-session: selected '${target.name}'`);
         }
-        return 'echo "axn-session: session selection is not available here"';
+        return echoReply('axn-session: session selection is not available here');
       }
       if (sub === 'set') {
         const opts = parseSessionSetArgs(rest.slice(3));
-        if (opts.error) return `echo ${JSON.stringify(`axn-session: ${opts.error}`)}`;
+        if (opts.error) return echoReply(`axn-session: ${opts.error}`);
         const parts: string[] = [];
         if (opts.name !== undefined) {
           deps.renameSession(session.id, opts.name);
@@ -218,10 +219,10 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
           deps.updateSession(session.id, { summary });
           parts.push(summary ? 'summary updated' : 'summary cleared');
         }
-        return `echo ${JSON.stringify(`axn-session: ${parts.join(', ')}`)}`;
+        return echoReply(`axn-session: ${parts.join(', ')}`);
       }
       const opts = parseSessionArgs(sub === 'create' ? rest.slice(6) : rest);
-      if (opts.error) return `echo ${JSON.stringify(`axn-session: ${opts.error}`)}`;
+      if (opts.error) return echoReply(`axn-session: ${opts.error}`);
       // `-w`/`--workspace` targets another workspace by name — it must
       // exist unless `--create-ws` opts into creating it.
       let workspaceId = session.workspaceId;
@@ -232,20 +233,20 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
         if (hit) workspaceId = hit.id;
         else if (opts.createWs) workspaceId = deps.addWorkspace(opts.workspace);
         else
-          return `echo ${JSON.stringify(
+          return echoReply(
             `axn-session: no such workspace: ${opts.workspace} (use --create-ws to create it)`,
-          )}`;
+          );
       }
       const wsName =
         deps.workspacesRef.current.find((w) => w.id === workspaceId)?.name ?? workspaceId;
       const liveCwd =
         (await deps.backend.getCwd?.(originPty).catch(() => null)) ?? session.cwd;
       const opened = (where?: string) =>
-        `echo ${JSON.stringify(
+        echoReply(
           `axn-session: opened '${opts.name ?? 'session'}' in workspace '${wsName}'${
             where ? ` at ${where}` : ''
           }`,
-        )}`;
+        );
       if (!opts.path || opts.path === '.') {
         const id = deps.openSession(
           workspaceId,
@@ -271,9 +272,9 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
         }
         return opened(stat.path);
       }
-      return `echo ${JSON.stringify(
+      return echoReply(
         `axn-session: not a directory: ${opts.path} (a bare word is a path — use -w for a workspace, -n for a name)`,
-      )}`;
+      );
     },
     completeArg: async (ctx, rest, lineHead) => {
       // Flag-aware completion: a workspace name after -w/--workspace,
@@ -335,12 +336,12 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     takesArg: true,
     run: ({ deps, session }, argRaw) => {
       const arg = argRaw ? unquote(argRaw) : '';
-      if (!arg) return 'echo "usage: axn-session-mv <workspace>"';
+      if (!arg) return echoReply('usage: axn-session-mv <workspace>');
       const existing = deps.workspacesRef.current.find(
         (w) => w.name.toLowerCase() === arg.toLowerCase(),
       );
       deps.moveSessionToWorkspace(session.id, existing?.id ?? deps.addWorkspace(arg));
-      return `echo ${JSON.stringify(`axn-session-mv: moved session to workspace '${arg}'`)}`;
+      return echoReply(`axn-session-mv: moved session to workspace '${arg}'`);
     },
     completeArg: ({ deps }, rest, lineHead) =>
       completeWorkspaceName(deps.workspacesRef.current, rest, lineHead),
@@ -349,9 +350,9 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     name: 'axn-session-window',
     run: ({ deps, session }) => {
       const tearOff = deps.tearOffSession;
-      if (!tearOff) return 'echo "axn-session-window: new windows are not available here"';
+      if (!tearOff) return echoReply('axn-session-window: new windows are not available here');
       if (deps.sessionsRef.current.length <= 1) {
-        return 'echo "axn-session-window: this is the only session in its window"';
+        return echoReply('axn-session-window: this is the only session in its window');
       }
       void tearOff(session.id);
       return false;
@@ -393,7 +394,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
       const lines = deps.workspacesRef.current.map(
         (w) => `${w.id === session.workspaceId ? '*' : ' '} ${w.name}`,
       );
-      return `echo ${JSON.stringify(lines.join('\n'))}`;
+      return echoReply(lines.join('\n'));
     },
   },
   {
@@ -432,7 +433,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
           (e.label ?? e.path.split('/').pop() ?? '').toLowerCase().includes(lower),
         );
       if (!hit) {
-        return `echo ${JSON.stringify(`axn-focus: no such tab: ${target}`)}`;
+        return echoReply(`axn-focus: no such tab: ${target}`);
       }
       deps.activateSessionTab(session.id, hit.id);
       return false;
@@ -460,14 +461,14 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
         .replace(/[\r\n]+/g, ' ')
         .trim();
       if (!needle || !message) {
-        return 'echo "usage: axn-tell <session> <message>"';
+        return echoReply('usage: axn-tell <session> <message>');
       }
       const target = findSessionByName(deps.sessionsRef.current, needle);
       if (!target) {
-        return `echo ${JSON.stringify(`axn-tell: no such session: ${needle}`)}`;
+        return echoReply(`axn-tell: no such session: ${needle}`);
       }
       if (!activeTabAcceptsInput(target)) {
-        return `echo ${JSON.stringify(`axn-tell: '${target.name}' is on a view that takes no input`)}`;
+        return echoReply(`axn-tell: '${target.name}' is on a view that takes no input`);
       }
       const envelope = `[axn-tell from "${session.name.replace(/"/g, "'")}"] ${message}`;
       const comm =
@@ -476,7 +477,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
           .catch(() => null)) ?? null;
       const line = !comm || SHELL_FOREGROUND_RE.test(comm) ? `# ${envelope}` : envelope;
       void deps.backend.write(ptyIdOf(target), `${line}\r`);
-      return `echo ${JSON.stringify(`axn-tell: sent to '${target.name}'`)}`;
+      return echoReply(`axn-tell: sent to '${target.name}'`);
     },
     completeArg: ({ deps }, rest, lineHead) =>
       /\s$/.test(rest) || shellTokens(rest).length !== 1
@@ -493,14 +494,14 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     run: ({ deps }, arg) => {
       const flagged = parseTargetFlag(arg ?? '');
       if (flagged && !flagged.target) {
-        return 'echo "axn-broadcast: --to needs a session (name or id)"';
+        return echoReply('axn-broadcast: --to needs a session (name or id)');
       }
       let targets: ShellSession[];
       let text: string;
       if (flagged) {
         const target = findSessionByName(deps.sessionsRef.current, flagged.target!);
         if (!target) {
-          return `echo ${JSON.stringify(`axn-broadcast: no such session: ${flagged.target}`)}`;
+          return echoReply(`axn-broadcast: no such session: ${flagged.target}`);
         }
         targets = [target];
         text = flagged.rest.trim();
@@ -511,19 +512,19 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
           .map((id) => deps.sessionsRef.current.find((s) => s.id === id))
           .filter((s): s is ShellSession => !!s);
         if (text && !targets.length) {
-          return 'echo "axn-broadcast: broadcast set is empty (axn-broadcast-add marks sessions)"';
+          return echoReply('axn-broadcast: broadcast set is empty (axn-broadcast-add marks sessions)');
         }
       }
       if (!text) {
-        return 'echo "usage: axn-broadcast [--to <session>] <line> — send the line to every broadcast-marked session"';
+        return echoReply('usage: axn-broadcast [--to <session>] <line> — send the line to every broadcast-marked session');
       }
       const result = sendLine(deps, targets, text);
       if (result !== undefined) return result;
-      return `echo ${JSON.stringify(
+      return echoReply(
         flagged
           ? `axn-broadcast: sent to '${targets[0].name}'`
           : `axn-broadcast: sent to ${targets.length} session${targets.length === 1 ? '' : 's'}`,
-      )}`;
+      );
     },
     completeArg: ({ deps }, rest, lineHead) => {
       const rawCur = /\s$/.test(rest) ? '' : (/\S+$/.exec(rest)?.[0] ?? '');
@@ -552,10 +553,10 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
         ? findSessionByName(deps.sessionsRef.current, needle)
         : session;
       if (!target) {
-        return `echo ${JSON.stringify(`axn-broadcast-add: no such session: ${argRaw}`)}`;
+        return echoReply(`axn-broadcast-add: no such session: ${argRaw}`);
       }
       broadcastSet.mark(target.id);
-      return `echo ${JSON.stringify(`axn-broadcast-add: marked '${target.name}'`)}`;
+      return echoReply(`axn-broadcast-add: marked '${target.name}'`);
     },
     completeArg: ({ deps }, rest, lineHead) =>
       completeSessionName(deps.sessionsRef.current, rest, lineHead),
@@ -569,10 +570,10 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
         ? findSessionByName(deps.sessionsRef.current, needle)
         : session;
       if (!target) {
-        return `echo ${JSON.stringify(`axn-broadcast-rm: no such session: ${argRaw}`)}`;
+        return echoReply(`axn-broadcast-rm: no such session: ${argRaw}`);
       }
       broadcastSet.unmark(target.id);
-      return `echo ${JSON.stringify(`axn-broadcast-rm: unmarked '${target.name}'`)}`;
+      return echoReply(`axn-broadcast-rm: unmarked '${target.name}'`);
     },
     completeArg: ({ deps }, rest, lineHead) =>
       completeSessionName(deps.sessionsRef.current, rest, lineHead),
@@ -582,7 +583,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     run: () => {
       const n = broadcastSet.size();
       broadcastSet.clear();
-      return `echo ${JSON.stringify(`axn-broadcast-clear: ${n} session${n === 1 ? '' : 's'} unmarked`)}`;
+      return echoReply(`axn-broadcast-clear: ${n} session${n === 1 ? '' : 's'} unmarked`);
     },
   },
   {
@@ -593,9 +594,9 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
         .map((id) => deps.sessionsRef.current.find((s) => s.id === id))
         .filter((s): s is ShellSession => !!s)
         .map((s) => `${s.id === session.id ? '*' : ' '}${s.name}`);
-      return `echo ${JSON.stringify(
+      return echoReply(
         names.length ? names.join('\n') : 'axn-broadcasts: broadcast set is empty',
-      )}`;
+      );
     },
   },
 ];
