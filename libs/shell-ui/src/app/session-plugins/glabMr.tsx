@@ -60,11 +60,15 @@ export interface MrDiscussion {
   resolved: boolean;
   /** Note authors in chronological order. */
   notes: string[];
+  /** When the newest note was posted (ISO), when known. */
+  lastAt?: string;
 }
 
 export interface MrThreadSummary {
   waitingForMe: number;
   waitingForOther: number;
+  /** The newest note across the open threads; `author` is `you` for mine. */
+  lastComment?: { author: string; at: string };
 }
 
 /** An open merge request as tracked by the glab-mr plugin. */
@@ -157,16 +161,19 @@ export function summarizeOpenThreads(
   mr: Pick<GlabMrItem, 'discussions'>,
   me: string,
 ): MrThreadSummary {
-  return mr.discussions.reduce(
-    (summary, discussion) => {
-      if (!discussion.resolvable || discussion.resolved) return summary;
-      const last = discussion.notes[discussion.notes.length - 1];
-      if (last === me) summary.waitingForOther += 1;
-      else if (last) summary.waitingForMe += 1;
-      return summary;
-    },
-    { waitingForMe: 0, waitingForOther: 0 },
-  );
+  const summary: MrThreadSummary = { waitingForMe: 0, waitingForOther: 0 };
+  for (const discussion of mr.discussions) {
+    if (!discussion.resolvable || discussion.resolved) continue;
+    const last = discussion.notes[discussion.notes.length - 1];
+    if (!last) continue;
+    if (last === me) summary.waitingForOther += 1;
+    else summary.waitingForMe += 1;
+    const at = discussion.lastAt;
+    if (at && (!summary.lastComment || Date.parse(at) > Date.parse(summary.lastComment.at))) {
+      summary.lastComment = { author: last === me ? 'you' : last, at };
+    }
+  }
+  return summary;
 }
 
 /**
@@ -273,7 +280,12 @@ export function restMrPeople(raw: RawMrDetail): MrPeople {
 }
 
 interface RawMrDiscussion {
-  notes?: { resolvable?: boolean; resolved?: boolean | null; author?: { username?: string } }[];
+  notes?: {
+    resolvable?: boolean;
+    resolved?: boolean | null;
+    created_at?: string;
+    author?: { username?: string };
+  }[];
 }
 
 /**
@@ -292,6 +304,7 @@ function normalizeRestDiscussions(discussions: RawMrDiscussion[]): MrDiscussion[
     resolvable: discussion.notes?.some((note) => note.resolvable === true) ?? false,
     resolved: discussion.notes?.every((note) => note.resolved === true) ?? false,
     notes: (discussion.notes ?? []).map((note) => note.author?.username ?? '').filter(Boolean),
+    lastAt: discussion.notes?.[discussion.notes.length - 1]?.created_at,
   }));
 }
 
@@ -610,7 +623,7 @@ const MR_OVERVIEW_QUERY = `query { currentUser { username
 // notes(last: 20): only a thread's newest notes matter — `mrWaitingForMe`
 // reads who wrote last — the same window as gh-pr's `comments(last: 20)`.
 const mrDiscussionsFields = (afterVar?: string) =>
-  `discussions(first: 100${afterVar ? `, after: $${afterVar}` : ''}) { pageInfo { hasNextPage endCursor } nodes { resolvable resolved notes(last: 20) { nodes { author { username } } } } }`;
+  `discussions(first: 100${afterVar ? `, after: $${afterVar}` : ''}) { pageInfo { hasNextPage endCursor } nodes { resolvable resolved notes(last: 20) { nodes { createdAt author { username } } } } }`;
 
 /** MRs per discussions query, and how many such queries run at once. */
 const DISCUSSION_BATCH = 8;
@@ -715,7 +728,7 @@ interface RawGqlMr {
     nodes?: {
       resolvable?: boolean;
       resolved?: boolean;
-      notes?: { nodes?: { author?: { username?: string } }[] };
+      notes?: { nodes?: { createdAt?: string; author?: { username?: string } }[] };
     }[];
   };
 }
@@ -760,6 +773,7 @@ function normalizeDiscussions(raw: RawGqlMr['discussions']): MrDiscussion[] {
     resolvable: d.resolvable ?? false,
     resolved: d.resolved ?? false,
     notes: (d.notes?.nodes ?? []).map((n) => n.author?.username ?? ''),
+    lastAt: d.notes?.nodes?.[d.notes.nodes.length - 1]?.createdAt,
   }));
 }
 
@@ -1046,7 +1060,18 @@ function projectShort(fullPath: string): string {
  * the parts are listed as what they are — who commented last — and any
  * remainder is named instead of silently making the sum look wrong.
  */
-export function threadSummaryTip(open: number, summary?: MrThreadSummary): string {
+export function relativeAgo(iso: string, now = Date.now()): string | null {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return null;
+  const minutes = Math.max(0, Math.round((now - then) / 60_000));
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+export function threadSummaryTip(open: number, summary?: MrThreadSummary, now = Date.now()): string {
   const plural = (n: number) => `${n} open thread${n === 1 ? '' : 's'}`;
   if (!summary) return `${plural(open)} · last commenter unavailable`;
   const lines = [plural(open)];
@@ -1054,6 +1079,10 @@ export function threadSummaryTip(open: number, summary?: MrThreadSummary): strin
   if (summary.waitingForOther > 0) lines.push(`• ${summary.waitingForOther} last answered by you — waiting on others`);
   const unknown = open - summary.waitingForMe - summary.waitingForOther;
   if (unknown > 0) lines.push(`• ${unknown} without a loaded last comment`);
+  if (summary.lastComment) {
+    const ago = relativeAgo(summary.lastComment.at, now);
+    lines.push(`Last comment by ${summary.lastComment.author}${ago ? ` · ${ago}` : ''}`);
+  }
   return lines.join('\n');
 }
 

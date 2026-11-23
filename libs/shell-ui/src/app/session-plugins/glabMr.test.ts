@@ -20,6 +20,7 @@ import {
   summarizeOpenThreads,
   mrAwaitingOthers,
   threadSummaryTip,
+  relativeAgo,
   mrNeedsAction,
   mrWaitingForMe,
   mergeMine,
@@ -586,5 +587,35 @@ describe('threadSummaryTip', () => {
   });
   it('says so when the split is unavailable', () => {
     expect(threadSummaryTip(4)).toBe('4 open threads · last commenter unavailable');
+  });
+});
+
+describe('last comment', () => {
+  const at = (iso: string) => Date.parse(iso);
+  it('summarizeOpenThreads keeps the newest note of the open threads', () => {
+    const m = mr({
+      discussions: [
+        { ...thread(['other']), lastAt: '2026-11-20T10:00:00Z' },
+        { ...thread(['other', 'me']), lastAt: '2026-11-22T10:00:00Z' },
+        { ...thread(['x'], true), lastAt: '2026-11-23T10:00:00Z' },
+      ],
+    });
+    expect(summarizeOpenThreads(m, 'me').lastComment).toEqual({ author: 'you', at: '2026-11-22T10:00:00Z' });
+  });
+  it('relativeAgo formats minutes, hours and days', () => {
+    const now = at('2026-11-23T12:00:00Z');
+    expect(relativeAgo('2026-11-23T11:59:40Z', now)).toBe('just now');
+    expect(relativeAgo('2026-11-23T11:15:00Z', now)).toBe('45m ago');
+    expect(relativeAgo('2026-11-23T07:00:00Z', now)).toBe('5h ago');
+    expect(relativeAgo('2026-11-18T12:00:00Z', now)).toBe('5d ago');
+    expect(relativeAgo('nope', now)).toBeNull();
+  });
+  it('the tooltip ends with the last commenter and how long ago', () => {
+    const tip = threadSummaryTip(
+      2,
+      { waitingForMe: 1, waitingForOther: 1, lastComment: { author: 'alice', at: '2026-11-23T09:00:00Z' } },
+      at('2026-11-23T12:00:00Z'),
+    );
+    expect(tip.split('\n').pop()).toBe('Last comment by alice · 3h ago');
   });
 });
