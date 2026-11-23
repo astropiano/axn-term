@@ -34,7 +34,7 @@ msgstr "{label} (hex)"
 msgid "{label}: theme {slot}"
 msgstr "{label}: theme {slot}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1234
+#: libs/shell-ui/src/app/SettingsModal.tsx:1259
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 
@@ -42,8 +42,8 @@ msgstr "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{
 #~ msgid "Account"
 #~ msgstr "Account"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1259
-#: libs/shell-ui/src/app/SettingsModal.tsx:1261
+#: libs/shell-ui/src/app/SettingsModal.tsx:1284
+#: libs/shell-ui/src/app/SettingsModal.tsx:1286
 msgid "Add icon"
 msgstr "Add icon"
 
@@ -59,11 +59,11 @@ msgstr "Add view"
 msgid "Advanced"
 msgstr "Advanced"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1063
+#: libs/shell-ui/src/app/SettingsModal.tsx:1088
 msgid "Also used as the session icon while this process is foreground."
 msgstr "Also used as the session icon while this process is foreground."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:754
+#: libs/shell-ui/src/app/SettingsModal.tsx:779
 msgid "Applies immediately to the running app. Logs rotate in the OS log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides."
 msgstr "Applies immediately to the running app. Logs rotate in the OS log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides."
 
@@ -80,7 +80,7 @@ msgid "Asking <0>{asked}</0>."
 msgstr "Asking <0>{asked}</0>."
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:69
-#: libs/shell-ui/src/app/SettingsModal.tsx:973
+#: libs/shell-ui/src/app/SettingsModal.tsx:998
 msgid "Auto"
 msgstr "Auto"
 
@@ -123,7 +123,7 @@ msgstr "Built-in font"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1245
+#: libs/shell-ui/src/app/SettingsModal.tsx:1270
 #: libs/shell-ui/src/app/TagModal.tsx:184
 msgid "Cancel"
 msgstr "Cancel"
@@ -164,6 +164,10 @@ msgstr "Clients"
 msgid "Clients: {0}"
 msgstr "Clients: {0}"
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:662
+msgid "Clipboard writes from programs"
+msgstr "Clipboard writes from programs"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:170
 msgid "Close"
 msgstr "Close"
@@ -189,7 +193,7 @@ msgstr "Colour of {name}"
 msgid "Colour of {tag}"
 msgstr "Colour of {tag}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:692
+#: libs/shell-ui/src/app/SettingsModal.tsx:717
 msgid "Config file"
 msgstr "Config file"
 
@@ -335,7 +339,7 @@ msgstr "Delete workspace “{0}”?"
 msgid "Directory"
 msgstr "Directory"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:877
+#: libs/shell-ui/src/app/SettingsModal.tsx:902
 msgid "disabled"
 msgstr "disabled"
 
@@ -355,7 +359,7 @@ msgstr "Each view gets its own rail item. Give a URL, or a command that prints o
 msgid "Edit"
 msgstr "Edit"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1188
+#: libs/shell-ui/src/app/SettingsModal.tsx:1213
 msgid "Edit icon"
 msgstr "Edit icon"
 
@@ -371,12 +375,12 @@ msgstr "empty"
 msgid "Enable devin task parser"
 msgstr "Enable devin task parser"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:772
+#: libs/shell-ui/src/app/SettingsModal.tsx:797
 msgid "Enable remote — show the Remote console in the rail"
 msgstr "Enable remote — show the Remote console in the rail"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:877
-#: libs/shell-ui/src/app/SettingsModal.tsx:940
+#: libs/shell-ui/src/app/SettingsModal.tsx:902
+#: libs/shell-ui/src/app/SettingsModal.tsx:965
 msgid "enabled"
 msgstr "enabled"
 
@@ -397,7 +401,7 @@ msgstr "Expand"
 msgid "Export failed."
 msgstr "Export failed."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:707
+#: libs/shell-ui/src/app/SettingsModal.tsx:732
 msgid "Export…"
 msgstr "Export…"
 
@@ -422,15 +426,15 @@ msgstr "failed"
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "Faster: F2 on the selected session, or double-click its name"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:896
+#: libs/shell-ui/src/app/SettingsModal.tsx:921
 msgid "file preview"
 msgstr "file preview"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:806
+#: libs/shell-ui/src/app/SettingsModal.tsx:831
 msgid "File previews"
 msgstr "File previews"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:848
+#: libs/shell-ui/src/app/SettingsModal.tsx:873
 msgid "Filter plugins…"
 msgstr "Filter plugins…"
 
@@ -494,11 +498,11 @@ msgstr "Hub URL"
 msgid "Icon"
 msgstr "Icon"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:715
+#: libs/shell-ui/src/app/SettingsModal.tsx:740
 msgid "Import replaces all settings with the picked config.yaml."
 msgstr "Import replaces all settings with the picked config.yaml."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:700
+#: libs/shell-ui/src/app/SettingsModal.tsx:725
 msgid "Import…"
 msgstr "Import…"
 
@@ -567,11 +571,11 @@ msgstr "loading…"
 msgid "Loading…"
 msgstr "Loading…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:727
+#: libs/shell-ui/src/app/SettingsModal.tsx:752
 msgid "Log level"
 msgstr "Log level"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1043
+#: libs/shell-ui/src/app/SettingsModal.tsx:1068
 msgid "Logo"
 msgstr "Logo"
 
@@ -579,7 +583,7 @@ msgstr "Logo"
 msgid "Main window"
 msgstr "Main window"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:683
+#: libs/shell-ui/src/app/SettingsModal.tsx:708
 msgid "Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
 msgstr "Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
 
@@ -661,7 +665,7 @@ msgstr "New worktree session"
 msgid "no clients"
 msgstr "no clients"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1198
+#: libs/shell-ui/src/app/SettingsModal.tsx:1223
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "No icons configured — every session shows the default terminal icon."
 
@@ -722,6 +726,10 @@ msgstr "Not signed in"
 msgid "not yet"
 msgstr "not yet"
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:674
+msgid "Off"
+msgstr "Off"
+
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:727
 msgid "OIDC client"
 msgstr "OIDC client"
@@ -733,6 +741,10 @@ msgstr "OIDC issuer"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:624
 msgid "On the same Wi-Fi, the axn-term app finds this desktop by itself. Anywhere else, scan this code in the app."
 msgstr "On the same Wi-Fi, the axn-term app finds this desktop by itself. Anywhere else, scan this code in the app."
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:673
+msgid "Only from the focused terminal"
+msgstr "Only from the focused terminal"
 
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:820
 msgid "only this device, not viewing a session"
@@ -776,7 +788,7 @@ msgstr "Open in workspace"
 msgid "Open link"
 msgstr "Open link"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:750
+#: libs/shell-ui/src/app/SettingsModal.tsx:775
 msgid "Open log folder…"
 msgstr "Open log folder…"
 
@@ -809,7 +821,7 @@ msgstr "Overall UI scale in percent — panel, tabs, banners, menus. The termina
 msgid "Pairing code for the axn-term app"
 msgstr "Pairing code for the axn-term app"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:974
+#: libs/shell-ui/src/app/SettingsModal.tsx:999
 msgid "Panel accordion"
 msgstr "Panel accordion"
 
@@ -826,7 +838,7 @@ msgstr "Paste"
 msgid "Pause viewport"
 msgstr "Pause viewport"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:920
+#: libs/shell-ui/src/app/SettingsModal.tsx:945
 msgid "permissions:"
 msgstr "permissions:"
 
@@ -851,9 +863,13 @@ msgstr "Preview"
 msgid "Preview unavailable"
 msgstr "Preview unavailable"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1207
+#: libs/shell-ui/src/app/SettingsModal.tsx:1232
 msgid "Process"
 msgstr "Process"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:677
+msgid "Programs such as Claude Code copy text with OSC 52. Writes from a terminal you are not in are ignored, so output you only view cannot replace your clipboard."
+msgstr "Programs such as Claude Code copy text with OSC 52. Writes from a terminal you are not in are ignored, so output you only view cannot replace your clipboard."
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:764
 #~ msgid "Publish this window's terminals to a /remote hub — other devices attach via the web app with ?remote=<session>."
@@ -873,11 +889,11 @@ msgstr "Publishing"
 #~ msgid "Publishing \\u2014 connected"
 #~ msgstr "Publishing \\u2014 connected"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:977
+#: libs/shell-ui/src/app/SettingsModal.tsx:1002
 msgid "Rail icon only"
 msgstr "Rail icon only"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:977
+#: libs/shell-ui/src/app/SettingsModal.tsx:1002
 msgid "Rail item"
 msgstr "Rail item"
 
@@ -913,7 +929,7 @@ msgstr "Remote — this machine is the host"
 msgid "Remote — viewing"
 msgstr "Remote — viewing"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:763
+#: libs/shell-ui/src/app/SettingsModal.tsx:788
 msgid "Remote access"
 msgstr "Remote access"
 
@@ -930,7 +946,7 @@ msgstr "Remote access"
 msgid "Remove"
 msgstr "Remove"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1191
+#: libs/shell-ui/src/app/SettingsModal.tsx:1216
 msgid "Remove icon"
 msgstr "Remove icon"
 
@@ -952,7 +968,7 @@ msgstr "Render session summaries (set via axn-session-summary)"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
-#: libs/shell-ui/src/app/SettingsModal.tsx:912
+#: libs/shell-ui/src/app/SettingsModal.tsx:937
 msgid "requires {0}{1}"
 msgstr "requires {0}{1}"
 
@@ -1011,13 +1027,13 @@ msgstr "Run the login in a shell, then check again."
 msgid "Running"
 msgstr "Running"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:926
+#: libs/shell-ui/src/app/SettingsModal.tsx:951
 msgid "sandboxed — no permissions (no shell, files or terminal access)"
 msgstr "sandboxed — no permissions (no shell, files or terminal access)"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1253
+#: libs/shell-ui/src/app/SettingsModal.tsx:1278
 msgid "Save"
 msgstr "Save"
 
@@ -1072,7 +1088,7 @@ msgstr "Server address"
 msgid "Session actions"
 msgstr "Session actions"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:662
+#: libs/shell-ui/src/app/SettingsModal.tsx:687
 msgid "Session icons"
 msgstr "Session icons"
 
@@ -1083,11 +1099,11 @@ msgstr "Session icons"
 #~ msgid "Session name on the hub (optional)"
 #~ msgstr "Session name on the hub (optional)"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:896
+#: libs/shell-ui/src/app/SettingsModal.tsx:921
 msgid "session plugin"
 msgstr "session plugin"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:800
+#: libs/shell-ui/src/app/SettingsModal.tsx:825
 msgid "Session plugins"
 msgstr "Session plugins"
 
@@ -1142,7 +1158,7 @@ msgstr "Show all sessions"
 msgid "Show only sessions that need you"
 msgstr "Show only sessions that need you"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:969
+#: libs/shell-ui/src/app/SettingsModal.tsx:994
 msgid "Show this plugin's status as an accordion in the session panel, or keep only its rail icon."
 msgstr "Show this plugin's status as an accordion in the session panel, or keep only its rail icon."
 
@@ -1170,23 +1186,23 @@ msgstr "Signed in"
 msgid "Signed in as {0}"
 msgstr "Signed in as {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3508
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3518
 msgid "Start workflow…"
 msgstr "Start workflow…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:966
+#: libs/shell-ui/src/app/SettingsModal.tsx:991
 msgid "Status display"
 msgstr "Status display"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:719
+#: libs/shell-ui/src/app/SettingsModal.tsx:744
 msgid "Stored in ~/.axn-term/config.yaml"
 msgstr "Stored in ~/.axn-term/config.yaml"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1004
+#: libs/shell-ui/src/app/SettingsModal.tsx:1029
 msgid "Stored in ~/.axn-term/plugins.yaml"
 msgstr "Stored in ~/.axn-term/plugins.yaml"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:720
+#: libs/shell-ui/src/app/SettingsModal.tsx:745
 msgid "Stored in browser localStorage"
 msgstr "Stored in browser localStorage"
 
@@ -1291,7 +1307,7 @@ msgstr "This closes {0} {1} inside it."
 msgid "This machine is the host"
 msgstr "This machine is the host"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:999
+#: libs/shell-ui/src/app/SettingsModal.tsx:1024
 msgid "This plugin declares no settings."
 msgstr "This plugin declares no settings."
 
@@ -1332,7 +1348,7 @@ msgstr "UI zoom"
 msgid "Unable to read file"
 msgstr "Unable to read file"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:913
+#: libs/shell-ui/src/app/SettingsModal.tsx:938
 msgid "unmet, plugin disabled"
 msgstr "unmet, plugin disabled"
 
@@ -1359,7 +1375,7 @@ msgstr "User token"
 msgid "Where the \"+\" for a new session appears: a ghost row at the end of each workspace's session list, the workspace header, or both."
 msgstr "Where the \"+\" for a new session appears: a ghost row at the end of each workspace's session list, the workspace header, or both."
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:968
+#: libs/shell-ui/src/app/SettingsModal.tsx:993
 msgid "Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise."
 msgstr "Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise."
 

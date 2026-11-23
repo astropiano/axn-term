@@ -34,7 +34,7 @@ msgstr "{label}（十六进制）"
 msgid "{label}: theme {slot}"
 msgstr "{label}：主题 {slot}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1234
+#: libs/shell-ui/src/app/SettingsModal.tsx:1259
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "一个 Lucide 图标名称（如 <0>GitFork</0>）或内联 SVG 标签，例如 <1>{SVG_HINT_EXAMPLE}</1>"
 
@@ -42,8 +42,8 @@ msgstr "一个 Lucide 图标名称（如 <0>GitFork</0>）或内联 SVG 标签�
 #~ msgid "Account"
 #~ msgstr "账户"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1259
-#: libs/shell-ui/src/app/SettingsModal.tsx:1261
+#: libs/shell-ui/src/app/SettingsModal.tsx:1284
+#: libs/shell-ui/src/app/SettingsModal.tsx:1286
 msgid "Add icon"
 msgstr "添加图标"
 
@@ -59,11 +59,11 @@ msgstr "添加视图"
 msgid "Advanced"
 msgstr "高级"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1063
+#: libs/shell-ui/src/app/SettingsModal.tsx:1088
 msgid "Also used as the session icon while this process is foreground."
 msgstr "此进程位于前台时也用作会话图标。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:754
+#: libs/shell-ui/src/app/SettingsModal.tsx:779
 msgid "Applies immediately to the running app. Logs rotate in the OS log folder (~/Library/Logs/axn-term); LOG_LEVEL env overrides."
 msgstr "立即应用于正在运行的应用。日志在系统日志文件夹 (~/Library/Logs/axn-term) 中轮转；LOG_LEVEL 环境变量优先生效。"
 
@@ -80,7 +80,7 @@ msgid "Asking <0>{asked}</0>."
 msgstr "正在查询 <0>{asked}</0>。"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:69
-#: libs/shell-ui/src/app/SettingsModal.tsx:973
+#: libs/shell-ui/src/app/SettingsModal.tsx:998
 msgid "Auto"
 msgstr "自动"
 
@@ -123,7 +123,7 @@ msgstr "内置字体"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1245
+#: libs/shell-ui/src/app/SettingsModal.tsx:1270
 #: libs/shell-ui/src/app/TagModal.tsx:184
 msgid "Cancel"
 msgstr "取消"
@@ -164,6 +164,10 @@ msgstr "客户端"
 msgid "Clients: {0}"
 msgstr "：{0}"
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:662
+msgid "Clipboard writes from programs"
+msgstr "程序写入剪贴板"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:170
 msgid "Close"
 msgstr "关闭"
@@ -189,7 +193,7 @@ msgstr "{name} 的颜色"
 msgid "Colour of {tag}"
 msgstr "{tag} 的颜色"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:692
+#: libs/shell-ui/src/app/SettingsModal.tsx:717
 msgid "Config file"
 msgstr "配置文件"
 
@@ -335,7 +339,7 @@ msgstr "删除工作区“{0}”？"
 msgid "Directory"
 msgstr "目录"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:877
+#: libs/shell-ui/src/app/SettingsModal.tsx:902
 msgid "disabled"
 msgstr "已禁用"
 
@@ -355,7 +359,7 @@ msgstr "每个视图在侧栏中都有自己的项目。请填写 URL，或填�
 msgid "Edit"
 msgstr "编辑"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1188
+#: libs/shell-ui/src/app/SettingsModal.tsx:1213
 msgid "Edit icon"
 msgstr "编辑图标"
 
@@ -371,12 +375,12 @@ msgstr "空"
 msgid "Enable devin task parser"
 msgstr "启用 Devin 任务解析器"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:772
+#: libs/shell-ui/src/app/SettingsModal.tsx:797
 msgid "Enable remote — show the Remote console in the rail"
 msgstr " — "
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:877
-#: libs/shell-ui/src/app/SettingsModal.tsx:940
+#: libs/shell-ui/src/app/SettingsModal.tsx:902
+#: libs/shell-ui/src/app/SettingsModal.tsx:965
 msgid "enabled"
 msgstr "已启用"
 
@@ -397,7 +401,7 @@ msgstr "展开"
 msgid "Export failed."
 msgstr "导出失败。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:707
+#: libs/shell-ui/src/app/SettingsModal.tsx:732
 msgid "Export…"
 msgstr "导出…"
 
@@ -422,15 +426,15 @@ msgstr "失败"
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "更快：在所选会话上按 F2，或双击其名称"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:896
+#: libs/shell-ui/src/app/SettingsModal.tsx:921
 msgid "file preview"
 msgstr "文件预览"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:806
+#: libs/shell-ui/src/app/SettingsModal.tsx:831
 msgid "File previews"
 msgstr "文件预览"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:848
+#: libs/shell-ui/src/app/SettingsModal.tsx:873
 msgid "Filter plugins…"
 msgstr "筛选插件…"
 
@@ -494,11 +498,11 @@ msgstr "Hub \\u5730\\u5740"
 msgid "Icon"
 msgstr "图标"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:715
+#: libs/shell-ui/src/app/SettingsModal.tsx:740
 msgid "Import replaces all settings with the picked config.yaml."
 msgstr "导入将用所选 config.yaml 替换所有设置。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:700
+#: libs/shell-ui/src/app/SettingsModal.tsx:725
 msgid "Import…"
 msgstr "导入…"
 
@@ -567,11 +571,11 @@ msgstr "加载中…"
 msgid "Loading…"
 msgstr "加载中…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:727
+#: libs/shell-ui/src/app/SettingsModal.tsx:752
 msgid "Log level"
 msgstr "日志级别"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1043
+#: libs/shell-ui/src/app/SettingsModal.tsx:1068
 msgid "Logo"
 msgstr "徽标"
 
@@ -579,7 +583,7 @@ msgstr "徽标"
 msgid "Main window"
 msgstr "主窗口"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:683
+#: libs/shell-ui/src/app/SettingsModal.tsx:708
 msgid "Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTerminal) or an SVG tag."
 msgstr "将可执行文件名或插件 ID 映射到 Lucide 图标（如 Bot、SquareTerminal）或 SVG 标签。"
 
@@ -660,7 +664,7 @@ msgstr "新建 worktree 会话"
 msgid "no clients"
 msgstr "无客户端"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1198
+#: libs/shell-ui/src/app/SettingsModal.tsx:1223
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "未配置图标 — 每个会话都显示默认终端图标。"
 
@@ -720,6 +724,10 @@ msgstr "未登录"
 msgid "not yet"
 msgstr "尚未"
 
+#: libs/shell-ui/src/app/SettingsModal.tsx:674
+msgid "Off"
+msgstr "关闭"
+
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:727
 msgid "OIDC client"
 msgstr "OIDC 客户端"
@@ -731,6 +739,10 @@ msgstr "OIDC "
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:624
 msgid "On the same Wi-Fi, the axn-term app finds this desktop by itself. Anywhere else, scan this code in the app."
 msgstr "在同一 Wi-Fi 下，axn-term 应用会自动找到这台电脑。在其他地方，请在应用中扫描此二维码。"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:673
+msgid "Only from the focused terminal"
+msgstr "仅限获得焦点的终端"
 
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:820
 msgid "only this device, not viewing a session"
@@ -774,7 +786,7 @@ msgstr "在工作区中打开"
 msgid "Open link"
 msgstr "打开链接"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:750
+#: libs/shell-ui/src/app/SettingsModal.tsx:775
 msgid "Open log folder…"
 msgstr "打开日志文件夹…"
 
@@ -807,7 +819,7 @@ msgstr "整体界面缩放百分比 — 面板、标签页、横幅、菜单。�
 msgid "Pairing code for the axn-term app"
 msgstr "axn-term 应用的配对码"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:974
+#: libs/shell-ui/src/app/SettingsModal.tsx:999
 msgid "Panel accordion"
 msgstr "面板折叠区"
 
@@ -824,7 +836,7 @@ msgstr "粘贴"
 msgid "Pause viewport"
 msgstr "暂停视口"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:920
+#: libs/shell-ui/src/app/SettingsModal.tsx:945
 msgid "permissions:"
 msgstr "权限："
 
@@ -849,9 +861,13 @@ msgstr "预览"
 msgid "Preview unavailable"
 msgstr "预览不可用"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1207
+#: libs/shell-ui/src/app/SettingsModal.tsx:1232
 msgid "Process"
 msgstr "进程"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:677
+msgid "Programs such as Claude Code copy text with OSC 52. Writes from a terminal you are not in are ignored, so output you only view cannot replace your clipboard."
+msgstr "Claude Code 等程序通过 OSC 52 复制文本。来自你当前未使用的终端的写入会被忽略，因此你只是查看的输出无法替换你的剪贴板。"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:764
 #~ msgid "Publish this window's terminals to a /remote hub — other devices attach via the web app with ?remote=<session>."
@@ -871,11 +887,11 @@ msgstr "发布"
 #~ msgid "Publishing \\u2014 connected"
 #~ msgstr "\\u5df2\\u53d1\\u5e03 \\u2014 \\u5df2\\u8fde\\u63a5"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:977
+#: libs/shell-ui/src/app/SettingsModal.tsx:1002
 msgid "Rail icon only"
 msgstr "仅侧栏图标"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:977
+#: libs/shell-ui/src/app/SettingsModal.tsx:1002
 msgid "Rail item"
 msgstr "边栏项"
 
@@ -911,7 +927,7 @@ msgstr " — "
 msgid "Remote — viewing"
 msgstr " — "
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:763
+#: libs/shell-ui/src/app/SettingsModal.tsx:788
 msgid "Remote access"
 msgstr "远程访问"
 
@@ -928,7 +944,7 @@ msgstr "远程访问"
 msgid "Remove"
 msgstr "移除"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1191
+#: libs/shell-ui/src/app/SettingsModal.tsx:1216
 msgid "Remove icon"
 msgstr "移除图标"
 
@@ -950,7 +966,7 @@ msgstr "显示会话摘要（通过 axn-session-summary 设置）"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
-#: libs/shell-ui/src/app/SettingsModal.tsx:912
+#: libs/shell-ui/src/app/SettingsModal.tsx:937
 msgid "requires {0}{1}"
 msgstr "需要 {0}{1}"
 
@@ -1008,13 +1024,13 @@ msgstr "在 Shell 中运行登录命令，然后重新检查。"
 msgid "Running"
 msgstr "运行中"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:926
+#: libs/shell-ui/src/app/SettingsModal.tsx:951
 msgid "sandboxed — no permissions (no shell, files or terminal access)"
 msgstr "已沙箱化 — 无权限（无 shell、文件或终端访问）"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1253
+#: libs/shell-ui/src/app/SettingsModal.tsx:1278
 msgid "Save"
 msgstr "保存"
 
@@ -1069,7 +1085,7 @@ msgstr "服务器地址"
 msgid "Session actions"
 msgstr "会话操作"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:662
+#: libs/shell-ui/src/app/SettingsModal.tsx:687
 msgid "Session icons"
 msgstr "会话图标"
 
@@ -1080,11 +1096,11 @@ msgstr "会话图标"
 #~ msgid "Session name on the hub (optional)"
 #~ msgstr "Hub \\u4e0a\\u7684\\u4f1a\\u8bdd\\u540d\\u79f0\\uff08\\u53ef\\u9009\\uff09"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:896
+#: libs/shell-ui/src/app/SettingsModal.tsx:921
 msgid "session plugin"
 msgstr "会话插件"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:800
+#: libs/shell-ui/src/app/SettingsModal.tsx:825
 msgid "Session plugins"
 msgstr "会话插件"
 
@@ -1139,7 +1155,7 @@ msgstr "显示所有会话"
 msgid "Show only sessions that need you"
 msgstr "仅显示需要处理的会话"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:969
+#: libs/shell-ui/src/app/SettingsModal.tsx:994
 msgid "Show this plugin's status as an accordion in the session panel, or keep only its rail icon."
 msgstr "将此插件的状态以折叠面板显示在会话面板中，或仅保留其侧栏图标。"
 
@@ -1167,23 +1183,23 @@ msgstr "已登录"
 msgid "Signed in as {0}"
 msgstr "已登录为 {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3508
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3518
 msgid "Start workflow…"
 msgstr "启动工作流…"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:966
+#: libs/shell-ui/src/app/SettingsModal.tsx:991
 msgid "Status display"
 msgstr "状态显示"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:719
+#: libs/shell-ui/src/app/SettingsModal.tsx:744
 msgid "Stored in ~/.axn-term/config.yaml"
 msgstr "存储于 ~/.axn-term/config.yaml"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1004
+#: libs/shell-ui/src/app/SettingsModal.tsx:1029
 msgid "Stored in ~/.axn-term/plugins.yaml"
 msgstr "存储于 ~/.axn-term/plugins.yaml"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:720
+#: libs/shell-ui/src/app/SettingsModal.tsx:745
 msgid "Stored in browser localStorage"
 msgstr "存储于浏览器 localStorage"
 
@@ -1288,7 +1304,7 @@ msgstr "将关闭其中的 {0} 个{1}。"
 msgid "This machine is the host"
 msgstr "本机是主机"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:999
+#: libs/shell-ui/src/app/SettingsModal.tsx:1024
 msgid "This plugin declares no settings."
 msgstr "此插件未声明任何设置。"
 
@@ -1329,7 +1345,7 @@ msgstr "界面缩放"
 msgid "Unable to read file"
 msgstr "无法读取文件"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:913
+#: libs/shell-ui/src/app/SettingsModal.tsx:938
 msgid "unmet, plugin disabled"
 msgstr "未满足，插件已禁用"
 
@@ -1356,7 +1372,7 @@ msgstr "\\u7528\\u6237\\u4ee4\\u724c"
 msgid "Where the \"+\" for a new session appears: a ghost row at the end of each workspace's session list, the workspace header, or both."
 msgstr "新建会话的 \"+\" 显示位置：每个工作区会话列表末尾的占位行、工作区标题，或两者。"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:968
+#: libs/shell-ui/src/app/SettingsModal.tsx:993
 msgid "Where this plugin's status meters appear. Auto uses the rail on touch devices and the session panel otherwise."
 msgstr "此插件状态仪表的显示位置。“自动”在触摸设备上使用边栏，否则使用会话面板。"
 

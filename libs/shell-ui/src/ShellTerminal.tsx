@@ -8,7 +8,7 @@ import { placeHoverCard } from './hoverCardPlacement';
 import type { ShellSession } from './types';
 import { useSettings } from './SettingsProvider';
 import { getXtermColors, resolveShellFont } from './themes';
-import { registerTerminal, resizeSessionBuffer, serializeTerminal, setPendingReplay, takePendingReplay, takeReloadReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, registerTerminalInput, unregisterTerminalInput, registerSelectionResolver, unregisterSelectionResolver, type SelectionResolver, type TerminalInput } from './terminalRegistry';
+import { registerTerminal, resizeSessionBuffer, serializeTerminal, setPendingReplay, takePendingReplay, takeReloadReplay, takePtyKeepAlive, unregisterTerminal, registerTerminalElement, terminalSelection, handleClipboardWrites, terminalHasFocus, registerTerminalInput, unregisterTerminalInput, registerSelectionResolver, unregisterSelectionResolver, type SelectionResolver, type TerminalInput } from './terminalRegistry';
 import { applyTerminalRenderer, createTerminalInput, isUserInput, OSC_REPORT_RAW_WAIT_MS, oscReportTarget, repaintTerminal, safely } from './terminalRenderer';
 import { acquirePty, nudgePtyRedraw } from './ptyLifetime';
 import {
@@ -158,6 +158,8 @@ export function ShellTerminal({
   const onUserInputRef = useRef(onUserInput);
   onUserInputRef.current = onUserInput;
   const { activeTheme, settings } = useSettings();
+  const clipboardWritesRef = useRef(settings.terminalClipboardWrites);
+  clipboardWritesRef.current = settings.terminalClipboardWrites;
   const { services } = useShellServices();
   // Disposes the active GPU renderer addon when the setting hot-swaps; the
   // addon itself is also disposed by term.dispose() on teardown.
@@ -315,10 +317,21 @@ export function ShellTerminal({
       }
     });
     const unregisterElement = registerTerminalElement(terminalRef.current, term);
-    // OSC 52: TUIs with their own mouse selection (Claude Code) copy this way
-    const clipboardWrites = handleClipboardWrites(term, (text) => {
-      void Promise.resolve(services.copyText(text)).catch(() => {});
-    });
+    // OSC 52: TUIs with their own mouse selection (Claude Code) copy this way.
+    // Only the visible terminal the user is in may write the clipboard, and
+    // the `terminalClipboardWrites` setting can turn it off.
+    const clipboardWrites = handleClipboardWrites(
+      term,
+      (text) => {
+        void Promise.resolve(services.copyText(text)).catch(() => {});
+      },
+      () => {
+        const mode = clipboardWritesRef.current ?? 'focused';
+        const ok = mode !== 'off' && isVisibleRef.current === true && terminalHasFocus(term);
+        if (!ok) axnLog('info', 'terminal', `OSC 52 clipboard write ignored (${mode === 'off' ? 'disabled in settings' : 'terminal not focused'})`);
+        return ok;
+      },
+    );
     registerTerminal(session.id, term);
     // A remount after the view was dropped (selection moved, broadcast
     // deck), a session moved in from another window, or a page reload with

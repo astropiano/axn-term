@@ -26,7 +26,7 @@ import {
   toggleExpandedGroup,
 } from './panelStatus';
 import { orderRailPlugins } from './railOrder';
-import { sanitizeSvgIcon } from './sanitizeSvg';
+import { sanitizeSvgIcon, svgIconContainStyle } from './sanitizeSvg';
 import { useContextMenuTrigger } from '../useContextMenuTrigger';
 import type { MenuPosition } from '../useContextMenuTrigger';
 import type { AgentCli, AttentionLevel, ShellSession, Workspace } from '../types';
@@ -1035,7 +1035,7 @@ export function SessionIconGlyph({
   const svg = useMemo(() => (isSvgString(value) ? sanitizeSvgIcon(value) : null), [value]);
 
   if (svg !== null) {
-    return <span className={className} dangerouslySetInnerHTML={{ __html: svg }} />;
+    return <span className={className} style={svgIconContainStyle} dangerouslySetInnerHTML={{ __html: svg }} />;
   }
 
   const IconComponent = DynamicIcon ?? SquareTerminal;

@@ -37,4 +37,24 @@ describe('sanitizeSvgIcon', () => {
     expect(clean).not.toMatch(/script|style|foreignobject|<img|onerror/i);
     expect(clean).toContain('<path d="M0 0"');
   });
+
+  it('drops fixed/sticky positioning so an icon cannot cover the app', () => {
+    const clean = sanitizeSvgIcon(
+      '<svg style="position:fixed;inset:0;z-index:9999;color:red"><rect style="position: sticky; top: 0"></rect></svg>',
+    );
+    expect(clean).not.toMatch(/fixed|sticky/i);
+    expect(clean).toMatch(/color:\s*red/);
+  });
+
+  it('keeps in-icon references but drops external ones', () => {
+    const clean = sanitizeSvgIcon(
+      '<svg xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient id="g"></linearGradient><path id="p" d="M0 0"></path></defs>' +
+        '<a href="#p"><circle r="1"></circle></a><a href="https://evil.example/x"><rect></rect></a><rect fill="url(#g)"></rect>' +
+        '<image href="https://evil.example/beacon.png"></image><image xlink:href="//evil.example/b.png"></image>' +
+        '<rect filter="url(https://evil.example/f.svg#x)"></rect><circle style="fill: url(&quot;https://evil.example/p&quot;)"></circle></svg>',
+    );
+    expect(clean).toContain('href="#p"');
+    expect(clean).toContain('fill="url(#g)"');
+    expect(clean).not.toContain('evil.example');
+  });
 });

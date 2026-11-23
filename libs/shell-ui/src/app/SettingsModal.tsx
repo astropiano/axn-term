@@ -657,6 +657,31 @@ function GeneralTab() {
         </p>
       </div>
 
+      <div className="mb-4" hidden={!matchSetting(query, 'terminal clipboard osc 52 copy programs')}>
+        <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
+          <Trans>Clipboard writes from programs</Trans>
+        </label>
+        <select
+          value={settings.terminalClipboardWrites ?? 'focused'}
+          onChange={(e) =>
+            updateSettings({
+              terminalClipboardWrites: e.currentTarget.value as AppSettings['terminalClipboardWrites'],
+            })
+          }
+          className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+        >
+          <option value="focused">{t`Only from the focused terminal`}</option>
+          <option value="off">{t`Off`}</option>
+        </select>
+        <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+          <Trans>
+            Programs such as Claude Code copy text with OSC 52. Writes from a
+            terminal you are not in are ignored, so output you only view cannot
+            replace your clipboard.
+          </Trans>
+        </p>
+      </div>
+
       <div className="mb-4" hidden={!matchSetting(query, 'session icons lucide svg executable mapping')}>
         <label className="mb-1 block text-[13px] text-[var(--text-secondary)]">
           <Trans>Session icons</Trans>
