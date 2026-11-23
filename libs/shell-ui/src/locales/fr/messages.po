@@ -180,7 +180,7 @@ msgstr "Écritures du presse-papiers par les programmes"
 msgid "Close"
 msgstr "Fermer"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3184
+#: libs/shell-ui/src/app/ShellApp.tsx:3186
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 

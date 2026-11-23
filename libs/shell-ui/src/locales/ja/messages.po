@@ -180,7 +180,7 @@ msgstr "プログラムからのクリップボード書き込み"
 msgid "Close"
 msgstr "閉じる"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3184
+#: libs/shell-ui/src/app/ShellApp.tsx:3186
 msgid "Close tab"
 msgstr "タブを閉じる"
 

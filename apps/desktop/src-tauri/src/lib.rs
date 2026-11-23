@@ -7,6 +7,7 @@ mod exec;
 mod files;
 mod git;
 mod logfile;
+mod perf_trace;
 mod persist;
 mod procinfo;
 mod pty;
@@ -201,6 +202,7 @@ fn app_menu(handle: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri:
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    perf_trace::init();
     // First, while the process is still single-threaded: it edits the env.
     let remote_control = remote::RemoteControl::from_env();
 
@@ -301,6 +303,7 @@ pub fn run() {
     let builder = builder.manage(Arc::new(control::ControlState::default()));
     builder
         .setup(move |app| -> Result<(), Box<dyn std::error::Error>> {
+            perf_trace::mark("setup_begin", None);
             app.listen("log", |event| {
                 if let Ok(p) = serde_json::from_str::<LogPayload>(event.payload()) {
                     log::log!(p.level.to_level(), "[{}] {}", p.target, p.message);
@@ -357,6 +360,7 @@ pub fn run() {
                     }
                 }
             }
+            perf_trace::mark("windows_created", None);
             // When the OS tears the session down (logout / restart /
             // shutdown), systemd and the session manager terminate apps with
             // SIGTERM. Turn it into an `os-shutdown` event so the frontend
@@ -469,7 +473,15 @@ pub fn run() {
             devhmr::dev_hmr_free_port,
             devhmr::dev_hmr_install,
             devhmr::dev_hmr_open_main,
+            perf_trace::perf_mark,
         ])
+        .on_page_load(|webview, payload| {
+            let name = match payload.event() {
+                tauri::webview::PageLoadEvent::Started => "page_started",
+                tauri::webview::PageLoadEvent::Finished => "page_finished",
+            };
+            perf_trace::mark(name, Some(webview.label()));
+        })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {

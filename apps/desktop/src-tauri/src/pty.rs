@@ -498,12 +498,18 @@ pub(crate) fn spawn_pty(
     // Bounded: while the emitter is paused (flow control) the reader stops,
     // the kernel PTY buffer fills and the producing process blocks.
     let (chunk_tx, chunk_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(OUTPUT_QUEUE_CHUNKS);
+    let session_id_trace = session_id.clone();
     std::thread::spawn(move || {
         let mut buf = vec![0u8; OUTPUT_READ_BUF];
+        let mut first = true;
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
+                    if first {
+                        first = false;
+                        crate::perf_trace::mark("pty_first_output", Some(&session_id_trace));
+                    }
                     if chunk_tx.send(buf[..n].to_vec()).is_err() {
                         break;
                     }

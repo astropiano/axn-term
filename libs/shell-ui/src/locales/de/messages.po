@@ -180,7 +180,7 @@ msgstr "Zwischenablage-Schreibzugriffe von Programmen"
 msgid "Close"
 msgstr "Schließen"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3184
+#: libs/shell-ui/src/app/ShellApp.tsx:3186
 msgid "Close tab"
 msgstr "Tab schließen"
 

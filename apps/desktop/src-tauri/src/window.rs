@@ -138,6 +138,9 @@ pub(crate) fn create_window_with<M: Manager<Wry>>(
             // them the same margin on the left.
             .traffic_light_position(tauri::LogicalPosition::new(14.0, 19.0));
     }
+    if crate::perf_trace::enabled() {
+        builder = builder.initialization_script(crate::perf_trace::INIT_SCRIPT);
+    }
     builder = builder.visible(false);
     // macOS/Windows: no native file-drop target. The default wry drop handler
     // registers the webview as an OS-level drop destination, which on macOS

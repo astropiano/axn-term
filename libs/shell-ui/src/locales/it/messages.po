@@ -180,7 +180,7 @@ msgstr "Scritture negli appunti dai programmi"
 msgid "Close"
 msgstr "Chiudi"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3184
+#: libs/shell-ui/src/app/ShellApp.tsx:3186
 msgid "Close tab"
 msgstr "Chiudi scheda"
 

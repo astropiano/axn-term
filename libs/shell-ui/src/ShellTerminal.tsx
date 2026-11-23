@@ -38,6 +38,7 @@ import {
   type TargetAction,
   type TextTarget,
 } from './app/textTargets';
+import { perfMark } from './perf';
 
 import '@xterm/xterm/css/xterm.css';
 
@@ -327,7 +328,9 @@ export function ShellTerminal({
 
     const fit = new FitAddon();
     term.loadAddon(fit);
+    perfMark('term_open_start', session.id);
     term.open(terminalRef.current);
+    perfMark('term_open_done', session.id);
     // xterm@6 teardown race: refresh callbacks registered via
     // addRefreshCallback (Viewport._sync et al.) run inside xterm's own
     // rAF — once the renderer is torn down (WebGL context loss, fast
@@ -397,6 +400,7 @@ export function ShellTerminal({
           term,
           settings.terminalRenderer,
         ).dispose;
+        perfMark('renderer_attached', session.id);
       });
     }
 
@@ -495,6 +499,7 @@ export function ShellTerminal({
     let enterPollTimeout: ReturnType<typeof setTimeout> | null = null;
     let active = true;
     const decoder = new TextDecoder();
+    let firstOutput = true;
 
     const sessionId = session.id;
     // Backend PTY this view is bound to — normally the session itself, but a
@@ -542,7 +547,16 @@ export function ShellTerminal({
         // enough to be certain it wasn't a merely long legitimate link.
         const osc8Guard = createOsc8LeakGuard(() => term.write(OSC8_CLOSE));
         unlisten = backend.onOutput(ptyId, (bytes) => {
-          term.write(bytes, flow.track(bytes.length));
+          if (firstOutput) {
+            firstOutput = false;
+            const done = flow.track(bytes.length);
+            term.write(bytes, () => {
+              done();
+              requestAnimationFrame(() => perfMark('first_output_painted', sessionId));
+            });
+          } else {
+            term.write(bytes, flow.track(bytes.length));
+          }
 
           const raw = decoder.decode(bytes, { stream: true });
           osc8Guard(raw);
@@ -565,6 +579,7 @@ export function ShellTerminal({
         // adopted session) — not a fresh spawn, so plugin onSessionOpen hooks
         // must not fire (they assume an empty shell and e.g. inject restore
         // commands).
+        perfMark('pty_spawn', session.id);
         const spawned = await pty.start();
         if (!active) return;
 
