@@ -350,6 +350,35 @@ describe('central (absolute) draft folders', () => {
   });
 });
 
+describe('{repo} placeholder', () => {
+  it('becomes the remote repo name, so one entry serves every project', async () => {
+    const h = makeHarness({}, {}, { patterns: '*: .local-drafts, /central/{repo}' });
+    h.existing.add('/central/axn-term');
+    const loc = await resolveScratchpad(h.ctx);
+    expect(loc?.project).toBe('axn-term');
+    expect(loc?.dirs).toEqual(['.local-drafts', '/central/axn-term']);
+    expect(loc?.existing).toEqual(['/central/axn-term']);
+  });
+});
+
+describe('listDrafts modification times', () => {
+  it('stats only the files a predicate accepts', async () => {
+    const h = makeHarness({}, {}, { patterns: '*: .local-drafts' });
+    h.existing.add(`${REPO}/.local-drafts`);
+    h.listing[`${REPO}/.local-drafts`] = [dirEntry('AIACC-1-a.md'), dirEntry('other.md')];
+    const stated: string[] = [];
+    const base = h.ctx.statPath;
+    h.ctx.statPath = async (path, cwd) => {
+      stated.push(path);
+      return base(path, cwd);
+    };
+    const loc = (await resolveScratchpad(h.ctx))!;
+    stated.length = 0;
+    await listDrafts(h.ctx, loc, (name) => name.startsWith('AIACC-1'));
+    expect(stated).toEqual([`${REPO}/.local-drafts/AIACC-1-a.md`]);
+  });
+});
+
 describe('listDrafts', () => {
   it('lists files in existing dirs, skipping .gitignore and folders', async () => {
     const h = makeHarness({}, {}, { patterns: '*: .local-drafts, drafts' });

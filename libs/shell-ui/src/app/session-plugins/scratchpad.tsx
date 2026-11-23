@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ghostButtonClass } from '../chromeStyles';
-import { PanelHeader, PanelHeaderSpacer } from '../PanelHeader';
+import { fieldClass } from '../chromeStyles';
+import { ContextMenu, menuItemClass } from '../../ContextMenu';
+import { PanelHeader, PanelHeaderButton, PanelHeaderSpacer } from '../PanelHeader';
+import { PanelSearch } from '../SessionPanel';
 import { RailItem } from '../RailItem';
+import { ScratchpadCleanupModal } from '../ScratchpadCleanupModal';
+import { FileText, NotebookPen, RefreshCw, Trash2 } from 'lucide-react';
+import { relativeAgo } from './relativeTime';
 import {
-  ClipboardCopy,
-  FileText,
-  FolderOpen,
-  NotebookPen,
-  RefreshCw,
-  X,
-} from 'lucide-react';
+  dedupeEntries,
+  filterEntries,
+  groupByRepo,
+  repoNames,
+  trashScript,
+  type DraftEntry,
+} from './scratchpadDrafts';
 import type {
   PluginApi,
   RepoMenuItem,
@@ -120,6 +125,8 @@ export interface ScratchpadLocation {
   repoRoot: string;
   /** Primary name — the checkout dir basename (a worktree's own name). */
   repoName: string;
+  /** The project: the remote repo name, else the checkout folder name. Groups the view and fills `{repo}`. */
+  project: string;
   /** Names patterns match against: checkout basename + remote repo name. */
   names: string[];
   /** All configured dirs for this repo (repo-relative, deduped, ordered). */
@@ -184,7 +191,8 @@ export async function resolveScratchpad(ctx: Ctx): Promise<ScratchpadLocation | 
   const names = [
     ...new Set([baseName(repoRoot), remoteRepoName(remote)].filter(Boolean)),
   ];
-  const configured = dirsForRepo(patternsOf(ctx), names);
+  const project = remoteRepoName(remote) || baseName(repoRoot);
+  const configured = dirsForRepo(patternsOf(ctx), names).map((d) => d.split('{repo}').join(project));
   if (!configured.length) return null;
   const home = configured.some((d) => d === '~' || d.startsWith('~/'))
     ? (await ctx.exec('printf %s "$HOME"', repoRoot).catch(() => '')).trim()
@@ -202,6 +210,7 @@ export async function resolveScratchpad(ctx: Ctx): Promise<ScratchpadLocation | 
   return {
     repoRoot,
     repoName: names[0] ?? baseName(repoRoot),
+    project,
     names,
     dirs,
     existing,
@@ -247,25 +256,35 @@ export function currentDrafts(
     .sort((a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0));
 }
 
+/**
+ * The drafts in the location's existing folders. `modified` decides which
+ * files get their modification time (one `stat` each): none by default,
+ * every file with `true`, or only those a predicate accepts — so a refresh
+ * that only needs the files of one ticket never stats the rest of the folder.
+ */
 export async function listDrafts(
   ctx: Ctx,
   loc: ScratchpadLocation,
-  includeModifiedAt = false,
+  modified: boolean | ((name: string) => boolean) = false,
 ): Promise<DraftFile[]> {
+  const wants = typeof modified === 'function' ? modified : () => modified;
   const out: DraftFile[] = [];
   for (const dir of loc.existing) {
     const entries = await ctx.listDir(dirPath(loc, dir), loc.repoRoot).catch(() => null);
-    for (const e of entries ?? []) {
-      if (e.isFile && e.name !== '.gitignore') {
-        const path = `${dirPath(loc, dir)}/${e.name}`;
-        const modifiedAt = includeModifiedAt
-          ? (await ctx.statPath(path).catch(() => null))?.modifiedAt
-          : undefined;
-        out.push({ dir, name: e.name, path, modifiedAt });
-      }
-    }
+    const files = (entries ?? []).filter((e) => e.isFile && e.name !== '.gitignore');
+    out.push(
+      ...(await Promise.all(
+        files.map(async (e): Promise<DraftFile> => {
+          const path = `${dirPath(loc, dir)}/${e.name}`;
+          const modifiedAt = wants(e.name)
+            ? (await ctx.statPath(path).catch(() => null))?.modifiedAt
+            : undefined;
+          return { dir, name: e.name, path, modifiedAt };
+        }),
+      )),
+    );
   }
-  return out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
 }
 
 function stamp(): string {
@@ -369,7 +388,9 @@ async function refreshDirs(ctx: Ctx): Promise<void> {
     const identifiers = ctx.getSessionIdentifiers();
     const drafts = loc && identifiers.length
       ? currentDrafts(
-          await listDrafts(ctx, loc, true),
+          await listDrafts(ctx, loc, (name) =>
+            identifiers.some((identifier) => draftMatchesIdentifier(name, identifier.value)),
+          ),
           identifiers,
           settingsOf(ctx).recentDraftHours ?? 0.5,
         )
@@ -566,26 +587,25 @@ async function completeScratchArg(ctx: Ctx, argPrefix: string): Promise<string[]
 }
 
 // ---------------------------------------------------------------------------
-// Full-area view — drafts across every open session's repo
+// Full-area view — drafts across every open session's repo, by repo name
 // ---------------------------------------------------------------------------
 
-interface RepoGroup {
-  loc: ScratchpadLocation;
-  drafts: DraftFile[];
-}
+type OpenKind = 'editor' | 'preview';
 
-function ScratchpadView({
+export function ScratchpadView({
   sessions,
   sessionApi,
-  openTab,
-  close,
+  selectSession,
 }: {
   sessions: ShellSession[];
   sessionApi: (sessionId: string) => Ctx | undefined;
-  openTab?: (tab: { path: string; kind: 'editor' | 'browser' | 'preview' }) => void;
-  close: () => void;
+  selectSession: (sessionId: string) => void;
 }) {
-  const [groups, setGroups] = useState<RepoGroup[] | null>(null);
+  const [entries, setEntries] = useState<DraftEntry[] | null>(null);
+  const [query, setQuery] = useState('');
+  const [repo, setRepo] = useState<string | null>(null);
+  const [cleanup, setCleanup] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; entry: DraftEntry } | null>(null);
   const sessionApiRef = useRef(sessionApi);
   sessionApiRef.current = sessionApi;
   const sessionsRef = useRef(sessions);
@@ -594,132 +614,178 @@ function ScratchpadView({
 
   const load = useCallback(async () => {
     const seen = new Set<string>();
-    const out: RepoGroup[] = [];
+    const found: DraftEntry[] = [];
     for (const s of sessionsRef.current) {
       const api = sessionApiRef.current(s.id);
       if (!api) continue;
       const loc = await resolveScratchpad(api);
       if (!loc || seen.has(loc.repoRoot)) continue;
       seen.add(loc.repoRoot);
-      out.push({ loc, drafts: await listDrafts(api, loc) });
+      for (const d of await listDrafts(api, loc, true)) {
+        found.push({
+          repo: loc.project,
+          dir: d.dir,
+          inRepo: !isAbsoluteDir(d.dir),
+          name: d.name,
+          path: d.path,
+          modifiedAt: d.modifiedAt,
+          sessionId: s.id,
+        });
+      }
     }
-    setGroups(out);
+    setEntries(dedupeEntries(found));
   }, []);
 
   useEffect(() => {
     void load();
   }, [load, sessionsKey]);
 
-  const total = groups?.reduce((n, g) => n + g.drafts.length, 0) ?? 0;
-  const rowBtn =
-    'flex shrink-0 items-center justify-center rounded p-0.5 text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]';
+  const repos = entries ? repoNames(entries) : [];
+  // The repo filter is only offered — and only applied — when there is a choice.
+  const activeRepo = repos.length > 1 && repo !== null && repos.includes(repo) ? repo : null;
+  const visible = entries ? filterEntries(entries, query, activeRepo) : [];
+  const groups = groupByRepo(visible);
+  const now = Date.now();
+
+  const open = (entry: DraftEntry, kind: OpenKind) => {
+    sessionApi(entry.sessionId)?.openTab({ path: entry.path, kind });
+    selectSession(entry.sessionId);
+  };
+
+  const trash = async (picked: DraftEntry[]) => {
+    const api = picked.length ? sessionApi(picked[0].sessionId) : undefined;
+    if (!api) throw new Error('No session available to run the cleanup.');
+    await api.exec(trashScript(picked.map((e) => e.path)));
+    setCleanup(false);
+    await load();
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)]">
-      <PanelHeader icon={<NotebookPen />} title="Scratchpad">
-        <span className="text-[11px] text-[var(--text-secondary)]">
-          {total} draft{total === 1 ? '' : 's'} · {groups?.length ?? 0} repo
-          {groups?.length === 1 ? '' : 's'}
-        </span>
+      <PanelHeader
+        icon={<NotebookPen />}
+        title="Scratchpad"
+        meta={
+          <span className="text-[11px] text-[var(--text-secondary)]">
+            {entries?.length ?? 0} draft{entries?.length === 1 ? '' : 's'}
+          </span>
+        }
+      >
+        <div className="flex min-w-0 max-w-sm flex-1 pl-2">
+          <PanelSearch value={query} onChange={setQuery} placeholder="Filter drafts…" />
+        </div>
+        {repos.length > 1 && (
+          <select
+            value={activeRepo ?? ''}
+            onChange={(e) => setRepo(e.target.value || null)}
+            aria-label="Repo"
+            className={fieldClass}
+          >
+            <option value="">All</option>
+            {repos.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        )}
         <PanelHeaderSpacer />
-        <button
-          type="button"
-          onClick={() => void load()}
-          data-tip="Refresh"
-          aria-label="Refresh"
-          className={ghostButtonClass}
-        >
+        <PanelHeaderButton title="Refresh" onClick={() => void load()}>
           <RefreshCw className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={close}
-          data-tip="Close"
-          aria-label="Close"
-          className={ghostButtonClass}
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        </PanelHeaderButton>
+        <PanelHeaderButton title="Clean up old drafts…" onClick={() => setCleanup(true)}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </PanelHeaderButton>
       </PanelHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {groups === null ? (
+        {entries === null ? (
           <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
             Scanning session repos…
           </div>
-        ) : groups.length === 0 ? (
+        ) : entries.length === 0 ? (
           <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
             No drafts — create one from a session's menu or with `axn-scratch new &lt;name&gt;`.
+          </div>
+        ) : groups.length === 0 ? (
+          <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
+            No draft matches the filter.
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {groups.map((g) => (
-              <div key={g.loc.repoRoot}>
-                <div className="mb-1 flex items-center gap-2 px-2">
-                  <span className="text-xs font-semibold text-[var(--text-primary)]">
-                    {g.loc.repoName}
+              <div key={g.repo}>
+                <div className="mb-1 px-2 text-xs font-semibold text-[var(--text-primary)]">
+                  {g.repo}
+                  <span className="ml-2 font-normal text-[var(--text-tertiary)]">
+                    {g.entries.length}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--text-secondary)]">
-                    {g.loc.repoRoot}
-                  </span>
-                  <button
-                    type="button"
-                    className={rowBtn}
-                    data-tip="Copy the AGENTS.md/CLAUDE.md hint for this repo"
-                    aria-label="Copy agent hint"
-                    onClick={() =>
-                      void shellServices()?.copyText(agentHintLines(g.loc).join('\n'))
-                    }
-                  >
-                    <ClipboardCopy className="h-3 w-3" />
-                  </button>
                 </div>
-                {g.loc.dirs.map((dir) => {
-                  const files = g.drafts.filter((f) => f.dir === dir);
-                  const exists = g.loc.existing.includes(dir);
-                  return (
-                    <div key={dir}>
-                      <button
-                        type="button"
-                        disabled={!exists}
-                        onClick={() =>
-                          openTab?.({ path: dirPath(g.loc, dir), kind: 'browser' })
-                        }
-                        className="flex w-full items-center gap-2 rounded px-2 py-1 text-left transition enabled:hover:bg-[var(--surface)] disabled:opacity-50"
-                        data-tip={exists ? dirPath(g.loc, dir) : `${dir}/ — not created yet`}
-                      >
-                        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                        <span className="font-mono text-xs text-[var(--text-primary)]">
-                          {dir}/
-                        </span>
-                        {!exists && (
-                          <span className="rounded bg-[var(--orange)]/15 px-1 text-[10px] text-[var(--orange)]">
-                            not created
-                          </span>
-                        )}
-                      </button>
-                      {files.map((f) => (
-                        <button
-                          key={f.path}
-                          type="button"
-                          onClick={() => openTab?.({ path: f.path, kind: 'editor' })}
-                          data-tip={f.path}
-                          className="flex w-full items-center gap-2 rounded py-1 pl-7 pr-2 text-left transition hover:bg-[var(--surface)]"
-                        >
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                          <span className="min-w-0 truncate font-mono text-xs text-[var(--text-primary)]">
-                            {f.name}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })}
+                {g.entries.map((f) => (
+                  <button
+                    key={f.path}
+                    type="button"
+                    onClick={() => open(f, 'editor')}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setMenu({ x: e.clientX, y: e.clientY, entry: f });
+                    }}
+                    data-tip={f.path}
+                    className="flex w-full items-center gap-2 rounded py-1 pl-4 pr-2 text-left transition hover:bg-[var(--surface)]"
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--text-primary)]">
+                      {f.name}
+                    </span>
+                    <span className="shrink-0 rounded bg-[var(--fill-1)] px-1 text-[10px] text-[var(--text-secondary)]">
+                      {f.inRepo ? f.dir : 'central'}
+                    </span>
+                    <span className="w-14 shrink-0 text-right text-[11px] text-[var(--text-tertiary)]">
+                      {f.modifiedAt !== undefined ? relativeAgo(f.modifiedAt, now) : ''}
+                    </span>
+                  </button>
+                ))}
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          {(
+            [
+              ['Open preview', () => open(menu.entry, 'preview')],
+              ['Open in editor', () => open(menu.entry, 'editor')],
+              ...(shellServices()?.revealPath
+                ? ([['Reveal', () => shellServices()?.revealPath?.(menu.entry.path)]] as const)
+                : []),
+              ['Copy path', () => void shellServices()?.copyText(menu.entry.path)],
+            ] as const
+          ).map(([label, run]) => (
+            <button
+              key={label}
+              type="button"
+              className={menuItemClass}
+              onClick={() => {
+                setMenu(null);
+                run();
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </ContextMenu>
+      )}
+
+      {cleanup && entries && (
+        <ScratchpadCleanupModal
+          entries={activeRepo ? entries.filter((e) => e.repo === activeRepo) : entries}
+          scope={activeRepo ?? 'all repos'}
+          onCancel={() => setCleanup(false)}
+          onConfirm={trash}
+        />
+      )}
     </div>
   );
 }
@@ -756,7 +822,6 @@ export const scratchpadPlugin: SessionViewPlugin = {
   version: '0.1.0',
   settingsKey: 'scratchpad',
   stateKey: 'scratchpad',
-  hostsTabs: true,
   defaultEnabled: false,
   settings: [
     {
@@ -853,13 +918,8 @@ export const scratchpadPlugin: SessionViewPlugin = {
       <NotebookPen />
     </RailItem>
   ),
-  renderView: ({ sessions, sessionApi, openTab, close }) => (
-    <ScratchpadView
-      sessions={sessions}
-      sessionApi={sessionApi}
-      openTab={openTab}
-      close={close}
-    />
+  renderView: ({ sessions, sessionApi, selectSession }) => (
+    <ScratchpadView sessions={sessions} sessionApi={sessionApi} selectSession={selectSession} />
   ),
   sessionFields: [
     {
