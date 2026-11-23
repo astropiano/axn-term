@@ -17,6 +17,7 @@ import {
   countOpenThreads,
   myOpenThreads,
   myThreadsAnswered,
+  summarizeOpenThreads,
   mrNeedsAction,
   mrWaitingForMe,
   mergeMine,
@@ -116,6 +117,28 @@ describe('myOpenThreads / myThreadsAnswered', () => {
   it('is not answered when the last note is mine', () => {
     const m = mr({ discussions: [thread(['bob', 'me'])] });
     expect(myThreadsAnswered(m, 'me')).toBe(false);
+  });
+});
+
+describe('summarizeOpenThreads', () => {
+  it('counts the last author for unresolved resolvable threads', () => {
+    const m = mr({
+      discussions: [
+        thread(['me']),
+        thread(['other', 'me']),
+        thread(['me', 'other']),
+        thread(['other'], true),
+        { resolvable: false, resolved: false, notes: ['other'] },
+      ],
+    });
+    expect(summarizeOpenThreads(m, 'me')).toEqual({ waitingForMe: 1, waitingForOther: 2 });
+  });
+
+  it('leaves threads without a known author out of the responsibility counts', () => {
+    expect(summarizeOpenThreads(mr({ discussions: [thread([])] }), 'me')).toEqual({
+      waitingForMe: 0,
+      waitingForOther: 0,
+    });
   });
 });
 
@@ -285,9 +308,20 @@ describe('glab command lines', () => {
     expect(argv[5]).toContain('m0: project(fullPath: $p0)');
     expect(argv[5]).toContain('m1: project(fullPath: $p1)');
     expect(argv[5]).toContain('notes(last: 20)');
+    expect(argv[5]).toContain('pageInfo');
     expect(argv[5]).not.toContain('pwned');
     expect(argv.slice(6)).toEqual(['-f', 'p0=grp/$(touch pwned)', '-f', 'i0=7', '-f', 'p1=g/q', '-f', 'i1=9']);
     expect(existsSync(join(cwd, 'pwned'))).toBe(false);
+  });
+
+  it('adds a discussion cursor only when requesting a later page', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'axn-glab-cwd-'));
+    const argv = argvOf(
+      mrDiscussionsCommand('gitlab.acme.io', [{ project: 'g/q', iid: 9, after: 'cursor-1' }]),
+      cwd,
+    );
+    expect(argv[5]).toContain('after: $a0');
+    expect(argv.slice(6)).toEqual(['-f', 'p0=g/q', '-f', 'i0=9', '-f', 'a0=cursor-1']);
   });
 });
 
@@ -386,6 +420,40 @@ describe('refreshMrOverview failures', () => {
     await refreshMrOverview();
     expect(calls.slice(3)).toEqual([[], ['4']]);
     expect(currentMrOverview().review.map((m) => m.discussions.length)).toEqual([1, 1]);
+  });
+
+  it('follows every discussion page before classifying the thread owners', async () => {
+    let page = 0;
+    runtime(async (cmd = '') => {
+      const iids = iidsOf(cmd);
+      if (!iids.length) return lists([reviewMr('3')]);
+      page += 1;
+      if (page === 1) {
+        return JSON.stringify({ data: {
+          m0: { mergeRequest: {
+            discussions: {
+              pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
+              nodes: [thread('me')],
+            },
+          } },
+        } });
+      }
+      expect(cmd).toContain('after: $a0');
+      return JSON.stringify({ data: {
+        m0: { mergeRequest: {
+          discussions: {
+            pageInfo: { hasNextPage: false, endCursor: null },
+            nodes: [thread('reviewer')],
+          },
+        } },
+      } });
+    });
+    await refreshMrOverview();
+    expect(currentMrOverview().review[0].discussions).toHaveLength(2);
+    expect(currentMrOverview().review[0].threadSummary).toEqual({
+      waitingForMe: 1,
+      waitingForOther: 1,
+    });
   });
 
   it('splits discussions into batches of eight', async () => {
