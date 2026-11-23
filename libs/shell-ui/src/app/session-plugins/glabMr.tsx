@@ -1040,12 +1040,21 @@ function projectShort(fullPath: string): string {
   return parts.length > 1 ? parts.slice(1).join('/') : fullPath;
 }
 
-function threadSummaryTip(open: number, summary?: MrThreadSummary): string {
-  if (!summary) return `${open} open thread${open === 1 ? '' : 's'} · who must act is unavailable`;
-  const parts = [`${open} open thread${open === 1 ? '' : 's'}`];
-  if (summary.waitingForMe > 0) parts.push(`${summary.waitingForMe} waiting for you`);
-  if (summary.waitingForOther > 0) parts.push(`${summary.waitingForOther} waiting for someone else`);
-  return parts.join(' · ');
+/**
+ * Tooltip for the thread indicator. `open` is GitLab's own count of every open
+ * thread; the split by last commenter comes from the fetched discussions, so
+ * the parts are listed as what they are — who commented last — and any
+ * remainder is named instead of silently making the sum look wrong.
+ */
+export function threadSummaryTip(open: number, summary?: MrThreadSummary): string {
+  const plural = (n: number) => `${n} open thread${n === 1 ? '' : 's'}`;
+  if (!summary) return `${plural(open)} · last commenter unavailable`;
+  const lines = [plural(open)];
+  if (summary.waitingForMe > 0) lines.push(`• ${summary.waitingForMe} last answered by someone else — your move`);
+  if (summary.waitingForOther > 0) lines.push(`• ${summary.waitingForOther} last answered by you — waiting on others`);
+  const unknown = open - summary.waitingForMe - summary.waitingForOther;
+  if (unknown > 0) lines.push(`• ${unknown} without a loaded last comment`);
+  return lines.join('\n');
 }
 
 function threadSummaryColor(summary?: MrThreadSummary): string {

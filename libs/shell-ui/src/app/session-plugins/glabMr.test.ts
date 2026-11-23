@@ -19,6 +19,7 @@ import {
   myThreadsAnswered,
   summarizeOpenThreads,
   mrAwaitingOthers,
+  threadSummaryTip,
   mrNeedsAction,
   mrWaitingForMe,
   mergeMine,
@@ -564,5 +565,26 @@ describe('restMrPeople', () => {
       }),
     ).toEqual({ author: 'sebastian', assignees: ['sebastian'], reviewers: ['alex'] });
     expect(restMrPeople({})).toEqual({ author: '', assignees: [], reviewers: [] });
+  });
+});
+
+describe('threadSummaryTip', () => {
+  it('names who commented last and any remainder', () => {
+    expect(threadSummaryTip(10, { waitingForMe: 3, waitingForOther: 5 })).toBe(
+      [
+        '10 open threads',
+        '• 3 last answered by someone else — your move',
+        '• 5 last answered by you — waiting on others',
+        '• 2 without a loaded last comment',
+      ].join('\n'),
+    );
+  });
+  it('omits empty parts and the remainder when the parts add up', () => {
+    expect(threadSummaryTip(1, { waitingForMe: 0, waitingForOther: 1 })).toBe(
+      '1 open thread\n• 1 last answered by you — waiting on others',
+    );
+  });
+  it('says so when the split is unavailable', () => {
+    expect(threadSummaryTip(4)).toBe('4 open threads · last commenter unavailable');
   });
 });
