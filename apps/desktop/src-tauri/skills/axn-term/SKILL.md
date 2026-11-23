@@ -29,6 +29,28 @@ so the user can see at a glance what is happening without opening it.
 - Quote the text as one shell argument.
 - `session summary` with no text clears it.
 
+## axn-progress — declare your own progress bar
+
+Sets the session's progress bar explicitly. A declared value outranks both
+task-derived progress and anything detected on screen, while task lists keep
+updating as usual. The last declaration wins; it is released when your
+process exits or on `clear`/`done`.
+
+```sh
+"$AXN_TERM_CLI" session command "axn-progress 42"        # explicit percentage
+"$AXN_TERM_CLI" session command "axn-progress --eta 10m" # glide from now to 100%
+"$AXN_TERM_CLI" session command "axn-progress --eta 10m --from 20 --to 90 --label tests"
+"$AXN_TERM_CLI" session command "axn-progress done"      # confirmed 100%, then releases
+"$AXN_TERM_CLI" session command "axn-progress clear"     # withdraw
+"$AXN_TERM_CLI" session command "axn-progress --json"    # query: {"progress":42,"source":"declared","declared":{…}}
+```
+
+Durations accept `90s`, `10m`, `2h`, composites like `1h30m`, or bare seconds.
+When the ETA passes, the bar parks at 100% and the session is flagged "ETA
+reached" — that means *overdue*, not confirmed finished; report real
+completion with `axn-progress done`. Re-declare as you make progress; a bare
+`axn-progress` (or `--json`) reports the current state.
+
 ## Other commands
 
 - `"$AXN_TERM_CLI" session rename <name>` — rename the session (no name

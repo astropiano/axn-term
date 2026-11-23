@@ -3,6 +3,7 @@ import { axnLog } from '../log';
 import { sessionLastSelectedAt } from '../attention';
 import type { SessionAttention, SessionBanner, SessionStatus, ShellSession, Task } from '../../types';
 import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin';
+import { declaredActive } from './declaredProgress';
 import { registerAgentLauncher } from './agentRegistry';
 import {
   agentResumeMenuItem,
@@ -180,12 +181,17 @@ function applyDevinTasks(
   const nextStatus =
     status === 'blocked' ? 'blocked' : working ? 'running' : (status ?? 'idle');
   const live = ctx.getSession();
+  // An explicit axn-progress declaration owns the bar — tasks and status
+  // still update, the progress field does not.
+  const declared = declaredActive(live.id);
   if (
     tasksKey(simple) !== tasksKey(live.tasks ?? []) ||
-    progress !== (live.progress ?? 0) ||
+    (!declared && progress !== (live.progress ?? 0)) ||
     nextStatus !== (live.status ?? 'idle')
   ) {
-    ctx.updateSession(live.id, { tasks: simple, progress, status: nextStatus });
+    const patch: Partial<ShellSession> = { tasks: simple, status: nextStatus };
+    if (!declared) patch.progress = progress;
+    ctx.updateSession(live.id, patch);
   }
 }
 
@@ -851,7 +857,9 @@ export const devinPlugin: SessionViewPlugin = {
       return;
     axnLog('debug', 'devin', 'devin process ended; clearing task list and progress');
     if (hasTasks) ctx.updatePluginState({ tasks: [] });
-    ctx.updateSession(ctx.session.id, { tasks: [], progress: 0, status: finalStatus });
+    const patch: Partial<ShellSession> = { tasks: [], status: finalStatus };
+    if (!declaredActive(ctx.session.id)) patch.progress = 0;
+    ctx.updateSession(ctx.session.id, patch);
   },
 
   onOutput: (ctx, text) => {
@@ -957,13 +965,16 @@ export const devinPlugin: SessionViewPlugin = {
       const simple = toTasks(tasks);
       const { progress, status } = computeTaskState(tasks);
       const nextStatus = status ?? 'idle';
+      const declared = declaredActive(ctx.session.id);
       if (
         tasksKey(simple) !== tasksKey(ctx.session.tasks ?? []) ||
-        progress !== (ctx.session.progress ?? 0) ||
+        (!declared && progress !== (ctx.session.progress ?? 0)) ||
         nextStatus !== (ctx.session.status ?? 'idle')
       ) {
         axnLog('debug', 'devin', `updating session progress: ${progress}%`);
-        ctx.updateSession(ctx.session.id, { tasks: simple, progress, status: nextStatus });
+        const patch: Partial<ShellSession> = { tasks: simple, status: nextStatus };
+        if (!declared) patch.progress = progress;
+        ctx.updateSession(ctx.session.id, patch);
       }
     }
 
@@ -1071,12 +1082,15 @@ export const devinPlugin: SessionViewPlugin = {
     if (state.attention) {
       ctx.updatePluginState({ attention: undefined });
     }
+    const declared = declaredActive(ctx.session.id);
     if (
       (ctx.session.tasks ?? []).length > 0 ||
-      (ctx.session.progress ?? 0) > 0 ||
+      (!declared && (ctx.session.progress ?? 0) > 0) ||
       (ctx.session.status ?? 'idle') !== 'idle'
     ) {
-      ctx.updateSession(ctx.session.id, { tasks: [], progress: 0, status: 'idle' });
+      const patch: Partial<ShellSession> = { tasks: [], status: 'idle' };
+      if (!declared) patch.progress = 0;
+      ctx.updateSession(ctx.session.id, patch);
     }
     if (state.devinOutputStart !== undefined) {
       ctx.updatePluginState({ devinOutputStart: undefined });
