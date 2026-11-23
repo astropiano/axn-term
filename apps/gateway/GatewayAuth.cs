@@ -30,16 +30,18 @@ public static class GatewayAuth
     }
 
     /// <summary>
-    /// Fail closed: a token is only bound to this deployment by its issuer,
-    /// audience or authorized party — without any of them every token the
-    /// JWKS signs (any realm client) would be accepted.
+    /// Fail closed: a token is only bound to this gateway by its audience or
+    /// authorized party. The issuer alone is not enough — every client in the
+    /// realm shares it, so a token minted for any other app in the realm would
+    /// be accepted.
     /// </summary>
     public static void RequireTokenBinding(IReadOnlyCollection<string> validIssuers, string? audience, string? clientId)
     {
-        if (validIssuers.Count == 0 && string.IsNullOrWhiteSpace(audience) && string.IsNullOrWhiteSpace(clientId))
+        if (string.IsNullOrWhiteSpace(audience) && string.IsNullOrWhiteSpace(clientId))
         {
-            throw new InvalidOperationException(
-                "Authentication:ValidIssuer(s), Authentication:Audience or Authentication:ClientId is required");
+            throw new InvalidOperationException(validIssuers.Count == 0
+                ? "Authentication:Audience or Authentication:ClientId is required"
+                : "Authentication:Audience or Authentication:ClientId is required — Authentication:ValidIssuer(s) alone accepts tokens of every client in the realm");
         }
     }
 
