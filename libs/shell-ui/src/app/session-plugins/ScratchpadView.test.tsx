@@ -29,7 +29,6 @@ function fixture(name: string, project: string, files: Record<string, number>) {
     repo: { root: `/work/${name}`, branch: 'main', remote: `git@h:g/${project}.git` },
     pluginState: {},
   } as unknown as ShellSession;
-  const openTab = vi.fn();
   const api = {
     session,
     pluginSettings: { patterns: '*: .local-drafts' },
@@ -43,13 +42,12 @@ function fixture(name: string, project: string, files: Record<string, number>) {
     },
     listDir: async () =>
       Object.keys(files).map((n) => ({ name: n, isFile: true, isDirectory: false, isSymlink: false })),
-    openTab,
   };
-  return { session, api, openTab };
+  return { session, api };
 }
 
 async function render(fixtures: ReturnType<typeof fixture>[]) {
-  const selectSession = vi.fn();
+  const openTab = vi.fn();
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -59,7 +57,7 @@ async function render(fixtures: ReturnType<typeof fixture>[]) {
         <ScratchpadView
           sessions={fixtures.map((f) => f.session)}
           sessionApi={(id) => fixtures.find((f) => f.session.id === id)?.api as never}
-          selectSession={selectSession}
+          openTab={openTab}
         />
       </StoryShellProviders>,
     );
@@ -67,7 +65,7 @@ async function render(fixtures: ReturnType<typeof fixture>[]) {
   await act(async () => {
     await new Promise((r) => setTimeout(r, 0));
   });
-  return selectSession;
+  return openTab;
 }
 
 const rows = () =>
@@ -108,14 +106,18 @@ it('filters by repo', async () => {
   expect(rows().map((r) => r.textContent)).toEqual([expect.stringContaining('plan.md')]);
 });
 
-it('opens a draft as preview from the context menu in its session', async () => {
-  const f = fixture('only-1', 'only', { 'a.md': HOUR });
-  const selectSession = await render([f]);
+it('opens a draft as a preview tab inside the view from the context menu', async () => {
+  const openTab = await render([fixture('only-1', 'only', { 'a.md': HOUR })]);
   await act(async () => {
     rows()[0].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }));
   });
   const item = [...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Open preview')!;
   await act(async () => item.click());
-  expect(f.openTab).toHaveBeenCalledWith({ path: '/work/only-1/.local-drafts/a.md', kind: 'preview' });
-  expect(selectSession).toHaveBeenCalledWith('only-1');
+  expect(openTab).toHaveBeenCalledWith({ path: '/work/only-1/.local-drafts/a.md', kind: 'preview' });
+});
+
+it('opens a draft in an editor tab on click', async () => {
+  const openTab = await render([fixture('only-1', 'only', { 'a.md': HOUR })]);
+  await act(async () => rows()[0].click());
+  expect(openTab).toHaveBeenCalledWith({ path: '/work/only-1/.local-drafts/a.md', kind: 'editor' });
 });

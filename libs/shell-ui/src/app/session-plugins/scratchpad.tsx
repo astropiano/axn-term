@@ -595,11 +595,12 @@ type OpenKind = 'editor' | 'preview';
 export function ScratchpadView({
   sessions,
   sessionApi,
-  selectSession,
+  openTab,
 }: {
   sessions: ShellSession[];
   sessionApi: (sessionId: string) => Ctx | undefined;
-  selectSession: (sessionId: string) => void;
+  /** Opens a tab inside this view (the plugin hosts tabs). */
+  openTab?: (tab: { path: string; kind: 'editor' | 'browser' | 'preview' }) => void;
 }) {
   const [entries, setEntries] = useState<DraftEntry[] | null>(null);
   const [query, setQuery] = useState('');
@@ -647,10 +648,7 @@ export function ScratchpadView({
   const groups = groupByRepo(visible);
   const now = Date.now();
 
-  const open = (entry: DraftEntry, kind: OpenKind) => {
-    sessionApi(entry.sessionId)?.openTab({ path: entry.path, kind });
-    selectSession(entry.sessionId);
-  };
+  const open = (entry: DraftEntry, kind: OpenKind) => openTab?.({ path: entry.path, kind });
 
   const trash = async (picked: DraftEntry[]) => {
     const api = picked.length ? sessionApi(picked[0].sessionId) : undefined;
@@ -822,6 +820,7 @@ export const scratchpadPlugin: SessionViewPlugin = {
   version: '0.1.0',
   settingsKey: 'scratchpad',
   stateKey: 'scratchpad',
+  hostsTabs: true,
   defaultEnabled: false,
   settings: [
     {
@@ -918,8 +917,8 @@ export const scratchpadPlugin: SessionViewPlugin = {
       <NotebookPen />
     </RailItem>
   ),
-  renderView: ({ sessions, sessionApi, selectSession }) => (
-    <ScratchpadView sessions={sessions} sessionApi={sessionApi} selectSession={selectSession} />
+  renderView: ({ sessions, sessionApi, openTab }) => (
+    <ScratchpadView sessions={sessions} sessionApi={sessionApi} openTab={openTab} />
   ),
   sessionFields: [
     {
