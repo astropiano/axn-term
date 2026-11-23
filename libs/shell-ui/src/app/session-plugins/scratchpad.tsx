@@ -226,6 +226,7 @@ export function currentDrafts(
 export async function listDrafts(
   ctx: Ctx,
   loc: ScratchpadLocation,
+  includeModifiedAt = false,
 ): Promise<DraftFile[]> {
   const out: DraftFile[] = [];
   for (const dir of loc.existing) {
@@ -233,7 +234,9 @@ export async function listDrafts(
     for (const e of entries ?? []) {
       if (e.isFile && e.name !== '.gitignore') {
         const path = `${loc.repoRoot}/${dir}/${e.name}`;
-        const modifiedAt = (await ctx.statPath(path).catch(() => null))?.modifiedAt;
+        const modifiedAt = includeModifiedAt
+          ? (await ctx.statPath(path).catch(() => null))?.modifiedAt
+          : undefined;
         out.push({ dir, name: e.name, path, modifiedAt });
       }
     }
@@ -329,46 +332,60 @@ function stateOf(ctx: Ctx): ScratchpadState {
 }
 
 const refreshTimers = new Map<string, number>();
+const pollTimers = new Map<string, number>();
 const closedSessions = new Set<string>();
 const REFRESH_DELAY_MS = 800;
 const CURRENT_DRAFTS_REFRESH_MS = 30_000;
 
 async function refreshDirs(ctx: Ctx): Promise<void> {
-  const loc = await resolveScratchpad(ctx);
-  const next = loc?.dirs ?? [];
-  const identifiers = ctx.getSessionIdentifiers();
-  const drafts = loc && identifiers.length
-    ? currentDrafts(
-        await listDrafts(ctx, loc),
-        identifiers,
-        settingsOf(ctx).recentDraftHours ?? 0.5,
-      )
-    : [];
-  const state = stateOf(ctx);
-  if (
-    JSON.stringify(state.dirs ?? []) !== JSON.stringify(next) ||
-    JSON.stringify(state.currentDrafts ?? []) !== JSON.stringify(drafts)
-  ) {
-    ctx.updatePluginState({ dirs: next, currentDrafts: drafts });
+  try {
+    const loc = await resolveScratchpad(ctx);
+    const next = loc?.dirs ?? [];
+    const identifiers = ctx.getSessionIdentifiers();
+    const drafts = loc && identifiers.length
+      ? currentDrafts(
+          await listDrafts(ctx, loc, true),
+          identifiers,
+          settingsOf(ctx).recentDraftHours ?? 0.5,
+        )
+      : [];
+    const state = stateOf(ctx);
+    if (
+      JSON.stringify(state.dirs ?? []) !== JSON.stringify(next) ||
+      JSON.stringify(state.currentDrafts ?? []) !== JSON.stringify(drafts)
+    ) {
+      ctx.updatePluginState({ dirs: next, currentDrafts: drafts });
+    }
+  } finally {
+    if (!closedSessions.has(ctx.session.id)) {
+      armTimer(pollTimers, ctx, CURRENT_DRAFTS_REFRESH_MS, () => void refreshDirs(ctx));
+    }
   }
+}
+
+function armTimer(
+  timers: Map<string, number>,
+  ctx: Ctx,
+  delay: number,
+  callback: () => void,
+): void {
+  const id = ctx.session.id;
+  const existing = timers.get(id);
+  if (existing !== undefined) window.clearTimeout(existing);
+  timers.set(
+    id,
+    window.setTimeout(() => {
+      timers.delete(id);
+      callback();
+    }, delay),
+  );
 }
 
 /** Output settles → the session may have cd'd to another repo → re-resolve. */
 function scheduleRefresh(ctx: Ctx): void {
   const id = ctx.session.id;
   if (closedSessions.has(id)) return;
-  const existing = refreshTimers.get(id);
-  if (existing !== undefined) window.clearTimeout(existing);
-  refreshTimers.set(
-    id,
-    window.setTimeout(() => {
-      refreshTimers.delete(id);
-      void refreshDirs(ctx);
-      if (!closedSessions.has(id)) {
-        window.setTimeout(() => scheduleRefresh(ctx), CURRENT_DRAFTS_REFRESH_MS);
-      }
-    }, REFRESH_DELAY_MS),
-  );
+  armTimer(refreshTimers, ctx, REFRESH_DELAY_MS, () => void refreshDirs(ctx));
 }
 
 // ---------------------------------------------------------------------------
@@ -794,16 +811,17 @@ export const scratchpadPlugin: SessionViewPlugin = {
   onSessionOpen: (ctx) => {
     closedSessions.delete(ctx.session.id);
     void refreshDirs(ctx);
-    scheduleRefresh(ctx);
   },
   onOutput: (ctx) => {
     scheduleRefresh(ctx);
   },
   onClose: (ctx) => {
     closedSessions.add(ctx.session.id);
-    const timer = refreshTimers.get(ctx.session.id);
-    if (timer !== undefined) window.clearTimeout(timer);
-    refreshTimers.delete(ctx.session.id);
+    for (const timers of [refreshTimers, pollTimers]) {
+      const timer = timers.get(ctx.session.id);
+      if (timer !== undefined) window.clearTimeout(timer);
+      timers.delete(ctx.session.id);
+    }
   },
   renderRail: ({ viewActive, toggleView }) => (
     <RailItem title="Scratchpad" onClick={toggleView} active={viewActive}>
