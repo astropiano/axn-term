@@ -18,6 +18,7 @@ import {
   myOpenThreads,
   myThreadsAnswered,
   summarizeOpenThreads,
+  mrAwaitingOthers,
   mrNeedsAction,
   mrWaitingForMe,
   mergeMine,
@@ -139,6 +140,25 @@ describe('summarizeOpenThreads', () => {
       waitingForMe: 0,
       waitingForOther: 0,
     });
+  });
+});
+
+describe('mrNeedsAction with a thread summary', () => {
+  const sum = (waitingForMe: number, waitingForOther: number) => ({ waitingForMe, waitingForOther });
+  it('is red only when a thread waits on me', () => {
+    expect(mrNeedsAction(mr({ openThreadCount: 2, threadSummary: sum(1, 1) }))).toBe(true);
+    expect(mrNeedsAction(mr({ openThreadCount: 2, threadSummary: sum(0, 2) }))).toBe(false);
+  });
+
+  it('approved but waiting on others to resolve my threads is not an action, unless mergeable', () => {
+    const base = { approved: true, openThreadCount: 1, threadSummary: sum(0, 1) };
+    expect(mrNeedsAction(mr({ ...base, mergeStatus: 'discussions_not_resolved' }))).toBe(false);
+    expect(mrNeedsAction(mr({ ...base, mergeStatus: 'mergeable' }))).toBe(true);
+    expect(mrAwaitingOthers(mr(base))).toBe(true);
+  });
+
+  it('without a summary any open thread still counts', () => {
+    expect(mrNeedsAction(mr({ openThreadCount: 1 }))).toBe(true);
   });
 });
 

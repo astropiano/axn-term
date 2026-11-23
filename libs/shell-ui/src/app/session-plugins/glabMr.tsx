@@ -171,18 +171,30 @@ export function summarizeOpenThreads(
 
 /**
  * "Needs action" for an MR I own (assignee, or author without assignee):
- * merge conflicts, open threads, already approved (ready to merge), or a
- * failing pipeline.
+ * merge conflicts, a failing pipeline, a thread someone else answered last,
+ * or approved (ready to merge). The thread *count* is every open thread, but
+ * only threads waiting on me make it an action: when each open thread was
+ * last answered by me, only others can resolve them — an approved MR that GitLab
+ * will not merge yet then stays yellow rather than red, as in mr-inbox. Without a
+ * thread summary (discussions unavailable) any open thread counts, to be safe.
  */
 export function mrNeedsAction(
-  mr: Pick<GlabMrItem, 'conflicts' | 'approved' | 'pipeline' | 'discussions' | 'openThreadCount'>,
+  mr: Pick<GlabMrItem, 'conflicts' | 'approved' | 'pipeline' | 'discussions' | 'openThreadCount'> &
+    Partial<Pick<GlabMrItem, 'threadSummary' | 'mergeStatus'>>,
 ): boolean {
-  return (
-    mr.conflicts ||
-    mr.approved ||
-    mr.pipeline === 'failed' ||
-    openThreads(mr) > 0
-  );
+  if (mr.conflicts || mr.pipeline === 'failed') return true;
+  const summary = mr.threadSummary;
+  const open = openThreads(mr);
+  if (!summary) return mr.approved || open > 0;
+  if (summary.waitingForMe > 0) return true;
+  return mr.approved && !(open > 0 && mr.mergeStatus !== 'mergeable');
+}
+
+/** Open threads that only others can resolve (every one was last answered by me). */
+export function mrAwaitingOthers(
+  mr: Pick<GlabMrItem, 'discussions' | 'openThreadCount'> & Partial<Pick<GlabMrItem, 'threadSummary'>>,
+): boolean {
+  return !!mr.threadSummary && mr.threadSummary.waitingForMe === 0 && openThreads(mr) > 0;
 }
 
 /**
