@@ -4,7 +4,7 @@ import type { SessionBackend } from '@axn-term/session-backend';
 import { BroadcastDeck } from './BroadcastDeck';
 import { StoryShellProviders } from './storyMocks';
 import { broadcastSet } from './broadcastSet';
-import type { ShellSession } from '../types';
+import { ptyIdOf, type ShellSession } from '../types';
 
 const E = '\x1b[';
 const fakeOutput = (name: string, color: string) =>
@@ -45,7 +45,7 @@ function makeDeckBackend(sessions: ShellSession[]): SessionBackend {
   return {
     createSession: () => Promise.resolve(false),
     write: (ptyId: string, data: string) => {
-      const s = sessions.find((x) => x.ptyId === ptyId);
+      const s = sessions.find((x) => ptyIdOf(x) === ptyId);
       if (s) emit(s.id, `${E}[2K\r$ ${data.replace(/\r$/, '')}\r\n$ `);
     },
     resize: () => {},
@@ -78,7 +78,8 @@ const meta = {
   component: BroadcastDeck,
 } satisfies Meta<typeof BroadcastDeck>;
 export default meta;
-type Story = StoryObj<typeof meta>;
+// Render-only stories (no args) — BroadcastDeck's props come from <Deck>.
+type Story = StoryObj;
 
 export const ThreeShells: Story = {
   render: () => <Deck sessions={SESSIONS.slice(0, 3)} />,

@@ -84,7 +84,7 @@ describe('checkReachable', () => {
 
 describe('resolveEntryUrl', () => {
   it('uses the url when set', async () => {
-    await expect(resolveEntryUrl({ id: 'a', title: 'A', url: 'https://a.example' }, undefined)).resolves.toBe(
+    await expect(resolveEntryUrl({ url: 'https://a.example' }, undefined)).resolves.toBe(
       'https://a.example',
     );
   });
@@ -96,7 +96,7 @@ describe('resolveEntryUrl', () => {
     await expect(resolveEntryUrl(entry, async () => 'javascript:alert(1)')).rejects.toThrow();
   });
   it('fails a urlCommand entry where commands cannot run', async () => {
-    await expect(resolveEntryUrl({ id: 'a', title: 'A', urlCommand: 'x' }, undefined)).rejects.toThrow();
+    await expect(resolveEntryUrl({ urlCommand: 'x' }, undefined)).rejects.toThrow();
   });
 });
 

@@ -86,7 +86,7 @@ function RailAndWorkspacesExample({
     <StoryShellProviders configYaml="remoteEnabled: true">
       <TooltipHost />
       <MemoryStatsProvider active>
-      <PluginPanelStatus plugins={all} />
+      <PluginPanelStatus plugins={[...all]} />
       <div className="flex h-[460px] w-[336px] items-stretch overflow-hidden rounded-[var(--radius-lg)] bg-[var(--chrome)] shadow-[0_0_0_1px_var(--hairline)]">
         <StoryRail
           activeId={null}
@@ -126,8 +126,10 @@ function RailAndWorkspacesExample({
             onOpenTab={() => {}}
             pluginData={pluginData}
             mergePluginData={mergePluginData}
-            onOpenSubShell={() => {}}
+            onOpenSubShell={() => undefined}
             onTurnIntoWorkspace={() => {}}
+            updateWorkspace={() => {}}
+            onOpenIde={() => {}}
             onOpenPluginView={() => {}}
             hiddenStatusSources={
               detailed

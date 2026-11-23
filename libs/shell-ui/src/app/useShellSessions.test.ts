@@ -41,7 +41,7 @@ describe('mergeMirrorSessions', () => {
     const prev = [
       session('s1', {
         output: 'retained pty text',
-        tasks: [{ id: 't1', title: 'do it', status: 'active' }],
+        tasks: [{ id: 't1', title: 'do it', done: false }],
         progress: 42,
         summary: 'agent summary',
         topic: 'investigate',

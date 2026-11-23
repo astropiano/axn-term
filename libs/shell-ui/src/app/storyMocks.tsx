@@ -378,7 +378,6 @@ export function StoryRail({
   onToggle: (pluginId: string) => void;
   /** pluginData.<settingsKey> the rail plugins read as appState. */
   pluginData?: Record<string, unknown>;
-  bare?: boolean;
   /** Render `renderRailDetail` for plugins that declare it (statusDisplay:
    * rail / touch default), the plain `renderRail` item otherwise. */
   detailed?: boolean;

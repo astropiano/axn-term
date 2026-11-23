@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { findSessionField } from './plugin';
-import type { ShellSession, Workspace } from '../../types';
-import type { PluginApi, SessionViewContext } from './plugin';
+import type { SessionBanner, ShellSession, Workspace } from '../../types';
+import type { MenuScope, PluginApi, PluginCommand, SessionViewContext } from './plugin';
 import {
   worktreesPlugin,
   slugify,
@@ -16,6 +16,13 @@ import {
 import { shellQuote } from '../../shellQuote';
 
 type Ctx = SessionViewContext & PluginApi;
+
+/** The single-session scope SessionPanel hands `sessionMenuItems`. */
+const scopeOf = (ctx: Ctx): MenuScope => ({
+  targets: [ctx],
+  sessions: [ctx.session],
+  workspaces: [],
+});
 
 const REPO = '/home/tester/axn-term';
 
@@ -94,7 +101,7 @@ function makeHarness(
     isProgressHandled: () => false,
     getScreenLines: () => [],
     setAttention: () => {},
-    setBanner: (b) => {
+    setBanner: (b: SessionBanner | null) => {
       h.banners.push(b as Record<string, unknown> | null);
       h.store.worktrees = { ...(h.store.worktrees as Record<string, unknown>), banner: b };
     },
@@ -211,7 +218,7 @@ describe('git command builders', () => {
 describe('sessionMenuItems', () => {
   it('offers worktree creation on a plain session', () => {
     const h = makeHarness();
-    const items = worktreesPlugin.sessionMenuItems!(h.ctx);
+    const items = worktreesPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx));
     expect(items.map((i) => i.label)).toEqual([
       'New worktree session',
       'New worktree with claude',
@@ -221,7 +228,7 @@ describe('sessionMenuItems', () => {
   it('offers review/remove on a worktree session', () => {
     const wt = { repoRoot: REPO, path: '/home/tester/worktrees/axn-term-fix', branch: 'wt/fix' };
     const h = makeHarness({}, { worktree: wt });
-    const items = worktreesPlugin.sessionMenuItems!(h.ctx);
+    const items = worktreesPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx));
     expect(items.map((i) => i.label)).toEqual(['Review worktree changes', 'Remove worktree']);
 
     items[0].onClick();
@@ -230,7 +237,7 @@ describe('sessionMenuItems', () => {
 
   it('uses the configured default agent in the label', () => {
     const h = makeHarness({}, {}, { defaultAgent: 'devin' });
-    const items = worktreesPlugin.sessionMenuItems!(h.ctx);
+    const items = worktreesPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx));
     expect(items[1].label).toBe('New worktree with devin');
   });
 });
@@ -273,7 +280,7 @@ describe('workspaceMenuItems', () => {
 describe('worktree creation', () => {
   it('adds the worktree, opens a session there, and tags it on open', async () => {
     const h = makeHarness();
-    const items = worktreesPlugin.sessionMenuItems!(h.ctx);
+    const items = worktreesPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx));
     items[0].onClick();
     await flush();
     await flush();
@@ -294,7 +301,7 @@ describe('worktree creation', () => {
 
   it('seeds the agent command into the new session', async () => {
     const h = makeHarness();
-    const items = worktreesPlugin.sessionMenuItems!(h.ctx);
+    const items = worktreesPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx));
     items[1].onClick(); // New worktree with claude
     await flush();
     await flush();
@@ -308,7 +315,7 @@ describe('worktree creation', () => {
   it('names the worktree from axn-worktree <name>', async () => {
     const h = makeHarness();
     const cmd = worktreesPlugin.commands![0];
-    const out = await (cmd as { run: (c: Ctx, a?: string) => Promise<unknown> }).run(h.ctx, 'My Fix');
+    const out = await (cmd as PluginCommand).run!(h.ctx, 'My Fix', 'axn-worktree My Fix');
     expect(out).toBe(false);
     const dir = `/home/tester/worktrees/axn-term-wt-my-fix`;
     expect(h.execCalls.some((c) => c.command.includes(`'${dir}'`))).toBe(true);
@@ -323,7 +330,7 @@ describe('worktree creation', () => {
       throw new Error('not a repo');
     };
     const cmd = worktreesPlugin.commands![0];
-    const out = await (cmd as { run: (c: Ctx, a?: string) => Promise<unknown> }).run(h.ctx, 'x');
+    const out = await (cmd as PluginCommand).run!(h.ctx, 'x', 'axn-worktree x');
     expect(out).toBe(`echo 'axn-worktree: not inside a git repository'`);
   });
 
@@ -335,7 +342,7 @@ describe('worktree creation', () => {
       if (cmd.includes('worktree add')) throw new Error('branch exists');
       return realExec(cmd, cwd);
     };
-    worktreesPlugin.sessionMenuItems!(h.ctx)[0].onClick();
+    worktreesPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx))[0].onClick();
     await flush();
     await flush();
     expect(h.openedSessions).toHaveLength(0);
@@ -352,7 +359,7 @@ describe('worktree removal', () => {
 
   it('removes and offers branch deletion', async () => {
     const h = makeHarness({}, { worktree: wt });
-    worktreesPlugin.sessionMenuItems!(h.ctx)[1].onClick();
+    worktreesPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx))[1].onClick();
     await flush();
     expect(h.execCalls.some((c) => c.command === removeWorktreeCmd(REPO, wt.path))).toBe(true);
     expect((h.store.worktrees as { worktree?: unknown }).worktree).toBeNull();
@@ -367,7 +374,7 @@ describe('worktree removal', () => {
       if (cmd.includes('worktree remove')) throw new Error('dirty');
       return '';
     };
-    worktreesPlugin.sessionMenuItems!(h.ctx)[1].onClick();
+    worktreesPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx))[1].onClick();
     await flush();
     const banner = h.banners.at(-1) as { level: string; actions: { id: string }[] };
     expect(banner.level).toBe('error');
@@ -383,7 +390,7 @@ describe('worktree removal', () => {
 
   it('remove-branch deletes the kept branch after removal', async () => {
     const h = makeHarness({}, { worktree: wt });
-    worktreesPlugin.sessionMenuItems!(h.ctx)[1].onClick(); // Remove worktree
+    worktreesPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx))[1].onClick(); // Remove worktree
     await flush();
     // pluginState.worktree is cleared by removal — the action falls back to
     // the stashed record.

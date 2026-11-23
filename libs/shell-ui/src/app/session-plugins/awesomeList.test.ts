@@ -201,7 +201,7 @@ describe('axn-awesome command', () => {
   it('run dispatches stored commands through runCommand when available', async () => {
     const ctx = makeCtx({ items: [{ path: 'axn-git', type: 'command' }] });
     // Swallowed by the dispatch (e.g. an axn-* command that handled itself).
-    ctx.runCommand = vi.fn(async () => false);
+    ctx.runCommand = vi.fn(async () => false as const);
     expect(await awesome().run?.(ctx, 'run 1', 'axn-awesome run 1')).toBe(false);
     expect(ctx.runCommand).toHaveBeenCalledWith('axn-git');
     // A replacement/feedback string from the dispatch is returned verbatim.

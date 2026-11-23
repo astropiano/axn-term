@@ -34,7 +34,8 @@ function makeCtx(
   const writes: string[] = [];
   const restoringCalls: Array<string | null> = [];
   const updateSessionCalls: Array<{ sessionId: string; patch: Partial<ShellSession> }> = [];
-  const ctx: Ctx = {
+  // Only the API surface the vibe plugin touches.
+  const ctx = {
     session,
     updateSession: (sessionId, patch) => {
       updateSessionCalls.push({ sessionId, patch });
@@ -58,7 +59,7 @@ function makeCtx(
     getTty: async () => null,
     openBrowser: () => {},
     openTab: () => {},
-    openSubShell: () => {},
+    openSubShell: () => undefined,
     openSession: () => {},
     readFile: async () => { throw new Error('ENOENT'); },
     writeFile: async () => {},
@@ -80,7 +81,7 @@ function makeCtx(
     },
     appState: undefined,
     updateAppState: () => {},
-  };
+  } satisfies Partial<Ctx> as unknown as Ctx;
   return { ctx, writes, pluginStateStore, updateSessionCalls, restoringCalls };
 }
 
@@ -103,15 +104,6 @@ async function flushRestoreWrites() {
   // onSessionOpen: waitForSessionOutput (microtask) + 400ms settle timer.
   await vi.advanceTimersByTimeAsync(600);
 }
-
-const VIBE_RESUME = (name: string) =>
-  `Session ended.\nResume this session with \`vibe -r ${name}\`\n`;
-
-const VIBE_RESUME_V2 = (name: string) =>
-  ` vibe -r ${name}\n resumes this session\n`;
-
-const VIBE_SESSION_LINE = (name: string) =>
-  `Session: ${name}`;
 
 describe('vibe plugin', () => {
   describe('VIBE_PROCESS_RE', () => {

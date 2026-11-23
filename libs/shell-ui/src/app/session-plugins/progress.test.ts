@@ -40,7 +40,8 @@ function makeCtx(overrides: {
     output: '',
     process: overrides.process ?? 'pacman',
   };
-  const ctx: Ctx = {
+  // Only the API surface the progress plugin touches.
+  const ctx = {
     session,
     updateSession: (_sessionId, patch) => {
       Object.assign(session, patch);
@@ -69,7 +70,7 @@ function makeCtx(overrides: {
     setRestoring: () => {},
     appState: undefined,
     updateAppState: () => {},
-  };
+  } satisfies Partial<Ctx> as unknown as Ctx;
   return { ctx, session, pluginStateStore, screen };
 }
 

@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
+    "typecheck": "tsc && tsc -p tsconfig.test.json",
     "storybook": "node ./scripts/storybook-dev.mjs",
     "build-storybook": "storybook build"
   },

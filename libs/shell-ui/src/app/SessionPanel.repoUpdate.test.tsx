@@ -77,6 +77,7 @@ async function render(sessions: ShellSession[], plugins: SessionViewPlugin[]) {
     onOpenTab: noop,
     onOpenSubShell: () => undefined,
     onTurnIntoWorkspace: noop,
+    onOpenIde: noop,
     pluginData: {},
     mergePluginData: noop,
   };

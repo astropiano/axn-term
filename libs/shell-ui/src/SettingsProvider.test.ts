@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement } from 'react';
+import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -117,9 +117,15 @@ describe('SettingsProvider with an invalid config.yaml', () => {
     }
     const element = createElement(
       SettingsProvider,
-      { configStore: store },
-      createElement(Probe),
-      createElement(AttentionProbe),
+      {
+        configStore: store,
+        children: createElement(
+          Fragment,
+          null,
+          createElement(Probe),
+          createElement(AttentionProbe),
+        ),
+      },
     );
     return { store, element, ctx: () => ctx, fire: (raw: string | null) => watchCb(raw) };
   }
@@ -198,9 +204,15 @@ describe('PluginSettingsProvider with an invalid plugins.yaml', () => {
     }
     const element = createElement(
       PluginSettingsProvider,
-      { store },
-      createElement(Probe),
-      createElement(AttentionProbe),
+      {
+        store,
+        children: createElement(
+          Fragment,
+          null,
+          createElement(Probe),
+          createElement(AttentionProbe),
+        ),
+      },
     );
     return { store, element, ctx: () => ctx, fire: (raw: string | null) => watchCb(raw) };
   }

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import { SessionPanel } from './SessionPanel';
 import { StoryShellProviders } from './storyMocks';
 import { ShellServicesProvider } from '../services';
@@ -72,6 +72,7 @@ async function render(props: Partial<ComponentProps<typeof SessionPanel>>) {
           onTurnIntoWorkspace={noop}
           pluginData={{}}
           mergePluginData={noop}
+          onOpenIde={noop}
           {...props}
         />
         </ShellServicesProvider>

@@ -9,7 +9,7 @@ tests used to verify work, and the `axn-term-hmr` hot-reload dev variant.
 pnpm install --frozen-lockfile
 pnpm dev:desktop          # Tauri dev: vite dev server + cargo run
 npx nx run-many -t test   # unit tests
-pnpm exec tsc --noEmit    # typecheck (from apps/desktop)
+pnpm typecheck            # app sources + libs tests/stories
 ```
 
 `pnpm dev:desktop` already hot-reloads the frontend — but it runs *your*

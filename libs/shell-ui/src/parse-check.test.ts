@@ -1,8 +1,8 @@
-import { it, expect } from 'vitest';
+import { it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { parseDevinTasks } from './src/app/session-plugins/devinTasks';
+import { parseDevinTasks } from './app/session-plugins/devinTasks';
 
 const STATE_FILE =
   process.env.AXN_STATE_FILE ?? join(homedir(), '.axn-term/state.json');
