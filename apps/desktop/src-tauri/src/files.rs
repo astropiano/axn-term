@@ -4,6 +4,28 @@
 use std::path::PathBuf;
 use tauri_plugin_fs::FsExt;
 
+/// Resolve a frontend-supplied path: `~/` expands to the home directory,
+/// relative paths join `cwd` (absolute paths win). Returns `None` for a
+/// relative path without a usable cwd.
+fn resolve_fs_path(cwd: Option<&str>, path: &str) -> Option<PathBuf> {
+    let expanded = if let Some(rest) = path.strip_prefix("~/") {
+        match dirs::home_dir() {
+            Some(home) => home.join(rest),
+            None => PathBuf::from(path),
+        }
+    } else {
+        PathBuf::from(path)
+    };
+    if expanded.is_absolute() {
+        Some(expanded)
+    } else {
+        match cwd {
+            Some(c) if !c.is_empty() => Some(std::path::Path::new(c).join(&expanded)),
+            _ => None,
+        }
+    }
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PathStat {
@@ -14,23 +36,7 @@ pub(crate) struct PathStat {
 
 #[tauri::command]
 pub(crate) fn stat_path(cwd: Option<String>, path: String) -> Option<PathStat> {
-    let expanded = if let Some(rest) = path.strip_prefix("~/") {
-        match dirs::home_dir() {
-            Some(home) => home.join(rest).to_string_lossy().into_owned(),
-            None => path.clone(),
-        }
-    } else {
-        path
-    };
-    let p = std::path::PathBuf::from(&expanded);
-    let resolved = if p.is_absolute() {
-        p
-    } else {
-        match cwd {
-            Some(c) if !c.is_empty() => std::path::Path::new(&c).join(&p),
-            _ => return None,
-        }
-    };
+    let resolved = resolve_fs_path(cwd.as_deref(), &path)?;
     let meta = std::fs::metadata(&resolved).ok()?;
     if !meta.is_file() && !meta.is_dir() {
         return None;
@@ -40,6 +46,78 @@ pub(crate) fn stat_path(cwd: Option<String>, path: String) -> Option<PathStat> {
         is_file: meta.is_file(),
         is_dir: meta.is_dir(),
     })
+}
+
+/// `readdir` entry for `fs_read_dir` — serialized like the frontend's
+/// `DirEntry` (name/isFile/isDirectory/isSymlink).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FsDirEntry {
+    name: String,
+    is_file: bool,
+    is_directory: bool,
+    is_symlink: bool,
+}
+
+// Unscoped reads. The fs-plugin scope ($HOME + fileAccessRoots) only remains
+// as a write rail: the app is a terminal — the webview already reads
+// anything via the PTY (`cat`), so gating reads only produced
+// `forbidden path` errors for previews and browsed paths outside $HOME
+// (/tmp, /Volumes, ...). writeFile/mkdir stay on the plugin scope.
+
+/// Only regular files may be read whole: a device or FIFO would block or
+/// stream forever. `metadata` follows symlinks, like the read itself.
+fn require_regular_file(p: &std::path::Path) -> Result<(), String> {
+    let meta = std::fs::metadata(p).map_err(|e| format!("{}: {}", p.display(), e))?;
+    if !meta.is_file() {
+        return Err(format!("{}: not a regular file", p.display()));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn fs_read_text(cwd: Option<String>, path: String) -> Result<String, String> {
+    let p = resolve_fs_path(cwd.as_deref(), &path).ok_or("path is not absolute")?;
+    require_regular_file(&p)?;
+    std::fs::read_to_string(&p).map_err(|e| format!("{}: {}", p.display(), e))
+}
+
+/// Raw IPC response (no JSON/base64 copy) — previews read multi-MB images.
+#[tauri::command]
+pub(crate) fn fs_read_bytes(
+    cwd: Option<String>,
+    path: String,
+) -> Result<tauri::ipc::Response, String> {
+    let p = resolve_fs_path(cwd.as_deref(), &path).ok_or("path is not absolute")?;
+    require_regular_file(&p)?;
+    std::fs::read(&p)
+        .map(tauri::ipc::Response::new)
+        .map_err(|e| format!("{}: {}", p.display(), e))
+}
+
+#[tauri::command]
+pub(crate) fn fs_read_dir(cwd: Option<String>, path: String) -> Result<Vec<FsDirEntry>, String> {
+    let p = resolve_fs_path(cwd.as_deref(), &path).ok_or("path is not absolute")?;
+    let rd = std::fs::read_dir(&p).map_err(|e| format!("{}: {}", p.display(), e))?;
+    let mut out = Vec::new();
+    for entry in rd {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let ft = entry.file_type().map_err(|e| e.to_string())?;
+        out.push(FsDirEntry {
+            name: entry.file_name().to_string_lossy().into_owned(),
+            is_file: ft.is_file(),
+            is_directory: ft.is_dir(),
+            is_symlink: ft.is_symlink(),
+        });
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub(crate) fn fs_exists(cwd: Option<String>, path: String) -> bool {
+    resolve_fs_path(cwd.as_deref(), &path)
+        .map(|p| p.exists())
+        .unwrap_or(false)
 }
 
 #[tauri::command]
@@ -644,5 +722,74 @@ mod reveal_tests {
             r#"/select,"C:\Program Files\my app\a b.txt""#
         );
         assert_eq!(explorer_select_arg(r#"C:\x"y"#), r#"/select,"C:\xy""#);
+    }
+}
+
+#[cfg(test)]
+mod fs_read_tests {
+    use super::*;
+
+    #[test]
+    fn resolves_absolute_tilde_and_cwd_relative_paths() {
+        let home = dirs::home_dir().unwrap();
+        assert_eq!(
+            resolve_fs_path(None, "/abs/x"),
+            Some(PathBuf::from("/abs/x"))
+        );
+        assert_eq!(resolve_fs_path(None, "~/x"), Some(home.join("x")));
+        assert_eq!(
+            resolve_fs_path(Some("/tmp/base"), "rel/x"),
+            Some(PathBuf::from("/tmp/base/rel/x"))
+        );
+        // A relative path without a cwd cannot resolve.
+        assert_eq!(resolve_fs_path(None, "rel/x"), None);
+        assert_eq!(resolve_fs_path(Some(""), "rel/x"), None);
+        // An absolute path wins over a cwd.
+        assert_eq!(
+            resolve_fs_path(Some("/tmp/base"), "/abs/x"),
+            Some(PathBuf::from("/abs/x"))
+        );
+    }
+
+    #[test]
+    fn reads_regular_files_but_not_directories_or_devices() {
+        let dir = std::env::temp_dir().join(format!("axn-fs-read-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("a.txt");
+        std::fs::write(&file, "hello").unwrap();
+
+        assert_eq!(
+            fs_read_text(None, file.to_string_lossy().into_owned()).as_deref(),
+            Ok("hello")
+        );
+        assert!(fs_read_bytes(None, file.to_string_lossy().into_owned()).is_ok());
+        assert!(fs_exists(None, file.to_string_lossy().into_owned()));
+        assert!(!fs_exists(None, dir.join("missing").to_string_lossy().into_owned()));
+
+        // A directory is not a regular file; a device would stream forever.
+        assert!(fs_read_text(None, dir.to_string_lossy().into_owned()).is_err());
+        assert!(fs_read_bytes(None, dir.to_string_lossy().into_owned()).is_err());
+        #[cfg(unix)]
+        assert!(fs_read_bytes(None, "/dev/null".to_string()).is_err());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn read_dir_reports_entry_kinds() {
+        let dir = std::env::temp_dir().join(format!("axn-fs-dir-test-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("a.txt"), "x").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("a.txt", dir.join("link")).unwrap();
+
+        let entries = fs_read_dir(None, dir.to_string_lossy().into_owned()).unwrap();
+        let get = |name: &str| entries.iter().find(|e| e.name == name).unwrap();
+        assert!(get("a.txt").is_file);
+        assert!(get("sub").is_directory);
+        #[cfg(unix)]
+        assert!(get("link").is_symlink);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
