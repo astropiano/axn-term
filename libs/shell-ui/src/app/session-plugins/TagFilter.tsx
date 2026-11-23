@@ -44,7 +44,7 @@ export function TagFilter({
 
   return (
     <div
-      className="flex items-center gap-1 overflow-x-auto py-0.5 text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex flex-wrap items-center gap-1 py-0.5 text-xs"
       role="group"
       aria-label={t`Tag filter`}
     >
@@ -72,7 +72,7 @@ export function TagFilter({
             onClick={() => onChange(isSelected ? null : tag)}
             aria-pressed={isSelected}
             data-tip={t`Filter by tag: ${tag}`}
-            className="flex h-5 shrink-0 items-center gap-1 rounded-full px-2 text-[10px] font-medium transition-all duration-[var(--dur-1)]"
+            className="flex h-5 max-w-full min-w-0 items-center gap-1 rounded-full px-2 text-[10px] font-medium transition-all duration-[var(--dur-1)]"
             style={
               isSelected && hex && text
                 ? {
