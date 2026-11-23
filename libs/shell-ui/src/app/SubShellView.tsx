@@ -10,6 +10,7 @@ import { getXtermColors, resolveShellFont } from '../themes';
 import {
   getScreenLines,
   handleClipboardWrites,
+  terminalHasFocus,
   registerTerminal,
   serializeTerminal,
   setPendingReplay,
@@ -38,6 +39,7 @@ import { talkResumeCommand } from './gitReview';
 import { isAppChromeShortcut, isAppNavigationShortcut, isReloadShortcut } from './shortcuts';
 import type { EditorTab, ShellSession } from '../types';
 import { createFlowControl } from '../flowControl';
+import { axnLog } from './log';
 
 /**
  * A sub-shell sub-view: a child PTY of the session spawned via
@@ -129,6 +131,8 @@ export function SubShellView({
   onCompleteInputRef.current = onCompleteInput;
   onUserInputRef.current = onUserInput;
   const { activeTheme, settings } = useSettings();
+  const clipboardWritesRef = useRef(settings.terminalClipboardWrites);
+  clipboardWritesRef.current = settings.terminalClipboardWrites;
   const { services } = useShellServices();
   const notifyRef = useRef(services.notify);
   notifyRef.current = services.notify;
@@ -160,10 +164,21 @@ export function SubShellView({
     t.loadAddon(fit);
     t.open(terminalRef.current);
     const unregisterElement = registerTerminalElement(terminalRef.current, t);
-    // OSC 52: TUIs with their own mouse selection (Claude Code) copy this way
-    const clipboardWrites = handleClipboardWrites(t, (text) => {
-      void Promise.resolve(services.copyText(text)).catch(() => {});
-    });
+    // OSC 52: TUIs with their own mouse selection (Claude Code) copy this way.
+    // Same gate as the main terminal — only the visible, focused terminal may
+    // write the clipboard, and the setting can turn it off.
+    const clipboardWrites = handleClipboardWrites(
+      t,
+      (text) => {
+        void Promise.resolve(services.copyText(text)).catch(() => {});
+      },
+      () => {
+        const mode = clipboardWritesRef.current ?? 'focused';
+        const ok = mode !== 'off' && isVisibleRef.current === true && terminalHasFocus(t);
+        if (!ok) axnLog('info', 'terminal', `OSC 52 clipboard write ignored (${mode === 'off' ? 'disabled in settings' : 'terminal not focused'})`);
+        return ok;
+      },
+    );
     // keyed by the tab id: screen scans (subShellTasks.ts) read this PTY's view
     registerTerminal(tab.id, t);
     // A tab moved in with its session from another window, or the page
