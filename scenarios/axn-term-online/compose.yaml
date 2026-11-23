@@ -18,9 +18,12 @@ name: axn-term-online
 #   https://axn-term.localhost:8092          - axn-term web UI (single origin)
 #   http://127.0.0.1:18097                   - same routes over plain HTTP
 #
-# DATA_MOUNT: host directory bind-mounted into every agent container at the
-# same path (writable). When set, shells land there by default and task state
-# is written under <DATA_MOUNT>. Leave empty for /tmp.
+# DATA_MOUNT: host directory holding one subdirectory per user; each agent
+# container gets only its own <DATA_MOUNT>/<user> bind-mounted at the same
+# path (writable, created on first use). When set, shells land there by
+# default and task state is written under <DATA_MOUNT>/<user>/.axn-term —
+# PTY_CWD / SESSION_HOST_HOME / AXN_STATE_DIR paths under DATA_MOUNT are
+# moved into the user's subdirectory by the gateway. Leave empty for /tmp.
 
 services:
   keycloak:

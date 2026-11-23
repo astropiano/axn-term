@@ -67,6 +67,20 @@ if [ "$(id -u)" = "0" ]; then
     user_home="/home/$session_user"
     [ "$session_user" = "root" ] && user_home=/root
 
+    # The gateway binds only this user's <DATA_MOUNT>/<user> dir (and its
+    # nix/ subdir at ~/.config/nix). Docker creates a missing bind source
+    # root-owned — hand fresh ones to the session user. Only the mount
+    # points themselves (they can't be swapped for symlinks), never -R,
+    # and only while root still owns them.
+    if [ "$session_user" != "root" ]; then
+        for mount_dir in "${AXN_USER_DATA_DIR:-}" \
+            "$([ "${AXN_USER_NIX_MANAGED:-0}" = "1" ] && printf '%s' "$user_home/.config/nix")"; do
+            [ -n "$mount_dir" ] && [ -d "$mount_dir" ] && [ ! -L "$mount_dir" ] || continue
+            [ "$(stat -c %u "$mount_dir")" = "0" ] \
+                && chown -h "$session_user:" "$mount_dir" 2>/dev/null || true
+        done
+    fi
+
     # Everything below that touches the (user-writable, persistent) home
     # runs as the session user: as root, a planted symlink would turn a
     # mkdir/chown/log redirect into a write to /etc and friends.

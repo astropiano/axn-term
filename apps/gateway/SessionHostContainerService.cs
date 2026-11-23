@@ -250,8 +250,15 @@ public sealed class SessionHostContainerService : IDisposable
     {
         var binds = new List<string>();
         var nixManaged = false;
-        var ptyCwd = _defaultPtyCwd;
-        var home = _home;
+        // DATA_MOUNT is shared by all users; each container only ever sees
+        // its own <DATA_MOUNT>/<user> subdirectory. Configured paths under
+        // DATA_MOUNT (PTY_CWD, SESSION_HOST_HOME, AXN_STATE_DIR — compose
+        // defaults them there) move into that subdirectory, so no two
+        // hosts share a home, cwd or control.sock.
+        var userDataDir = UserDataDir(_dataMount, userId);
+        var ptyCwd = RebaseOntoUserDataDir(_defaultPtyCwd, _dataMount, userDataDir);
+        var home = RebaseOntoUserDataDir(_home, _dataMount, userDataDir);
+        var stateDir = RebaseOntoUserDataDir(_stateDir, _dataMount, userDataDir);
 
         if (_homeVolumePrefix is not null)
         {
@@ -269,7 +276,7 @@ public sealed class SessionHostContainerService : IDisposable
             binds.Add($"{volumeName}:{home}:Z");
             // With a real home the shell should land there unless DATA_MOUNT
             // overrides the cwd.
-            ptyCwd = string.IsNullOrWhiteSpace(_dataMount) ? home : _dataMount;
+            ptyCwd = userDataDir ?? home;
         }
 
         if (_nixVolumePrefix is not null)
@@ -282,18 +289,19 @@ public sealed class SessionHostContainerService : IDisposable
             binds.Add($"{volumeName}:/nix:Z");
         }
 
-        if (!string.IsNullOrWhiteSpace(_dataMount))
+        if (userDataDir is not null)
         {
-            // Mount the user's data directory at the same path so shell paths are
-            // familiar. The container user must have write permission there.
-            binds.Add($"{_dataMount}:{_dataMount}");
-            ptyCwd = _dataMount;
+            // Mount only the user's own data directory, at the same path so
+            // shell paths are familiar. Docker creates it root-owned on first
+            // use; the entrypoint (root mode) hands it to the session user.
+            binds.Add($"{userDataDir}:{userDataDir}");
+            ptyCwd = userDataDir;
 
             // Per-user nix config: the user's own writable nix dir mounted at
             // ~/.config/nix when entitled + AXN_USER_NIX_ENABLED is on.
             if (_nixEnabled && _caps.NixManaged(userId))
             {
-                var nixDir = Path.Combine(_dataMount, "nix");
+                var nixDir = Path.Combine(userDataDir, "nix");
                 binds.Add($"{nixDir}:/home/{userId}/.config/nix");
                 nixManaged = true;
             }
@@ -312,9 +320,14 @@ public sealed class SessionHostContainerService : IDisposable
             "PTY_ARGS=",
             $"PTY_CWD={ptyCwd}",
             $"HOME={home}",
-            $"AXN_STATE_DIR={_stateDir}",
+            $"AXN_STATE_DIR={stateDir}",
             $"{SessionHostSecret.EnvName}={secret}",
         };
+        if (userDataDir is not null)
+        {
+            env.Add($"AXN_USER_DATA_DIR={userDataDir}");
+        }
+
         if (nixManaged)
         {
             env.Add("AXN_USER_NIX_MANAGED=1");
@@ -449,5 +462,47 @@ public sealed class SessionHostContainerService : IDisposable
     public void Dispose()
     {
         _docker.Dispose();
+    }
+
+    /// <summary>
+    /// The user's own directory under DATA_MOUNT ("&lt;DATA_MOUNT&gt;/&lt;userId&gt;"),
+    /// or null when no DATA_MOUNT is configured. Only this directory is
+    /// bind-mounted into the user's session host — never DATA_MOUNT itself.
+    /// userId comes from <see cref="UserIdentity.ToUserId"/>, so it is a
+    /// single safe path segment.
+    /// </summary>
+    public static string? UserDataDir(string? dataMount, string userId)
+    {
+        if (string.IsNullOrWhiteSpace(dataMount))
+        {
+            return null;
+        }
+
+        return $"{dataMount.TrimEnd('/')}/{userId}";
+    }
+
+    /// <summary>
+    /// Moves a configured path that lies in DATA_MOUNT (the mount itself or
+    /// anything below it) to the same place inside the user's data dir —
+    /// DATA_MOUNT itself is not mounted into session hosts. Other paths are
+    /// container-local already and stay as they are.
+    /// </summary>
+    public static string RebaseOntoUserDataDir(string path, string? dataMount, string? userDataDir)
+    {
+        if (string.IsNullOrWhiteSpace(dataMount) || userDataDir is null)
+        {
+            return path;
+        }
+
+        var root = dataMount.TrimEnd('/');
+        var trimmed = path.TrimEnd('/');
+        if (trimmed == root)
+        {
+            return userDataDir;
+        }
+
+        return path.StartsWith(root + "/", StringComparison.Ordinal)
+            ? userDataDir + path[root.Length..]
+            : path;
     }
 }
