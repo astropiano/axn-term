@@ -35,6 +35,17 @@ export const PTY_EXITED_CLOSE_CODE = 4001;
 const CONNECTION_LOST_NOTICE =
   '\r\n\x1b[2m[axn-term: connection lost — reload to reconnect]\x1b[0m\r\n';
 
+/**
+ * A control request the host never answers is rejected after this long, so
+ * the pending map cannot grow without bound. Above the host's own fs (30 s)
+ * and default exec (60 s) timeouts — those still answer with an error.
+ */
+export const REQUEST_TIMEOUT_MS = 90_000;
+/** `exec` is bounded host-side (AXN_EXEC_TIMEOUT_SECONDS, may be raised). */
+const EXEC_REQUEST_TIMEOUT_MS = 10 * 60_000;
+/** cwd/fg-process are polled every second — a stuck one must give way soon. */
+const POLL_REQUEST_TIMEOUT_MS = 5_000;
+
 export interface WsBackendOptions {
   /** WebSocket URL of the gateway/session-host `/ws` endpoint. */
   url: string;
@@ -52,6 +63,10 @@ export interface WsBackendOptions {
  */
 export class WsBackend implements SessionBackend {
   private conns = new Map<string, WsConn>();
+  // connect() awaits getToken() before it can register the conn; a second
+  // connect() for the same id in that window must join this one, not open
+  // a second socket (and a second host PTY) that nothing ever closes.
+  private connecting = new Map<string, Promise<boolean>>();
   // Output listeners are keyed by client id — independent of the conn
   // instance. A StrictMode remount can replace the conn under a listener;
   // per-conn storage left the replacement with no callbacks (dead output).
@@ -103,11 +118,29 @@ export class WsBackend implements SessionBackend {
     clientId: string,
     opts: PtySpawnOptions & { command?: string },
   ): Promise<boolean> {
+    const inFlight = this.connecting.get(clientId);
+    if (inFlight) {
+      await inFlight;
+      return false;
+    }
     const existing = this.conns.get(clientId);
     if (existing && existing.ws.readyState <= WebSocket.OPEN) {
       await existing.openPromise;
       return false;
     }
+    const attempt = this.openConn(clientId, opts);
+    this.connecting.set(clientId, attempt);
+    try {
+      return await attempt;
+    } finally {
+      if (this.connecting.get(clientId) === attempt) this.connecting.delete(clientId);
+    }
+  }
+
+  private async openConn(
+    clientId: string,
+    opts: PtySpawnOptions & { command?: string },
+  ): Promise<boolean> {
 
     let url = this.opts.url;
     const params = new URLSearchParams();
@@ -204,6 +237,7 @@ export class WsBackend implements SessionBackend {
     clientId: string,
     type: string,
     extra: Record<string, unknown>,
+    timeoutMs = REQUEST_TIMEOUT_MS,
   ): Promise<Record<string, unknown>> {
     const conn = this.conns.get(clientId);
     if (!conn || conn.ws.readyState !== WebSocket.OPEN) {
@@ -211,10 +245,24 @@ export class WsBackend implements SessionBackend {
     }
     const requestId = crypto.randomUUID();
     return new Promise((resolve, reject) => {
-      conn.pending.set(requestId, { resolve, reject });
+      const timer = setTimeout(() => {
+        conn.pending.delete(requestId);
+        reject(new Error(`${type} timed out`));
+      }, timeoutMs);
+      conn.pending.set(requestId, {
+        resolve: (msg) => {
+          clearTimeout(timer);
+          resolve(msg);
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      });
       try {
         conn.ws.send(JSON.stringify({ type, requestId, ...extra }));
       } catch (e) {
+        clearTimeout(timer);
         conn.pending.delete(requestId);
         reject(e);
       }
@@ -248,7 +296,7 @@ export class WsBackend implements SessionBackend {
 
   async getCwd(clientId: string): Promise<string | null> {
     try {
-      const msg = await this.request(clientId, 'cwd', {});
+      const msg = await this.request(clientId, 'cwd', {}, POLL_REQUEST_TIMEOUT_MS);
       return msg.ok === true ? (msg.cwd as string) : null;
     } catch {
       return null;
@@ -257,7 +305,7 @@ export class WsBackend implements SessionBackend {
 
   async getForegroundProcess(clientId: string): Promise<string | null> {
     try {
-      const msg = await this.request(clientId, 'fg-process', {});
+      const msg = await this.request(clientId, 'fg-process', {}, POLL_REQUEST_TIMEOUT_MS);
       return msg.ok === true ? ((msg.process as string) ?? null) : null;
     } catch {
       return null;
@@ -266,14 +314,19 @@ export class WsBackend implements SessionBackend {
 
   /** `sh -c` in the session host, resolved against the PTY's live cwd. */
   async exec(clientId: string, command: string, cwd?: string): Promise<string> {
-    const msg = await this.request(clientId, 'exec', { command, cwd });
+    const msg = await this.request(clientId, 'exec', { command, cwd }, EXEC_REQUEST_TIMEOUT_MS);
     if (msg.ok !== true) throw new Error((msg.error as string) ?? 'exec failed');
     return ((msg.stdout as string) ?? '').trimEnd();
   }
 
   /** `git` argv (no shell) in `cwd`. */
   async execGit(clientId: string, cwd: string, args: string[]): Promise<string> {
-    const msg = await this.request(clientId, 'exec', { argv: ['git', ...args], cwd });
+    const msg = await this.request(
+      clientId,
+      'exec',
+      { argv: ['git', ...args], cwd },
+      EXEC_REQUEST_TIMEOUT_MS,
+    );
     if (msg.ok !== true) throw new Error((msg.error as string) ?? 'git failed');
     return (msg.stdout as string) ?? '';
   }

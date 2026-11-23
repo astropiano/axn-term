@@ -181,3 +181,60 @@ describe('WsBackend control commands', () => {
     expect(JSON.parse(ws.sent.at(-1) as string)).toMatchObject({ type: 'control-reply', requestId: 'r2', ok: false });
   });
 });
+
+describe('WsBackend connection lifecycle', () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('concurrent connects for one id open a single socket', async () => {
+    let releaseToken!: (token: string) => void;
+    const token = new Promise<string>((resolve) => (releaseToken = resolve));
+    const backend = new WsBackend({ url: 'ws://host/ws', getToken: () => token });
+
+    const first = backend.createSession('s1', { cols: 80, rows: 24 });
+    const second = backend.createSession('s1', { cols: 80, rows: 24 });
+    releaseToken('t');
+    const ws = await nextSocket(1);
+    ws.open();
+
+    expect(await first).toBe(true);
+    expect(await second).toBe(false);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it('a request the host never answers times out and leaves no pending entry', async () => {
+    const { backend, output } = setup();
+    const ws = await connect(backend);
+    vi.useFakeTimers();
+
+    const read = backend.readFile('s1', '/etc/hosts');
+    const cwd = backend.getCwd('s1');
+    vi.advanceTimersByTime(5_000);
+    expect(await cwd).toBeNull();
+    vi.advanceTimersByTime(90_000);
+    await expect(read).rejects.toThrow('fs-read timed out');
+
+    // A late answer is ignored rather than treated as output.
+    const requestId = JSON.parse(ws.sent[1] as string).requestId;
+    ws.onmessage?.({ data: JSON.stringify({ type: 'fs-read-result', requestId, ok: true }) });
+    expect(output).toEqual([]);
+  });
+
+  it('an answered request clears its timeout', async () => {
+    const { backend } = setup();
+    const ws = await connect(backend);
+    vi.useFakeTimers();
+
+    const cwd = backend.getCwd('s1');
+    const requestId = JSON.parse(ws.sent.at(-1) as string).requestId;
+    ws.onmessage?.({ data: JSON.stringify({ type: 'cwd-result', requestId, ok: true, cwd: '/tmp' }) });
+    expect(await cwd).toBe('/tmp');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});

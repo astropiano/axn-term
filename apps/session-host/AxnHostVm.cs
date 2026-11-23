@@ -377,30 +377,39 @@ public sealed class AxnHostVm : ApplicationModel, IDisposable
             return new JsonObject { ["ok"] = false, ["error"] = "invalid pty id" };
         }
 
+        var (session, spawned) = await LiveOrSpawnAsync(_host, id, SpawnThrottled, async () =>
+        {
+            var spawnedPty = await _host.SpawnAsync(id, cmd, cwd, cols, rows, CancellationToken.None);
+            if (spawnedPty is not null)
+            {
+                // Before the gate opens: a concurrent reattach must already
+                // see the PTY's metadata.
+                spawnedPty.SessionId = sessionId;
+                spawnedPty.WorkspaceId = workspaceId;
+                spawnedPty.Name = name;
+                spawnedPty.Kind = kind;
+            }
+            return spawnedPty;
+        });
+
         // Reattach: a live PTY with this id already exists — the client gets
         // the existing stream, no respawn (spawned=false, like the desktop).
-        if (TryLive(id, out var live))
+        if (!spawned && session is not null)
         {
-            RegisterPty(live);
+            RegisterPty(session);
             return new JsonObject { ["ok"] = true, ["spawned"] = false, ["id"] = id };
         }
 
-        if (SpawnThrottled())
+        if (!spawned)
         {
             return new JsonObject { ["ok"] = false, ["error"] = "rate limited" };
         }
 
-        var session = await _host.SpawnAsync(id, cmd, cwd, cols, rows, CancellationToken.None);
         if (session is null)
         {
             return new JsonObject { ["ok"] = false, ["error"] = "spawn failed" };
         }
         _viewports.Apply(session, _infos, cols, rows);
-
-        session.SessionId = sessionId;
-        session.WorkspaceId = workspaceId;
-        session.Name = name;
-        session.Kind = kind;
         RegisterPty(session);
         return new JsonObject { ["ok"] = true, ["spawned"] = true, ["id"] = id };
     }
@@ -574,6 +583,38 @@ public sealed class AxnHostVm : ApplicationModel, IDisposable
             : Task.FromResult(NoSuchPty(id));
 
     // ---- internals ----
+
+    /// <summary>Host-wide: every connection has its own VM over the shared
+    /// <see cref="PtyHost"/>, so two devices restoring the same PTY id must
+    /// not both pass the live check and spawn (the first PTY would be
+    /// orphaned when the second overwrites the registry entry).</summary>
+    private static readonly SemaphoreSlim SpawnGate = new(1, 1);
+
+    /// <summary>Atomic check-then-spawn: returns the live PTY with
+    /// <paramref name="id"/> (Spawned=false), or the result of
+    /// <paramref name="spawn"/> (Spawned=true, null when it failed).
+    /// (null, false) means the spawn was throttled.</summary>
+    public static async Task<(PtySession? Pty, bool Spawned)> LiveOrSpawnAsync(
+        PtyHost host, string id, Func<bool> throttled, Func<Task<PtySession?>> spawn)
+    {
+        await SpawnGate.WaitAsync();
+        try
+        {
+            if (host.Sessions.TryGetValue(id, out var live) && live.ExitCode is null)
+            {
+                return (live, false);
+            }
+            if (throttled())
+            {
+                return (null, false);
+            }
+            return (await spawn(), true);
+        }
+        finally
+        {
+            SpawnGate.Release();
+        }
+    }
 
     private bool TryLive(string id, out PtySession pty) =>
         _host.Sessions.TryGetValue(id, out pty!) && pty.ExitCode is null;
