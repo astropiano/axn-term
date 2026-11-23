@@ -445,34 +445,48 @@ pub(crate) fn setup(app: &AppHandle) {
     }
 }
 
+/// `DevHmrState` is only managed in HMR mode, but the `dev_hmr_*` commands
+/// are registered in every build — so a release build gets an error, not a
+/// panic, when something invokes them.
+fn hmr_state<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<tauri::State<'_, DevHmrState>, String> {
+    app.try_state::<DevHmrState>()
+        .ok_or_else(|| "dev HMR mode is not enabled".to_string())
+}
+
 #[tauri::command]
-pub(crate) fn dev_hmr_status(app: AppHandle) -> DevHmrStatus {
-    status_of(&app, &app.state::<DevHmrState>())
+pub(crate) fn dev_hmr_status(app: AppHandle) -> Result<DevHmrStatus, String> {
+    let state = hmr_state(&app)?;
+    Ok(status_of(&app, &state))
 }
 
 #[tauri::command]
 pub(crate) fn dev_hmr_set_repo(app: AppHandle, repo: Option<String>) -> Result<(), String> {
+    // Check the mode before writing, so a non-HMR build never touches the config.
+    let state = hmr_state(&app)?;
     let path = repo.map(PathBuf::from).filter(|p| p.is_dir());
     write_config(path.as_deref())?;
-    emit_status(&app, &app.state::<DevHmrState>());
+    emit_status(&app, &state);
     Ok(())
 }
 
 #[tauri::command]
 pub(crate) fn dev_hmr_start(app: AppHandle) -> Result<(), String> {
-    start_vite(app.clone(), &app.state::<DevHmrState>())
+    let state = hmr_state(&app)?;
+    start_vite(app.clone(), &state)
 }
 
 #[tauri::command]
 pub(crate) fn dev_hmr_stop(app: AppHandle) -> Result<(), String> {
-    stop_vite(&app.state::<DevHmrState>());
-    emit_status(&app, &app.state::<DevHmrState>());
+    let state = hmr_state(&app)?;
+    stop_vite(&state);
+    emit_status(&app, &state);
     Ok(())
 }
 
 #[tauri::command]
 pub(crate) fn dev_hmr_install(app: AppHandle) -> Result<(), String> {
-    install_deps(app.clone(), &app.state::<DevHmrState>())
+    let state = hmr_state(&app)?;
+    install_deps(app.clone(), &state)
 }
 
 #[tauri::command]
@@ -481,13 +495,22 @@ pub(crate) fn dev_hmr_open_main(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{Duration, Instant};
 
     #[test]
+    fn hmr_state_errors_instead_of_panicking_when_not_managed() {
+        let app = tauri::test::mock_app();
+        assert_eq!(hmr_state(app.handle()).err().as_deref(), Some("dev HMR mode is not enabled"));
+        app.manage(DevHmrState::default());
+        assert!(hmr_state(app.handle()).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn stopping_kills_the_grandchild_too() {
+        use std::time::{Duration, Instant};
         // Same shape as vite: a wrapper whose grandchild does the work.
         let pidfile = std::env::temp_dir().join(format!("axn-devhmr-test-{}", std::process::id()));
         let _ = std::fs::remove_file(&pidfile);
