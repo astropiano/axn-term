@@ -11,6 +11,7 @@ import {
   draftFileName,
   findDraft,
   resolveScratchpad,
+  dirPath,
   listDrafts,
   currentDrafts,
   draftMatchesIdentifier,
@@ -181,10 +182,22 @@ describe('parsePatterns', () => {
     expect(p[0].dirs).toEqual(['.drafts', 'notes']);
   });
 
-  it('splits on newlines and strips slashes', () => {
-    const p = parsePatterns('axn-term: /drafts/\nother: tmp/notes/');
+  it('splits on newlines and strips slashes from repo-relative dirs', () => {
+    const p = parsePatterns('axn-term: drafts/\nother: tmp/notes/');
     expect(p[0].dirs).toEqual(['drafts']);
     expect(p[1].dirs).toEqual(['tmp/notes']);
+  });
+
+  it('keeps absolute and home dirs, so a repo can use a central folder next to its own', () => {
+    const p = parsePatterns('*: .local-drafts, ~/Magnolia/Drafts/axn/; axn-term: /srv/notes/');
+    expect(p[0].dirs).toEqual(['.local-drafts', '~/Magnolia/Drafts/axn']);
+    expect(p[1].dirs).toEqual(['/srv/notes']);
+    expect(dirsForRepo(p, ['axn-term'])).toEqual(['.local-drafts', '~/Magnolia/Drafts/axn', '/srv/notes']);
+  });
+
+  it('dirPath leaves absolute dirs alone and roots relative ones in the repo', () => {
+    expect(dirPath({ repoRoot: '/r' }, 'notes')).toBe('/r/notes');
+    expect(dirPath({ repoRoot: '/r' }, '/central/x')).toBe('/central/x');
   });
 
   it('skips malformed regexes', () => {
@@ -309,6 +322,31 @@ describe('resolveScratchpad', () => {
       throw new Error('not a repo');
     };
     expect(await resolveScratchpad(h.ctx)).toBeNull();
+  });
+});
+
+describe('central (absolute) draft folders', () => {
+  const CENTRAL = '/home/tester/Magnolia/Drafts/axn-term';
+  const settings = { patterns: `*: .local-drafts; axn-term: ${CENTRAL}` };
+
+  it('resolves both the in-repo and the central folder', async () => {
+    const h = makeHarness({}, {}, settings);
+    h.existing.add(`${REPO}/.local-drafts`);
+    h.existing.add(CENTRAL);
+    const loc = await resolveScratchpad(h.ctx);
+    expect(loc?.dirs).toEqual(['.local-drafts', CENTRAL]);
+    expect(loc?.existing).toEqual(['.local-drafts', CENTRAL]);
+  });
+
+  it('lists drafts of both folders with their real paths', async () => {
+    const h = makeHarness({}, {}, settings);
+    h.existing.add(`${REPO}/.local-drafts`);
+    h.existing.add(CENTRAL);
+    h.listing[`${REPO}/.local-drafts`] = [dirEntry('a.md')];
+    h.listing[CENTRAL] = [dirEntry('AIACC-757-notes.md')];
+    const loc = (await resolveScratchpad(h.ctx))!;
+    const drafts = await listDrafts(h.ctx, loc);
+    expect(drafts.map((d) => d.path)).toEqual([`${REPO}/.local-drafts/a.md`, `${CENTRAL}/AIACC-757-notes.md`]);
   });
 });
 

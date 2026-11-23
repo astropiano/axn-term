@@ -44,8 +44,24 @@ export interface ScratchPattern {
   /** The repo matcher as written (regex source, `*` = all repos). */
   repo: string;
   re: RegExp;
-  /** Repo-relative draft folders this entry contributes. */
+  /** Draft folders this entry contributes: repo-relative, or absolute (`/…`, `~/…`). */
   dirs: string[];
+}
+
+/** Absolute (`/…`) and home (`~`, `~/…`) folders stay as written; relative ones lose stray slashes. */
+function normalizeDir(raw: string): string {
+  const d = raw.trim();
+  if (d === '~' || d.startsWith('~/')) return d.replace(/\/+$/, '') || '~';
+  if (d.startsWith('/')) return d.replace(/\/+$/, '') || '/';
+  return d.replace(/^\/+|\/+$/g, '');
+}
+
+/** Whether a configured draft folder is absolute rather than inside the repo. */
+export const isAbsoluteDir = (dir: string): boolean => dir.startsWith('/');
+
+/** A draft folder as an absolute path: absolute dirs as they are, others under the repo root. */
+export function dirPath(loc: Pick<ScratchpadLocation, 'repoRoot'>, dir: string): string {
+  return isAbsoluteDir(dir) ? dir : `${loc.repoRoot}/${dir}`;
 }
 
 export function parsePatterns(raw: unknown): ScratchPattern[] {
@@ -58,7 +74,7 @@ export function parsePatterns(raw: unknown): ScratchPattern[] {
     const repo = (ci === -1 ? '*' : entry.slice(0, ci)).trim() || '*';
     const dirs = (ci === -1 ? entry : entry.slice(ci + 1))
       .split(',')
-      .map((d) => d.trim().replace(/^\/+|\/+$/g, ''))
+      .map((d) => normalizeDir(d))
       .filter(Boolean);
     if (!dirs.length) continue;
     try {
@@ -168,7 +184,15 @@ export async function resolveScratchpad(ctx: Ctx): Promise<ScratchpadLocation | 
   const names = [
     ...new Set([baseName(repoRoot), remoteRepoName(remote)].filter(Boolean)),
   ];
-  const dirs = dirsForRepo(patternsOf(ctx), names);
+  const configured = dirsForRepo(patternsOf(ctx), names);
+  if (!configured.length) return null;
+  const home = configured.some((d) => d === '~' || d.startsWith('~/'))
+    ? (await ctx.exec('printf %s "$HOME"', repoRoot).catch(() => '')).trim()
+    : '';
+  // `~` expands to the home folder; without one the entry is unusable, so drop it.
+  const dirs = configured
+    .map((d) => (d === '~' || d.startsWith('~/') ? (home ? `${home}${d.slice(1)}` : '') : d))
+    .filter(Boolean);
   if (!dirs.length) return null;
   const existing: string[] = [];
   for (const dir of dirs) {
@@ -230,10 +254,10 @@ export async function listDrafts(
 ): Promise<DraftFile[]> {
   const out: DraftFile[] = [];
   for (const dir of loc.existing) {
-    const entries = await ctx.listDir(dir, loc.repoRoot).catch(() => null);
+    const entries = await ctx.listDir(dirPath(loc, dir), loc.repoRoot).catch(() => null);
     for (const e of entries ?? []) {
       if (e.isFile && e.name !== '.gitignore') {
-        const path = `${loc.repoRoot}/${dir}/${e.name}`;
+        const path = `${dirPath(loc, dir)}/${e.name}`;
         const modifiedAt = includeModifiedAt
           ? (await ctx.statPath(path).catch(() => null))?.modifiedAt
           : undefined;
@@ -276,14 +300,15 @@ async function createDraft(
   const ext = (settingsOf(ctx).defaultExt ?? 'md').replace(/^\./, '') || 'md';
   const name = draftFileName(rawName, ext);
   if (!loc.existing.includes(loc.primary)) {
-    await ctx.mkdir(loc.primary, loc.repoRoot);
-    if (settingsOf(ctx).gitignoreDrafts !== false) {
+    await ctx.mkdir(dirPath(loc, loc.primary), loc.repoRoot);
+    // Only in-repo folders need hiding from git; an absolute folder is outside it.
+    if (settingsOf(ctx).gitignoreDrafts !== false && !isAbsoluteDir(loc.primary)) {
       await ctx
         .writeFile(`${loc.primary}/.gitignore`, '*\n', loc.repoRoot)
         .catch(() => {});
     }
   }
-  const path = `${loc.repoRoot}/${loc.primary}/${name}`;
+  const path = `${dirPath(loc, loc.primary)}/${name}`;
   if (!(await ctx.statPath(path).catch(() => null))) {
     await ctx.writeFile(path, `# ${rawName.trim() || name}\n\n`).catch(() => {});
   }
@@ -308,13 +333,13 @@ export function findDraft(drafts: DraftFile[], arg: string): DraftFile | undefin
 export function agentHintLines(loc: ScratchpadLocation): string[] {
   const list = loc.dirs.map((d) => `\`${d}/\``).join(', ');
   return [
-    `Scratchpad: drafts and working notes for this repo live in ${list} (repo-relative, gitignored).`,
+    `Scratchpad: drafts and working notes for this repo live in ${list} (repo-relative unless absolute, gitignored when in the repo).`,
     `Check them for existing notes before starting work; write plans and notes as \`<topic>.md\` files in \`${loc.primary}/\`.`,
   ];
 }
 
 function agentHintPrompt(loc: ScratchpadLocation): string {
-  return `My drafts and working notes for this repo live in ${loc.primary}/ (repo-relative). Check it for existing notes before starting work, and store working notes there. `;
+  return `My drafts and working notes for this repo live in ${loc.primary}/ (relative to the repo root unless absolute). Check it for existing notes before starting work, and store working notes there. `;
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +452,7 @@ async function openFolder(ctx: Ctx, dir?: string): Promise<void> {
     return;
   }
   const target = dir && loc.dirs.includes(dir) ? dir : loc.primary;
-  ctx.openBrowser(`${loc.repoRoot}/${target}`);
+  ctx.openBrowser(dirPath(loc, target));
 }
 
 async function copyHint(ctx: Ctx): Promise<void> {
@@ -467,9 +492,9 @@ export async function runScratch(
   const [sub, rest] = splitHead(arg ?? '');
   switch (sub) {
     case 'dir':
-      return echoLine(`${loc.repoRoot}/${loc.primary}`);
+      return echoLine(dirPath(loc, loc.primary));
     case 'browse':
-      ctx.openBrowser(`${loc.repoRoot}/${loc.primary}`);
+      ctx.openBrowser(dirPath(loc, loc.primary));
       return false;
     case 'hint':
       return printLines(agentHintLines(loc));
@@ -501,7 +526,7 @@ export async function runScratch(
     case '': {
       const drafts = await listDrafts(ctx, loc);
       return printLines([
-        `scratchpad: ${loc.repoRoot}/${loc.primary}${loc.existing.length > 1 ? ` (+${loc.existing.length - 1} more)` : ''}`,
+        `scratchpad: ${dirPath(loc, loc.primary)}${loc.existing.length > 1 ? ` (+${loc.existing.length - 1} more)` : ''}`,
         ...(drafts.length
           ? drafts.map((f, i) => `  ${i + 1}. ${f.name}${loc.existing.length > 1 ? `  (${f.dir})` : ''}`)
           : ['  (no drafts — `axn-scratch new <name>` creates one)']),
@@ -658,10 +683,10 @@ function ScratchpadView({
                         type="button"
                         disabled={!exists}
                         onClick={() =>
-                          openTab?.({ path: `${g.loc.repoRoot}/${dir}`, kind: 'browser' })
+                          openTab?.({ path: dirPath(g.loc, dir), kind: 'browser' })
                         }
                         className="flex w-full items-center gap-2 rounded px-2 py-1 text-left transition enabled:hover:bg-[var(--surface)] disabled:opacity-50"
-                        data-tip={exists ? `${g.loc.repoRoot}/${dir}` : `${dir}/ — not created yet`}
+                        data-tip={exists ? dirPath(g.loc, dir) : `${dir}/ — not created yet`}
                       >
                         <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
                         <span className="font-mono text-xs text-[var(--text-primary)]">
