@@ -172,7 +172,7 @@ msgstr "プログラムからのクリップボード書き込み"
 msgid "Close"
 msgstr "閉じる"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3154
+#: libs/shell-ui/src/app/ShellApp.tsx:3166
 msgid "Close tab"
 msgstr "タブを閉じる"
 
@@ -987,7 +987,7 @@ msgstr "プロセス名に戻す"
 #~ msgstr "{0} セッション{1}を再開"
 
 #. placeholder {0}: name ? ` '${name}'` : ''
-#: libs/shell-ui/src/app/session-plugins/agentResume.ts:264
+#: libs/shell-ui/src/app/session-plugins/agentResume.ts:262
 #: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:38
 msgid "Resume {agent} session{0}"
 msgstr "{agent} セッションを再開{0}"

@@ -302,6 +302,17 @@ pub(crate) fn wait_exit_then_drain(
     exit_code
 }
 
+/// True when `id` now names a different PTY than the one owning `child` —
+/// the id was re-spawned, so the old process's exit belongs to nobody.
+/// The child handle is the generation token: each spawn has its own.
+pub(crate) fn is_superseded(
+    sessions: &std::collections::HashMap<String, Session>,
+    id: &str,
+    child: &Arc<Mutex<Box<dyn Child + Send + Sync>>>,
+) -> bool {
+    sessions.get(id).is_some_and(|s| !Arc::ptr_eq(&s.child, child))
+}
+
 /// Initial PTY size, clamped to a sensible minimum so programs that read the
 /// PTY size (e.g. Terminal.Gui's ansi driver) don't start with a 0x0 screen.
 pub(crate) fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
@@ -449,6 +460,15 @@ pub(crate) fn spawn_pty(
             Duration::from_millis(100),
             READER_DRAIN_TIMEOUT,
         );
+        // Re-run under the same id (create_subshell): the map now holds a
+        // newer PTY, and this exit must not be reported as its exit.
+        if let Some(state) = exit_handle.try_state::<AppState>() {
+            if let Ok(sessions) = state.sessions.lock() {
+                if is_superseded(&sessions, &session_id_exit, &child_for_exit) {
+                    return;
+                }
+            }
+        }
         // Read the parent link at exit time: a promoted or detached
         // sub-shell reports `session-exited`, a demoted main shell or
         // regular sub-shell reports `subshell-exited`.
@@ -566,7 +586,7 @@ pub(crate) fn create_subshell(
     rows: Option<u16>,
 ) -> Result<(), String> {
     let parent_pid = {
-        let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+        let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
         // A live PTY under this id is attached to, not respawned (e.g. a
         // demoted main shell shown as a sub-shell tab). Refresh its parent
         // link so exit reporting follows the current owner.
@@ -576,8 +596,10 @@ pub(crate) fn create_subshell(
                 return Ok(());
             }
         }
-        // Re-spawning an existing id (re-run) replaces the dead child.
-        if let Some(old) = sessions.remove(&subshell_id) {
+        // Re-spawning an existing id (re-run) replaces the dead child. It
+        // stays in the map until spawn_pty's insert replaces it, so its exit
+        // watcher never sees the id vacant and reports a stale exit.
+        if let Some(old) = sessions.get(&subshell_id) {
             old.flow.set_paused(false);
             let _ = old.child.lock().unwrap().kill();
         }
@@ -934,19 +956,25 @@ pub(crate) fn close_session(app: AppHandle, state: State<AppState>, session_id: 
     Ok(())
 }
 
-/// Remove a session and its sub-shells (they die with it) from the map.
+/// Remove a session and its sub-shells — transitively, a sub-shell's own
+/// sub-shells included (they die with it) — from the map.
 pub(crate) fn take_session_tree(state: &AppState, session_id: &str) -> Result<Vec<(String, Session)>, String> {
     let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
     if !sessions.contains_key(session_id) {
         return Err("session not found".to_string());
     }
-    let ids: Vec<String> = sessions
-        .iter()
-        .filter(|(_, s)| s.parent_id.lock().unwrap().as_deref() == Some(session_id))
-        .map(|(id, _)| id.clone())
-        .chain(std::iter::once(session_id.to_string()))
-        .collect();
-    Ok(ids
+    let mut taken = vec![session_id.to_string()];
+    let mut next = 0;
+    while next < taken.len() {
+        let parent = taken[next].clone();
+        next += 1;
+        for (id, s) in sessions.iter() {
+            if s.parent_id.lock().unwrap().as_deref() == Some(parent.as_str()) && !taken.contains(id) {
+                taken.push(id.clone());
+            }
+        }
+    }
+    Ok(taken
         .into_iter()
         .filter_map(|id| sessions.remove(&id).map(|s| (id, s)))
         .collect())
@@ -1412,16 +1440,40 @@ mod close_tests {
     }
 
     #[test]
+    fn a_respawned_id_supersedes_the_old_child() {
+        let mut sessions = std::collections::HashMap::new();
+        let (old, _) = spawn("sleep 100", Some("p"));
+        let old_child = Arc::clone(&old.child);
+        sessions.insert("t".to_string(), old);
+        assert!(!is_superseded(&sessions, "t", &old_child));
+        let (new, _) = spawn("sleep 100", Some("p"));
+        let replaced = sessions.insert("t".to_string(), new).unwrap();
+        assert!(is_superseded(&sessions, "t", &old_child));
+        // A closed id (not in the map) still reports its exit.
+        let current = sessions.remove("t").unwrap();
+        assert!(!is_superseded(&sessions, "t", &old_child));
+        for session in [replaced, current] {
+            end_session(session).join().unwrap();
+        }
+    }
+
+    #[test]
     fn closing_takes_the_sub_shells_and_nothing_else() {
         let state = AppState::new(false);
-        for (id, parent) in [("a", None), ("a-sub", Some("a")), ("b", None), ("b-sub", Some("b"))] {
+        for (id, parent) in [
+            ("a", None),
+            ("a-sub", Some("a")),
+            ("a-sub-sub", Some("a-sub")),
+            ("b", None),
+            ("b-sub", Some("b")),
+        ] {
             let (session, _) = spawn("sleep 100", parent);
             state.sessions.lock().unwrap().insert(id.into(), session);
         }
         assert!(take_session_tree(&state, "missing").is_err());
         let mut closed: Vec<_> = take_session_tree(&state, "a").unwrap();
         closed.sort_by(|x, y| x.0.cmp(&y.0));
-        assert_eq!(closed.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(), ["a", "a-sub"]);
+        assert_eq!(closed.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(), ["a", "a-sub", "a-sub-sub"]);
         let mut left: Vec<_> = state.sessions.lock().unwrap().keys().cloned().collect();
         left.sort();
         assert_eq!(left, ["b", "b-sub"]);

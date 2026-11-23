@@ -172,7 +172,7 @@ msgstr "Clipboard writes from programs"
 msgid "Close"
 msgstr "Close"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3154
+#: libs/shell-ui/src/app/ShellApp.tsx:3166
 msgid "Close tab"
 msgstr "Close tab"
 
@@ -990,7 +990,7 @@ msgstr "Reset to process name"
 #~ msgstr "Resume {0} session{1}"
 
 #. placeholder {0}: name ? ` '${name}'` : ''
-#: libs/shell-ui/src/app/session-plugins/agentResume.ts:264
+#: libs/shell-ui/src/app/session-plugins/agentResume.ts:262
 #: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:38
 msgid "Resume {agent} session{0}"
 msgstr "Resume {agent} session{0}"

@@ -1028,7 +1028,12 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       // track agent exits and where devin actually ran for restore).
       const timers: ReturnType<typeof setInterval>[] = [];
       if (backend.getCwd) {
+        // In-flight guard: a host slow to answer must not get a new
+        // request stacked on every tick.
+        let cwdBusy = false;
         const pollCwd = async () => {
+          if (cwdBusy) return;
+          cwdBusy = true;
           try {
             const cwd = (await backend.getCwd!(ptyId)) ?? null;
             const current = sessionsRef.current.find((s) => s.id === sessionId);
@@ -1036,13 +1041,18 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             if (current && cwd && cwd !== current.cwd) updateSession(sessionId, { cwd });
           } catch {
             // ignore
+          } finally {
+            cwdBusy = false;
           }
         };
         void pollCwd();
         timers.push(setInterval(pollCwd, 1000));
       }
       if (backend.getForegroundProcess) {
+        let processBusy = false;
         const pollProcess = async () => {
+          if (processBusy) return;
+          processBusy = true;
           try {
             const process = (await backend.getForegroundProcess!(ptyId)) ?? null;
             const session = sessionsRef.current.find((s) => s.id === sessionId);
@@ -1065,6 +1075,8 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
             if (Object.keys(patch).length > 0) updateSession(sessionId, patch);
           } catch {
             // ignore
+          } finally {
+            processBusy = false;
           }
         };
         void pollProcess();

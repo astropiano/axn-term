@@ -203,6 +203,37 @@ fn login_shell_command(dir: &Path, command: &str) -> Command {
     c
 }
 
+/// Spawn as the leader of a new session (and so process group): the vite
+/// server runs as a grandchild (zsh → pnpm → node), and killing only the
+/// wrapper left it holding the port. `setsid` rather than a bare process
+/// group: the interactive login shell must not find a controlling terminal
+/// (an app started from a terminal) and stop itself on SIGTTIN.
+#[cfg(unix)]
+fn own_process_group(cmd: &mut Command) {
+    use std::os::unix::process::CommandExt;
+    // SAFETY: setsid is async-signal-safe and touches no parent state.
+    unsafe {
+        cmd.pre_exec(|| nix::unistd::setsid().map(|_| ()).map_err(std::io::Error::from));
+    }
+}
+
+#[cfg(not(unix))]
+fn own_process_group(_cmd: &mut Command) {}
+
+/// Kill `child` and everything in its process group, then reap it. The
+/// child is still unreaped while the group is signalled, so its pid (the
+/// group id) cannot have been reused.
+fn kill_process_group(child: &mut Child) {
+    #[cfg(unix)]
+    {
+        use nix::sys::signal::{killpg, Signal};
+        use nix::unistd::Pid;
+        let _ = killpg(Pid::from_raw(child.id() as i32), Signal::SIGKILL);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 fn vite_dir(repo: &Path) -> PathBuf {
     repo.join("apps/desktop")
 }
@@ -235,7 +266,7 @@ pub(crate) fn start_vite(app: AppHandle, state: &DevHmrState) -> Result<(), Stri
     set_status(&app, state, ViteStatus::Starting, None);
     push_log(state, format!("$ pnpm exec vite --port {port} --strictPort ({})", repo.display()));
 
-    let mut child = login_shell_command(
+    let mut command = login_shell_command(
         &repo,
         &format!(
             "{} --dir {} exec vite --host {} --port {} --strictPort",
@@ -244,7 +275,9 @@ pub(crate) fn start_vite(app: AppHandle, state: &DevHmrState) -> Result<(), Stri
             AXN_HMR_HOST,
             port
         ),
-    )
+    );
+    own_process_group(&mut command);
+    let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null())
@@ -319,8 +352,7 @@ pub(crate) fn start_vite(app: AppHandle, state: &DevHmrState) -> Result<(), Stri
 pub(crate) fn stop_vite(state: &DevHmrState) {
     let mut guard = state.child.lock().unwrap();
     if let Some(mut child) = guard.take() {
-        let _ = child.kill();
-        let _ = child.wait();
+        kill_process_group(&mut child);
     }
     *state.status.lock().unwrap() = ViteStatus::Idle;
     *state.port.lock().unwrap() = None;
@@ -447,4 +479,41 @@ pub(crate) fn dev_hmr_install(app: AppHandle) -> Result<(), String> {
 pub(crate) fn dev_hmr_open_main(app: AppHandle) -> Result<(), String> {
     open_main_window(&app);
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn stopping_kills_the_grandchild_too() {
+        // Same shape as vite: a wrapper whose grandchild does the work.
+        let pidfile = std::env::temp_dir().join(format!("axn-devhmr-test-{}", std::process::id()));
+        let _ = std::fs::remove_file(&pidfile);
+        let mut command = Command::new("sh");
+        command.args(["-c", &format!("sh -c 'echo $$ > {}; exec sleep 100' & wait", pidfile.display())]);
+        own_process_group(&mut command);
+        let mut child = command.spawn().unwrap();
+
+        let started = Instant::now();
+        let grandchild = loop {
+            if let Some(pid) = std::fs::read_to_string(&pidfile).ok().and_then(|s| s.trim().parse::<i32>().ok()) {
+                break nix::unistd::Pid::from_raw(pid);
+            }
+            assert!(started.elapsed() < Duration::from_secs(5), "grandchild never started");
+            std::thread::sleep(Duration::from_millis(20));
+        };
+
+        kill_process_group(&mut child);
+
+        let started = Instant::now();
+        // The grandchild is reparented to init (or a subreaper), which reaps
+        // it; signal 0 then fails with ESRCH.
+        while nix::sys::signal::kill(grandchild, None).is_ok() {
+            assert!(started.elapsed() < Duration::from_secs(5), "grandchild survived the stop");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let _ = std::fs::remove_file(&pidfile);
+    }
 }

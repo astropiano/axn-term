@@ -64,7 +64,19 @@ public sealed class SessionHostService : BackgroundService
         }
 
         var pty = session.Pty;
-        await sender.SendJsonAsync(new JsonObject { ["type"] = "session", ["sessionId"] = sessionId }, cancellationToken);
+        try
+        {
+            await sender.SendJsonAsync(new JsonObject { ["type"] = "session", ["sessionId"] = sessionId }, cancellationToken);
+        }
+        catch
+        {
+            // The client is already gone (aborted connect, StrictMode
+            // double-mount, fast reconnect): nothing below would ever reap
+            // the PTY we just registered.
+            _host.Kill(session);
+            _host.Remove(sessionId);
+            throw;
+        }
         // `axn-term session …` from this PTY is answered by this connection.
         using var controlChannel = _control.RegisterPty(sessionId, (requestId, _, line) =>
             sender.SendJsonAsync(

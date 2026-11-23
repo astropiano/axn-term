@@ -176,6 +176,18 @@ describe('rememberLastAgentSession / forgetLastAgentSession', () => {
     expect((lastOf(h) as { at: number }).at).toBe(42);
   });
 
+  it('writes a changed record stamped in the same millisecond as the previous one', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    try {
+      const h = makeCtx('devin');
+      rememberLastAgentSession(h.ctx, 'devin', { name: 'n-1', command: 'devin -r n-1' });
+      rememberLastAgentSession(h.ctx, 'devin', { name: 'n-2', command: 'devin -r n-2' });
+      expect(lastOf(h)).toMatchObject({ name: 'n-2', command: 'devin -r n-2', at: 1_000 });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('never reads a legacy app-level record and retires it on capture', () => {
     const h = makeCtx('devin', {}, {
       appData: { last: { name: 'n-1', cwd: '/repo', command: 'devin -r n-1', at: 42 } },

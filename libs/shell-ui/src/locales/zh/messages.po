@@ -172,7 +172,7 @@ msgstr "程序写入剪贴板"
 msgid "Close"
 msgstr "关闭"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3154
+#: libs/shell-ui/src/app/ShellApp.tsx:3166
 msgid "Close tab"
 msgstr "关闭标签页"
 
@@ -987,7 +987,7 @@ msgstr "重置为进程名"
 #~ msgstr "恢复 {0} 会话{1}"
 
 #. placeholder {0}: name ? ` '${name}'` : ''
-#: libs/shell-ui/src/app/session-plugins/agentResume.ts:264
+#: libs/shell-ui/src/app/session-plugins/agentResume.ts:262
 #: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:38
 msgid "Resume {agent} session{0}"
 msgstr "恢复 {agent} 会话{0}"
