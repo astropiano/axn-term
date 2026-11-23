@@ -120,8 +120,27 @@ export function compactCliError(message: string): string {
     const lead = message.slice(0, message.indexOf('Timeout on')).trim();
     return `${lead ? `${lead} ` : ''}${GRAPHQL_TIMEOUT_SUMMARY} (${timeouts.length} fields: ${fields})`;
   }
+  // GitHub answers a query that runs past its limit with one generic error.
+  if (/This may be the result of a timeout/i.test(message)) return `GitHub: ${GRAPHQL_TIMEOUT_SUMMARY}`;
   return message.length > MAX_ERROR_CHARS ? `${message.slice(0, MAX_ERROR_CHARS)}…` : message;
 }
+
+/** Marker plugin_exec appends when it caps a command's output. */
+export const EXEC_TRUNCATED_MARKER = '[axn-term: output truncated';
+
+/**
+ * Throw a readable error when plugin_exec cut `out` off at its output cap —
+ * JSON.parse would only report "Expected '}'".
+ */
+export function assertNotTruncated(cli: ForgeCli, out: string): void {
+  if (out.includes(EXEC_TRUNCATED_MARKER)) {
+    throw new Error(`${cli} output too large: ${out.slice(out.lastIndexOf('[axn-term:'))}`);
+  }
+}
+
+/** The "check your auth" hint only fits errors the CLI itself raised, not output-size or timeout ones. */
+export const isAuthHintRelevant = (cli: ForgeCli, error?: string) =>
+  !(error ?? '').startsWith(`${cli} output too large`) && !(error ?? '').includes(GRAPHQL_TIMEOUT_SUMMARY);
 
 /** Stderr line the guard in `forgeCliCommand` prints when the CLI is absent. */
 export const cliMissingMarker = (cli: ForgeCli) => `axn-term: ${cli} is not installed`;

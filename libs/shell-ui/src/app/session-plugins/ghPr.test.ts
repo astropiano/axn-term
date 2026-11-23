@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   currentPrOverview,
+  decisionFromReviews,
   ghPrPlugin,
   overviewCommand,
   ownPrs,
@@ -146,6 +147,44 @@ describe('normalizePr', () => {
       resolved: false,
       notes: ['bob'],
     });
+  });
+
+  it('derives approval from latest reviews when GitHub has no reviewDecision', () => {
+    // No branch protection → reviewDecision is null even on approved PRs.
+    const approved = normalizePr({
+      number: 2,
+      reviewDecision: null,
+      author: { login: 'bob' },
+      latestOpinionatedReviews: { nodes: [{ state: 'APPROVED', author: { login: 'carol' } }] },
+    });
+    expect(approved.approved).toBe(true);
+    expect(approved.reviewDecision).toBe('approved');
+    expect(approved.approvedBy).toEqual(['carol']);
+
+    const blocked = normalizePr({
+      number: 3,
+      reviewDecision: null,
+      author: { login: 'bob' },
+      latestOpinionatedReviews: {
+        nodes: [
+          { state: 'APPROVED', author: { login: 'carol' } },
+          { state: 'CHANGES_REQUESTED', author: { login: 'dave' } },
+        ],
+      },
+    });
+    expect(blocked.approved).toBe(false);
+    expect(blocked.reviewDecision).toBe('changes_requested');
+    expect(prNeedsAction(blocked)).toBe(true);
+  });
+
+  it("keeps GitHub's own reviewDecision when branch protection sets one", () => {
+    const item = normalizePr({
+      number: 4,
+      reviewDecision: 'REVIEW_REQUIRED',
+      latestOpinionatedReviews: { nodes: [{ state: 'APPROVED', author: { login: 'carol' } }] },
+    });
+    expect(item.approved).toBe(false);
+    expect(item.reviewDecision).toBe('review_required');
   });
 
   it('treats APPROVED decision as approved', () => {
@@ -385,5 +424,115 @@ describe('cliPrPeople', () => {
         latestReviews: [{ author: { login: 'me' } }, { author: { login: 'bob' } }, { author: { login: 'alice' } }],
       }),
     ).toEqual({ author: 'bob', assignees: ['bob'], reviewers: ['alice', 'me'] });
+  });
+});
+
+describe('decisionFromReviews', () => {
+  it('lets an outstanding change request win and ignores the author', () => {
+    expect(decisionFromReviews([])).toBe('');
+    expect(decisionFromReviews([{ state: 'APPROVED', author: { login: 'a' } }])).toBe('APPROVED');
+    expect(
+      decisionFromReviews([
+        { state: 'APPROVED', author: { login: 'a' } },
+        { state: 'CHANGES_REQUESTED', author: { login: 'b' } },
+      ]),
+    ).toBe('CHANGES_REQUESTED');
+    expect(decisionFromReviews([{ state: 'APPROVED', author: { login: 'me' } }, null], 'me')).toBe('');
+    expect(decisionFromReviews([{ state: 'COMMENTED', author: { login: 'a' } }])).toBe('');
+  });
+});
+
+describe('refreshPrOverview on GitHub-specific answers', () => {
+  afterEach(() => {
+    bindAppRuntime(null);
+    resetPrOverview();
+  });
+
+  const answer = (body: unknown) =>
+    bindAppRuntime({
+      exec: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+      statPath: async () => null,
+      resolveSessionId: () => null,
+    });
+  const node = (n: number, extra: object = {}) => ({
+    number: n,
+    url: `https://github.com/o/r/pull/${n}`,
+    repository: { nameWithOwner: 'o/r' },
+    author: { login: 'other' },
+    ...extra,
+  });
+
+  it('keeps a team-requested review PR even when another user is also requested', async () => {
+    answer({
+      data: {
+        viewer: { login: 'me' },
+        assigned: { nodes: [] },
+        authored: { nodes: [] },
+        review: { nodes: [node(5, { reviewRequests: { nodes: [{ requestedReviewer: { login: 'carol' } }] } })] },
+      },
+    });
+    await refreshPrOverview();
+    expect(currentPrOverview().review.map((p) => p.reference)).toEqual(['#5']);
+  });
+
+  it('still drops an assigned-elsewhere PR that did not come from the review search', async () => {
+    answer({
+      data: {
+        viewer: { login: 'me' },
+        assigned: { nodes: [] },
+        authored: { nodes: [node(6, { author: { login: 'me' }, assignees: { nodes: [{ login: 'zed' }] } })] },
+        review: { nodes: [] },
+      },
+    });
+    await refreshPrOverview();
+    const o = currentPrOverview();
+    expect(o.mine).toEqual([]);
+    expect(o.review).toEqual([]);
+  });
+
+  it('keeps partial data next to errors and reports them as a warning', async () => {
+    answer({
+      data: {
+        viewer: { login: 'me' },
+        assigned: { nodes: [] },
+        authored: { nodes: [node(9, { author: { login: 'me' } }), null] },
+        review: { nodes: [null] },
+      },
+      errors: [
+        { message: 'Resource protected by organization SAML enforcement.' },
+        { message: 'Resource protected by organization SAML enforcement.' },
+      ],
+    });
+    await refreshPrOverview();
+    const o = currentPrOverview();
+    expect(o.status).toBe('ready');
+    expect(o.mine.map((p) => p.reference)).toEqual(['#9']);
+    expect(o.warning).toBe('2 results could not be loaded: Resource protected by organization SAML enforcement.');
+  });
+
+  it('fails when the errors leave no viewer at all', async () => {
+    answer({ data: null, errors: [{ message: 'Bad credentials' }] });
+    await refreshPrOverview();
+    expect(currentPrOverview()).toMatchObject({ status: 'error', error: 'Bad credentials' });
+  });
+
+  it('names truncated output and a GitHub query timeout', async () => {
+    answer('{"data":{\n[axn-term: output truncated at 1048576 bytes]');
+    await refreshPrOverview();
+    expect(currentPrOverview().error).toMatch(/^gh output too large: \[axn-term: output truncated/);
+
+    answer({
+      errors: [
+        { message: 'Something went wrong while executing your query. This may be the result of a timeout, or it could be a GitHub bug.' },
+      ],
+    });
+    await refreshPrOverview();
+    expect(currentPrOverview().error).toBe('GitHub: the server timed out answering the query');
+  });
+
+  it('asks for the new review fields in the overview query', () => {
+    const cmd = overviewCommand();
+    expect(cmd).toContain('latestOpinionatedReviews(first: 30) { nodes { state author { login } } }');
+    expect(cmd).not.toContain('states: APPROVED');
   });
 });

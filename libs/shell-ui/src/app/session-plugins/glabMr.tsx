@@ -38,7 +38,8 @@ import {
   defaultHostNote,
   classifyCliError,
   compactCliError,
-  GRAPHQL_TIMEOUT_SUMMARY,
+  assertNotTruncated,
+  isAuthHintRelevant,
   forgeCheckouts,
   forgeCliCommand,
   forgeHost,
@@ -697,11 +698,6 @@ export function mergeMine<T extends GlabMrItem>(
 
 let refreshInFlight: Promise<void> | null = null;
 
-const EXEC_TRUNCATED_MARKER = '[axn-term: output truncated';
-
-/** Auth hint only fits errors glab itself raised, not output-size ones. */
-const isAuthHintRelevant = (error?: string) =>
-  !(error ?? '').startsWith('glab output too large') && !(error ?? '').includes(GRAPHQL_TIMEOUT_SUMMARY);
 
 /** `glab mr list` for the MRs whose source is `branch` (single-quoted: git allows `$(…)` in names). */
 export function mrListCommand(branch: string): string {
@@ -748,11 +744,7 @@ export function mrDiscussionsCommand(
 
 /** Parse `glab api graphql` output into its `data`; throws on any failure. */
 function parseGraphql<T>(out: string): T | undefined {
-  // plugin_exec caps output and appends a marker; JSON.parse would only
-  // report "Expected '}'" — name the real cause instead.
-  if (out.includes(EXEC_TRUNCATED_MARKER)) {
-    throw new Error(`glab output too large: ${out.slice(out.lastIndexOf('[axn-term:'))}`);
-  }
+  assertNotTruncated('glab', out);
   const parsed = JSON.parse(out) as { data?: T; errors?: { message?: string }[] };
   if (parsed.errors?.length) {
     throw new Error(parsed.errors.map((e) => e.message ?? 'graphql error').join(' '));
@@ -1333,7 +1325,7 @@ function GlabMrView({
           <div className="rounded-[var(--radius-lg)] bg-[var(--raised)] p-3.5 text-xs leading-relaxed text-[var(--text-primary)] shadow-[0_0_0_1px_var(--hairline)]">
             <div className="mb-1 font-semibold text-[var(--red)]">Failed to load merge requests</div>
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
-            {isAuthHintRelevant(data.error) && (
+            {isAuthHintRelevant('glab', data.error) && (
               <div className="text-[var(--text-secondary)]">
                 Check <code className="text-[var(--accent)]">{authCommand('glab', 'status', data.host)}</code> in a shell.
               </div>
