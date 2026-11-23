@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { PublishPanelStatus } from '../PanelStatusSection';
 import { ghostButtonClass } from '../chromeStyles';
 import { PanelHeader, PanelHeaderButton, PanelHeaderChip, PanelHeaderSpacer } from '../PanelHeader';
@@ -38,7 +38,8 @@ import {
   defaultHostNote,
   classifyCliError,
   compactCliError,
-  GRAPHQL_TIMEOUT_SUMMARY,
+  assertNotTruncated,
+  isAuthHintRelevant,
   forgeCheckouts,
   forgeCliCommand,
   forgeHost,
@@ -48,6 +49,7 @@ import {
   splitByRole,
   type CliFailure,
 } from './forge';
+import { relativeAgo } from './relativeTime';
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -59,6 +61,15 @@ export interface MrDiscussion {
   resolved: boolean;
   /** Note authors in chronological order. */
   notes: string[];
+  /** When the newest note was posted (ISO), when known. */
+  lastAt?: string;
+}
+
+export interface MrThreadSummary {
+  waitingForMe: number;
+  waitingForOther: number;
+  /** The newest note across the open threads; `author` is `you` for mine. */
+  lastComment?: { author: string; at: string };
 }
 
 /** An open merge request as tracked by the glab-mr plugin. */
@@ -95,6 +106,7 @@ export interface GlabMrItem {
   openThreadCount?: number;
   /** User (non-system) notes as counted by GitLab. */
   noteCount?: number;
+  threadSummary?: MrThreadSummary;
 }
 
 /** Per-session MR summary stored in pluginState (`glab-mr.mrs`). */
@@ -108,6 +120,7 @@ interface SessionMr {
   discussionsResolved: boolean;
   /** Unresolved resolvable threads; absent when the discussions fetch failed. */
   openThreads?: number;
+  threadSummary?: MrThreadSummary;
   mergeStatus: string;
   pipeline: string | null;
 }
@@ -145,20 +158,51 @@ export function myThreadsAnswered(
   return myOpenThreads(mr, me).some((d) => d.notes[d.notes.length - 1] !== me);
 }
 
+export function summarizeOpenThreads(
+  mr: Pick<GlabMrItem, 'discussions'>,
+  me: string,
+): MrThreadSummary {
+  const summary: MrThreadSummary = { waitingForMe: 0, waitingForOther: 0 };
+  for (const discussion of mr.discussions) {
+    if (!discussion.resolvable || discussion.resolved) continue;
+    const last = discussion.notes[discussion.notes.length - 1];
+    if (!last) continue;
+    if (last === me) summary.waitingForOther += 1;
+    else summary.waitingForMe += 1;
+    const at = discussion.lastAt;
+    if (at && (!summary.lastComment || Date.parse(at) > Date.parse(summary.lastComment.at))) {
+      summary.lastComment = { author: last === me ? 'you' : last, at };
+    }
+  }
+  return summary;
+}
+
 /**
  * "Needs action" for an MR I own (assignee, or author without assignee):
- * merge conflicts, open threads, already approved (ready to merge), or a
- * failing pipeline.
+ * merge conflicts, a failing pipeline, a thread someone else answered last,
+ * or approved (ready to merge). The thread *count* is every open thread, but
+ * only threads waiting on me make it an action: when each open thread was
+ * last answered by me, only others can resolve them — an approved MR that GitLab
+ * will not merge yet then stays yellow rather than red, as in mr-inbox. Without a
+ * thread summary (discussions unavailable) any open thread counts, to be safe.
  */
 export function mrNeedsAction(
-  mr: Pick<GlabMrItem, 'conflicts' | 'approved' | 'pipeline' | 'discussions' | 'openThreadCount'>,
+  mr: Pick<GlabMrItem, 'conflicts' | 'approved' | 'pipeline' | 'discussions' | 'openThreadCount'> &
+    Partial<Pick<GlabMrItem, 'threadSummary' | 'mergeStatus'>>,
 ): boolean {
-  return (
-    mr.conflicts ||
-    mr.approved ||
-    mr.pipeline === 'failed' ||
-    openThreads(mr) > 0
-  );
+  if (mr.conflicts || mr.pipeline === 'failed') return true;
+  const summary = mr.threadSummary;
+  const open = openThreads(mr);
+  if (!summary) return mr.approved || open > 0;
+  if (summary.waitingForMe > 0) return true;
+  return mr.approved && !(open > 0 && mr.mergeStatus !== 'mergeable');
+}
+
+/** Open threads that only others can resolve (every one was last answered by me). */
+export function mrAwaitingOthers(
+  mr: Pick<GlabMrItem, 'discussions' | 'openThreadCount'> & Partial<Pick<GlabMrItem, 'threadSummary'>>,
+): boolean {
+  return !!mr.threadSummary && mr.threadSummary.waitingForMe === 0 && openThreads(mr) > 0;
 }
 
 /**
@@ -183,6 +227,28 @@ const MR_STALE_MS = 300_000;
 const sessionTimers = new Map<string, number>();
 const sessionLastFetch = new Map<string, number>();
 const sessionLastKey = new Map<string, string>();
+const sessionMe = new Map<string, string>();
+const sessionMeInFlight = new Map<string, Promise<string | undefined>>();
+const hostArg = (host: string) => `--hostname ${shellQuote(host)}`;
+
+async function currentMrUser(ctx: SessionViewContext & PluginApi, hostname: unknown): Promise<string | undefined> {
+  const host = forgeHost(hostname) ?? 'gitlab.com';
+  const cached = sessionMe.get(host);
+  if (cached) return cached;
+  const running = sessionMeInFlight.get(host);
+  if (running) return running;
+  const request = ctx
+    .exec(forgeCliCommand('glab', `api ${hostArg(host)} user`))
+    .then((out) => {
+      const username = (JSON.parse(out) as { username?: string }).username;
+      if (username) sessionMe.set(host, username);
+      return username;
+    })
+    .catch(() => undefined)
+    .finally(() => sessionMeInFlight.delete(host));
+  sessionMeInFlight.set(host, request);
+  return request;
+}
 
 interface RawMrListItem {
   iid?: number;
@@ -215,7 +281,12 @@ export function restMrPeople(raw: RawMrDetail): MrPeople {
 }
 
 interface RawMrDiscussion {
-  notes?: { resolvable?: boolean; resolved?: boolean | null }[];
+  notes?: {
+    resolvable?: boolean;
+    resolved?: boolean | null;
+    created_at?: string;
+    author?: { username?: string };
+  }[];
 }
 
 /**
@@ -227,6 +298,34 @@ export function countOpenThreads(discussions: RawMrDiscussion[]): number {
   return discussions.filter((d) =>
     (d.notes ?? []).some((n) => n.resolvable === true && n.resolved !== true),
   ).length;
+}
+
+function normalizeRestDiscussions(discussions: RawMrDiscussion[]): MrDiscussion[] {
+  return discussions.map((discussion) => ({
+    resolvable: discussion.notes?.some((note) => note.resolvable === true) ?? false,
+    resolved: discussion.notes?.every((note) => note.resolved === true) ?? false,
+    notes: (discussion.notes ?? []).map((note) => note.author?.username ?? '').filter(Boolean),
+    lastAt: discussion.notes?.[discussion.notes.length - 1]?.created_at,
+  }));
+}
+
+async function fetchAllRestDiscussions(
+  ctx: SessionViewContext & PluginApi,
+  root: string,
+  iid: number,
+): Promise<RawMrDiscussion[]> {
+  const discussions: RawMrDiscussion[] = [];
+  for (let page = 1; ; page += 1) {
+    const out = await ctx.exec(
+      `glab api "projects/:fullpath/merge_requests/${iid}/discussions?per_page=100&page=${page}"`,
+      root,
+    );
+    const parsed = JSON.parse(out) as unknown;
+    if (!Array.isArray(parsed)) break;
+    discussions.push(...(parsed as RawMrDiscussion[]));
+    if (parsed.length < 100) break;
+  }
+  return discussions;
 }
 
 async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
@@ -258,11 +357,13 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
 
   // Per-MR detail calls add the head pipeline status and the open-thread
   // count (both absent from list output).
+  const me = await currentMrUser(ctx, hostname);
   const mrs = await Promise.all(
     list.slice(0, 5).map(async (item): Promise<SessionMr> => {
       const iid = Math.trunc(Number(item.iid));
       let pipeline: string | null = null;
       let threadCount: number | undefined;
+      let threadSummary: MrThreadSummary | undefined;
       try {
         const detail = await ctx.exec(
           `glab api "projects/:fullpath/merge_requests/${iid}"`,
@@ -277,13 +378,13 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
         // pipeline stays unknown
       }
       try {
-        const out = await ctx.exec(
-          `glab api "projects/:fullpath/merge_requests/${iid}/discussions?per_page=100"`,
-          root,
-        );
-        const parsed = JSON.parse(out) as unknown;
-        if (Array.isArray(parsed)) {
-          threadCount = countOpenThreads(parsed as RawMrDiscussion[]);
+        const discussions = await fetchAllRestDiscussions(ctx, root, iid);
+        threadCount = countOpenThreads(discussions);
+        if (me) {
+          threadSummary = summarizeOpenThreads(
+            { discussions: normalizeRestDiscussions(discussions) },
+            me,
+          );
         }
       } catch {
         // thread count stays unknown — the panel falls back to the boolean chip
@@ -297,6 +398,7 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
         conflicts: item.has_conflicts ?? false,
         discussionsResolved: item.blocking_discussions_resolved ?? true,
         openThreads: threadCount,
+        threadSummary,
         mergeStatus: (item.detailed_merge_status ?? '').toLowerCase(),
         pipeline,
       };
@@ -503,10 +605,11 @@ async function mrWatchTick(args: {
  *
  * 1. One query for the three lists, with GitLab's own thread/note counters
  *    instead of discussions (2–6 s). That covers everything "mine" needs.
- * 2. Discussions (who wrote last in my threads) only for review MRs, which
- *    `mrWaitingForMe` reads — `DISCUSSION_BATCH` MRs per aliased query
- *    (8 took ~7 s), and only for MRs whose counters changed since the last
- *    refresh (`discussionCache`). A quiet poll is a single glab call.
+ * 2. Discussions (who wrote last in open threads) for every displayed MR
+ *    with open threads — `DISCUSSION_BATCH` MRs per aliased query
+ *    (8 took ~7 s), following each connection's cursor until complete, and
+ *    only for MRs whose counters changed since the last refresh
+ *    (`discussionCache`). A quiet poll is a single glab call.
  *
  * `updatedAt` is no change signal: a comment can land after it unchanged.
  */
@@ -520,7 +623,8 @@ const MR_OVERVIEW_QUERY = `query { currentUser { username
 
 // notes(last: 20): only a thread's newest notes matter — `mrWaitingForMe`
 // reads who wrote last — the same window as gh-pr's `comments(last: 20)`.
-const MR_DISCUSSIONS_FIELDS = `discussions(first: 100) { nodes { resolvable resolved notes(last: 20) { nodes { author { username } } } } }`;
+const mrDiscussionsFields = (afterVar?: string) =>
+  `discussions(first: 100${afterVar ? `, after: $${afterVar}` : ''}) { pageInfo { hasNextPage endCursor } nodes { resolvable resolved notes(last: 20) { nodes { createdAt author { username } } } } }`;
 
 /** MRs per discussions query, and how many such queries run at once. */
 const DISCUSSION_BATCH = 8;
@@ -554,9 +658,6 @@ function setOverview(next: MrOverview) {
 
 /** The GitLab host a URL host stands for in the overview (`undefined` = gitlab.com). */
 const overviewHost = () => (overview.host ?? 'gitlab.com').toLowerCase();
-
-/** `--hostname` for one GitLab host. */
-const hostArg = (host: string) => `--hostname ${shellQuote(host)}`;
 
 /**
  * Per-MR people cache behind dev-workflow's role lookup (`MrResolver`):
@@ -624,10 +725,11 @@ interface RawGqlMr {
   project?: { fullPath?: string };
   headPipeline?: { status?: string } | null;
   discussions?: {
+    pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
     nodes?: {
       resolvable?: boolean;
       resolved?: boolean;
-      notes?: { nodes?: { author?: { username?: string } }[] };
+      notes?: { nodes?: { createdAt?: string; author?: { username?: string } }[] };
     }[];
   };
 }
@@ -672,6 +774,7 @@ function normalizeDiscussions(raw: RawGqlMr['discussions']): MrDiscussion[] {
     resolvable: d.resolvable ?? false,
     resolved: d.resolved ?? false,
     notes: (d.notes?.nodes ?? []).map((n) => n.author?.username ?? ''),
+    lastAt: d.notes?.nodes?.[d.notes.nodes.length - 1]?.createdAt,
   }));
 }
 
@@ -697,11 +800,6 @@ export function mergeMine<T extends GlabMrItem>(
 
 let refreshInFlight: Promise<void> | null = null;
 
-const EXEC_TRUNCATED_MARKER = '[axn-term: output truncated';
-
-/** Auth hint only fits errors glab itself raised, not output-size ones. */
-const isAuthHintRelevant = (error?: string) =>
-  !(error ?? '').startsWith('glab output too large') && !(error ?? '').includes(GRAPHQL_TIMEOUT_SUMMARY);
 
 /** `glab mr list` for the MRs whose source is `branch` (single-quoted: git allows `$(…)` in names). */
 export function mrListCommand(branch: string): string {
@@ -732,32 +830,71 @@ export function mrOverviewCommand(hostname?: unknown): string {
  */
 export function mrDiscussionsCommand(
   hostname: unknown,
-  mrs: { project: string; iid: number | string }[],
+  mrs: { project: string; iid: number | string; after?: string }[],
 ): string {
-  const decl = mrs.map((_, i) => `$p${i}: ID!, $i${i}: String!`).join(', ');
+  const decl = mrs
+    .map((mr, i) => `$p${i}: ID!, $i${i}: String!${mr.after ? `, $a${i}: String!` : ''}`)
+    .join(', ');
   const body = mrs
-    .map((_, i) => `m${i}: project(fullPath: $p${i}) { mergeRequest(iid: $i${i}) { ${MR_DISCUSSIONS_FIELDS} } }`)
+    .map((mr, i) => `m${i}: project(fullPath: $p${i}) { mergeRequest(iid: $i${i}) { ${mrDiscussionsFields(mr.after ? `a${i}` : undefined)} } }`)
     .join(' ');
   const vars: Record<string, string> = {};
   mrs.forEach((mr, i) => {
     vars[`p${i}`] = mr.project;
     vars[`i${i}`] = String(mr.iid);
+    if (mr.after) vars[`a${i}`] = mr.after;
   });
   return graphqlCommand(hostname, `query(${decl}) { ${body} }`, vars);
 }
 
 /** Parse `glab api graphql` output into its `data`; throws on any failure. */
 function parseGraphql<T>(out: string): T | undefined {
-  // plugin_exec caps output and appends a marker; JSON.parse would only
-  // report "Expected '}'" — name the real cause instead.
-  if (out.includes(EXEC_TRUNCATED_MARKER)) {
-    throw new Error(`glab output too large: ${out.slice(out.lastIndexOf('[axn-term:'))}`);
-  }
+  assertNotTruncated('glab', out);
   const parsed = JSON.parse(out) as { data?: T; errors?: { message?: string }[] };
   if (parsed.errors?.length) {
     throw new Error(parsed.errors.map((e) => e.message ?? 'graphql error').join(' '));
   }
   return parsed.data;
+}
+
+async function fetchDiscussionBatch(
+  exec: (command: string) => Promise<string>,
+  hostname: unknown,
+  batch: RawGqlMr[],
+): Promise<Map<string, MrDiscussion[]>> {
+  const discussions = new Map<string, MrDiscussion[]>();
+  const cursors = new Map<string, string | undefined>();
+  let pending = batch;
+  while (pending.length > 0) {
+    type Gql = { mergeRequest?: { discussions?: RawGqlMr['discussions'] } | null } | null;
+    const data = parseGraphql<Record<string, Gql>>(
+      await exec(
+        mrDiscussionsCommand(
+          hostname,
+          pending.map((raw) => ({
+            project: raw.project?.fullPath ?? '',
+            iid: raw.iid ?? '',
+            after: cursors.get(rawKey(raw)),
+          })),
+        ),
+      ),
+    );
+    const next: RawGqlMr[] = [];
+    pending.forEach((raw, i) => {
+      const page = data?.[`m${i}`]?.mergeRequest?.discussions;
+      const key = rawKey(raw);
+      discussions.set(key, [
+        ...(discussions.get(key) ?? []),
+        ...normalizeDiscussions(page),
+      ]);
+      if (page?.pageInfo?.hasNextPage && page.pageInfo.endCursor) {
+        cursors.set(key, page.pageInfo.endCursor);
+        next.push(raw);
+      }
+    });
+    pending = next;
+  }
+  return discussions;
 }
 
 /** `fn` over `items`, at most `limit` at a time; results keep the input order. */
@@ -808,12 +945,23 @@ export function refreshMrOverview(settings?: {
       const authoredRaw = user.authoredMergeRequests?.nodes ?? [];
       const reviewRaw = user.reviewRequestedMergeRequests?.nodes ?? [];
 
-      // Step two: discussions for review MRs whose counters moved.
-      const reviewKeys = new Set(reviewRaw.map(rawKey));
-      for (const key of discussionCache.keys()) if (!reviewKeys.has(key)) discussionCache.delete(key);
+      // Step two: paginate discussions for every displayed MR whose counters moved.
+      // The overview counters are authoritative for the total; the discussions
+      // pages provide the latest author needed for responsibility classification.
+      const allRaw = [...assignedRaw, ...authoredRaw, ...reviewRaw];
+      const allKeys = new Set(allRaw.map(rawKey));
+      for (const key of discussionCache.keys()) if (!allKeys.has(key)) discussionCache.delete(key);
       const stale = new Map<string, RawGqlMr>();
-      for (const raw of reviewRaw) {
-        if (discussionCache.get(rawKey(raw))?.stamp !== discussionStamp(raw)) stale.set(rawKey(raw), raw);
+      for (const raw of allRaw) {
+        const hasOpen =
+          raw.resolvableDiscussionsCount === undefined ||
+          raw.resolvedDiscussionsCount === undefined ||
+          raw.resolvableDiscussionsCount > raw.resolvedDiscussionsCount;
+        if (hasOpen && discussionCache.get(rawKey(raw))?.stamp !== discussionStamp(raw)) {
+          stale.set(rawKey(raw), raw);
+        } else if (!hasOpen) {
+          discussionCache.delete(rawKey(raw));
+        }
       }
       const batches: RawGqlMr[][] = [];
       const pending = [...stale.values()];
@@ -822,19 +970,15 @@ export function refreshMrOverview(settings?: {
       let firstError: unknown;
       await mapLimit(batches, DISCUSSION_BATCHES_AT_ONCE, async (batch) => {
         try {
-          type Gql = { mergeRequest?: { discussions?: RawGqlMr['discussions'] } | null } | null;
-          const d = parseGraphql<Record<string, Gql>>(
-            await rt.exec(
-              mrDiscussionsCommand(
-                settings?.hostname,
-                batch.map((raw) => ({ project: raw.project?.fullPath ?? '', iid: raw.iid ?? '' })),
-              ),
-            ),
+          const discussions = await fetchDiscussionBatch(
+            (command) => rt.exec(command),
+            settings?.hostname,
+            batch,
           );
-          batch.forEach((raw, i) => {
+          batch.forEach((raw) => {
             discussionCache.set(rawKey(raw), {
               stamp: discussionStamp(raw),
-              discussions: normalizeDiscussions(d?.[`m${i}`]?.mergeRequest?.discussions),
+              discussions: discussions.get(rawKey(raw)) ?? [],
             });
           });
         } catch (e) {
@@ -845,10 +989,16 @@ export function refreshMrOverview(settings?: {
         }
       });
       if (batches.length > 0 && failed === batches.length) throw firstError;
-      const toItem = (raw: RawGqlMr): GlabMrItem => ({
-        ...normalizeMr(raw),
-        discussions: discussionCache.get(rawKey(raw))?.discussions ?? [],
-      });
+      const toItem = (raw: RawGqlMr): GlabMrItem => {
+        const cached = discussionCache.get(rawKey(raw));
+        return {
+          ...normalizeMr(raw),
+          discussions: cached?.discussions ?? [],
+          threadSummary: cached
+            ? summarizeOpenThreads({ discussions: cached.discussions }, user.username ?? '')
+            : undefined,
+        };
+      };
       const assigned = assignedRaw.map(toItem);
       const authored = authoredRaw.map(toItem);
       const review = reviewRaw.map(toItem);
@@ -905,6 +1055,58 @@ function projectShort(fullPath: string): string {
   return parts.length > 1 ? parts.slice(1).join('/') : fullPath;
 }
 
+export { relativeAgo };
+
+export function threadSummaryTip(open: number, summary?: MrThreadSummary, now = Date.now()): string {
+  const plural = (n: number) => `${n} open thread${n === 1 ? '' : 's'}`;
+  if (!summary) return `${plural(open)} · last commenter unavailable`;
+  const lines = [plural(open)];
+  if (summary.waitingForMe > 0) lines.push(`• ${summary.waitingForMe} last answered by someone else — your move`);
+  if (summary.waitingForOther > 0) lines.push(`• ${summary.waitingForOther} last answered by you — waiting on others`);
+  const unknown = open - summary.waitingForMe - summary.waitingForOther;
+  if (unknown > 0) lines.push(`• ${unknown} without a loaded last comment`);
+  if (summary.lastComment) {
+    const ago = relativeAgo(summary.lastComment.at, now);
+    lines.push(`Last comment by ${summary.lastComment.author}${ago ? ` · ${ago}` : ''}`);
+  }
+  return lines.join('\n');
+}
+
+function threadSummaryColor(summary?: MrThreadSummary): string {
+  if (!summary) return 'var(--orange)';
+  if (summary.waitingForMe > 0) return 'var(--red)';
+  if (summary.waitingForOther > 0) return 'var(--yellow)';
+  return 'var(--orange)';
+}
+
+export function ThreadIndicator({
+  open,
+  summary,
+  children,
+}: {
+  open: number;
+  summary?: MrThreadSummary;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className="flex shrink-0 items-center gap-0.5"
+      data-tip={threadSummaryTip(open, summary)}
+      style={{ color: threadSummaryColor(summary) }}
+    >
+      <MessageSquare className="h-3 w-3" />
+      {children}
+    </span>
+  );
+}
+
+function sessionThreadLabel(mr: SessionMr): string | null {
+  if (mr.openThreads === undefined) return mr.discussionsResolved ? null : 'open threads';
+  return mr.openThreads > 0
+    ? `${mr.openThreads} open thread${mr.openThreads === 1 ? '' : 's'}`
+    : null;
+}
+
 // ---------------------------------------------------------------------------
 // Session view — MRs open on the session's current branch
 // ---------------------------------------------------------------------------
@@ -926,16 +1128,7 @@ function SessionMrs({ ctx }: { ctx: SessionViewContext & PluginApi }) {
     <div className="mb-2">
       <div className="flex flex-col gap-1 text-[11px]">
         {mrs.map((mr) => {
-          // `openThreads` is authoritative once fetched; snapshots without it
-          // fall back to the boolean `discussionsResolved` chip.
-          const threadLabel =
-            mr.openThreads !== undefined
-              ? mr.openThreads > 0
-                ? `${mr.openThreads} open thread${mr.openThreads === 1 ? '' : 's'}`
-                : null
-              : mr.discussionsResolved
-                ? null
-                : 'open threads';
+          const threadLabel = sessionThreadLabel(mr);
           return (
             <div key={mr.iid} className="flex flex-col gap-0.5">
               <div className="flex items-center gap-1">
@@ -958,10 +1151,9 @@ function SessionMrs({ ctx }: { ctx: SessionViewContext & PluginApi }) {
                   <span className="rounded bg-[color-mix(in_srgb,var(--red)_20%,transparent)] px-1 text-[var(--red)]">conflicts</span>
                 )}
                 {threadLabel && (
-                  <span className="flex items-center gap-0.5 text-[var(--orange)]">
-                    <MessageSquare className="h-3 w-3" />
+                  <ThreadIndicator open={mr.openThreads ?? 0} summary={mr.threadSummary}>
                     {threadLabel}
-                  </span>
+                  </ThreadIndicator>
                 )}
                 {mr.pipeline && <PipelineChip status={mr.pipeline} />}
               </div>
@@ -1139,10 +1331,9 @@ function MrRow({ mr, badge, env, showDescription = true }: { showDescription?: b
             </span>
           )}
           {threads > 0 && (
-            <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--orange)]">
-              <MessageSquare className="h-3 w-3" />
+            <ThreadIndicator open={threads} summary={mr.threadSummary}>
               {threads}
-            </span>
+            </ThreadIndicator>
           )}
           {mr.pipeline && (
             <span className="shrink-0 text-[10px]">
@@ -1333,7 +1524,7 @@ function GlabMrView({
           <div className="rounded-[var(--radius-lg)] bg-[var(--raised)] p-3.5 text-xs leading-relaxed text-[var(--text-primary)] shadow-[0_0_0_1px_var(--hairline)]">
             <div className="mb-1 font-semibold text-[var(--red)]">Failed to load merge requests</div>
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
-            {isAuthHintRelevant(data.error) && (
+            {isAuthHintRelevant('glab', data.error) && (
               <div className="text-[var(--text-secondary)]">
                 Check <code className="text-[var(--accent)]">{authCommand('glab', 'status', data.host)}</code> in a shell.
               </div>

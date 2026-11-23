@@ -17,6 +17,10 @@ import {
   countOpenThreads,
   myOpenThreads,
   myThreadsAnswered,
+  summarizeOpenThreads,
+  mrAwaitingOthers,
+  threadSummaryTip,
+  relativeAgo,
   mrNeedsAction,
   mrWaitingForMe,
   mergeMine,
@@ -116,6 +120,47 @@ describe('myOpenThreads / myThreadsAnswered', () => {
   it('is not answered when the last note is mine', () => {
     const m = mr({ discussions: [thread(['bob', 'me'])] });
     expect(myThreadsAnswered(m, 'me')).toBe(false);
+  });
+});
+
+describe('summarizeOpenThreads', () => {
+  it('counts the last author for unresolved resolvable threads', () => {
+    const m = mr({
+      discussions: [
+        thread(['me']),
+        thread(['other', 'me']),
+        thread(['me', 'other']),
+        thread(['other'], true),
+        { resolvable: false, resolved: false, notes: ['other'] },
+      ],
+    });
+    expect(summarizeOpenThreads(m, 'me')).toEqual({ waitingForMe: 1, waitingForOther: 2 });
+  });
+
+  it('leaves threads without a known author out of the responsibility counts', () => {
+    expect(summarizeOpenThreads(mr({ discussions: [thread([])] }), 'me')).toEqual({
+      waitingForMe: 0,
+      waitingForOther: 0,
+    });
+  });
+});
+
+describe('mrNeedsAction with a thread summary', () => {
+  const sum = (waitingForMe: number, waitingForOther: number) => ({ waitingForMe, waitingForOther });
+  it('is red only when a thread waits on me', () => {
+    expect(mrNeedsAction(mr({ openThreadCount: 2, threadSummary: sum(1, 1) }))).toBe(true);
+    expect(mrNeedsAction(mr({ openThreadCount: 2, threadSummary: sum(0, 2) }))).toBe(false);
+  });
+
+  it('approved but waiting on others to resolve my threads is not an action, unless mergeable', () => {
+    const base = { approved: true, openThreadCount: 1, threadSummary: sum(0, 1) };
+    expect(mrNeedsAction(mr({ ...base, mergeStatus: 'discussions_not_resolved' }))).toBe(false);
+    expect(mrNeedsAction(mr({ ...base, mergeStatus: 'mergeable' }))).toBe(true);
+    expect(mrAwaitingOthers(mr(base))).toBe(true);
+  });
+
+  it('without a summary any open thread still counts', () => {
+    expect(mrNeedsAction(mr({ openThreadCount: 1 }))).toBe(true);
   });
 });
 
@@ -285,9 +330,20 @@ describe('glab command lines', () => {
     expect(argv[5]).toContain('m0: project(fullPath: $p0)');
     expect(argv[5]).toContain('m1: project(fullPath: $p1)');
     expect(argv[5]).toContain('notes(last: 20)');
+    expect(argv[5]).toContain('pageInfo');
     expect(argv[5]).not.toContain('pwned');
     expect(argv.slice(6)).toEqual(['-f', 'p0=grp/$(touch pwned)', '-f', 'i0=7', '-f', 'p1=g/q', '-f', 'i1=9']);
     expect(existsSync(join(cwd, 'pwned'))).toBe(false);
+  });
+
+  it('adds a discussion cursor only when requesting a later page', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'axn-glab-cwd-'));
+    const argv = argvOf(
+      mrDiscussionsCommand('gitlab.acme.io', [{ project: 'g/q', iid: 9, after: 'cursor-1' }]),
+      cwd,
+    );
+    expect(argv[5]).toContain('after: $a0');
+    expect(argv.slice(6)).toEqual(['-f', 'p0=g/q', '-f', 'i0=9', '-f', 'a0=cursor-1']);
   });
 });
 
@@ -332,10 +388,13 @@ describe('refreshMrOverview failures', () => {
   const thread = (...authors: string[]) => ({
     resolvable: true, resolved: false, notes: { nodes: authors.map((username) => ({ author: { username } })) },
   });
-  const lists = (review: object[], mine: object[] = [gqlMr('1'), gqlMr('2')]) =>
+  /** An MR with no open threads: its discussions are never fetched. */
+  const quietMr = (iid: string, extra: object = {}) =>
+    gqlMr(iid, { resolvableDiscussionsCount: 0, resolvedDiscussionsCount: 0, ...extra });
+  const lists = (review: object[], mine: object[] = [quietMr('1'), quietMr('2')]) =>
     JSON.stringify({ data: { currentUser: {
       username: 'me',
-      assignedMergeRequests: { nodes: [gqlMr('1', { assignees: { nodes: [{ username: 'me' }] } })] },
+      assignedMergeRequests: { nodes: [quietMr('1', { assignees: { nodes: [{ username: 'me' }] } })] },
       authoredMergeRequests: { nodes: mine },
       reviewRequestedMergeRequests: { nodes: review },
     } } });
@@ -348,18 +407,18 @@ describe('refreshMrOverview failures', () => {
       `m${i}`, { mergeRequest: { discussions: { nodes: [thread(...authors(iid))] } } },
     ])) });
 
-  it('fetches discussions only for review MRs, in one batch, and counts threads on mine', async () => {
+  it('fetches discussions only for MRs with open threads, in one batch', async () => {
     const calls: string[][] = [];
     runtime(async (cmd = '') => {
       const iids = iidsOf(cmd);
       calls.push(iids);
       if (!iids.length) {
-        return lists([reviewMr('3'), reviewMr('4')], [gqlMr('1'), gqlMr('2', { resolvableDiscussionsCount: 3, resolvedDiscussionsCount: 1 })]);
+        return lists([reviewMr('3'), reviewMr('4')], [quietMr('1'), gqlMr('2', { resolvableDiscussionsCount: 3, resolvedDiscussionsCount: 1 })]);
       }
       return discussionsAnswer(iids, (iid) => ['me', `r${iid}`]);
     });
     await refreshMrOverview({ hostname: 'gitlab.acme.io' });
-    expect(calls).toEqual([[], ['3', '4']]);
+    expect(calls).toEqual([[], ['2', '3', '4']]);
     const o = currentMrOverview();
     expect(o.status).toBe('ready');
     expect(o.mine.map((m) => m.iid).sort()).toEqual([1, 2]);
@@ -386,6 +445,40 @@ describe('refreshMrOverview failures', () => {
     await refreshMrOverview();
     expect(calls.slice(3)).toEqual([[], ['4']]);
     expect(currentMrOverview().review.map((m) => m.discussions.length)).toEqual([1, 1]);
+  });
+
+  it('follows every discussion page before classifying the thread owners', async () => {
+    let page = 0;
+    runtime(async (cmd = '') => {
+      const iids = iidsOf(cmd);
+      if (!iids.length) return lists([reviewMr('3')]);
+      page += 1;
+      if (page === 1) {
+        return JSON.stringify({ data: {
+          m0: { mergeRequest: {
+            discussions: {
+              pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
+              nodes: [thread('me')],
+            },
+          } },
+        } });
+      }
+      expect(cmd).toContain('after: $a0');
+      return JSON.stringify({ data: {
+        m0: { mergeRequest: {
+          discussions: {
+            pageInfo: { hasNextPage: false, endCursor: null },
+            nodes: [thread('reviewer')],
+          },
+        } },
+      } });
+    });
+    await refreshMrOverview();
+    expect(currentMrOverview().review[0].discussions).toHaveLength(2);
+    expect(currentMrOverview().review[0].threadSummary).toEqual({
+      waitingForMe: 1,
+      waitingForOther: 1,
+    });
   });
 
   it('splits discussions into batches of eight', async () => {
@@ -473,5 +566,56 @@ describe('restMrPeople', () => {
       }),
     ).toEqual({ author: 'sebastian', assignees: ['sebastian'], reviewers: ['alex'] });
     expect(restMrPeople({})).toEqual({ author: '', assignees: [], reviewers: [] });
+  });
+});
+
+describe('threadSummaryTip', () => {
+  it('names who commented last and any remainder', () => {
+    expect(threadSummaryTip(10, { waitingForMe: 3, waitingForOther: 5 })).toBe(
+      [
+        '10 open threads',
+        '• 3 last answered by someone else — your move',
+        '• 5 last answered by you — waiting on others',
+        '• 2 without a loaded last comment',
+      ].join('\n'),
+    );
+  });
+  it('omits empty parts and the remainder when the parts add up', () => {
+    expect(threadSummaryTip(1, { waitingForMe: 0, waitingForOther: 1 })).toBe(
+      '1 open thread\n• 1 last answered by you — waiting on others',
+    );
+  });
+  it('says so when the split is unavailable', () => {
+    expect(threadSummaryTip(4)).toBe('4 open threads · last commenter unavailable');
+  });
+});
+
+describe('last comment', () => {
+  const at = (iso: string) => Date.parse(iso);
+  it('summarizeOpenThreads keeps the newest note of the open threads', () => {
+    const m = mr({
+      discussions: [
+        { ...thread(['other']), lastAt: '2026-11-20T10:00:00Z' },
+        { ...thread(['other', 'me']), lastAt: '2026-11-22T10:00:00Z' },
+        { ...thread(['x'], true), lastAt: '2026-11-23T10:00:00Z' },
+      ],
+    });
+    expect(summarizeOpenThreads(m, 'me').lastComment).toEqual({ author: 'you', at: '2026-11-22T10:00:00Z' });
+  });
+  it('relativeAgo formats minutes, hours and days', () => {
+    const now = at('2026-11-23T12:00:00Z');
+    expect(relativeAgo('2026-11-23T11:59:40Z', now)).toBe('just now');
+    expect(relativeAgo('2026-11-23T11:15:00Z', now)).toBe('45m ago');
+    expect(relativeAgo('2026-11-23T07:00:00Z', now)).toBe('5h ago');
+    expect(relativeAgo('2026-11-18T12:00:00Z', now)).toBe('5d ago');
+    expect(relativeAgo('nope', now)).toBeNull();
+  });
+  it('the tooltip ends with the last commenter and how long ago', () => {
+    const tip = threadSummaryTip(
+      2,
+      { waitingForMe: 1, waitingForOther: 1, lastComment: { author: 'alice', at: '2026-11-23T09:00:00Z' } },
+      at('2026-11-23T12:00:00Z'),
+    );
+    expect(tip.split('\n').pop()).toBe('Last comment by alice · 3h ago');
   });
 });

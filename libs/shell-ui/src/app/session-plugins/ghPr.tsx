@@ -8,7 +8,6 @@ import { appRuntime } from '../appRuntime';
 import {
   GitPullRequest,
   Globe,
-  MessageSquare,
   RefreshCw,
   Text,
   X,
@@ -44,6 +43,9 @@ import {
   forgeHost,
   forgeOfRemote,
   forgeRailMode,
+  assertNotTruncated,
+  isAuthHintRelevant,
+  mrRole,
   remoteOwner,
   repoRootsSetting,
   type CliFailure,
@@ -54,7 +56,11 @@ import {
   mrNeedsAction,
   mrWaitingForMe,
   openThreads,
+  summarizeOpenThreads,
+  ThreadIndicator,
   type GlabMrItem,
+  type MrDiscussion,
+  type MrThreadSummary,
 } from './glabMr';
 
 // ---------------------------------------------------------------------------
@@ -85,6 +91,8 @@ interface SessionPr {
   discussionsResolved: boolean;
   /** Unresolved review threads; absent when the threads fetch failed. */
   openThreads?: number;
+  /** Who commented last on the open threads; absent when the fetch failed. */
+  threadSummary?: MrThreadSummary;
   /** mergeStateStatus, lowercased (e.g. `clean`, `blocked`, `behind`). */
   mergeStatus: string;
   /** Aggregated statusCheckRollup, lowercased; null when no checks exist. */
@@ -100,7 +108,10 @@ interface SessionPr {
  * "Needs action" for a PR I own: the GitLab rules plus CHANGES_REQUESTED,
  * which GitHub reports as a review decision rather than a thread flag.
  */
-export function prNeedsAction(pr: Pick<GhPrItem, 'conflicts' | 'approved' | 'pipeline' | 'discussions' | 'reviewDecision'>): boolean {
+export function prNeedsAction(
+  pr: Pick<GhPrItem, 'conflicts' | 'approved' | 'pipeline' | 'discussions' | 'reviewDecision'> &
+    Partial<Pick<GhPrItem, 'threadSummary' | 'mergeStatus' | 'openThreadCount'>>,
+): boolean {
   return pr.reviewDecision === 'changes_requested' || mrNeedsAction(pr);
 }
 
@@ -153,7 +164,7 @@ export interface RawPrListItem {
   author?: { login?: string } | null;
   assignees?: { login?: string }[] | null;
   reviewRequests?: { login?: string }[] | null;
-  latestReviews?: { author?: { login?: string } | null }[] | null;
+  latestReviews?: { state?: string; author?: { login?: string } | null }[] | null;
 }
 
 const PR_LIST_FIELDS =
@@ -177,6 +188,25 @@ export function cliPrPeople(raw: RawPrListItem): MrPeople {
     assignees: logins(raw.assignees),
     reviewers: [...new Set([...logins(raw.reviewRequests), ...reviewed])],
   };
+}
+
+/**
+ * GitHub sets `reviewDecision` only when branch protection requires reviews;
+ * elsewhere it is null even on approved PRs. Derive it from each reviewer's
+ * latest approve/request-changes review instead (`latestReviews` /
+ * `latestOpinionatedReviews`): any outstanding change request wins, else any
+ * approval counts. Returns the GraphQL enum spelling, '' when undecided.
+ */
+export function decisionFromReviews(
+  reviews: ({ state?: string; author?: { login?: string } | null } | null)[],
+  author = '',
+): string {
+  const states = reviews
+    .filter((r) => r && (r.author?.login ?? '') !== author)
+    .map((r) => (r?.state ?? '').toUpperCase());
+  if (states.includes('CHANGES_REQUESTED')) return 'CHANGES_REQUESTED';
+  if (states.includes('APPROVED')) return 'APPROVED';
+  return '';
 }
 
 /** `gh pr list` for the PRs whose head is `branch` (branch single-quoted: git allows `$(…)` in names). */
@@ -229,8 +259,16 @@ interface RawThreadsResponse {
   data?: {
     repository?: Record<
       string,
-      { reviewThreads?: { nodes?: { isResolved?: boolean }[] } } | null
+      {
+        reviewThreads?: {
+          nodes?: {
+            isResolved?: boolean;
+            comments?: { nodes?: { createdAt?: string; author?: { login?: string } | null }[] };
+          }[];
+        };
+      } | null
     >;
+    viewer?: { login?: string };
   };
 }
 
@@ -244,19 +282,25 @@ export function threadsCommand(numbers: number[]): string {
   const body = numbers
     .map(
       (_, i) =>
-        `p${i}: pullRequest(number: $n${i}) { reviewThreads(first: 100) { nodes { isResolved } } }`,
+        `p${i}: pullRequest(number: $n${i}) { reviewThreads(first: 100) { nodes { isResolved comments(last: 20) { nodes { createdAt author { login } } } } } }`,
     )
     .join(' ');
   const varArgs = numbers.map((n, i) => `-F n${i}=${Math.trunc(n)}`).join(' ');
-  const query = `query($owner: String!, $name: String!, ${vars}) { repository(owner: $owner, name: $name) { ${body} } }`;
+  const query = `query($owner: String!, $name: String!, ${vars}) { viewer { login } repository(owner: $owner, name: $name) { ${body} } }`;
   return forgeCliCommand(
     'gh',
     `api graphql -F 'owner={owner}' -F 'name={repo}' ${varArgs} -f query=${shellQuote(query)}`,
   );
 }
 
+/** Open-thread count and who commented last, per PR number. */
+interface OpenThreads {
+  open: number;
+  summary?: MrThreadSummary;
+}
+
 /**
- * Unresolved-thread count per PR number, one batched graphql call — `gh pr
+ * Open threads per PR number, one batched graphql call — `gh pr
  * list`/`view` don't expose reviewThreads (resolution is GraphQL-only) and
  * placeholders only substitute in `-F` values, so the numbers ride as
  * variables. On any failure the map stays empty → threads read as resolved.
@@ -265,15 +309,23 @@ async function fetchOpenThreads(
   ctx: SessionViewContext & PluginApi,
   root: string,
   numbers: number[],
-): Promise<Map<number, number>> {
-  const open = new Map<number, number>();
+): Promise<Map<number, OpenThreads>> {
+  const open = new Map<number, OpenThreads>();
   if (numbers.length === 0) return open;
   try {
     const out = await ctx.exec(threadsCommand(numbers), root);
-    const repo = (JSON.parse(out) as RawThreadsResponse).data?.repository ?? {};
+    const data = (JSON.parse(out) as RawThreadsResponse).data;
+    const repo = data?.repository ?? {};
+    const me = data?.viewer?.login ?? '';
     numbers.forEach((n, i) => {
       const nodes = repo[`p${i}`]?.reviewThreads?.nodes;
-      if (nodes) open.set(n, nodes.filter((t) => !t.isResolved).length);
+      if (!nodes) return;
+      open.set(n, {
+        open: nodes.filter((t) => !t.isResolved).length,
+        summary: me
+          ? summarizeOpenThreads({ discussions: nodes.map(normalizeThread) }, me)
+          : undefined,
+      });
     });
   } catch {
     // gh missing/unauth'd/non-GitHub — threads read as resolved
@@ -321,7 +373,8 @@ async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
   );
   for (const item of top) if (item.url) prPeople.fill(item.url, cliPrPeople(item));
   const prs = top.map((item): SessionPr => {
-    const openThreads = openThreadCounts.get(item.number ?? 0);
+    const found = openThreadCounts.get(item.number ?? 0);
+    const openThreads = found?.open;
     return {
       number: item.number ?? 0,
       reference: `#${item.number}`,
@@ -331,9 +384,10 @@ async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
       conflicts: item.mergeable === 'CONFLICTING',
       discussionsResolved: openThreads === undefined ? true : openThreads === 0,
       openThreads,
+      threadSummary: found?.summary,
       mergeStatus: (item.mergeStateStatus ?? '').toLowerCase(),
       checks: rollupStatus(item.statusCheckRollup),
-      reviewDecision: (item.reviewDecision ?? '').toLowerCase(),
+      reviewDecision: (item.reviewDecision || decisionFromReviews(item.latestReviews ?? [])).toLowerCase(),
     };
   });
 
@@ -533,7 +587,7 @@ async function prWatchTick(args: {
 // threads × 20 comments ≈ 120k nodes; threads(100) × comments(50) was 620k
 // and failed every refresh). `comments(last:)`: mrWaitingForMe looks at the
 // newest note of a thread.
-const PR_FRAGMENT = `... on PullRequest { number title bodyText url isDraft mergeable headRefName baseRefName updatedAt reviewDecision author { login } assignees(first: 20) { nodes { login } } reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } } repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } reviewThreads(first: 50) { nodes { isResolved comments(last: 20) { nodes { author { login } } } } } reviews(last: 30, states: APPROVED) { nodes { author { login } } } }`;
+const PR_FRAGMENT = `... on PullRequest { number title bodyText url isDraft mergeable headRefName baseRefName updatedAt reviewDecision author { login } assignees(first: 20) { nodes { login } } reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } } repository { nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } reviewThreads(first: 50) { nodes { isResolved comments(last: 20) { nodes { createdAt author { login } } } } } latestOpinionatedReviews(first: 30) { nodes { state author { login } } } }`;
 
 const PR_OVERVIEW_QUERY = `query {
   viewer { login }
@@ -554,6 +608,8 @@ export interface PrOverview {
   mine: GhPrItem[];
   /** PRs requesting my review. */
   review: GhPrItem[];
+  /** Partial failure: GitHub answered, but some results were withheld (e.g. SAML-protected orgs). */
+  warning?: string;
   fetchedAt?: number;
 }
 
@@ -628,21 +684,43 @@ interface RawGqlPr {
   reviewThreads?: {
     nodes?: {
       isResolved?: boolean;
-      comments?: { nodes?: { author?: { login?: string } | null }[] };
+      comments?: { nodes?: { createdAt?: string; author?: { login?: string } | null }[] };
     }[];
   };
+  /** Older snapshots/fixtures: approving reviews only. */
   reviews?: { nodes?: { author?: { login?: string } | null }[] };
+  /** Each reviewer's latest APPROVED / CHANGES_REQUESTED review. */
+  latestOpinionatedReviews?: { nodes?: ({ state?: string; author?: { login?: string } | null } | null)[] };
 }
 
 const logins = (conn?: { nodes?: ({ login?: string } | null)[] }) =>
   (conn?.nodes ?? []).map((n) => n?.login ?? '').filter(Boolean);
 
+/** One GraphQL review thread as the shared discussion shape. */
+function normalizeThread(t: NonNullable<NonNullable<RawGqlPr['reviewThreads']>['nodes']>[number]): MrDiscussion {
+  const notes = t.comments?.nodes ?? [];
+  return {
+    resolvable: true,
+    resolved: t.isResolved ?? false,
+    notes: notes.map((n) => n?.author?.login ?? ''),
+    lastAt: notes[notes.length - 1]?.createdAt,
+  };
+}
+
 export function normalizePr(raw: RawGqlPr): GhPrItem {
   const project = raw.repository?.nameWithOwner ?? '';
   const number = Number(raw.number ?? 0);
-  const reviews = (raw.reviews?.nodes ?? [])
+  const author = raw.author?.login ?? '';
+  // Older snapshots/fixtures carry approving reviews only — treat each as APPROVED.
+  const reviewNodes =
+    raw.latestOpinionatedReviews?.nodes ??
+    (raw.reviews?.nodes ?? []).map((n) => ({ state: 'APPROVED', author: n?.author }));
+  const reviews = reviewNodes
+    .filter((r) => (r?.state ?? '').toUpperCase() === 'APPROVED')
     .map((r) => r?.author?.login ?? '')
     .filter(Boolean);
+  // reviewDecision is null unless branch protection requires reviews.
+  const decision = raw.reviewDecision || decisionFromReviews(reviewNodes, author);
   const rollup =
     raw.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ?? null;
   return {
@@ -659,20 +737,16 @@ export function normalizePr(raw: RawGqlPr): GhPrItem {
     conflicts: raw.mergeable === 'CONFLICTING',
     mergeStatus: (raw.mergeable ?? '').toLowerCase(),
     pipeline: rollupStatus(rollup),
-    approved: raw.reviewDecision === 'APPROVED',
+    approved: decision === 'APPROVED',
     approvedBy: reviews,
-    author: raw.author?.login ?? '',
+    author,
     assignees: logins(raw.assignees),
     reviewers: (raw.reviewRequests?.nodes ?? [])
       .map((n) => n?.requestedReviewer?.login ?? '')
       .filter(Boolean),
     updatedAt: raw.updatedAt ?? '',
-    discussions: (raw.reviewThreads?.nodes ?? []).map((t) => ({
-      resolvable: true,
-      resolved: t.isResolved ?? false,
-      notes: (t.comments?.nodes ?? []).map((n) => n?.author?.login ?? ''),
-    })),
-    reviewDecision: (raw.reviewDecision ?? '').toLowerCase(),
+    discussions: (raw.reviewThreads?.nodes ?? []).map(normalizeThread),
+    reviewDecision: decision.toLowerCase(),
   };
 }
 
@@ -716,41 +790,54 @@ export function refreshPrOverview(settings?: {
       const rt = appRuntime();
       if (!rt) throw new Error('no session available for gh');
       const out = await rt.exec(overviewCommand(settings?.hostname));
+      assertNotTruncated('gh', out);
       const parsed = JSON.parse(out) as {
         data?: {
           viewer?: { login?: string };
           assigned?: { nodes?: (RawGqlPr | null)[] };
           authored?: { nodes?: (RawGqlPr | null)[] };
           review?: { nodes?: (RawGqlPr | null)[] };
-        };
+        } | null;
         errors?: { message?: string }[];
       };
-      if (parsed.errors?.length) {
-        throw new Error(parsed.errors[0].message ?? 'graphql error');
-      }
+      const errors = (parsed.errors ?? []).map((e) => e.message ?? 'graphql error');
       const user = parsed.data?.viewer;
-      if (!user) throw new Error('no viewer — run `gh auth login`');
+      // GitHub returns partial data next to per-node errors (a SAML-protected
+      // org withholds its PRs as FORBIDDEN): keep what came back, warn.
+      if (!user) throw new Error(errors[0] ?? 'no viewer — run `gh auth login`');
+      const warning = errors.length
+        ? `Some pull requests could not be loaded (${errors.length} error${errors.length === 1 ? '' : 's'}): ${compactCliError([...new Set(errors)].join(' '))}`
+        : undefined;
+      const me = user.login ?? '';
       const nodes = (c?: { nodes?: (RawGqlPr | null)[] }) =>
-        (c?.nodes ?? []).filter((n): n is RawGqlPr => !!n).map(normalizePr);
-      for (const conn of [parsed.data?.assigned, parsed.data?.authored, parsed.data?.review]) {
-        for (const pr of nodes(conn)) {
-          // approvals count as reviews — GitHub drops a reviewer from
-          // reviewRequests once they review
-          if (pr.url) {
-            prPeople.fill(pr.url, prPeopleOf(pr));
-          }
-        }
+        (c?.nodes ?? [])
+          .filter((n): n is RawGqlPr => !!n)
+          .map(normalizePr)
+          .map((pr) => ({ ...pr, threadSummary: summarizeOpenThreads(pr, me) }));
+      const assigned = nodes(parsed.data?.assigned);
+      const authored = nodes(parsed.data?.authored);
+      const review = nodes(parsed.data?.review);
+      // `review-requested:@me` also matches requests to a team I'm on, which
+      // reviewRequests can't name as me — such a PR would read as `other` and
+      // vanish from both sections. GitHub put it in my review list: trust it.
+      const reviewKeys = new Set(review.map((pr) => pr.key));
+      const peopleOf = (pr: GhPrItem): MrPeople => {
+        const people = prPeopleOf(pr);
+        return reviewKeys.has(pr.key) && mrRole(people, me) === 'other'
+          ? { ...people, reviewers: [...people.reviewers, me] }
+          : people;
+      };
+      for (const pr of [...assigned, ...authored, ...review]) {
+        // approvals count as reviews — GitHub drops a reviewer from
+        // reviewRequests once they review
+        if (pr.url) prPeople.fill(pr.url, peopleOf(pr));
       }
       setOverview({
         status: 'ready',
         host,
-        username: user.login ?? '',
-        ...splitByRole(
-          mergeMine(nodes(parsed.data?.assigned), nodes(parsed.data?.authored)),
-          nodes(parsed.data?.review),
-          user.login ?? '',
-          prPeopleOf,
-        ),
+        username: me,
+        ...splitByRole(mergeMine(assigned, authored), review, me, peopleOf),
+        warning,
         fetchedAt: Date.now(),
       });
     } catch (e) {
@@ -858,10 +945,9 @@ function SessionPrs({ ctx }: { ctx: SessionViewContext & PluginApi }) {
                   </span>
                 )}
                 {threadLabel && (
-                  <span className="flex items-center gap-0.5 text-[var(--orange)]">
-                    <MessageSquare className="h-3 w-3" />
+                  <ThreadIndicator open={pr.openThreads ?? 0} summary={pr.threadSummary}>
                     {threadLabel}
-                  </span>
+                  </ThreadIndicator>
                 )}
                 {pr.checks && <ChecksChip status={pr.checks} />}
               </div>
@@ -1045,10 +1131,9 @@ function PrRow({ pr, badge, env, showDescription = true }: { showDescription?: b
             </span>
           )}
           {threads > 0 && (
-            <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--orange)]">
-              <MessageSquare className="h-3 w-3" />
+            <ThreadIndicator open={threads} summary={pr.threadSummary}>
               {threads}
-            </span>
+            </ThreadIndicator>
           )}
           {pr.pipeline && (
             <span className="shrink-0 text-[10px]">
@@ -1239,15 +1324,26 @@ function GhPrView({
           <div className="rounded-[var(--radius-lg)] bg-[var(--raised)] p-3.5 text-xs leading-relaxed text-[var(--text-primary)] shadow-[0_0_0_1px_var(--hairline)]">
             <div className="mb-1 font-semibold text-[var(--red)]">Failed to load pull requests</div>
             <div className="mb-2 text-[var(--text-secondary)]">{data.error}</div>
-            <div className="text-[var(--text-secondary)]">
-              Check <code className="text-[var(--accent)]">{authCommand('gh', 'status', data.host)}</code> in a shell.
-            </div>
+            {isAuthHintRelevant('gh', data.error) && (
+              <div className="text-[var(--text-secondary)]">
+                Check <code className="text-[var(--accent)]">{authCommand('gh', 'status', data.host)}</code> in a shell.
+              </div>
+            )}
             {!data.host && (
               <div className="mt-1 text-[var(--text-secondary)]">{defaultHostNote('gh', 'GitHub')}</div>
             )}
           </div>
         ) : (
           <>
+            {data.warning && (
+              <div
+                role="status"
+                className="mb-2 flex items-start gap-1.5 rounded-[var(--radius-lg)] bg-[var(--raised)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)] shadow-[0_0_0_1px_var(--hairline)]"
+              >
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-[var(--orange)]" />
+                <span>{data.warning}</span>
+              </div>
+            )}
             <PrSection
               title="Assigned to me / authored without assignee"
               prs={mine}
