@@ -376,14 +376,18 @@ pub(crate) fn open_dev_settings(app: &AppHandle) {
         let _ = w.set_focus();
         return;
     }
-    let _ = tauri::WebviewWindowBuilder::new(
+    if let Ok(w) = tauri::WebviewWindowBuilder::new(
         app,
         "dev-settings",
         WebviewUrl::CustomProtocol("axn://localhost/dev-settings".parse().unwrap()),
     )
     .title("axn-term-hmr")
     .inner_size(640.0, 560.0)
-    .build();
+    .build()
+    {
+        #[cfg(target_os = "linux")]
+        crate::window::configure_linux_titlebar(&w);
+    }
 }
 
 /// Startup path for the dev product: settings window always; vite + main

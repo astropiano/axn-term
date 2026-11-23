@@ -47,7 +47,8 @@ signal-hook = "0.3"
 libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# Same major version tao/wry link against; used to strip tao's custom
-# Wayland headerbar so the compositor can draw native decorations.
+# Same major version tao/wry link against; used to strip the Wayland
+# titlebar where the compositor draws server-side decorations (KDE,
+# wlroots) — GNOME and friends keep the themed GTK headerbar (window.rs).
 gtk = "0.18"
 

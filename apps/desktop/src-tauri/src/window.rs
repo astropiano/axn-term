@@ -173,20 +173,26 @@ pub(crate) fn create_window_with<M: Manager<Wry>>(
         });
     }
 
-    // On Wayland, tao unconditionally installs a GtkHeaderBar as the window
-    // titlebar, forcing GTK client-side decorations — a tall, icon-less bar
-    // that looks foreign on KDE. Removing it lets GTK use the compositor's
-    // server-side decorations (native KWin titlebar on KDE/Wayland) and
-    // falls back to GTK's plain titlebar on compositors without SSD.
+    // On Wayland a decorated GTK3 window draws its own client-side
+    // decorations — GTK installs an internal GtkHeaderBar as the titlebar —
+    // unless the compositor offers server-side decorations through the KDE
+    // server-decoration protocol. KDE and the wlroots family do; removing
+    // the titlebar there hands the frame back to the compositor (native
+    // KWin titlebar on KDE/Wayland). GNOME's mutter does not: stripping the
+    // titlebar there leaves GTK's minimal fallback bar — a plain, unthemed
+    // light strip — so the themed headerbar stays.
     // Both calls run on the GTK main thread; this function may be reached
     // from the remote-control HTTP thread.
     #[cfg(target_os = "linux")]
     {
         use gtk::prelude::*;
         let window2 = window.clone();
+        let ssd = server_side_decorations();
         let _ = window.run_on_main_thread(move || {
-            if let Ok(gtk_window) = window2.gtk_window() {
-                gtk_window.set_titlebar(None::<&gtk::Widget>);
+            if ssd {
+                if let Ok(gtk_window) = window2.gtk_window() {
+                    gtk_window.set_titlebar(None::<&gtk::Widget>);
+                }
             }
             let _ = window2.show();
             // Linux/Windows windows start with the menu bar hidden —
@@ -210,6 +216,59 @@ pub(crate) fn create_window_with<M: Manager<Wry>>(
     #[cfg(target_os = "macos")]
     window.show().map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Whether the display server draws window frames itself, making GTK's
+/// client-side titlebar redundant: always on X11 (the window manager
+/// decorates), and on Wayland only for compositors implementing the KDE
+/// server-decoration protocol — KWin (Plasma) and the wlroots family
+/// (Sway, Hyprland, labwc, Wayfire, river, dwl). GNOME's mutter and niri
+/// deliberately do not; there the themed GtkHeaderBar GTK installs is the
+/// right chrome, because stripping it leaves GTK's bare fallback bar.
+#[cfg(target_os = "linux")]
+fn server_side_decorations() -> bool {
+    let forced_x11 = std::env::var("GDK_BACKEND")
+        .unwrap_or_default()
+        .split(',')
+        .next()
+        .is_some_and(|b| b.trim().eq_ignore_ascii_case("x11"));
+    if forced_x11 || std::env::var_os("WAYLAND_DISPLAY").is_none() {
+        return true;
+    }
+    if std::env::var_os("KDE_SESSION_VERSION").is_some() {
+        return true;
+    }
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+    desktop
+        .to_ascii_lowercase()
+        .split(':')
+        .any(|d| {
+            matches!(
+                d.trim(),
+                "kde" | "plasma" | "sway" | "hyprland" | "labwc" | "wayfire" | "river" | "dwl"
+            )
+        })
+}
+
+/// Applies the Linux decoration choice to a window: strip the GTK
+/// titlebar where the compositor draws server-side decorations (KDE,
+/// wlroots — see `server_side_decorations`), keep the themed headerbar
+/// elsewhere (GNOME). For the windows not built through
+/// `create_window_with` (settings, dev settings), which would otherwise
+/// keep the foreign-looking GTK bar on KDE.
+/// Runs on the GTK main thread.
+#[cfg(target_os = "linux")]
+pub(crate) fn configure_linux_titlebar(window: &tauri::WebviewWindow) {
+    use gtk::prelude::*;
+    let window2 = window.clone();
+    let ssd = server_side_decorations();
+    let _ = window.run_on_main_thread(move || {
+        if ssd {
+            if let Ok(gtk_window) = window2.gtk_window() {
+                gtk_window.set_titlebar(None::<&gtk::Widget>);
+            }
+        }
+    });
 }
 
 /// Navigations a window's webview may perform: the app's own pages (bundled

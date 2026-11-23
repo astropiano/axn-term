@@ -254,15 +254,17 @@ pub fn run() {
                         let _ = app.emit_to(label.as_str(), "menu-settings", ());
                     } else if let Some(w) = app.get_webview_window("settings") {
                         let _ = w.set_focus();
-                    } else {
-                        let _ = tauri::WebviewWindowBuilder::new(
-                            app,
-                            "settings",
-                            tauri::WebviewUrl::App("index.html#axn-settings".into()),
-                        )
-                        .title("axn-term — Settings")
-                        .inner_size(720.0, 780.0)
-                        .build();
+                    } else if let Ok(w) = tauri::WebviewWindowBuilder::new(
+                        app,
+                        "settings",
+                        tauri::WebviewUrl::App("index.html#axn-settings".into()),
+                    )
+                    .title("axn-term — Settings")
+                    .inner_size(720.0, 780.0)
+                    .build()
+                    {
+                        #[cfg(target_os = "linux")]
+                        window::configure_linux_titlebar(&w);
                     }
                 }
                 "axn-quit" => {
