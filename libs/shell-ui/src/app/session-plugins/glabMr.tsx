@@ -160,8 +160,9 @@ export function summarizeOpenThreads(
   return mr.discussions.reduce(
     (summary, discussion) => {
       if (!discussion.resolvable || discussion.resolved) return summary;
-      if (discussion.notes.at(-1) === me) summary.waitingForOther += 1;
-      else if (discussion.notes.at(-1)) summary.waitingForMe += 1;
+      const last = discussion.notes[discussion.notes.length - 1];
+      if (last === me) summary.waitingForOther += 1;
+      else if (last) summary.waitingForMe += 1;
       return summary;
     },
     { waitingForMe: 0, waitingForOther: 0 },

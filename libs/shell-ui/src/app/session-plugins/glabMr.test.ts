@@ -366,10 +366,13 @@ describe('refreshMrOverview failures', () => {
   const thread = (...authors: string[]) => ({
     resolvable: true, resolved: false, notes: { nodes: authors.map((username) => ({ author: { username } })) },
   });
-  const lists = (review: object[], mine: object[] = [gqlMr('1'), gqlMr('2')]) =>
+  /** An MR with no open threads: its discussions are never fetched. */
+  const quietMr = (iid: string, extra: object = {}) =>
+    gqlMr(iid, { resolvableDiscussionsCount: 0, resolvedDiscussionsCount: 0, ...extra });
+  const lists = (review: object[], mine: object[] = [quietMr('1'), quietMr('2')]) =>
     JSON.stringify({ data: { currentUser: {
       username: 'me',
-      assignedMergeRequests: { nodes: [gqlMr('1', { assignees: { nodes: [{ username: 'me' }] } })] },
+      assignedMergeRequests: { nodes: [quietMr('1', { assignees: { nodes: [{ username: 'me' }] } })] },
       authoredMergeRequests: { nodes: mine },
       reviewRequestedMergeRequests: { nodes: review },
     } } });
@@ -382,18 +385,18 @@ describe('refreshMrOverview failures', () => {
       `m${i}`, { mergeRequest: { discussions: { nodes: [thread(...authors(iid))] } } },
     ])) });
 
-  it('fetches discussions only for review MRs, in one batch, and counts threads on mine', async () => {
+  it('fetches discussions only for MRs with open threads, in one batch', async () => {
     const calls: string[][] = [];
     runtime(async (cmd = '') => {
       const iids = iidsOf(cmd);
       calls.push(iids);
       if (!iids.length) {
-        return lists([reviewMr('3'), reviewMr('4')], [gqlMr('1'), gqlMr('2', { resolvableDiscussionsCount: 3, resolvedDiscussionsCount: 1 })]);
+        return lists([reviewMr('3'), reviewMr('4')], [quietMr('1'), gqlMr('2', { resolvableDiscussionsCount: 3, resolvedDiscussionsCount: 1 })]);
       }
       return discussionsAnswer(iids, (iid) => ['me', `r${iid}`]);
     });
     await refreshMrOverview({ hostname: 'gitlab.acme.io' });
-    expect(calls).toEqual([[], ['3', '4']]);
+    expect(calls).toEqual([[], ['2', '3', '4']]);
     const o = currentMrOverview();
     expect(o.status).toBe('ready');
     expect(o.mine.map((m) => m.iid).sort()).toEqual([1, 2]);
