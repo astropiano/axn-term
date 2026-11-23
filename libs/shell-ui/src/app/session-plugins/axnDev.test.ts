@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { countScenarios, parseAxnDevList, parseAxnDevRepos } from './axnDev';
+import { execFileSync } from 'node:child_process';
+import { countScenarios, parseAxnDevList, parseAxnDevRepos, scenarioOpCommand } from './axnDev';
 
 const LIST_OUTPUT = `Global scenarios:
   demo-mock                     \x1b[90m○ stopped\x1b[0m — Full-stack mock: API server + hardware EPD emulator
@@ -257,5 +258,23 @@ describe('parseAxnDevRepos', () => {
   it('rejects output of an older CLI', () => {
     expect(parseAxnDevRepos("Unknown git action 'repos'")).toBeNull();
     expect(parseAxnDevRepos('{}')).toBeNull();
+  });
+});
+
+describe('scenarioOpCommand', () => {
+  it('leaves plain names bare', () => {
+    expect(scenarioOpCommand({ name: 'api-dev', scope: 'project' }, 'start')).toBe('axn-dev start -s api-dev');
+    expect(scenarioOpCommand({ name: 'db', scope: 'global' }, 'stop')).toBe('axn-dev stop -g -s db');
+  });
+
+  it('passes a hostile scenario name as one argument', () => {
+    const name = 'x;rm -rf ~ $(touch pwned) `id`';
+    const cmd = scenarioOpCommand({ name, scope: 'global' }, 'start');
+    const argv = execFileSync(
+      '/bin/sh',
+      ['-c', `axn_dev() { printf '%s\\n' "$@"; }; ${cmd.replace(/^axn-dev/, 'axn_dev')}`],
+      { encoding: 'utf8' },
+    );
+    expect(argv).toBe(`start\n-g\n-s\n${name}\n`);
   });
 });

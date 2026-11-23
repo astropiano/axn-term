@@ -8,7 +8,7 @@ import type {
   SessionViewPlugin,
 } from './plugin';
 import type { SessionBanner, Workspace } from '../../types';
-import { shellQuote } from '../../shellQuote';
+import { sh, shellQuote, shellRaw } from '../../shellQuote';
 
 type Ctx = SessionViewContext & PluginApi;
 
@@ -73,6 +73,16 @@ export function parseAgentList(raw: unknown): string[] {
     .map((a) => a.trim().toLowerCase())
     .filter(Boolean);
   return agents.length ? agents : ['claude', 'devin', 'codex', 'agy', 'vibe'];
+}
+
+/**
+ * `<agent> -p '<prompt>'` asking for a worktree slug for an MR. The agent is
+ * the user's own `nameAgent` setting (a command, may carry flags) and goes in
+ * as-is; the MR reference and title come from the forge, so the prompt is one
+ * single-quoted word — no `$(…)`, backtick or `\` in a title can run.
+ */
+export function nameAgentCmd(agent: string, ref: string, title: string): string {
+  return sh`${shellRaw(agent)} -p ${`reply with only a short kebab-case git branch slug for merge request ${ref}: ${title}`}`;
 }
 
 /** How an agent resumes its last conversation, when it supports one. */
@@ -395,10 +405,7 @@ export const worktreesPlugin: SessionViewPlugin = {
       const agent = settingsOf(ctx).nameAgent?.trim();
       if (agent) {
         const suggestion = await ctx
-          .exec(
-            `${agent} -p "reply with only a short kebab-case git branch slug for merge request ${ref}: ${(mr.title ?? '').replace(/"/g, '')}"`,
-            root,
-          )
+          .exec(nameAgentCmd(agent, ref, mr.title ?? ''), root)
           .then((out) => slugify(out.split('\n')[0] ?? ''))
           .catch(() => '');
         if (suggestion) name = `${ref.replace(/^[!#]/, '')}-${suggestion}`;

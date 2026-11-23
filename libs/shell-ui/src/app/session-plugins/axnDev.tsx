@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { appRuntime } from '../appRuntime';
+import { sh, shellRaw } from '../../shellQuote';
 import type { RepoDir, RepoDirsContext } from '../repoDirectory';
 import { PanelSearch } from '../SessionPanel';
 import { RailItem } from '../RailItem';
@@ -381,6 +382,16 @@ export function refreshScenarios(): Promise<void> {
 }
 
 /**
+ * `axn-dev start|stop [-g] -s <name>`. The name comes from scenario files in
+ * the project (a cloned repo can name one `x;rm -rf ~`), so it goes in as one
+ * shell word.
+ */
+export function scenarioOpCommand(scenario: Pick<AxnDevScenario, 'name' | 'scope'>, op: 'start' | 'stop'): string {
+  const flag = scenario.scope === 'global' ? '-g ' : '';
+  return sh`axn-dev ${op} ${shellRaw(flag)}-s ${scenario.name}`;
+}
+
+/**
  * Start/stop a scenario via `axn-dev` as a child process — exec resolves on
  * clean exit and rejects on non-zero, surfacing the CLI's stderr. The op is
  * tracked per scenario so its row shows a pending state; the list refreshes
@@ -392,11 +403,10 @@ export async function runScenarioOp(scenario: AxnDevScenario, op: 'start' | 'sto
   const ops = { ...overview.ops, [scenario.key]: { op } };
   setOverview({ ...overview, ops });
   try {
-    const flag = scenario.scope === 'global' ? '-g ' : '';
     // The scenario dir sits inside its repo/worktree — running there lets
     // axn-dev resolve project scenarios regardless of the ambient cwd.
     const cwd = scenario.worktree?.path ?? scenario.path;
-    await rt.exec(`axn-dev ${op} ${flag}-s ${scenario.name}`, cwd);
+    await rt.exec(scenarioOpCommand(scenario, op), cwd);
     const cleared = { ...overview.ops };
     delete cleared[scenario.key];
     setOverview({ ...overview, ops: cleared });

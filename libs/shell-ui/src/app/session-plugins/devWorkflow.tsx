@@ -2332,7 +2332,7 @@ export function ticketWorktreeScript(root: string, dir: string, branch: string):
     `if git -C ${d} rev-parse --is-inside-work-tree >/dev/null 2>&1; then exit 0; fi`,
     `git -C ${r} fetch origin >/dev/null 2>&1 || true`,
     `base=$(git -C ${r} symbolic-ref -q --short refs/remotes/origin/HEAD || echo HEAD)`,
-    `if git -C ${r} show-ref --verify --quiet refs/heads/${branch}; then`,
+    `if git -C ${r} show-ref --verify --quiet ${shellQuote(`refs/heads/${branch}`)}; then`,
     `  git -C ${r} worktree add ${d} ${b}`,
     'else',
     `  git -C ${r} worktree add -b ${b} ${d} "$base"`,
