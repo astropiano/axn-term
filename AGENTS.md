@@ -8,9 +8,11 @@
   src-tauri/tauri.term-hmr.conf.json`, product/binary `axn-term-hmr`, or
   `AXN_TERM_HMR=1` for the same code path under `tauri dev`), spawns
   `pnpm exec vite` inside a user-picked checkout/worktree and loads its
-  session windows from that server (`WebviewUrl::External`, capabilities
-  `remote.urls` `http://localhost:*`/`127.0.0.1:*`, navigation allowlist in
-  `window.rs::is_dev_hmr_navigation`) — frontend edits hot-reload in the
+  session windows from that server (`WebviewUrl::External`, exactly
+  `http://127.0.0.1:5914` — the hmr conf's `frontendDist`, its hmr-only
+  `capabilities/dev-hmr.json` remote url and the navigation allowlist in
+  `window.rs::is_dev_hmr_navigation`; the shipped `default` capability
+  trusts no remote origin) — frontend edits hot-reload in the
   real app while the PTY/Rust side stays whatever the dev binary was built
   with. `devhmr.rs` owns the spawn/state/commands and the `#axn-dev`
   settings window (`apps/desktop/src/app/DevHmr.tsx`): repo picker, vite
@@ -54,7 +56,19 @@
   on an external volume) are granted at runtime from the `fileAccessRoots`
   list in `config.yaml` — desktop `App.tsx` passes it to the
   `allow_file_roots` command, which widens the fs scope; grants are
-  additive, so a removed root stays allowed until restart.
+  additive, so a removed root stays allowed until restart. Roots are
+  canonicalized (`files.rs::file_access_root`): `..`, filesystem roots,
+  ancestors of `$HOME` and system dirs (`/etc`, `/usr`, …) are refused.
+  Writes are limited to `writeTextFile`/`mkdir`, and both deny
+  `~/.ssh`, `~/.gnupg`, shell startup files and autostart dirs
+  (LaunchAgents, `~/.config/autostart`, `~/.config/systemd`) — keep the
+  two deny lists in `default.json` (and its `dev-hmr.json` mirror) equal.
+  The shipped webview has a CSP (`tauri.conf.json` `app.security.csp`):
+  sandboxed plugin frames are `srcdoc` documents and inherit it, so it must
+  stay a superset of their own policy (`sandbox.tsx::frameDoc` —
+  inline + `https:` scripts); `dangerousDisableAssetCspModification` keeps
+  Tauri from appending per-script hashes, which would disable
+  `'unsafe-inline'` for those frames.
   Web-capability gaps
   are expressed as absent optional methods — don't stub them with no-ops.
 - `@axn-term/session-backend/remote` — `RemoteBackend`, a `SessionBackend` over
@@ -1510,9 +1524,11 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
   src-tauri/tauri.term-hmr.conf.json`, product/binary `axn-term-hmr`, or
   `AXN_TERM_HMR=1` for the same code path under `tauri dev`), spawns
   `pnpm exec vite` inside a user-picked checkout/worktree and loads its
-  session windows from that server (`WebviewUrl::External`, capabilities
-  `remote.urls` `http://localhost:*`/`127.0.0.1:*`, navigation allowlist in
-  `window.rs::is_dev_hmr_navigation`) — frontend edits hot-reload in the
+  session windows from that server (`WebviewUrl::External`, exactly
+  `http://127.0.0.1:5914` — the hmr conf's `frontendDist`, its hmr-only
+  `capabilities/dev-hmr.json` remote url and the navigation allowlist in
+  `window.rs::is_dev_hmr_navigation`; the shipped `default` capability
+  trusts no remote origin) — frontend edits hot-reload in the
   real app while the PTY/Rust side stays whatever the dev binary was built
   with. `devhmr.rs` owns the spawn/state/commands and the `#axn-dev`
   settings window (`apps/desktop/src/app/DevHmr.tsx`): repo picker, vite
@@ -1556,7 +1572,19 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
   on an external volume) are granted at runtime from the `fileAccessRoots`
   list in `config.yaml` — desktop `App.tsx` passes it to the
   `allow_file_roots` command, which widens the fs scope; grants are
-  additive, so a removed root stays allowed until restart.
+  additive, so a removed root stays allowed until restart. Roots are
+  canonicalized (`files.rs::file_access_root`): `..`, filesystem roots,
+  ancestors of `$HOME` and system dirs (`/etc`, `/usr`, …) are refused.
+  Writes are limited to `writeTextFile`/`mkdir`, and both deny
+  `~/.ssh`, `~/.gnupg`, shell startup files and autostart dirs
+  (LaunchAgents, `~/.config/autostart`, `~/.config/systemd`) — keep the
+  two deny lists in `default.json` (and its `dev-hmr.json` mirror) equal.
+  The shipped webview has a CSP (`tauri.conf.json` `app.security.csp`):
+  sandboxed plugin frames are `srcdoc` documents and inherit it, so it must
+  stay a superset of their own policy (`sandbox.tsx::frameDoc` —
+  inline + `https:` scripts); `dangerousDisableAssetCspModification` keeps
+  Tauri from appending per-script hashes, which would disable
+  `'unsafe-inline'` for those frames.
   Web-capability gaps
   are expressed as absent optional methods — don't stub them with no-ops.
 - `@axn-term/session-backend/remote` — `RemoteBackend`, a `SessionBackend` over

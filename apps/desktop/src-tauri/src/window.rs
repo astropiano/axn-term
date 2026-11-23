@@ -90,8 +90,9 @@ pub(crate) fn create_window_with<M: Manager<Wry>>(
     let (width, height) = window_size(options.width, options.height);
     let dev_url = manager.config().build.dev_url.clone();
     // axn-term-hmr: session windows load the spawned vite dev server, not the
-    // bundled frontend. Until vite is up they show its origin anyway — it
-    // will serve as soon as the server binds (webview retries on reload).
+    // bundled frontend, once it announced itself (devhmr::vite_origin); before
+    // that they fall back to the app URL (in the bundled hmr product that is
+    // `frontendDist`, the same origin — webview retries on reload).
     let target = crate::devhmr::enabled()
         .then(|| manager.try_state::<crate::devhmr::DevHmrState>())
         .flatten()
@@ -261,12 +262,16 @@ pub(crate) fn allow_frame_origin(url: String) -> Result<(), String> {
 }
 
 /// axn-term-hmr loads its session windows from a spawned vite dev server —
-/// any localhost http origin navigates (the port is picked at spawn time
-/// and only known at runtime; this is a dev tool, not a shipped product).
+/// exactly its fixed origin (`devhmr::AXN_HMR_HOST`:`AXN_HMR_PORT`), not
+/// any localhost port.
 fn is_dev_hmr_navigation(url: &tauri::Url) -> bool {
-    crate::devhmr::enabled()
-        && url.scheme() == "http"
-        && matches!(url.host_str(), Some("localhost") | Some("127.0.0.1"))
+    crate::devhmr::enabled() && is_dev_hmr_origin(url)
+}
+
+fn is_dev_hmr_origin(url: &tauri::Url) -> bool {
+    url.scheme() == "http"
+        && url.host_str() == Some(crate::devhmr::AXN_HMR_HOST)
+        && url.port() == Some(crate::devhmr::AXN_HMR_PORT)
 }
 
 #[tauri::command]
@@ -551,6 +556,22 @@ mod navigation_tests {
             "http://tauri.localhost.evil.example/",
         ] {
             assert!(!is_app_navigation(&url(bad), Some(&dev)), "{bad}");
+        }
+    }
+
+    #[test]
+    fn dev_hmr_navigation_is_the_exact_vite_origin() {
+        assert!(is_dev_hmr_origin(&url("http://127.0.0.1:5914/")));
+        assert!(is_dev_hmr_origin(&url("http://127.0.0.1:5914/index.html#boot")));
+        for bad in [
+            "http://localhost:5914/",
+            "http://[::1]:5914/",
+            "http://127.0.0.1:59140/",
+            "http://127.0.0.1:5915/",
+            "https://127.0.0.1:5914/",
+            "http://127.0.0.1/",
+        ] {
+            assert!(!is_dev_hmr_origin(&url(bad)), "{bad}");
         }
     }
 }

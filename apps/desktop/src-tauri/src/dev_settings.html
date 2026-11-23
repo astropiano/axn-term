@@ -41,7 +41,7 @@ async function refresh(){
     const s = await invoke('dev_hmr_status');
     repoConfigured = s.repo;
     $('status').textContent = LABEL[s.vite]||s.vite;
-    $('port').textContent = s.port ? `http://localhost:${s.port}` : '';
+    $('port').textContent = s.port ? `http://127.0.0.1:${s.port}` : '';
     $('err').style.display = s.error ? 'block':'none';
     $('err').textContent = s.error||'';
     $('log').textContent = (s.log||[]).join('\n')||'vite output appears here';

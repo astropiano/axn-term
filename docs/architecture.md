@@ -78,7 +78,7 @@ The Rust side owns everything a browser can't do:
   per-PTY input queue.
 - `window.rs` — window lifecycle, native titlebar tinting, the navigation
   allowlist (`is_app_navigation` keeps windows inside the app;
-  `is_dev_hmr_navigation` adds localhost origins for hmr).
+  `is_dev_hmr_navigation` adds the vite origin `127.0.0.1:5914` for hmr).
 - `persist.rs` — `~/.axn-term/state.json`: atomic `tmp`+rename writes,
   `.bak` rotation, `.failed` quarantine; in hmr mode the state dir is
   `~/.axn-term-hmr` and state is memory-only.

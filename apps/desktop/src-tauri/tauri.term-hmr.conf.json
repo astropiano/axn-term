@@ -4,7 +4,15 @@
   "identifier": "dev.axn-term.axn-term-hmr",
   "mainBinaryName": "axn-term-hmr",
   "build": {
-    "frontendDist": "http://localhost:5914"
+    "frontendDist": "http://127.0.0.1:5914"
+  },
+  "app": {
+    "security": {
+      "capabilities": [
+        "default",
+        "dev-hmr"
+      ]
+    }
   },
   "bundle": {
     "macOS": {
