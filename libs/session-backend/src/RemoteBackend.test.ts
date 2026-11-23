@@ -117,7 +117,7 @@ describe('RemoteBackend', () => {
     // closed stream could stay in the pty entry — waitForStream resolved it
     // and every later write queued forever (dead input after a detach).
     const dead = new FakeStream('pty:p1@v');
-    dead.close('hidden');
+    dead.close();
     const fresh = new FakeStream('pty:p1@v');
     const session = fakeSession({ openStream: vi.fn(async () => fresh) });
     connectMock.mockResolvedValue(session);
@@ -175,7 +175,11 @@ describe('RemoteBackend', () => {
       await b1.ramphastosSession();
       await b2.ramphastosSession();
       const reported = (s: ReturnType<typeof fakeSession>) =>
-        s.invoke.mock.calls.find((c) => c[0] === '/vm/reportViewer')?.[1]?.[0];
+        (
+          s.invoke.mock.calls.find((c) => c[0] === '/vm/reportViewer')?.[1] as
+            | unknown[]
+            | undefined
+        )?.[0];
       expect(reported(s1)).toBeTruthy();
       expect(reported(s1)).toBe(reported(s2));
     } finally {

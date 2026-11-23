@@ -7,7 +7,8 @@ const meta = {
 } satisfies Meta<typeof RemoteIcon>;
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+// Render-only stories (no args) — each renders its own RemoteIcons.
+type Story = StoryObj;
 
 const STATES: { state: RemoteIconState; label: string }[] = [
   { state: 'idle', label: 'idle — chevrons take currentColor' },

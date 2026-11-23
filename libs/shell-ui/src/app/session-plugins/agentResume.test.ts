@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ShellSession } from '../../types';
-import type { SessionViewContext, PluginApi } from './plugin';
+import type { MenuScope, SessionViewContext, PluginApi } from './plugin';
 
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(async () => {}),
@@ -27,6 +27,13 @@ import { opencodePlugin } from './opencode';
 import { vibePlugin } from './vibe';
 
 type Ctx = SessionViewContext & PluginApi;
+
+/** The single-session scope SessionPanel hands `sessionMenuItems`. */
+const scopeOf = (ctx: Ctx): MenuScope => ({
+  targets: [ctx],
+  sessions: [ctx.session],
+  workspaces: [],
+});
 
 interface Harness {
   ctx: Ctx;
@@ -354,7 +361,7 @@ describe('devin plugin', () => {
     const h = makeCtx('devin', {}, {
       pluginState: { last: { name: 'grey-party', cwd: '/repo', command: 'devin -r grey-party', at: 1 } },
     });
-    const items = devinPlugin.sessionMenuItems?.(h.ctx) ?? [];
+    const items = devinPlugin.sessionMenuItems?.(h.ctx, scopeOf(h.ctx)) ?? [];
     expect(items.map((i) => i.label)).toEqual(["Resume devin session 'grey-party'"]);
   });
 });
@@ -634,7 +641,7 @@ describe('agentResumePanel', () => {
 
   it('clicking the button writes the stored command into the PTY', async () => {
     const h = makeCtx('devin', {}, { pluginState: { last } });
-    const el = agentResumePanel(h.ctx, 'devin') as ReactElement;
+    const el = agentResumePanel(h.ctx, 'devin') as ReactElement<{ children: ReactElement }>;
     const button = el.props.children as ReactElement<{ onClick: () => void }>;
     button.props.onClick();
     await vi.waitFor(() => expect(h.writes).toEqual([`${last.command}\r`]));

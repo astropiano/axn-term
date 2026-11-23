@@ -98,8 +98,10 @@ export const Panel: Story = {
         onOpenTab={() => {}}
         pluginData={{}}
         mergePluginData={() => {}}
-        onOpenSubShell={() => {}}
+        onOpenSubShell={() => undefined}
         onTurnIntoWorkspace={() => {}}
+        updateWorkspace={() => {}}
+        onOpenIde={() => {}}
       />
     </div>
   ),
@@ -197,8 +199,10 @@ export const PanelWithSelection: Story = {
         onOpenTab={() => {}}
         pluginData={{}}
         mergePluginData={() => {}}
-        onOpenSubShell={() => {}}
+        onOpenSubShell={() => undefined}
         onTurnIntoWorkspace={() => {}}
+        updateWorkspace={() => {}}
+        onOpenIde={() => {}}
       />
     </div>
   ),

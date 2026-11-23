@@ -44,7 +44,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-function terminalSetup(deps: { localPaths?: boolean; saveFile?: ReturnType<typeof vi.fn> } = {}) {
+function terminalSetup(deps: Pick<FileDropDeps, 'localPaths' | 'saveFile'> = {}) {
   const term = fakeTerm();
   const termEl = document.createElement('div');
   const panel = document.createElement('div');

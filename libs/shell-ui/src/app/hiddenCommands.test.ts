@@ -170,7 +170,7 @@ describe('createHiddenCommandInput', () => {
   it('off mode: axn-* still intercepts, other input passes through', () => {
     const paths: string[] = [];
     let mode: 'full' | 'agent' | 'off' = 'off';
-    const { input, written } = setup({
+    const { input } = setup({
       mode: () => mode,
       onEditorRequest: (p) => paths.push(p),
     });
@@ -289,7 +289,7 @@ describe('createHiddenCommandInput', () => {
   it('agent mode: only /exit is notified, everything else passes', () => {
     const lines: string[] = [];
     const paths: string[] = [];
-    const { input, written } = setup({
+    const { input } = setup({
       mode: () => 'agent',
       onSessionCommand: (l) => {
         lines.push(l);

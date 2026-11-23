@@ -74,6 +74,7 @@ async function render(props: Partial<ComponentProps<typeof SessionPanel>>) {
           onTurnIntoWorkspace={noop}
           pluginData={{}}
           mergePluginData={noop}
+          onOpenIde={noop}
           {...props}
         />
         </ShellServicesProvider>
@@ -110,11 +111,11 @@ it('hands a session menu hook just the clicked session as its target', async () 
 });
 
 it('hands a session menu hook every multi-selected session as targets', async () => {
-  const sessionMenuItems = vi.fn(() => [{ label: 'Probe', onClick: () => {} }]);
+  const sessionMenuItems = vi.fn<NonNullable<SessionViewPlugin['sessionMenuItems']>>(() => [{ label: 'Probe', onClick: () => {} }]);
   await render({ plugins: [{ id: 'p', title: 'p', sessionMenuItems }] });
   await act(async () => broadcastSet.replaceAll(['s-1', 's-2']));
   await openSessionMenu('tests');
-  const scope = sessionMenuItems.mock.calls.at(-1)![1] as unknown as { targets: { session: ShellSession }[] };
+  const scope = sessionMenuItems.mock.calls.at(-1)![1];
   expect(scope.targets.map((t) => t.session.id).sort()).toEqual(['s-1', 's-2']);
 });
 

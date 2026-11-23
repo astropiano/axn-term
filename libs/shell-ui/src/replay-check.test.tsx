@@ -31,7 +31,7 @@ it.skipIf(!existsSync(STATE_FILE))('replay real output in 4KB chunks', () => {
     const updates: any[] = [];
     const ctx: any = {
       session,
-      updateSession: (id: string, patch: any) => { Object.assign(session, patch); updates.push(patch); },
+      updateSession: (_id: string, patch: any) => { Object.assign(session, patch); updates.push(patch); },
       writeToSession: async () => {},
       updatePluginState: (p: any) => Object.assign(pluginState, p),
       getSession: () => session,

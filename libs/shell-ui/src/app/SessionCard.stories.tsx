@@ -261,15 +261,19 @@ const taskSnapshot = (s: ShellSession): TaskStateSnapshot => ({
     mode: '',
     summary: '',
     steps: [],
+    decisions: [],
+    openQuestions: [],
+    nextAction: '',
+    updatedAt: '',
   })),
 });
 
 function Panel({
-  layout,
   selected,
   colors,
   plugins,
 }: {
+  /** Consumed by the decorator (config.yaml seed), not by Panel itself. */
   layout: keyof typeof LAYOUTS;
   selected: string;
   colors: keyof typeof COLORS;

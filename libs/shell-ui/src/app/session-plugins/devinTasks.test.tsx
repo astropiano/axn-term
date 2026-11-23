@@ -41,7 +41,8 @@ function makeCtx(
   const writes: string[] = [];
   const restoringCalls: Array<string | null> = [];
   const updateSessionCalls: Array<{ sessionId: string; patch: Partial<ShellSession> }> = [];
-  const ctx: Ctx = {
+  // Only the API surface the devin plugin touches.
+  const ctx = {
     session,
     updateSession: (sessionId, patch) => {
       updateSessionCalls.push({ sessionId, patch });
@@ -85,7 +86,7 @@ function makeCtx(
     },
     appState: undefined,
     updateAppState: () => {},
-  };
+  } satisfies Partial<Ctx> as unknown as Ctx;
   return { ctx, writes, pluginStateStore, updateSessionCalls, restoringCalls };
 }
 

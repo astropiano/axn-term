@@ -3,7 +3,7 @@ import { pickFromList } from '../pickerHost';
 
 vi.mock('../pickerHost', () => ({ pickFromList: vi.fn(async () => null) }));
 import type { ShellSession } from '../../types';
-import type { SessionViewContext, PluginApi } from './plugin';
+import type { MenuScope, SessionViewContext, PluginApi } from './plugin';
 import { pluginCommands } from './plugin';
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -43,7 +43,6 @@ import {
   varChipFor,
   type BindingState,
   type WorkflowAction,
-  type WorkflowDef,
 } from './devWorkflow';
 import { registerMrResolver, resetMrResolvers, type MrRowEnv } from './mrActions';
 import { parsePersonas, registerPersonas } from './agentRegistry';
@@ -54,6 +53,13 @@ import './devinTasks';
 import './antigravity';
 
 type Ctx = SessionViewContext & PluginApi;
+
+/** The single-session scope SessionPanel hands `sessionMenuItems`. */
+const scopeOf = (ctx: Ctx): MenuScope => ({
+  targets: [ctx],
+  sessions: [ctx.session],
+  workspaces: [],
+});
 
 const WORKFLOW_SETTINGS = {
   workflows: {
@@ -119,7 +125,7 @@ interface Harness {
   execCalls: { command: string; cwd?: string }[];
   commandCalls: string[];
   subShells: { id: string; command?: string; cwd?: string; label?: string; agent?: string }[];
-  opened: { cwd?: string; name?: string }[];
+  opened: { cwd?: string; name?: string; workspaceId?: string }[];
   attention: unknown[];
   banners: (unknown | null)[];
 }
@@ -690,7 +696,7 @@ describe('commands', () => {
   describe('sessionMenuItems', () => {
     it('offers one start row opening a workflow picker when unbound', () => {
       const h = makeCtx();
-      const items = devWorkflowPlugin.sessionMenuItems?.(h.ctx) ?? [];
+      const items = devWorkflowPlugin.sessionMenuItems?.(h.ctx, scopeOf(h.ctx)) ?? [];
       expect(items.map((i) => i.label)).toEqual(['Start workflow…']);
       items[0].onClick();
       expect(vi.mocked(pickFromList).mock.calls.at(-1)?.[0].items.map((i) => i.label)).toEqual([
@@ -705,7 +711,7 @@ describe('commands', () => {
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
       await wf('start').run?.(h.ctx, 'multi', 'x');
-      const labels = (devWorkflowPlugin.sessionMenuItems?.(h.ctx) ?? []).map((i) => i.label);
+      const labels = (devWorkflowPlugin.sessionMenuItems?.(h.ctx, scopeOf(h.ctx)) ?? []).map((i) => i.label);
       expect(labels).toEqual([
         'Run draft',
         'Run spec-lint',
@@ -719,7 +725,7 @@ describe('commands', () => {
         execImpl: async (c) => (c.includes('rev-parse') ? '/repo\n' : ''),
       });
       await wf('start').run?.(h.ctx, 'offices', 'x');
-      const labels = (devWorkflowPlugin.sessionMenuItems?.(h.ctx) ?? []).map((i) => i.label);
+      const labels = (devWorkflowPlugin.sessionMenuItems?.(h.ctx, scopeOf(h.ctx)) ?? []).map((i) => i.label);
       expect(labels).toEqual([
         'Workflow offices → do',
         'Workflow offices → review',
@@ -1128,7 +1134,7 @@ describe('commands', () => {
 
     it('shellLine leaves agent actions untracked', () => {
       expect(
-        shellLine({ name: 'x', agent: { cli: 'devin' } }, 's', 'devin -- hi'),
+        shellLine({ name: 'x', agent: { cli: 'devin' } }, 's', 'devin -- hi', 'tok'),
       ).toBe('devin -- hi');
     });
   });
@@ -1298,9 +1304,6 @@ describe('commands', () => {
 });
 
 describe('workflow vars', () => {
-  const cmd = (name: string) => devWorkflowPlugin.commands?.find(
-    (c) => typeof c === 'object' && c.name === name,
-  ) as { run: (ctx: Ctx, arg?: string, line?: string) => unknown } | undefined;
 
   it('parses vars map, string shorthand, and list form', () => {
     expect(
@@ -1418,9 +1421,6 @@ describe('workflow vars', () => {
 });
 
 describe('workflow vars — start args, set command, marker, env', () => {
-  const cmd = (name: string) => devWorkflowPlugin.commands?.find(
-    (c) => typeof c === 'object' && c.name === name,
-  ) as { run: (ctx: Ctx, arg?: string, line?: string) => unknown; completeArg?: (ctx: Ctx, p?: string) => string[] } | undefined;
   const gitExec = async (c: string) => (c.includes('rev-parse') ? '/repo\n' : '');
   /** A session already inside MR <iid>'s review worktree — starts bind in place. */
   const inWorktree = (iid: number) => async (c: string) =>

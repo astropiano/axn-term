@@ -18,9 +18,16 @@ import {
 } from './devWorkflow';
 import { pluginCommands } from './plugin';
 import type { ShellSession } from '../../types';
-import type { PluginApi, SessionViewContext } from './plugin';
+import type { MenuScope, PluginApi, SessionViewContext } from './plugin';
 
 type Ctx = SessionViewContext & PluginApi;
+
+/** The single-session scope SessionPanel hands `sessionMenuItems`. */
+const scopeOf = (ctx: Ctx): MenuScope => ({
+  targets: [ctx],
+  sessions: [ctx.session],
+  workspaces: [],
+});
 
 const session = (over: Partial<ShellSession> = {}): ShellSession =>
   ({
@@ -214,7 +221,7 @@ describe('agents plugin', () => {
 
   it('session menu offers one agent picker row; onSessionOpen seeds the pick', async () => {
     const ctx = makeCtx({ pluginSettings: personasSettings });
-    const items = agentsPlugin.sessionMenuItems!(ctx);
+    const items = agentsPlugin.sessionMenuItems!(ctx, scopeOf(ctx));
     expect(items.map((i) => i.label)).toEqual(['New session with agent…']);
     vi.mocked(pickFromList).mockResolvedValueOnce('impl');
     items[0].onClick();
@@ -260,7 +267,7 @@ describe('agents plugin', () => {
     const ctx = makeCtx({ pluginSettings: personasSettings, updateAppState });
     for (let render = 0; render < 20; render++) {
       agentsPlugin.workspaceMenuItems!(ctx, { id: 'w1', name: 'Work', defaultFolder: '/repo' });
-      agentsPlugin.sessionMenuItems!(ctx);
+      agentsPlugin.sessionMenuItems!(ctx, scopeOf(ctx));
     }
     expect(updateAppState).not.toHaveBeenCalled();
     expect(resolvePersona('reviewer')).toMatchObject({ cli: 'devin' });

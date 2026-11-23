@@ -1467,7 +1467,7 @@ Example: `plugins/axn-demo-note/`.
 ## Restore verification
 
 - Desktop unit tests: `pnpm --filter @axn-term/desktop test`.
-- Typecheck: `pnpm exec tsc --noEmit` from `apps/desktop`.
+- Typecheck: `pnpm typecheck` (app sources, plus the libs' tests and stories via `apps/desktop/tsconfig.test.json`).
 - Build the embedded production frontend with `pnpm --filter @axn-term/desktop tauri build --bundles deb`; plain `cargo build --release` can still point at Vite's dev URL.
 - Run a desktop restore flow with `axn-dev flow -f flows/axn-term-restore-second-workspace.xml --adapter axn-term=flows/adapters/axn-term.js`. Flows use isolated temporary state; an explicitly provided state directory must not already exist.
 - Flows drive the app through its remote-control HTTP server (`AXN_TERM_REMOTE_CONTROL_PORT`). It only starts together with `AXN_TERM_REMOTE_CONTROL_TOKEN` (removed from the app's env, so PTYs never inherit it): every endpoint but `GET /health` requires `Authorization: Bearer <token>`, and requests whose `Host` is not `127.0.0.1:<port>`/`localhost:<port>` are rejected (DNS-rebinding guard). The adapter generates a token per run. The per-session output buffer behind `GET /sessions/<id>` (last ~200 KB) is only kept while the server is enabled.
@@ -2886,7 +2886,7 @@ Example: `plugins/axn-demo-note/`.
 ## Restore verification
 
 - Desktop unit tests: `pnpm --filter @axn-term/desktop test`.
-- Typecheck: `pnpm exec tsc --noEmit` from `apps/desktop`.
+- Typecheck: `pnpm typecheck` (app sources, plus the libs' tests and stories via `apps/desktop/tsconfig.test.json`).
 - Build the embedded production frontend with `pnpm --filter @axn-term/desktop tauri build --bundles deb`; plain `cargo build --release` can still point at Vite's dev URL.
 - Run a desktop restore flow with `axn-dev flow -f flows/axn-term-restore-second-workspace.xml --adapter axn-term=flows/adapters/axn-term.js`. Flows use isolated temporary state; an explicitly provided state directory must not already exist.
 - Flows drive the app through its remote-control HTTP server (`AXN_TERM_REMOTE_CONTROL_PORT`). It only starts together with `AXN_TERM_REMOTE_CONTROL_TOKEN` (removed from the app's env, so PTYs never inherit it): every endpoint but `GET /health` requires `Authorization: Bearer <token>`, and requests whose `Host` is not `127.0.0.1:<port>`/`localhost:<port>` are rejected (DNS-rebinding guard). The adapter generates a token per run. The per-session output buffer behind `GET /sessions/<id>` (last ~200 KB) is only kept while the server is enabled.

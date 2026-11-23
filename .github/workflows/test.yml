@@ -23,8 +23,9 @@ jobs:
       - run: pnpm exec vitest run
       # Catalog drift check — catches un-extracted strings (lingui check sync).
       - run: pnpm i18n:check
+      # App sources plus the libs' tests and stories (apps/desktop/tsconfig.test.json).
       - name: typecheck
-        run: pnpm --filter @axn-term/desktop exec tsc
+        run: pnpm typecheck
 
   dotnet:
     runs-on: ubuntu-latest

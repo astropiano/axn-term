@@ -73,6 +73,7 @@ async function render(props: Partial<ComponentProps<typeof SessionPanel>>) {
           onTurnIntoWorkspace={noop}
           pluginData={{}}
           mergePluginData={noop}
+          onOpenIde={noop}
           {...props}
         />
         </ShellServicesProvider>

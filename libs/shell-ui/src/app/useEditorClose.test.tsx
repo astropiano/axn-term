@@ -12,10 +12,10 @@ let guard: ReturnType<typeof useEditorClose>;
 const container = document.createElement('div');
 const tab: EditorTab = { id: 'editor', path: '/note.txt', kind: 'editor', dirty: true };
 function Harness() { guard = useEditorClose(); return guard.dialog; }
-async function mount(handle?: EditorHandle) {
+async function mount(handle?: Pick<EditorHandle, 'isDirty' | 'save'>) {
   root = createRoot(container);
   await act(async () => root.render(<Harness />));
-  if (handle) guard.registerEditor(tab.id, handle);
+  if (handle) guard.registerEditor(tab.id, { focus: () => {}, find: () => {}, ...handle });
 }
 async function click(label: string) {
   await act(async () => Array.from(container.querySelectorAll('button')).find((b) => b.textContent === label)!.click());

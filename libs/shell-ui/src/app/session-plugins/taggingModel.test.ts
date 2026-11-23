@@ -13,7 +13,6 @@ import {
   tagState,
   toggleTag,
 } from './taggingModel';
-import { isHexColor } from './tint';
 import { TAG_SLOTS } from '../../themes';
 
 describe('normalizeTag', () => {

@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { DirEntry, PathStat } from '@axn-term/session-backend';
-import type { ShellSession } from '../../types';
-import type { PluginApi, SessionViewContext } from './plugin';
+import type { SessionBanner, ShellSession } from '../../types';
+import type { MenuScope, PluginApi, SessionViewContext } from './plugin';
 import {
   scratchpadPlugin,
   parsePatterns,
@@ -18,6 +18,13 @@ import {
 } from './scratchpad';
 
 type Ctx = SessionViewContext & PluginApi;
+
+/** The single-session scope SessionPanel hands `sessionMenuItems`. */
+const scopeOf = (ctx: Ctx): MenuScope => ({
+  targets: [ctx],
+  sessions: [ctx.session],
+  workspaces: [],
+});
 
 const REPO = '/home/tester/axn-term';
 
@@ -119,7 +126,7 @@ function makeHarness(
     isProgressHandled: () => false,
     getScreenLines: () => [],
     setAttention: () => {},
-    setBanner: (b) => {
+    setBanner: (b: SessionBanner | null) => {
       h.banners.push(b as Record<string, unknown> | null);
     },
     setRestoring: () => {},
@@ -403,7 +410,7 @@ describe('plugin wiring', () => {
       {},
       { dirs: ['.local-drafts', 'drafts'] },
     );
-    const labels = scratchpadPlugin.sessionMenuItems!(h.ctx).map((i) => i.label);
+    const labels = scratchpadPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx)).map((i) => i.label);
     expect(labels).toContain('Open .local-drafts/');
     expect(labels).toContain('Open drafts/');
     expect(labels).not.toContain('Open drafts');
@@ -411,7 +418,7 @@ describe('plugin wiring', () => {
 
   it('falls back to a single Open drafts row before resolution', () => {
     const h = makeHarness();
-    const labels = scratchpadPlugin.sessionMenuItems!(h.ctx).map((i) => i.label);
+    const labels = scratchpadPlugin.sessionMenuItems!(h.ctx, scopeOf(h.ctx)).map((i) => i.label);
     expect(labels).toContain('Open drafts');
     expect(labels.filter((l) => l.startsWith('Open '))).toHaveLength(1);
   });

@@ -40,7 +40,7 @@ const fsBackend: SessionBackend = {
     Promise.resolve(
       (DIRS[resolvePath(undefined, path)] ?? []).map((name) => {
         const abs = `${path.replace(/\/$/, '')}/${name}`;
-        return { name, isDirectory: isDir(abs), isFile: !isDir(abs) };
+        return { name, isDirectory: isDir(abs), isFile: !isDir(abs), isSymlink: false };
       }),
     ),
   statPath: (_id, _cwd, path) =>

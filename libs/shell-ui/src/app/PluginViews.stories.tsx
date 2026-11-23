@@ -50,6 +50,7 @@ function PluginViewsExample() {
           {active ? (
             active.renderView!({
               pluginSettings: storyPluginSettings[active.settingsKey ?? active.id],
+              active: true,
               close: () => setActiveId(null),
               appState: pluginData[active.settingsKey ?? active.id],
               updateAppState: (patch) => updateAppState(active.id, patch),
