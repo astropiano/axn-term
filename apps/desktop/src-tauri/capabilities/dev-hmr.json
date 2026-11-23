@@ -43,7 +43,12 @@
         { "path": "$HOME/.config/systemd" },
         { "path": "$HOME/.config/systemd/**" },
         { "path": "$HOME/Library/LaunchAgents" },
-        { "path": "$HOME/Library/LaunchAgents/**" }
+        { "path": "$HOME/Library/LaunchAgents/**" },
+        { "path": "$HOME/.gitconfig" },
+        { "path": "$HOME/.config/git" },
+        { "path": "$HOME/.config/git/**" },
+        { "path": "**/.git" },
+        { "path": "**/.git/**" }
       ]
     },
     "fs:allow-watch",
@@ -74,7 +79,12 @@
         { "path": "$HOME/.config/systemd" },
         { "path": "$HOME/.config/systemd/**" },
         { "path": "$HOME/Library/LaunchAgents" },
-        { "path": "$HOME/Library/LaunchAgents/**" }
+        { "path": "$HOME/Library/LaunchAgents/**" },
+        { "path": "$HOME/.gitconfig" },
+        { "path": "$HOME/.config/git" },
+        { "path": "$HOME/.config/git/**" },
+        { "path": "**/.git" },
+        { "path": "**/.git/**" }
       ]
     },
     "notification:allow-is-permission-granted",

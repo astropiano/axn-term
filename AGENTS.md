@@ -67,8 +67,11 @@
   canonicalized (`files.rs::file_access_root`): `..`, filesystem roots,
   ancestors of `$HOME` and system dirs (`/etc`, `/usr`, …) are refused.
   Writes are limited to `writeTextFile`/`mkdir`, and both deny
-  `~/.ssh`, `~/.gnupg`, shell startup files and autostart dirs
-  (LaunchAgents, `~/.config/autostart`, `~/.config/systemd`) — keep the
+  `~/.ssh`, `~/.gnupg`, shell startup files, autostart dirs
+  (LaunchAgents, `~/.config/autostart`, `~/.config/systemd`) and git
+  internals (`~/.gitconfig`, `~/.config/git`, `**/.git/**` — a writable
+  `core.hooksPath` or hook is RCE; git ops go through the PTY, not the
+  fs plugin) — keep the
   two deny lists in `default.json` (and its `dev-hmr.json` mirror) equal.
   The shipped webview has a CSP (`tauri.conf.json` `app.security.csp`):
   sandboxed plugin frames are `srcdoc` documents and inherit it, so it must
@@ -1595,8 +1598,11 @@ Do not push directly to `develop` or `main`. Always create a feature branch, pus
   canonicalized (`files.rs::file_access_root`): `..`, filesystem roots,
   ancestors of `$HOME` and system dirs (`/etc`, `/usr`, …) are refused.
   Writes are limited to `writeTextFile`/`mkdir`, and both deny
-  `~/.ssh`, `~/.gnupg`, shell startup files and autostart dirs
-  (LaunchAgents, `~/.config/autostart`, `~/.config/systemd`) — keep the
+  `~/.ssh`, `~/.gnupg`, shell startup files, autostart dirs
+  (LaunchAgents, `~/.config/autostart`, `~/.config/systemd`) and git
+  internals (`~/.gitconfig`, `~/.config/git`, `**/.git/**` — a writable
+  `core.hooksPath` or hook is RCE; git ops go through the PTY, not the
+  fs plugin) — keep the
   two deny lists in `default.json` (and its `dev-hmr.json` mirror) equal.
   The shipped webview has a CSP (`tauri.conf.json` `app.security.csp`):
   sandboxed plugin frames are `srcdoc` documents and inherit it, so it must
