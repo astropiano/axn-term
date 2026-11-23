@@ -40,11 +40,14 @@ export function TagColorSettings({ settings, update, sessions, workspaces }: Plu
         <Trans>Tag colours</Trans>
       </div>
       <p className="text-[11px] text-[var(--text-secondary)]">
-        <Trans>Tags in use in this window. A tag without a set colour gets one derived from its name.</Trans>
+        <Trans>
+          Tags in use in this window — create one by choosing Tag… on a session or workspace. A tag without a set
+          colour gets one derived from its name.
+        </Trans>
       </p>
       {tags.length === 0 && (
         <p className="text-[11px] text-[var(--text-secondary)]">
-          <Trans>No tags yet.</Trans>
+          <Trans>No tags yet — right-click a session or workspace and choose Tag….</Trans>
         </p>
       )}
       {tags.map((tag) => {
