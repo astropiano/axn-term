@@ -42,6 +42,17 @@ public static class WebSocketProxy
             key => query[key].Select(value => KeyValuePair.Create(key, value)))).Value ?? "";
 
     /// <summary>
+    /// The client query minus `access_token` ("" when nothing is left): the
+    /// /cloud hub passes its other parameters through, but the JWT stays at
+    /// the gateway — the session host authenticates the gateway by its
+    /// shared secret, never by the user's token.
+    /// </summary>
+    public static string QueryWithoutToken(IQueryCollection query) =>
+        QueryString.Create(query
+            .Where(pair => !string.Equals(pair.Key, "access_token", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(pair => pair.Value.Select(value => KeyValuePair.Create(pair.Key, value)))).Value ?? "";
+
+    /// <summary>
     /// Relays frames both ways until one side closes, then hands that close
     /// — status and description — to the other side, so session-host close
     /// codes (4001 "pty-exited") reach the browser unchanged.

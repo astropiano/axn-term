@@ -3,6 +3,8 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using AxnTerm.Gateway;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Primitives;
 
 namespace AxnTerm.Gateway.Tests;
 
@@ -30,6 +32,28 @@ public class WebSocketProxyTests
         var (status, _) = WebSocketProxy.ResolveCloseStatus(null, null);
 
         Assert.Equal(WebSocketCloseStatus.EndpointUnavailable, status);
+    }
+
+    [Fact]
+    public void QueryWithoutTokenKeepsTheJwtAtTheGateway()
+    {
+        var query = new QueryCollection(new Dictionary<string, StringValues>
+        {
+            ["access_token"] = "eyJ.secret.jwt",
+            ["Access_Token"] = "again",
+            ["v"] = "1",
+            ["tag"] = new(["a b", "c"]),
+        });
+
+        var forwarded = WebSocketProxy.QueryWithoutToken(query);
+
+        Assert.DoesNotContain("access_token", forwarded, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret", forwarded);
+        Assert.Contains("v=1", forwarded);
+        Assert.Contains("tag=a%20b", forwarded);
+        Assert.Contains("tag=c", forwarded);
+        Assert.Equal("", WebSocketProxy.QueryWithoutToken(new QueryCollection(
+            new Dictionary<string, StringValues> { ["access_token"] = "t" })));
     }
 
     [Fact]

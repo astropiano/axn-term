@@ -18,9 +18,18 @@ public class GatewayConfigTests
     public void TokenValidationWithoutAnyBindingRefusesToStart()
     {
         Assert.Throws<InvalidOperationException>(() => GatewayAuth.RequireTokenBinding([], null, " "));
-        GatewayAuth.RequireTokenBinding(["http://issuer"], null, null);
         GatewayAuth.RequireTokenBinding([], "aud", null);
         GatewayAuth.RequireTokenBinding([], null, "axn-term");
+        GatewayAuth.RequireTokenBinding(["http://issuer"], null, "axn-term");
+    }
+
+    [Fact]
+    public void IssuerAloneDoesNotBindTokensToThisGateway()
+    {
+        // Every client in the realm shares the issuer, so a token minted for
+        // another app would be accepted.
+        Assert.Throws<InvalidOperationException>(() => GatewayAuth.RequireTokenBinding(["http://issuer"], null, null));
+        Assert.Throws<InvalidOperationException>(() => GatewayAuth.RequireTokenBinding(["a", "b"], " ", ""));
     }
 
     [Fact]

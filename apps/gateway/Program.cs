@@ -382,9 +382,10 @@ static async Task ProxySessionHostWebSocket(
 }
 
 // Hosted session paths — per-user session-host containers behind /ws and
-// the multiplexed /cloud + /ramphastos hubs. Hub__CloudEnabled=false makes
-// this a remote-only gateway: mirrored desktops via /remote are the only
-// sessions, and a container PTY cannot be reached at all.
+// the multiplexed /cloud + /ramphastos hubs, plus /session/recreate and
+// /tasks. Hub__CloudEnabled=false makes this a remote-only gateway:
+// mirrored desktops via /remote are the only sessions, and no route can
+// spawn or reach a session-host container.
 if (builder.Configuration.GetValue("Hub:CloudEnabled", true))
 {
 app.Map("/ws", [Microsoft.AspNetCore.Authorization.Authorize] (
@@ -407,8 +408,7 @@ app.Map("/ws", [Microsoft.AspNetCore.Authorization.Authorize] (
     CancellationToken cancellationToken) =>
     ProxySessionHostWebSocket(
         context, hosts, logger, cancellationToken,
-        "/ramphastos", context.Request.QueryString.Value));
-}
+        "/ramphastos", WebSocketProxy.QueryWithoutToken(context.Request.Query)));
 
 // Recreate my session host: drops the container; the next /ws connect
 // spawns a fresh one. Persistent volumes (home, nix store) are kept —
@@ -436,6 +436,7 @@ app.Map("/tasks", [Microsoft.AspNetCore.Authorization.Authorize] (
     ProxySessionHostWebSocket(
         context, hosts, logger, cancellationToken,
         "/tasks", null));
+}
 
 app.Run();
 /// <summary>

@@ -74,7 +74,8 @@ export function forEndpoint(
     shellWsUrl: doc.features.cloud ? urls.shellWs : undefined,
     remoteHubUrl: doc.features.remote ? urls.remoteHub : undefined,
     cloudUrl: doc.features.cloud ? (env('VITE_CLOUD_URL') ?? env('VITE_RAMPHASTOS_URL')) : undefined,
-    tasksWsBase: urls.ws,
+    // /tasks lives on the session host — a remote-only gateway does not map it.
+    tasksWsBase: doc.features.cloud ? urls.ws : undefined,
     remoteOnly: !doc.features.cloud || truthy(env('VITE_REMOTE_ONLY')),
     serverName: doc.name,
   };
