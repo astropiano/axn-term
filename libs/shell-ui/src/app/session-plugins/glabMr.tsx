@@ -49,6 +49,7 @@ import {
   splitByRole,
   type CliFailure,
 } from './forge';
+import { relativeAgo } from './relativeTime';
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -1054,22 +1055,7 @@ function projectShort(fullPath: string): string {
   return parts.length > 1 ? parts.slice(1).join('/') : fullPath;
 }
 
-/**
- * Tooltip for the thread indicator. `open` is GitLab's own count of every open
- * thread; the split by last commenter comes from the fetched discussions, so
- * the parts are listed as what they are — who commented last — and any
- * remainder is named instead of silently making the sum look wrong.
- */
-export function relativeAgo(iso: string, now = Date.now()): string | null {
-  const then = Date.parse(iso);
-  if (Number.isNaN(then)) return null;
-  const minutes = Math.max(0, Math.round((now - then) / 60_000));
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
+export { relativeAgo };
 
 export function threadSummaryTip(open: number, summary?: MrThreadSummary, now = Date.now()): string {
   const plural = (n: number) => `${n} open thread${n === 1 ? '' : 's'}`;
