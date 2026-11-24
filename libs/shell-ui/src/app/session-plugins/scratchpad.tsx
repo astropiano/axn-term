@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { fieldClass } from '../chromeStyles';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Dropdown } from '../Dropdown';
 import { ContextMenu, menuItemClass } from '../../ContextMenu';
-import { PanelHeader, PanelHeaderButton, PanelHeaderSpacer } from '../PanelHeader';
+import { PanelHeader, PanelHeaderButton } from '../PanelHeader';
 import { PanelSearch } from '../SessionPanel';
 import { RailItem } from '../RailItem';
 import { ScratchpadCleanupModal } from '../ScratchpadCleanupModal';
-import { FileText, NotebookPen, RefreshCw, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Folder, NotebookPen, RefreshCw, Trash2 } from 'lucide-react';
 import { relativeAgo } from './relativeTime';
 import {
   dedupeEntries,
@@ -14,6 +14,7 @@ import {
   repoNames,
   trashScript,
   type DraftEntry,
+  type RepoDrafts,
 } from './scratchpadDrafts';
 import type {
   PluginApi,
@@ -136,6 +137,11 @@ export interface ScratchpadLocation {
   /** Dir new drafts go into — first existing, else first configured. */
   primary: string;
 }
+
+/** A draft counts as current for its session while it was modified within this window. */
+export const DEFAULT_RECENT_DRAFT_HOURS = 24;
+/** The session card lists at most this many current drafts. */
+export const MAX_CARD_DRAFTS = 5;
 
 interface ScratchpadSettings {
   patterns?: string;
@@ -392,8 +398,8 @@ async function refreshDirs(ctx: Ctx): Promise<void> {
             identifiers.some((identifier) => draftMatchesIdentifier(name, identifier.value)),
           ),
           identifiers,
-          settingsOf(ctx).recentDraftHours ?? 0.5,
-        )
+          settingsOf(ctx).recentDraftHours ?? DEFAULT_RECENT_DRAFT_HOURS,
+        ).slice(0, MAX_CARD_DRAFTS)
       : [];
     const state = stateOf(ctx);
     if (
@@ -592,59 +598,160 @@ async function completeScratchArg(ctx: Ctx, argPrefix: string): Promise<string[]
 
 type OpenKind = 'editor' | 'preview';
 
+/**
+ * The view's data lives at module level, like the Docker view's list: leaving
+ * the view and coming back shows the last scan at once and only rescans in
+ * the background once it is older than `DRAFTS_STALE_MS` (or the set of
+ * sessions changed).
+ */
+const DRAFTS_STALE_MS = 30_000;
+interface DraftsStore {
+  key: string;
+  entries: DraftEntry[] | null;
+  fetchedAt: number;
+  loading: boolean;
+}
+let draftsStore: DraftsStore = { key: '', entries: null, fetchedAt: 0, loading: false };
+const draftsListeners = new Set<() => void>();
+const collapsedRepos = new Set<string>();
+let scanInFlight: Promise<void> | null = null;
+
+function setDraftsStore(next: Partial<DraftsStore>) {
+  draftsStore = { ...draftsStore, ...next };
+  for (const listener of draftsListeners) listener();
+}
+
+/** Test seam: forget the cached scan and the collapsed repos. */
+export function resetScratchpadCache() {
+  scanInFlight = null;
+  collapsedRepos.clear();
+  setDraftsStore({ key: '', entries: null, fetchedAt: 0, loading: false });
+}
+
+function useDraftsStore(): DraftsStore {
+  return useSyncExternalStore(
+    (listener) => {
+      draftsListeners.add(listener);
+      return () => draftsListeners.delete(listener);
+    },
+    () => draftsStore,
+  );
+}
+
+function useCollapsed(repo: string): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      draftsListeners.add(listener);
+      return () => draftsListeners.delete(listener);
+    },
+    () => collapsedRepos.has(repo),
+  );
+}
+
+function toggleCollapsed(repo: string) {
+  if (collapsedRepos.has(repo)) collapsedRepos.delete(repo);
+  else collapsedRepos.add(repo);
+  setDraftsStore({});
+}
+
+async function scanDrafts(
+  sessions: ShellSession[],
+  apiFor: (sessionId: string) => Ctx | undefined,
+): Promise<DraftEntry[]> {
+  const seen = new Set<string>();
+  const found: DraftEntry[] = [];
+  for (const s of sessions) {
+    const api = apiFor(s.id);
+    if (!api) continue;
+    const loc = await resolveScratchpad(api);
+    if (!loc || seen.has(loc.repoRoot)) continue;
+    seen.add(loc.repoRoot);
+    for (const d of await listDrafts(api, loc, true)) {
+      found.push({
+        repo: loc.project,
+        dir: d.dir,
+        inRepo: !isAbsoluteDir(d.dir),
+        name: d.name,
+        path: d.path,
+        modifiedAt: d.modifiedAt,
+        sessionId: s.id,
+      });
+    }
+  }
+  return dedupeEntries(found);
+}
+
+/** Rescan; one scan at a time. The previous result stays on screen meanwhile. */
+function refreshDrafts(
+  key: string,
+  sessions: ShellSession[],
+  apiFor: (sessionId: string) => Ctx | undefined,
+): Promise<void> {
+  scanInFlight ??= (async () => {
+    setDraftsStore({ loading: true });
+    try {
+      const entries = await scanDrafts(sessions, apiFor);
+      setDraftsStore({ key, entries, fetchedAt: Date.now() });
+    } finally {
+      scanInFlight = null;
+      setDraftsStore({ loading: false });
+    }
+  })();
+  return scanInFlight;
+}
+
 export function ScratchpadView({
   sessions,
   sessionApi,
   openTab,
+  appState,
+  updateAppState,
 }: {
   sessions: ShellSession[];
   sessionApi: (sessionId: string) => Ctx | undefined;
   /** Opens a tab inside this view (the plugin hosts tabs). */
   openTab?: (tab: { path: string; kind: 'editor' | 'browser' | 'preview' }) => void;
+  appState?: unknown;
+  updateAppState?: (patch: Record<string, unknown>) => void;
 }) {
-  const [entries, setEntries] = useState<DraftEntry[] | null>(null);
-  const [query, setQuery] = useState('');
-  const [repo, setRepo] = useState<string | null>(null);
+  const state = (appState ?? {}) as { query?: string; repo?: string | null };
+  const query = state.query ?? '';
+  const [localQuery, setLocalQuery] = useState(query);
+  const [localRepo, setLocalRepo] = useState<string | null>(state.repo ?? null);
+  const setQuery = (v: string) => {
+    setLocalQuery(v);
+    updateAppState?.({ query: v });
+  };
+  const setRepo = (v: string | null) => {
+    setLocalRepo(v);
+    updateAppState?.({ repo: v });
+  };
   const [cleanup, setCleanup] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; entry: DraftEntry } | null>(null);
+  const store = useDraftsStore();
   const sessionApiRef = useRef(sessionApi);
   sessionApiRef.current = sessionApi;
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const sessionsKey = sessions.map((s) => `${s.id}:${s.repo?.root ?? ''}`).join('|');
 
-  const load = useCallback(async () => {
-    const seen = new Set<string>();
-    const found: DraftEntry[] = [];
-    for (const s of sessionsRef.current) {
-      const api = sessionApiRef.current(s.id);
-      if (!api) continue;
-      const loc = await resolveScratchpad(api);
-      if (!loc || seen.has(loc.repoRoot)) continue;
-      seen.add(loc.repoRoot);
-      for (const d of await listDrafts(api, loc, true)) {
-        found.push({
-          repo: loc.project,
-          dir: d.dir,
-          inRepo: !isAbsoluteDir(d.dir),
-          name: d.name,
-          path: d.path,
-          modifiedAt: d.modifiedAt,
-          sessionId: s.id,
-        });
-      }
-    }
-    setEntries(dedupeEntries(found));
-  }, []);
+  const load = useCallback(
+    () =>
+      refreshDrafts(sessionsKey, sessionsRef.current, (id) => sessionApiRef.current(id)),
+    [sessionsKey],
+  );
 
   useEffect(() => {
-    void load();
+    const fresh = draftsStore.key === sessionsKey && Date.now() - draftsStore.fetchedAt < DRAFTS_STALE_MS;
+    if (!fresh) void load();
   }, [load, sessionsKey]);
 
+  // A scan made for another set of sessions is not shown as this view's list.
+  const entries = store.key === sessionsKey ? store.entries : null;
   const repos = entries ? repoNames(entries) : [];
   // The repo filter is only offered — and only applied — when there is a choice.
-  const activeRepo = repos.length > 1 && repo !== null && repos.includes(repo) ? repo : null;
-  const visible = entries ? filterEntries(entries, query, activeRepo) : [];
+  const activeRepo = repos.length > 1 && localRepo !== null && repos.includes(localRepo) ? localRepo : null;
+  const visible = entries ? filterEntries(entries, localQuery, activeRepo) : [];
   const groups = groupByRepo(visible);
   const now = Date.now();
 
@@ -660,92 +767,51 @@ export function ScratchpadView({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)]">
-      <PanelHeader
-        icon={<NotebookPen />}
-        title="Scratchpad"
-        meta={
-          <span className="text-[11px] text-[var(--text-secondary)]">
-            {entries?.length ?? 0} draft{entries?.length === 1 ? '' : 's'}
-          </span>
-        }
-      >
-        <div className="flex min-w-0 max-w-sm flex-1 pl-2">
-          <PanelSearch value={query} onChange={setQuery} placeholder="Filter drafts…" />
+      <PanelHeader icon={<NotebookPen />} title="Scratchpad">
+        <div className="min-w-0 flex-1">
+          <PanelSearch value={localQuery} onChange={setQuery} placeholder="Filter drafts…" />
         </div>
         {repos.length > 1 && (
-          <select
+          <Dropdown
+            ariaLabel="Repo"
             value={activeRepo ?? ''}
-            onChange={(e) => setRepo(e.target.value || null)}
-            aria-label="Repo"
-            className={fieldClass}
-          >
-            <option value="">All</option>
-            {repos.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setRepo(v || null)}
+            options={[{ value: '', label: 'All repos' }, ...repos.map((r) => ({ value: r, label: r }))]}
+            className="w-40"
+          />
         )}
-        <PanelHeaderSpacer />
+        <span className="text-[11px] text-[var(--text-secondary)]" data-tip="drafts shown / total">
+          {entries ? `${visible.length}/${entries.length}` : ''}
+        </span>
+        {store.fetchedAt > 0 && (
+          <span className="text-[11px] text-[var(--text-secondary)]">
+            updated {relativeAgo(store.fetchedAt, now)}
+          </span>
+        )}
         <PanelHeaderButton title="Refresh" onClick={() => void load()}>
-          <RefreshCw className="h-3.5 w-3.5" />
+          <RefreshCw className={`h-3.5 w-3.5 ${store.loading ? 'animate-spin' : ''}`} />
         </PanelHeaderButton>
         <PanelHeaderButton title="Clean up old drafts…" onClick={() => setCleanup(true)}>
           <Trash2 className="h-3.5 w-3.5" />
         </PanelHeaderButton>
       </PanelHeader>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {entries === null ? (
-          <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
-            Scanning session repos…
-          </div>
+          <div className="p-4 text-xs text-[var(--text-secondary)]">Scanning session repos…</div>
         ) : entries.length === 0 ? (
-          <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
+          <div className="p-4 text-xs text-[var(--text-secondary)]">
             No drafts — create one from a session's menu or with `axn-scratch new &lt;name&gt;`.
           </div>
         ) : groups.length === 0 ? (
-          <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
-            No draft matches the filter.
-          </div>
+          <div className="p-4 text-xs italic text-[var(--text-secondary)]">No draft matches the filter.</div>
         ) : (
-          <div className="flex flex-col gap-3">
-            {groups.map((g) => (
-              <div key={g.repo}>
-                <div className="mb-1 px-2 text-xs font-semibold text-[var(--text-primary)]">
-                  {g.repo}
-                  <span className="ml-2 font-normal text-[var(--text-tertiary)]">
-                    {g.entries.length}
-                  </span>
-                </div>
-                {g.entries.map((f) => (
-                  <button
-                    key={f.path}
-                    type="button"
-                    onClick={() => open(f, 'editor')}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setMenu({ x: e.clientX, y: e.clientY, entry: f });
-                    }}
-                    data-tip={f.path}
-                    className="flex w-full items-center gap-2 rounded py-1 pl-4 pr-2 text-left transition hover:bg-[var(--surface)]"
-                  >
-                    <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                    <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--text-primary)]">
-                      {f.name}
-                    </span>
-                    <span className="shrink-0 rounded bg-[var(--fill-1)] px-1 text-[10px] text-[var(--text-secondary)]">
-                      {f.inRepo ? f.dir : 'central'}
-                    </span>
-                    <span className="w-14 shrink-0 text-right text-[11px] text-[var(--text-tertiary)]">
-                      {f.modifiedAt !== undefined ? relativeAgo(f.modifiedAt, now) : ''}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
+          groups.map((g) => (
+            <RepoGroup key={g.repo} group={g} now={now} onOpen={open} onMenu={setMenu} />
+          ))
+        )}
+        {store.loading && entries !== null && (
+          <div className="px-3 text-[11px] italic text-[var(--text-secondary)]">refreshing…</div>
         )}
       </div>
 
@@ -783,6 +849,62 @@ export function ScratchpadView({
           onCancel={() => setCleanup(false)}
           onConfirm={trash}
         />
+      )}
+    </div>
+  );
+}
+
+/** One repo's drafts under a collapsible header, in the Docker view's list style. */
+function RepoGroup({
+  group,
+  now,
+  onOpen,
+  onMenu,
+}: {
+  group: RepoDrafts;
+  now: number;
+  onOpen: (entry: DraftEntry, kind: OpenKind) => void;
+  onMenu: (menu: { x: number; y: number; entry: DraftEntry }) => void;
+}) {
+  const collapsed = useCollapsed(group.repo);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => toggleCollapsed(group.repo)}
+        aria-expanded={!collapsed}
+        className="flex w-full items-center gap-1 px-2 pb-0.5 pt-1 text-[11px] font-semibold text-[var(--text-secondary)]"
+      >
+        {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        <Folder className="h-3 w-3" />
+        {group.repo}
+        <span className="font-normal">{group.entries.length}</span>
+      </button>
+      {!collapsed && (
+        <div className="border-l border-[var(--border)]" style={{ marginLeft: '14px' }}>
+          {group.entries.map((f) => (
+            <button
+              key={f.path}
+              type="button"
+              onClick={() => onOpen(f, 'editor')}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                onMenu({ x: e.clientX, y: e.clientY, entry: f });
+              }}
+              data-tip={f.path}
+              className="flex w-full items-center gap-2 px-3 py-1 text-left text-xs hover:bg-[var(--surface)]"
+            >
+              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
+              <span className="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]">{f.name}</span>
+              <span className="hidden w-32 shrink-0 truncate text-[11px] text-[var(--text-secondary)] sm:block">
+                {f.inRepo ? f.dir : 'central'}
+              </span>
+              <span className="w-16 shrink-0 text-right text-[11px] text-[var(--text-tertiary)]">
+                {f.modifiedAt !== undefined ? relativeAgo(f.modifiedAt, now) : ''}
+              </span>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -849,9 +971,9 @@ export const scratchpadPlugin: SessionViewPlugin = {
     {
       key: 'recentDraftHours',
       label: 'Recent drafts window (hours)',
-      description: 'Current drafts match identifiers in filenames modified within this window. Default: 0.5 hours.',
+      description: 'Current drafts match identifiers in filenames modified within this window. Default: 24 hours.',
       type: 'number',
-      default: 0.5,
+      default: DEFAULT_RECENT_DRAFT_HOURS,
     },
     {
       key: 'showCurrentDrafts',
@@ -917,8 +1039,14 @@ export const scratchpadPlugin: SessionViewPlugin = {
       <NotebookPen />
     </RailItem>
   ),
-  renderView: ({ sessions, sessionApi, openTab }) => (
-    <ScratchpadView sessions={sessions} sessionApi={sessionApi} openTab={openTab} />
+  renderView: ({ sessions, sessionApi, openTab, appState, updateAppState }) => (
+    <ScratchpadView
+      sessions={sessions}
+      sessionApi={sessionApi}
+      openTab={openTab}
+      appState={appState}
+      updateAppState={updateAppState}
+    />
   ),
   sessionFields: [
     {

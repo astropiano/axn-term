@@ -475,6 +475,7 @@ describe('agentHintLines', () => {
     const loc: ScratchpadLocation = {
       repoRoot: REPO,
       repoName: 'axn-term',
+      project: 'axn-term',
       names: ['axn-term'],
       dirs: ['.local-drafts', 'drafts'],
       existing: ['drafts'],

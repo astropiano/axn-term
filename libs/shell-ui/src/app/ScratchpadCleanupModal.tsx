@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { primaryButtonClass, quietButtonClass, fieldClass } from './chromeStyles';
+import { primaryButtonClass, quietButtonClass } from './chromeStyles';
+import { Dropdown } from './Dropdown';
 import { CLEANUP_AGES, olderThan, type DraftEntry } from './session-plugins/scratchpadDrafts';
 
 /**
@@ -57,22 +58,17 @@ export function ScratchpadCleanupModal({
         className="w-96 max-w-[90vw] rounded-[var(--radius-xl)] bg-[var(--elevated)] p-5 shadow-[var(--shadow-pop)]"
       >
         <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Clean up drafts</h2>
-        <label className="mb-3 flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+        <div className="mb-3 flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
           Older than
-          <select
-            value={ageIndex}
-            onChange={(e) => setAgeIndex(Number(e.target.value))}
-            disabled={busy}
-            className={fieldClass}
-            aria-label="Older than"
-          >
-            {CLEANUP_AGES.map((a, i) => (
-              <option key={a.label} value={i}>
-                {a.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          <Dropdown
+            ariaLabel="Older than"
+            value={String(ageIndex)}
+            onChange={(v) => !busy && setAgeIndex(Number(v))}
+            options={CLEANUP_AGES.map((a, i) => ({ value: String(i), label: a.label }))}
+            widthClass="w-36"
+            className="w-28"
+          />
+        </div>
         <p className="mb-1 text-[13px] text-[var(--text-primary)]" data-testid="cleanup-count">
           {picked.length === 0
             ? `No drafts older than ${age.label} in ${scope}.`

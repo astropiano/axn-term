@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ScratchpadCleanupModal } from './ScratchpadCleanupModal';
+import { StoryShellProviders } from './storyMocks';
 import type { DraftEntry } from './session-plugins/scratchpadDrafts';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -32,7 +33,9 @@ async function render(entries: DraftEntry[], onConfirm = vi.fn(async () => {})) 
   root = createRoot(container);
   await act(async () =>
     root!.render(
-      <ScratchpadCleanupModal entries={entries} scope="all repos" onCancel={() => {}} onConfirm={onConfirm} now={NOW} />,
+      <StoryShellProviders>
+        <ScratchpadCleanupModal entries={entries} scope="all repos" onCancel={() => {}} onConfirm={onConfirm} now={NOW} />
+      </StoryShellProviders>,
     ),
   );
   return onConfirm;
@@ -43,11 +46,10 @@ const text = () => container.querySelector('[data-testid="cleanup-count"]')!.tex
 it('says how many drafts the chosen age moves to the trash, and updates with the age', async () => {
   await render([entry('a', 20), entry('b', 5), entry('c', 100), entry('d')]);
   expect(text()).toBe('2 drafts older than 2 weeks in all repos will be moved to the trash.');
-  const select = container.querySelector('select')!;
-  await act(async () => {
-    select.value = '5'; // 3 months
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  expect(container.querySelector('select')).toBeNull();
+  await act(async () => (container.querySelector('button[aria-label="Older than"]') as HTMLButtonElement).click());
+  const threeMonths = [...document.body.querySelectorAll('[role="option"]')].find((o) => o.textContent === '3 months')!;
+  await act(async () => (threeMonths as HTMLButtonElement).click());
   expect(text()).toBe('1 draft older than 3 months in all repos will be moved to the trash.');
   expect(container.textContent).toContain('1 draft of unknown age is kept.');
 });
