@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ShellSession } from '../../types';
 import { StoryShellProviders } from '../storyMocks';
-import { ScratchpadView, resetScratchpadCache, scratchpadPlugin } from './scratchpad';
+import { ScratchpadView, resetScratchpadCache } from './scratchpad';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -179,43 +179,69 @@ it('shows the last scan at once when the view is opened again, without rescannin
   expect(listed.count).toBe(scans);
 });
 
-it('the rail scans in the background, so the view opens with its list ready', async () => {
-  const fixtures = [fixture('only-1', 'only', { 'a.md': HOUR })];
-  const rail = scratchpadPlugin.renderRail!({
-    backend: {} as never,
-    pluginSettings: {},
-    setAppAttention: () => {},
-    viewActive: false,
-    toggleView: () => {},
-    appState: {},
-    updateAppState: () => {},
-    sessions: fixtures.map((f) => f.session),
-    sessionApi: (id: string) => fixtures.find((f) => f.session.id === id)?.api as never,
-  });
-  const before = listed.count;
+const never = () => new Promise<never>(() => {});
+
+it('first paint after an app start shows the saved snapshot while the rescan runs', async () => {
+  const f = fixture('only-1', 'only', {});
+  (f.api as unknown as { listDir: () => Promise<never> }).listDir = never; // the rescan hangs
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
-  await act(async () => root!.render(<StoryShellProviders>{rail}</StoryShellProviders>));
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 0));
-  });
-  expect(listed.count).toBeGreaterThan(before);
-
-  // Now the view opens: its very first paint already lists the draft.
-  await act(async () => root!.unmount());
-  root = createRoot(container);
+  const snapshot = {
+    key: 'only-1:/work/only-1',
+    fetchedAt: Date.now() - 5 * 60_000,
+    entries: [
+      { repo: 'only', dir: '.local-drafts', inRepo: true, name: 'saved.md', path: '/work/only-1/.local-drafts/saved.md', modifiedAt: Date.now() - HOUR, sessionId: 'only-1' },
+    ],
+  };
   await act(async () => {
     root!.render(
       <StoryShellProviders>
         <ScratchpadView
-          sessions={fixtures.map((f) => f.session)}
-          sessionApi={(id) => fixtures.find((f) => f.session.id === id)?.api as never}
+          sessions={[f.session]}
+          sessionApi={() => f.api as never}
           openTab={vi.fn()}
+          appState={{ snapshot }}
+          updateAppState={vi.fn()}
         />
       </StoryShellProviders>,
     );
   });
   expect(container.textContent).not.toContain('Scanning');
-  expect(rows()).toHaveLength(1);
+  expect(rows().map((r) => r.textContent)).toEqual([expect.stringContaining('saved.md')]);
+  expect(container.textContent).toContain('updated 5m ago');
+});
+
+it('saves each new scan as the snapshot', async () => {
+  const f = fixture('only-1', 'only', { 'a.md': HOUR });
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+  const updateAppState = vi.fn();
+  await act(async () => {
+    root!.render(
+      <StoryShellProviders>
+        <ScratchpadView
+          sessions={[f.session]}
+          sessionApi={() => f.api as never}
+          openTab={vi.fn()}
+          appState={{}}
+          updateAppState={updateAppState}
+        />
+      </StoryShellProviders>,
+    );
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  const saved = updateAppState.mock.calls.map((c) => c[0]).find((p) => 'snapshot' in p);
+  expect(saved.snapshot.entries.map((e: { name: string }) => e.name)).toEqual(['a.md']);
+});
+
+it('does not scan while the view is closed', async () => {
+  const before = listed.count;
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  expect(listed.count).toBe(before);
 });

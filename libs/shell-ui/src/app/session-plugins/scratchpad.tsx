@@ -701,59 +701,15 @@ function refreshDrafts(
   return scanInFlight;
 }
 
-/** How often the rail keeps the cache warm, in seconds. */
-const DEFAULT_REFRESH_SECONDS = 120;
-const MIN_REFRESH_SECONDS = 30;
+/** While the view is open it rescans this often, in seconds. */
+const VIEW_REFRESH_SECONDS = 60;
+/** The saved snapshot keeps at most this many drafts. */
+const SNAPSHOT_MAX = 500;
 
-/**
- * The rail item — mounted for as long as the plugin is enabled, so it keeps
- * the drafts cache warm in the background (the axn-dev plugin's mechanism):
- * the first scan runs when the app starts, and opening the view finds the
- * list ready instead of an empty "Scanning…" screen. It rescans when the set
- * of sessions changes or the cache gets older than `refreshIntervalSeconds`,
- * and not at all while the window is hidden.
- */
-function ScratchpadRail({
-  sessions,
-  sessionApi,
-  pluginSettings,
-  viewActive,
-  toggleView,
-}: {
-  sessions: ShellSession[];
-  sessionApi: (sessionId: string) => Ctx | undefined;
-  pluginSettings: unknown;
-  viewActive: boolean;
-  toggleView: () => void;
-}) {
-  const intervalSec = Math.max(
-    MIN_REFRESH_SECONDS,
-    (pluginSettings as { refreshIntervalSeconds?: number } | undefined)?.refreshIntervalSeconds ??
-      DEFAULT_REFRESH_SECONDS,
-  );
-  const sessionApiRef = useRef(sessionApi);
-  sessionApiRef.current = sessionApi;
-  const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
-  const sessionsKey = sessions.map((s) => `${s.id}:${s.repo?.root ?? ''}`).join('|');
-
-  useEffect(() => {
-    const tick = () => {
-      if (typeof document !== 'undefined' && document.hidden) return;
-      const fresh =
-        draftsStore.key === sessionsKey && Date.now() - draftsStore.fetchedAt < intervalSec * 1000;
-      if (!fresh) void refreshDrafts(sessionsKey, sessionsRef.current, (id) => sessionApiRef.current(id));
-    };
-    tick();
-    const timer = window.setInterval(tick, intervalSec * 1000);
-    return () => window.clearInterval(timer);
-  }, [sessionsKey, intervalSec]);
-
-  return (
-    <RailItem title="Scratchpad" onClick={toggleView} active={viewActive}>
-      <NotebookPen />
-    </RailItem>
-  );
+interface DraftsSnapshot {
+  key: string;
+  fetchedAt: number;
+  entries: DraftEntry[];
 }
 
 export function ScratchpadView({
@@ -770,7 +726,7 @@ export function ScratchpadView({
   appState?: unknown;
   updateAppState?: (patch: Record<string, unknown>) => void;
 }) {
-  const state = (appState ?? {}) as { query?: string; repo?: string | null };
+  const state = (appState ?? {}) as { query?: string; repo?: string | null; snapshot?: DraftsSnapshot };
   const query = state.query ?? '';
   const [localQuery, setLocalQuery] = useState(query);
   const [localRepo, setLocalRepo] = useState<string | null>(state.repo ?? null);
@@ -797,13 +753,32 @@ export function ScratchpadView({
     [sessionsKey],
   );
 
+  // Refresh only while the view is open: now if the list is stale, then on an
+  // interval. The last result stays cached (in memory, and in the saved
+  // snapshot for the first open after a restart), so opening never starts empty.
   useEffect(() => {
     const fresh = draftsStore.key === sessionsKey && Date.now() - draftsStore.fetchedAt < DRAFTS_STALE_MS;
     if (!fresh) void load();
+    const timer = window.setInterval(() => void load(), VIEW_REFRESH_SECONDS * 1000);
+    return () => window.clearInterval(timer);
   }, [load, sessionsKey]);
 
-  // A scan made for another set of sessions is not shown as this view's list.
-  const entries = store.key === sessionsKey ? store.entries : null;
+  // Save each new result so the next app start can show it at once.
+  const persisted = useRef<string | null>(null);
+  useEffect(() => {
+    if (!store.entries || store.fetchedAt === 0) return;
+    const entries = store.entries.slice(0, SNAPSHOT_MAX);
+    const json = JSON.stringify(entries);
+    if (json === persisted.current) return;
+    persisted.current = json;
+    updateAppState?.({ snapshot: { key: store.key, fetchedAt: store.fetchedAt, entries } satisfies DraftsSnapshot });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.fetchedAt]);
+
+  // The last scan wins over the saved one; either is shown while a rescan runs.
+  const saved = state.snapshot;
+  const entries = store.entries ?? saved?.entries ?? null;
+  const lastFetchedAt = store.fetchedAt || saved?.fetchedAt || 0;
   const repos = entries ? repoNames(entries) : [];
   // The repo filter is only offered — and only applied — when there is a choice.
   const activeRepo = repos.length > 1 && localRepo !== null && repos.includes(localRepo) ? localRepo : null;
@@ -839,9 +814,9 @@ export function ScratchpadView({
         <span className="text-[11px] text-[var(--text-secondary)]" data-tip="drafts shown / total">
           {entries ? `${visible.length}/${entries.length}` : ''}
         </span>
-        {store.fetchedAt > 0 && (
+        {lastFetchedAt > 0 && (
           <span className="text-[11px] text-[var(--text-secondary)]">
-            updated {relativeAgo(store.fetchedAt, now)}
+            updated {relativeAgo(lastFetchedAt, now)}
           </span>
         )}
         <PanelHeaderButton title="Refresh" onClick={() => void load()}>
@@ -1069,14 +1044,6 @@ export const scratchpadPlugin: SessionViewPlugin = {
       default: true,
     },
     {
-      key: 'refreshIntervalSeconds',
-      label: 'Background refresh (seconds)',
-      description:
-        'How often the drafts list is rescanned while the app runs, so the Scratchpad view opens with its list ready. Default: 120, minimum 30.',
-      type: 'number',
-      default: DEFAULT_REFRESH_SECONDS,
-    },
-    {
       key: 'recentDraftHours',
       label: 'Recent drafts window (hours)',
       description: 'Current drafts match identifiers in filenames modified within this window. Default: 24 hours.',
@@ -1142,14 +1109,10 @@ export const scratchpadPlugin: SessionViewPlugin = {
       timers.delete(ctx.session.id);
     }
   },
-  renderRail: ({ sessions, sessionApi, pluginSettings, viewActive, toggleView }) => (
-    <ScratchpadRail
-      sessions={sessions}
-      sessionApi={sessionApi}
-      pluginSettings={pluginSettings}
-      viewActive={viewActive}
-      toggleView={toggleView}
-    />
+  renderRail: ({ viewActive, toggleView }) => (
+    <RailItem title="Scratchpad" onClick={toggleView} active={viewActive}>
+      <NotebookPen />
+    </RailItem>
   ),
   renderView: ({ sessions, sessionApi, openTab, appState, updateAppState }) => (
     <ScratchpadView
