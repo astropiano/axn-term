@@ -124,9 +124,21 @@ it('opens a draft as a preview tab inside the view from the context menu', async
   expect(openTab).toHaveBeenCalledWith({ path: '/work/only-1/.local-drafts/a.md', kind: 'preview' });
 });
 
-it('opens a draft in an editor tab on click', async () => {
+it('opens a draft as a preview tab on click', async () => {
   const openTab = await render([fixture('only-1', 'only', { 'a.md': HOUR })]);
   await act(async () => rows()[0].click());
+  expect(openTab).toHaveBeenCalledWith({ path: '/work/only-1/.local-drafts/a.md', kind: 'preview' });
+});
+
+it('the context menu offers preview, edit and copy path (reveal only where the platform has it)', async () => {
+  const openTab = await render([fixture('only-1', 'only', { 'a.md': HOUR })]);
+  await act(async () => {
+    rows()[0].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }));
+  });
+  const labels = () => [...document.body.querySelectorAll('button')].map((b) => b.textContent);
+  expect(labels()).toEqual(expect.arrayContaining(['Open preview', 'Edit', 'Copy path']));
+  const edit = [...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Edit')!;
+  await act(async () => (edit as HTMLButtonElement).click());
   expect(openTab).toHaveBeenCalledWith({ path: '/work/only-1/.local-drafts/a.md', kind: 'editor' });
 });
 

@@ -7,6 +7,7 @@ import { RailItem } from '../RailItem';
 import { ScratchpadCleanupModal } from '../ScratchpadCleanupModal';
 import { ChevronDown, ChevronRight, FileText, Folder, NotebookPen, RefreshCw, Trash2 } from 'lucide-react';
 import { relativeAgo } from './relativeTime';
+import { revealLabel } from '../../platform';
 import {
   dedupeEntries,
   filterEntries,
@@ -816,30 +817,13 @@ export function ScratchpadView({
       </div>
 
       {menu && (
-        <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
-          {(
-            [
-              ['Open preview', () => open(menu.entry, 'preview')],
-              ['Open in editor', () => open(menu.entry, 'editor')],
-              ...(shellServices()?.revealPath
-                ? ([['Reveal', () => shellServices()?.revealPath?.(menu.entry.path)]] as const)
-                : []),
-              ['Copy path', () => void shellServices()?.copyText(menu.entry.path)],
-            ] as const
-          ).map(([label, run]) => (
-            <button
-              key={label}
-              type="button"
-              className={menuItemClass}
-              onClick={() => {
-                setMenu(null);
-                run();
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </ContextMenu>
+        <DraftMenu
+          x={menu.x}
+          y={menu.y}
+          path={menu.entry.path}
+          onClose={() => setMenu(null)}
+          openAs={(kind) => open(menu.entry, kind)}
+        />
       )}
 
       {cleanup && entries && (
@@ -851,6 +835,52 @@ export function ScratchpadView({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Right-click menu of a draft — the same four actions wherever a draft is
+ * listed (the scratchpad view, the session card): preview, edit, reveal in
+ * the file manager (only where the platform has one) and copy its path.
+ */
+function DraftMenu({
+  x,
+  y,
+  path,
+  onClose,
+  openAs,
+}: {
+  x: number;
+  y: number;
+  path: string;
+  onClose: () => void;
+  openAs: (kind: OpenKind) => void;
+}) {
+  const services = shellServices();
+  const items: [string, () => void][] = [
+    ['Open preview', () => openAs('preview')],
+    ['Edit', () => openAs('editor')],
+    ...(services?.revealPath
+      ? ([[services.revealLabel ?? revealLabel, () => services.revealPath?.(path)]] as [string, () => void][])
+      : []),
+    ['Copy path', () => void services?.copyText(path)],
+  ];
+  return (
+    <ContextMenu x={x} y={y} onClose={onClose}>
+      {items.map(([label, run]) => (
+        <button
+          key={label}
+          type="button"
+          className={menuItemClass}
+          onClick={() => {
+            onClose();
+            run();
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </ContextMenu>
   );
 }
 
@@ -886,7 +916,7 @@ function RepoGroup({
             <button
               key={f.path}
               type="button"
-              onClick={() => onOpen(f, 'editor')}
+              onClick={() => onOpen(f, 'preview')}
               onContextMenu={(e) => {
                 e.preventDefault();
                 onMenu({ x: e.clientX, y: e.clientY, entry: f });
@@ -911,6 +941,7 @@ function RepoGroup({
 }
 
 function CurrentDrafts({ ctx }: { ctx: Ctx }) {
+  const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const drafts = stateOf(ctx).currentDrafts ?? [];
   if (drafts.length === 0) return null;
   return (
@@ -921,6 +952,11 @@ function CurrentDrafts({ ctx }: { ctx: Ctx }) {
           key={draft.path}
           type="button"
           onClick={() => ctx.openTab({ path: draft.path, kind: 'preview' })}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setMenu({ x: e.clientX, y: e.clientY, path: draft.path });
+          }}
           data-tip={draft.path}
           className="flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] text-[var(--accent)] hover:bg-[var(--surface)] hover:underline"
         >
@@ -928,6 +964,15 @@ function CurrentDrafts({ ctx }: { ctx: Ctx }) {
           <span className="min-w-0 truncate">{draft.name}</span>
         </button>
       ))}
+      {menu && (
+        <DraftMenu
+          x={menu.x}
+          y={menu.y}
+          path={menu.path}
+          onClose={() => setMenu(null)}
+          openAs={(kind) => ctx.openTab({ path: menu.path, kind })}
+        />
+      )}
     </div>
   );
 }
