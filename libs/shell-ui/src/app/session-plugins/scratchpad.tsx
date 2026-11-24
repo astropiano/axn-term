@@ -701,6 +701,61 @@ function refreshDrafts(
   return scanInFlight;
 }
 
+/** How often the rail keeps the cache warm, in seconds. */
+const DEFAULT_REFRESH_SECONDS = 120;
+const MIN_REFRESH_SECONDS = 30;
+
+/**
+ * The rail item — mounted for as long as the plugin is enabled, so it keeps
+ * the drafts cache warm in the background (the axn-dev plugin's mechanism):
+ * the first scan runs when the app starts, and opening the view finds the
+ * list ready instead of an empty "Scanning…" screen. It rescans when the set
+ * of sessions changes or the cache gets older than `refreshIntervalSeconds`,
+ * and not at all while the window is hidden.
+ */
+function ScratchpadRail({
+  sessions,
+  sessionApi,
+  pluginSettings,
+  viewActive,
+  toggleView,
+}: {
+  sessions: ShellSession[];
+  sessionApi: (sessionId: string) => Ctx | undefined;
+  pluginSettings: unknown;
+  viewActive: boolean;
+  toggleView: () => void;
+}) {
+  const intervalSec = Math.max(
+    MIN_REFRESH_SECONDS,
+    (pluginSettings as { refreshIntervalSeconds?: number } | undefined)?.refreshIntervalSeconds ??
+      DEFAULT_REFRESH_SECONDS,
+  );
+  const sessionApiRef = useRef(sessionApi);
+  sessionApiRef.current = sessionApi;
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  const sessionsKey = sessions.map((s) => `${s.id}:${s.repo?.root ?? ''}`).join('|');
+
+  useEffect(() => {
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const fresh =
+        draftsStore.key === sessionsKey && Date.now() - draftsStore.fetchedAt < intervalSec * 1000;
+      if (!fresh) void refreshDrafts(sessionsKey, sessionsRef.current, (id) => sessionApiRef.current(id));
+    };
+    tick();
+    const timer = window.setInterval(tick, intervalSec * 1000);
+    return () => window.clearInterval(timer);
+  }, [sessionsKey, intervalSec]);
+
+  return (
+    <RailItem title="Scratchpad" onClick={toggleView} active={viewActive}>
+      <NotebookPen />
+    </RailItem>
+  );
+}
+
 export function ScratchpadView({
   sessions,
   sessionApi,
@@ -1014,6 +1069,14 @@ export const scratchpadPlugin: SessionViewPlugin = {
       default: true,
     },
     {
+      key: 'refreshIntervalSeconds',
+      label: 'Background refresh (seconds)',
+      description:
+        'How often the drafts list is rescanned while the app runs, so the Scratchpad view opens with its list ready. Default: 120, minimum 30.',
+      type: 'number',
+      default: DEFAULT_REFRESH_SECONDS,
+    },
+    {
       key: 'recentDraftHours',
       label: 'Recent drafts window (hours)',
       description: 'Current drafts match identifiers in filenames modified within this window. Default: 24 hours.',
@@ -1079,10 +1142,14 @@ export const scratchpadPlugin: SessionViewPlugin = {
       timers.delete(ctx.session.id);
     }
   },
-  renderRail: ({ viewActive, toggleView }) => (
-    <RailItem title="Scratchpad" onClick={toggleView} active={viewActive}>
-      <NotebookPen />
-    </RailItem>
+  renderRail: ({ sessions, sessionApi, pluginSettings, viewActive, toggleView }) => (
+    <ScratchpadRail
+      sessions={sessions}
+      sessionApi={sessionApi}
+      pluginSettings={pluginSettings}
+      viewActive={viewActive}
+      toggleView={toggleView}
+    />
   ),
   renderView: ({ sessions, sessionApi, openTab, appState, updateAppState }) => (
     <ScratchpadView

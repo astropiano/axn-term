@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ShellSession } from '../../types';
 import { StoryShellProviders } from '../storyMocks';
-import { ScratchpadView, resetScratchpadCache } from './scratchpad';
+import { ScratchpadView, resetScratchpadCache, scratchpadPlugin } from './scratchpad';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -177,4 +177,45 @@ it('shows the last scan at once when the view is opened again, without rescannin
   expect(container.textContent).not.toContain('Scanning');
   expect(rows()).toHaveLength(1);
   expect(listed.count).toBe(scans);
+});
+
+it('the rail scans in the background, so the view opens with its list ready', async () => {
+  const fixtures = [fixture('only-1', 'only', { 'a.md': HOUR })];
+  const rail = scratchpadPlugin.renderRail!({
+    backend: {} as never,
+    pluginSettings: {},
+    setAppAttention: () => {},
+    viewActive: false,
+    toggleView: () => {},
+    appState: {},
+    updateAppState: () => {},
+    sessions: fixtures.map((f) => f.session),
+    sessionApi: (id: string) => fixtures.find((f) => f.session.id === id)?.api as never,
+  });
+  const before = listed.count;
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+  await act(async () => root!.render(<StoryShellProviders>{rail}</StoryShellProviders>));
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  expect(listed.count).toBeGreaterThan(before);
+
+  // Now the view opens: its very first paint already lists the draft.
+  await act(async () => root!.unmount());
+  root = createRoot(container);
+  await act(async () => {
+    root!.render(
+      <StoryShellProviders>
+        <ScratchpadView
+          sessions={fixtures.map((f) => f.session)}
+          sessionApi={(id) => fixtures.find((f) => f.session.id === id)?.api as never}
+          openTab={vi.fn()}
+        />
+      </StoryShellProviders>,
+    );
+  });
+  expect(container.textContent).not.toContain('Scanning');
+  expect(rows()).toHaveLength(1);
 });
