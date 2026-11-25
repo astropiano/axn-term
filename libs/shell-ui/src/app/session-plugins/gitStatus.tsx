@@ -229,11 +229,8 @@ function GitStatusRow({
           setMenuOpen(true);
         }}
       >
-        {repoIndicators(repo).map((ind, i) => (
-          <span key={i} className={ind.color}>
-            {ind.text}
-          </span>
-        ))}
+        {/* No per-indicator colours: the text takes the chip's own colour. */}
+        {repoIndicators(repo).map((ind) => ind.text).join(' ')}
       </StatusChip>
       {menuOpen && (
         <RepoMenu
