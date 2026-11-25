@@ -125,14 +125,18 @@ function parseGitStatus(
   }
 
   let dirty = false;
+  let changed = 0;
   let untracked = 0;
   for (const line of lines) {
     if (!line) continue;
     if (line.startsWith('??')) untracked += 1;
-    else dirty = true;
+    else {
+      dirty = true;
+      changed += 1;
+    }
   }
 
-  return { name, group, branch, ahead, behind, dirty, untracked, remoteBranchMissing, root, remote };
+  return { name, group, branch, ahead, behind, dirty, changed, untracked, remoteBranchMissing, root, remote };
 }
 
 // ---------------------------------------------------------------------------

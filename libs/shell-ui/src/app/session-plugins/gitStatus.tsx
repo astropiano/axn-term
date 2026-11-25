@@ -126,6 +126,21 @@ function repoIndicators(repo: RepoInfo): { color: string; text: string }[] {
   return indicators;
 }
 
+/** The chip's hover text: where it is, then what is going on — counts included. */
+export function repoChipTip(repo: RepoInfo): string {
+  const n = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+  const lines = [repo.root, repo.branch ?? '(detached)'];
+  if (repo.dirty) {
+    lines.push(repo.changed ? `${n(repo.changed, 'file')} with uncommitted changes` : 'uncommitted changes');
+  }
+  if (repo.untracked > 0) lines.push(`${n(repo.untracked, 'untracked file')}`);
+  if (repo.ahead > 0) lines.push(`${n(repo.ahead, 'commit')} not pushed`);
+  if (repo.behind > 0) lines.push(`${n(repo.behind, 'commit')} to pull`);
+  if (repo.remoteBranchMissing) lines.push('remote branch missing');
+  if (lines.length === 2) lines.push('up to date');
+  return lines.join('\n');
+}
+
 /** Chip colour: red = remote branch gone, orange = something to pull, yellow = uncommitted changes, blue = unpushed commits, green = up to date. */
 export function repoChipColor(repo: RepoInfo): string {
   if (repo.remoteBranchMissing) return 'red';
@@ -214,13 +229,12 @@ function GitStatusRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition>({ x: 0, y: 0 });
-  const branch = repo.branch ?? '(detached)';
 
   return (
     <>
       <StatusChip
         color={repoChipColor(repo)}
-        tip={`${repo.root}\n${branch}`}
+        tip={repoChipTip(repo)}
         icon={<GitBranch className="h-2.5 w-2.5 shrink-0" />}
         onContextMenu={(e) => {
           e.preventDefault();

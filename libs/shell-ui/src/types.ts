@@ -81,6 +81,8 @@ export interface RepoInfo {
   ahead: number;
   behind: number;
   dirty: boolean;
+  /** Files with uncommitted changes (staged or not, untracked excluded). */
+  changed?: number;
   untracked: number;
   remoteBranchMissing: boolean;
   root: string;

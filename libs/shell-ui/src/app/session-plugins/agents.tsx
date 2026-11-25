@@ -477,7 +477,7 @@ export const agentsPlugin: SessionViewPlugin = {
           // Icon only — persona names run long; the full name is the tooltip.
           <StatusChip
             color="accent"
-            tip={`persona: ${persona}`}
+            tip={persona}
             icon={<Bot className="h-2.5 w-2.5 shrink-0" />}
           />
         );
