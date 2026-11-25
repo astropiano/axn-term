@@ -51,8 +51,8 @@ pnpm tauri build --runner cargo-xwin --target "$TARGET" --bundles nsis
 echo "==> Staging artifacts..."
 RELEASE="$CARGO_TARGET_DIR/$TARGET/release"
 mkdir -p "$OUTPUT/windows/bin" "$OUTPUT/windows/bundle"
-cp -a "$RELEASE/axn-term.exe" "$OUTPUT/windows/bin/"
-cp -a "$RELEASE/bundle/nsis/"*.exe "$OUTPUT/windows/bundle/"
+cp "$RELEASE/axn-term.exe" "$OUTPUT/windows/bin/"
+cp "$RELEASE/bundle/nsis/"*.exe "$OUTPUT/windows/bundle/"
 
 if [[ -n "${HOST_UID:-}" ]]; then
   echo "==> Fixing output ownership..."
