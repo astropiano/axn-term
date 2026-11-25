@@ -32,6 +32,7 @@ pub(crate) struct PathStat {
     path: String,
     is_file: bool,
     is_dir: bool,
+    modified_at: Option<u64>,
 }
 
 #[tauri::command]
@@ -45,6 +46,11 @@ pub(crate) fn stat_path(cwd: Option<String>, path: String) -> Option<PathStat> {
         path: resolved.to_string_lossy().to_string(),
         is_file: meta.is_file(),
         is_dir: meta.is_dir(),
+        modified_at: meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64),
     })
 }
 

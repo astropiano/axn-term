@@ -23,6 +23,8 @@ export interface PathStat {
   path: string;
   isFile: boolean;
   isDir: boolean;
+  /** Last modification time in Unix milliseconds, when the backend exposes it. */
+  modifiedAt?: number;
 }
 
 /** A directory listing entry, as returned by `listDir`. */

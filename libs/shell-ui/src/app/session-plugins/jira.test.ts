@@ -9,6 +9,7 @@ import {
   findIssueKey,
   issueEnrichment,
   jiraConfig,
+  jiraPlugin,
   matchSubject,
   parseBulkFetch,
   parseProjectKeys,
@@ -69,6 +70,23 @@ describe('jiraConfig', () => {
     expect(jiraConfig({ ...base, tokenFrom: 'vault' }).ok).toBe(false);
     expect(jiraConfig({ ...base, token: 't', baseUrl: 'http://x' }).ok).toBe(false);
     expect(jiraConfig({ ...base, token: 't', projectKeys: '' }).ok).toBe(false);
+  });
+});
+
+describe('session identifiers', () => {
+  it('publishes configured ticket keys for a session', () => {
+    const session = {
+      name: 'work',
+      autoName: 'work',
+      cwd: '/repo',
+      repo: { branch: 'feature/AIACC-123', root: '/repo' },
+      pluginState: {},
+    } as never;
+    expect(jiraPlugin.sessionIdentifiers?.({
+      session,
+      pluginSettings: { ...base, token: 't' },
+      pluginState: {},
+    })).toEqual([{ value: 'AIACC-123', source: 'jira', label: 'Jira' }]);
   });
 });
 

@@ -11,7 +11,10 @@ import {
   draftFileName,
   findDraft,
   resolveScratchpad,
+  dirPath,
   listDrafts,
+  currentDrafts,
+  draftMatchesIdentifier,
   runScratch,
   agentHintLines,
   type ScratchpadLocation,
@@ -112,6 +115,7 @@ function makeHarness(
     pluginSettings,
     getSession: () => session,
     getSessionCount: () => 1,
+    getSessionIdentifiers: () => [],
     exec: async (command: string, cwd?: string) => {
       if (command.includes('rev-parse --show-toplevel')) return cwd ?? REPO;
       if (command.includes('remote get-url')) return 'git@gitlab.example.com:axn/axn-term.git';
@@ -178,10 +182,22 @@ describe('parsePatterns', () => {
     expect(p[0].dirs).toEqual(['.drafts', 'notes']);
   });
 
-  it('splits on newlines and strips slashes', () => {
-    const p = parsePatterns('axn-term: /drafts/\nother: tmp/notes/');
+  it('splits on newlines and strips slashes from repo-relative dirs', () => {
+    const p = parsePatterns('axn-term: drafts/\nother: tmp/notes/');
     expect(p[0].dirs).toEqual(['drafts']);
     expect(p[1].dirs).toEqual(['tmp/notes']);
+  });
+
+  it('keeps absolute and home dirs, so a repo can use a central folder next to its own', () => {
+    const p = parsePatterns('*: .local-drafts, ~/Magnolia/Drafts/axn/; axn-term: /srv/notes/');
+    expect(p[0].dirs).toEqual(['.local-drafts', '~/Magnolia/Drafts/axn']);
+    expect(p[1].dirs).toEqual(['/srv/notes']);
+    expect(dirsForRepo(p, ['axn-term'])).toEqual(['.local-drafts', '~/Magnolia/Drafts/axn', '/srv/notes']);
+  });
+
+  it('dirPath leaves absolute dirs alone and roots relative ones in the repo', () => {
+    expect(dirPath({ repoRoot: '/r' }, 'notes')).toBe('/r/notes');
+    expect(dirPath({ repoRoot: '/r' }, '/central/x')).toBe('/central/x');
   });
 
   it('skips malformed regexes', () => {
@@ -251,6 +267,30 @@ describe('findDraft', () => {
   });
 });
 
+describe('currentDrafts', () => {
+  const now = 1_000_000;
+  const id = { value: 'AIACC-123', source: 'jira' };
+  it('matches identifiers in filenames and orders recent files newest first', () => {
+    const drafts = [
+      { dir: 'drafts', name: 'AIACC-123-old.md', path: '/r/drafts/old.md', modifiedAt: now - 10_000 },
+      { dir: 'drafts', name: 'notes-AIACC-123.md', path: '/r/drafts/new.md', modifiedAt: now - 1_000 },
+      { dir: 'drafts', name: 'AIACC-1234.md', path: '/r/drafts/wrong.md', modifiedAt: now - 500 },
+      { dir: 'drafts', name: 'AIACC-123-stale.md', path: '/r/drafts/stale.md', modifiedAt: now - 2_000_000 },
+    ];
+    expect(currentDrafts(drafts, [id], 0.5, now).map((d) => d.name)).toEqual([
+      'notes-AIACC-123.md',
+      'AIACC-123-old.md',
+    ]);
+  });
+
+  it('returns nothing without identifiers or modification times', () => {
+    expect(draftMatchesIdentifier('AIACC-123.md', 'AIACC-123')).toBe(true);
+    expect(draftMatchesIdentifier('AIACC-1234.md', 'AIACC-123')).toBe(false);
+    expect(currentDrafts([{ dir: 'drafts', name: 'AIACC-123.md', path: '/x' }], [id], 0.5, now)).toEqual([]);
+    expect(currentDrafts([], [], 0.5, now)).toEqual([]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 
 describe('resolveScratchpad', () => {
@@ -282,6 +322,60 @@ describe('resolveScratchpad', () => {
       throw new Error('not a repo');
     };
     expect(await resolveScratchpad(h.ctx)).toBeNull();
+  });
+});
+
+describe('central (absolute) draft folders', () => {
+  const CENTRAL = '/home/tester/Magnolia/Drafts/axn-term';
+  const settings = { patterns: `*: .local-drafts; axn-term: ${CENTRAL}` };
+
+  it('resolves both the in-repo and the central folder', async () => {
+    const h = makeHarness({}, {}, settings);
+    h.existing.add(`${REPO}/.local-drafts`);
+    h.existing.add(CENTRAL);
+    const loc = await resolveScratchpad(h.ctx);
+    expect(loc?.dirs).toEqual(['.local-drafts', CENTRAL]);
+    expect(loc?.existing).toEqual(['.local-drafts', CENTRAL]);
+  });
+
+  it('lists drafts of both folders with their real paths', async () => {
+    const h = makeHarness({}, {}, settings);
+    h.existing.add(`${REPO}/.local-drafts`);
+    h.existing.add(CENTRAL);
+    h.listing[`${REPO}/.local-drafts`] = [dirEntry('a.md')];
+    h.listing[CENTRAL] = [dirEntry('AIACC-757-notes.md')];
+    const loc = (await resolveScratchpad(h.ctx))!;
+    const drafts = await listDrafts(h.ctx, loc);
+    expect(drafts.map((d) => d.path)).toEqual([`${REPO}/.local-drafts/a.md`, `${CENTRAL}/AIACC-757-notes.md`]);
+  });
+});
+
+describe('{repo} placeholder', () => {
+  it('becomes the remote repo name, so one entry serves every project', async () => {
+    const h = makeHarness({}, {}, { patterns: '*: .local-drafts, /central/{repo}' });
+    h.existing.add('/central/axn-term');
+    const loc = await resolveScratchpad(h.ctx);
+    expect(loc?.project).toBe('axn-term');
+    expect(loc?.dirs).toEqual(['.local-drafts', '/central/axn-term']);
+    expect(loc?.existing).toEqual(['/central/axn-term']);
+  });
+});
+
+describe('listDrafts modification times', () => {
+  it('stats only the files a predicate accepts', async () => {
+    const h = makeHarness({}, {}, { patterns: '*: .local-drafts' });
+    h.existing.add(`${REPO}/.local-drafts`);
+    h.listing[`${REPO}/.local-drafts`] = [dirEntry('AIACC-1-a.md'), dirEntry('other.md')];
+    const stated: string[] = [];
+    const base = h.ctx.statPath;
+    h.ctx.statPath = async (path, cwd) => {
+      stated.push(path);
+      return base(path, cwd);
+    };
+    const loc = (await resolveScratchpad(h.ctx))!;
+    stated.length = 0;
+    await listDrafts(h.ctx, loc, (name) => name.startsWith('AIACC-1'));
+    expect(stated).toEqual([`${REPO}/.local-drafts/AIACC-1-a.md`]);
   });
 });
 
@@ -381,6 +475,7 @@ describe('agentHintLines', () => {
     const loc: ScratchpadLocation = {
       repoRoot: REPO,
       repoName: 'axn-term',
+      project: 'axn-term',
       names: ['axn-term'],
       dirs: ['.local-drafts', 'drafts'],
       existing: ['drafts'],

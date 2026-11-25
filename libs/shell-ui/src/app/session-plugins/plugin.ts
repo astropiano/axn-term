@@ -17,6 +17,19 @@ export interface SessionViewContext {
   updateSession: (sessionId: string, patch: Partial<ShellSession>) => void;
 }
 
+/** A stable, human-readable value another plugin may use to identify a session. */
+export interface SessionIdentifier {
+  value: string;
+  source: string;
+  label?: string;
+}
+
+export interface SessionIdentifierContext {
+  session: ShellSession;
+  pluginSettings: unknown;
+  pluginState: unknown;
+}
+
 /** The rail-view operations every plugin ctx carries (backed by `app/viewHost.ts`). */
 export interface PluginViewApi {
   /** Open (or re-select) an http(s) page as a runtime rail view; returns its view key. */
@@ -36,6 +49,8 @@ export interface PluginAppCommandContext extends PluginViewApi {
 }
 
 export interface PluginApi extends PluginViewApi {
+  /** Identifiers published by all enabled plugins for this session. */
+  getSessionIdentifiers: () => SessionIdentifier[];
   writeToSession: (data: string) => Promise<void>;
   updatePluginState: (patch: unknown) => void;
   pluginState: unknown;
@@ -697,6 +712,8 @@ export interface SessionViewPlugin {
   dependsOn?: PluginDependency[];
   stateKey?: string;
   settingsKey?: string;
+  /** Publishes stable values that other session plugins may consume. */
+  sessionIdentifiers?: (ctx: SessionIdentifierContext) => SessionIdentifier[];
   /**
    * Whether the plugin is active when the user has not set `<id>.enabled` in
    * plugins.yaml. Defaults to `true` for built-in plugins; external plugins
@@ -1088,6 +1105,19 @@ export function createPluginApi(
   const live = () => deps.getLiveSession?.(session.id) ?? session;
   const enabledPlugins = () =>
     deps.plugins.filter((p) => isPluginEnabled(p, deps.pluginSettings, deps.plugins));
+  const getSessionIdentifiers = (): SessionIdentifier[] =>
+    enabledPlugins().flatMap((p) => {
+      if (!p.sessionIdentifiers) return [];
+      try {
+        return p.sessionIdentifiers({
+          session: live(),
+          pluginSettings: deps.pluginSettings[p.settingsKey ?? p.id],
+          pluginState: (live().pluginState ?? {})[p.stateKey ?? p.id],
+        });
+      } catch {
+        return [];
+      }
+    });
   const writeToSession = async (data: string) => {
     await deps.backend.write(ptyId, data);
   };
@@ -1113,6 +1143,7 @@ export function createPluginApi(
   return {
     session,
     updateSession: deps.updateSession,
+    getSessionIdentifiers,
     writeToSession,
     // Merged against the latest session state inside the host's updater — a
     // stale snapshot must never resurrect old fields.

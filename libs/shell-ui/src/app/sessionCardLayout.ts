@@ -76,6 +76,7 @@ export const DEFAULT_SESSION_CARD: ResolvedCardLayout = {
     ['git-status.repo'],
     ['glab-mr.mrs'],
     ['gh-pr.prs'],
+    ['scratchpad.currentDrafts'],
     ['devin.panel'],
     ['claude.resume'],
     ['codex.resume'],

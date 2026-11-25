@@ -1,18 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ghostButtonClass } from '../chromeStyles';
-import { PanelHeader, PanelHeaderSpacer } from '../PanelHeader';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Dropdown } from '../Dropdown';
+import { ContextMenu, menuItemClass } from '../../ContextMenu';
+import { PanelHeader, PanelHeaderButton } from '../PanelHeader';
+import { PanelSearch } from '../SessionPanel';
 import { RailItem } from '../RailItem';
+import { ScratchpadCleanupModal } from '../ScratchpadCleanupModal';
+import { ChevronDown, ChevronRight, FileText, Folder, NotebookPen, RefreshCw, Trash2 } from 'lucide-react';
+import { relativeAgo } from './relativeTime';
+import { revealLabel } from '../../platform';
 import {
-  ClipboardCopy,
-  FileText,
-  FolderOpen,
-  NotebookPen,
-  RefreshCw,
-  X,
-} from 'lucide-react';
+  dedupeEntries,
+  filterEntries,
+  groupByRepo,
+  repoNames,
+  trashScript,
+  type DraftEntry,
+  type RepoDrafts,
+} from './scratchpadDrafts';
 import type {
   PluginApi,
   RepoMenuItem,
+  SessionIdentifier,
   SessionViewContext,
   SessionViewPlugin,
 } from './plugin';
@@ -43,8 +51,24 @@ export interface ScratchPattern {
   /** The repo matcher as written (regex source, `*` = all repos). */
   repo: string;
   re: RegExp;
-  /** Repo-relative draft folders this entry contributes. */
+  /** Draft folders this entry contributes: repo-relative, or absolute (`/…`, `~/…`). */
   dirs: string[];
+}
+
+/** Absolute (`/…`) and home (`~`, `~/…`) folders stay as written; relative ones lose stray slashes. */
+function normalizeDir(raw: string): string {
+  const d = raw.trim();
+  if (d === '~' || d.startsWith('~/')) return d.replace(/\/+$/, '') || '~';
+  if (d.startsWith('/')) return d.replace(/\/+$/, '') || '/';
+  return d.replace(/^\/+|\/+$/g, '');
+}
+
+/** Whether a configured draft folder is absolute rather than inside the repo. */
+export const isAbsoluteDir = (dir: string): boolean => dir.startsWith('/');
+
+/** A draft folder as an absolute path: absolute dirs as they are, others under the repo root. */
+export function dirPath(loc: Pick<ScratchpadLocation, 'repoRoot'>, dir: string): string {
+  return isAbsoluteDir(dir) ? dir : `${loc.repoRoot}/${dir}`;
 }
 
 export function parsePatterns(raw: unknown): ScratchPattern[] {
@@ -57,7 +81,7 @@ export function parsePatterns(raw: unknown): ScratchPattern[] {
     const repo = (ci === -1 ? '*' : entry.slice(0, ci)).trim() || '*';
     const dirs = (ci === -1 ? entry : entry.slice(ci + 1))
       .split(',')
-      .map((d) => d.trim().replace(/^\/+|\/+$/g, ''))
+      .map((d) => normalizeDir(d))
       .filter(Boolean);
     if (!dirs.length) continue;
     try {
@@ -103,6 +127,8 @@ export interface ScratchpadLocation {
   repoRoot: string;
   /** Primary name — the checkout dir basename (a worktree's own name). */
   repoName: string;
+  /** The project: the remote repo name, else the checkout folder name. Groups the view and fills `{repo}`. */
+  project: string;
   /** Names patterns match against: checkout basename + remote repo name. */
   names: string[];
   /** All configured dirs for this repo (repo-relative, deduped, ordered). */
@@ -113,10 +139,17 @@ export interface ScratchpadLocation {
   primary: string;
 }
 
+/** A draft counts as current for its session while it was modified within this window. */
+export const DEFAULT_RECENT_DRAFT_HOURS = 24;
+/** The session card lists at most this many current drafts. */
+export const MAX_CARD_DRAFTS = 5;
+
 interface ScratchpadSettings {
   patterns?: string;
   defaultExt?: string;
   gitignoreDrafts?: boolean;
+  recentDraftHours?: number;
+  showCurrentDrafts?: boolean;
 }
 
 function settingsOf(ctx: Ctx): ScratchpadSettings {
@@ -165,7 +198,16 @@ export async function resolveScratchpad(ctx: Ctx): Promise<ScratchpadLocation | 
   const names = [
     ...new Set([baseName(repoRoot), remoteRepoName(remote)].filter(Boolean)),
   ];
-  const dirs = dirsForRepo(patternsOf(ctx), names);
+  const project = remoteRepoName(remote) || baseName(repoRoot);
+  const configured = dirsForRepo(patternsOf(ctx), names).map((d) => d.split('{repo}').join(project));
+  if (!configured.length) return null;
+  const home = configured.some((d) => d === '~' || d.startsWith('~/'))
+    ? (await ctx.exec('printf %s "$HOME"', repoRoot).catch(() => '')).trim()
+    : '';
+  // `~` expands to the home folder; without one the entry is unusable, so drop it.
+  const dirs = configured
+    .map((d) => (d === '~' || d.startsWith('~/') ? (home ? `${home}${d.slice(1)}` : '') : d))
+    .filter(Boolean);
   if (!dirs.length) return null;
   const existing: string[] = [];
   for (const dir of dirs) {
@@ -175,6 +217,7 @@ export async function resolveScratchpad(ctx: Ctx): Promise<ScratchpadLocation | 
   return {
     repoRoot,
     repoName: names[0] ?? baseName(repoRoot),
+    project,
     names,
     dirs,
     existing,
@@ -194,22 +237,61 @@ export interface DraftFile {
   name: string;
   /** Absolute path. */
   path: string;
+  modifiedAt?: number;
 }
 
+export function draftMatchesIdentifier(name: string, identifier: string): boolean {
+  const escaped = identifier.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escaped.length > 0 && new RegExp(`(^|[^A-Za-z0-9])${escaped}(?=$|[^A-Za-z0-9])`, 'i').test(name);
+}
+
+export function currentDrafts(
+  drafts: DraftFile[],
+  identifiers: SessionIdentifier[],
+  recentHours: number,
+  now = Date.now(),
+): DraftFile[] {
+  if (identifiers.length === 0 || !Number.isFinite(recentHours) || recentHours <= 0) return [];
+  const cutoff = now - recentHours * 60 * 60 * 1000;
+  return drafts
+    .filter(
+      (draft) =>
+        draft.modifiedAt !== undefined &&
+        draft.modifiedAt >= cutoff &&
+        identifiers.some((identifier) => draftMatchesIdentifier(draft.name, identifier.value)),
+    )
+    .sort((a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0));
+}
+
+/**
+ * The drafts in the location's existing folders. `modified` decides which
+ * files get their modification time (one `stat` each): none by default,
+ * every file with `true`, or only those a predicate accepts — so a refresh
+ * that only needs the files of one ticket never stats the rest of the folder.
+ */
 export async function listDrafts(
   ctx: Ctx,
   loc: ScratchpadLocation,
+  modified: boolean | ((name: string) => boolean) = false,
 ): Promise<DraftFile[]> {
+  const wants = typeof modified === 'function' ? modified : () => modified;
   const out: DraftFile[] = [];
   for (const dir of loc.existing) {
-    const entries = await ctx.listDir(dir, loc.repoRoot).catch(() => null);
-    for (const e of entries ?? []) {
-      if (e.isFile && e.name !== '.gitignore') {
-        out.push({ dir, name: e.name, path: `${loc.repoRoot}/${dir}/${e.name}` });
-      }
-    }
+    const entries = await ctx.listDir(dirPath(loc, dir), loc.repoRoot).catch(() => null);
+    const files = (entries ?? []).filter((e) => e.isFile && e.name !== '.gitignore');
+    out.push(
+      ...(await Promise.all(
+        files.map(async (e): Promise<DraftFile> => {
+          const path = `${dirPath(loc, dir)}/${e.name}`;
+          const modifiedAt = wants(e.name)
+            ? (await ctx.statPath(path).catch(() => null))?.modifiedAt
+            : undefined;
+          return { dir, name: e.name, path, modifiedAt };
+        }),
+      )),
+    );
   }
-  return out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
 }
 
 function stamp(): string {
@@ -244,14 +326,15 @@ async function createDraft(
   const ext = (settingsOf(ctx).defaultExt ?? 'md').replace(/^\./, '') || 'md';
   const name = draftFileName(rawName, ext);
   if (!loc.existing.includes(loc.primary)) {
-    await ctx.mkdir(loc.primary, loc.repoRoot);
-    if (settingsOf(ctx).gitignoreDrafts !== false) {
+    await ctx.mkdir(dirPath(loc, loc.primary), loc.repoRoot);
+    // Only in-repo folders need hiding from git; an absolute folder is outside it.
+    if (settingsOf(ctx).gitignoreDrafts !== false && !isAbsoluteDir(loc.primary)) {
       await ctx
         .writeFile(`${loc.primary}/.gitignore`, '*\n', loc.repoRoot)
         .catch(() => {});
     }
   }
-  const path = `${loc.repoRoot}/${loc.primary}/${name}`;
+  const path = `${dirPath(loc, loc.primary)}/${name}`;
   if (!(await ctx.statPath(path).catch(() => null))) {
     await ctx.writeFile(path, `# ${rawName.trim() || name}\n\n`).catch(() => {});
   }
@@ -276,13 +359,13 @@ export function findDraft(drafts: DraftFile[], arg: string): DraftFile | undefin
 export function agentHintLines(loc: ScratchpadLocation): string[] {
   const list = loc.dirs.map((d) => `\`${d}/\``).join(', ');
   return [
-    `Scratchpad: drafts and working notes for this repo live in ${list} (repo-relative, gitignored).`,
+    `Scratchpad: drafts and working notes for this repo live in ${list} (repo-relative unless absolute, gitignored when in the repo).`,
     `Check them for existing notes before starting work; write plans and notes as \`<topic>.md\` files in \`${loc.primary}/\`.`,
   ];
 }
 
 function agentHintPrompt(loc: ScratchpadLocation): string {
-  return `My drafts and working notes for this repo live in ${loc.primary}/ (repo-relative). Check it for existing notes before starting work, and store working notes there. `;
+  return `My drafts and working notes for this repo live in ${loc.primary}/ (relative to the repo root unless absolute). Check it for existing notes before starting work, and store working notes there. `;
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +375,7 @@ function agentHintPrompt(loc: ScratchpadLocation): string {
 
 interface ScratchpadState {
   dirs?: string[];
+  currentDrafts?: DraftFile[];
 }
 
 function stateOf(ctx: Ctx): ScratchpadState {
@@ -299,28 +383,62 @@ function stateOf(ctx: Ctx): ScratchpadState {
 }
 
 const refreshTimers = new Map<string, number>();
+const pollTimers = new Map<string, number>();
+const closedSessions = new Set<string>();
 const REFRESH_DELAY_MS = 800;
+const CURRENT_DRAFTS_REFRESH_MS = 30_000;
 
 async function refreshDirs(ctx: Ctx): Promise<void> {
-  const loc = await resolveScratchpad(ctx);
-  const next = loc?.dirs ?? [];
-  if (JSON.stringify(stateOf(ctx).dirs ?? []) !== JSON.stringify(next)) {
-    ctx.updatePluginState({ dirs: next });
+  try {
+    const loc = await resolveScratchpad(ctx);
+    const next = loc?.dirs ?? [];
+    const identifiers = ctx.getSessionIdentifiers();
+    const drafts = loc && identifiers.length
+      ? currentDrafts(
+          await listDrafts(ctx, loc, (name) =>
+            identifiers.some((identifier) => draftMatchesIdentifier(name, identifier.value)),
+          ),
+          identifiers,
+          settingsOf(ctx).recentDraftHours ?? DEFAULT_RECENT_DRAFT_HOURS,
+        ).slice(0, MAX_CARD_DRAFTS)
+      : [];
+    const state = stateOf(ctx);
+    if (
+      JSON.stringify(state.dirs ?? []) !== JSON.stringify(next) ||
+      JSON.stringify(state.currentDrafts ?? []) !== JSON.stringify(drafts)
+    ) {
+      ctx.updatePluginState({ dirs: next, currentDrafts: drafts });
+    }
+  } finally {
+    if (!closedSessions.has(ctx.session.id)) {
+      armTimer(pollTimers, ctx, CURRENT_DRAFTS_REFRESH_MS, () => void refreshDirs(ctx));
+    }
   }
+}
+
+function armTimer(
+  timers: Map<string, number>,
+  ctx: Ctx,
+  delay: number,
+  callback: () => void,
+): void {
+  const id = ctx.session.id;
+  const existing = timers.get(id);
+  if (existing !== undefined) window.clearTimeout(existing);
+  timers.set(
+    id,
+    window.setTimeout(() => {
+      timers.delete(id);
+      callback();
+    }, delay),
+  );
 }
 
 /** Output settles → the session may have cd'd to another repo → re-resolve. */
 function scheduleRefresh(ctx: Ctx): void {
   const id = ctx.session.id;
-  const existing = refreshTimers.get(id);
-  if (existing !== undefined) window.clearTimeout(existing);
-  refreshTimers.set(
-    id,
-    window.setTimeout(() => {
-      refreshTimers.delete(id);
-      void refreshDirs(ctx);
-    }, REFRESH_DELAY_MS),
-  );
+  if (closedSessions.has(id)) return;
+  armTimer(refreshTimers, ctx, REFRESH_DELAY_MS, () => void refreshDirs(ctx));
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +480,7 @@ async function openFolder(ctx: Ctx, dir?: string): Promise<void> {
     return;
   }
   const target = dir && loc.dirs.includes(dir) ? dir : loc.primary;
-  ctx.openBrowser(`${loc.repoRoot}/${target}`);
+  ctx.openBrowser(dirPath(loc, target));
 }
 
 async function copyHint(ctx: Ctx): Promise<void> {
@@ -402,9 +520,9 @@ export async function runScratch(
   const [sub, rest] = splitHead(arg ?? '');
   switch (sub) {
     case 'dir':
-      return echoLine(`${loc.repoRoot}/${loc.primary}`);
+      return echoLine(dirPath(loc, loc.primary));
     case 'browse':
-      ctx.openBrowser(`${loc.repoRoot}/${loc.primary}`);
+      ctx.openBrowser(dirPath(loc, loc.primary));
       return false;
     case 'hint':
       return printLines(agentHintLines(loc));
@@ -436,7 +554,7 @@ export async function runScratch(
     case '': {
       const drafts = await listDrafts(ctx, loc);
       return printLines([
-        `scratchpad: ${loc.repoRoot}/${loc.primary}${loc.existing.length > 1 ? ` (+${loc.existing.length - 1} more)` : ''}`,
+        `scratchpad: ${dirPath(loc, loc.primary)}${loc.existing.length > 1 ? ` (+${loc.existing.length - 1} more)` : ''}`,
         ...(drafts.length
           ? drafts.map((f, i) => `  ${i + 1}. ${f.name}${loc.existing.length > 1 ? `  (${f.dir})` : ''}`)
           : ['  (no drafts — `axn-scratch new <name>` creates one)']),
@@ -476,160 +594,415 @@ async function completeScratchArg(ctx: Ctx, argPrefix: string): Promise<string[]
 }
 
 // ---------------------------------------------------------------------------
-// Full-area view — drafts across every open session's repo
+// Full-area view — drafts across every open session's repo, by repo name
 // ---------------------------------------------------------------------------
 
-interface RepoGroup {
-  loc: ScratchpadLocation;
-  drafts: DraftFile[];
+type OpenKind = 'editor' | 'preview';
+
+/**
+ * The view's data lives at module level, like the Docker view's list: leaving
+ * the view and coming back shows the last scan at once and only rescans in
+ * the background once it is older than `DRAFTS_STALE_MS` (or the set of
+ * sessions changed).
+ */
+const DRAFTS_STALE_MS = 30_000;
+interface DraftsStore {
+  key: string;
+  entries: DraftEntry[] | null;
+  fetchedAt: number;
+  loading: boolean;
+}
+let draftsStore: DraftsStore = { key: '', entries: null, fetchedAt: 0, loading: false };
+const draftsListeners = new Set<() => void>();
+const collapsedRepos = new Set<string>();
+let scanInFlight: Promise<void> | null = null;
+
+function setDraftsStore(next: Partial<DraftsStore>) {
+  draftsStore = { ...draftsStore, ...next };
+  for (const listener of draftsListeners) listener();
 }
 
-function ScratchpadView({
+/** Test seam: forget the cached scan and the collapsed repos. */
+export function resetScratchpadCache() {
+  scanInFlight = null;
+  collapsedRepos.clear();
+  setDraftsStore({ key: '', entries: null, fetchedAt: 0, loading: false });
+}
+
+function useDraftsStore(): DraftsStore {
+  return useSyncExternalStore(
+    (listener) => {
+      draftsListeners.add(listener);
+      return () => draftsListeners.delete(listener);
+    },
+    () => draftsStore,
+  );
+}
+
+function useCollapsed(repo: string): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      draftsListeners.add(listener);
+      return () => draftsListeners.delete(listener);
+    },
+    () => collapsedRepos.has(repo),
+  );
+}
+
+function toggleCollapsed(repo: string) {
+  if (collapsedRepos.has(repo)) collapsedRepos.delete(repo);
+  else collapsedRepos.add(repo);
+  setDraftsStore({});
+}
+
+async function scanDrafts(
+  sessions: ShellSession[],
+  apiFor: (sessionId: string) => Ctx | undefined,
+): Promise<DraftEntry[]> {
+  const seen = new Set<string>();
+  const found: DraftEntry[] = [];
+  for (const s of sessions) {
+    const api = apiFor(s.id);
+    if (!api) continue;
+    const loc = await resolveScratchpad(api);
+    if (!loc || seen.has(loc.repoRoot)) continue;
+    seen.add(loc.repoRoot);
+    for (const d of await listDrafts(api, loc, true)) {
+      found.push({
+        repo: loc.project,
+        dir: d.dir,
+        inRepo: !isAbsoluteDir(d.dir),
+        name: d.name,
+        path: d.path,
+        modifiedAt: d.modifiedAt,
+        sessionId: s.id,
+      });
+    }
+  }
+  return dedupeEntries(found);
+}
+
+/** Rescan; one scan at a time. The previous result stays on screen meanwhile. */
+function refreshDrafts(
+  key: string,
+  sessions: ShellSession[],
+  apiFor: (sessionId: string) => Ctx | undefined,
+): Promise<void> {
+  scanInFlight ??= (async () => {
+    setDraftsStore({ loading: true });
+    try {
+      const entries = await scanDrafts(sessions, apiFor);
+      setDraftsStore({ key, entries, fetchedAt: Date.now() });
+    } finally {
+      scanInFlight = null;
+      setDraftsStore({ loading: false });
+    }
+  })();
+  return scanInFlight;
+}
+
+/** While the view is open it rescans this often, in seconds. */
+const VIEW_REFRESH_SECONDS = 60;
+/** The saved snapshot keeps at most this many drafts. */
+const SNAPSHOT_MAX = 500;
+
+interface DraftsSnapshot {
+  key: string;
+  fetchedAt: number;
+  entries: DraftEntry[];
+}
+
+export function ScratchpadView({
   sessions,
   sessionApi,
   openTab,
-  close,
+  appState,
+  updateAppState,
 }: {
   sessions: ShellSession[];
   sessionApi: (sessionId: string) => Ctx | undefined;
+  /** Opens a tab inside this view (the plugin hosts tabs). */
   openTab?: (tab: { path: string; kind: 'editor' | 'browser' | 'preview' }) => void;
-  close: () => void;
+  appState?: unknown;
+  updateAppState?: (patch: Record<string, unknown>) => void;
 }) {
-  const [groups, setGroups] = useState<RepoGroup[] | null>(null);
+  const state = (appState ?? {}) as { query?: string; repo?: string | null; snapshot?: DraftsSnapshot };
+  const query = state.query ?? '';
+  const [localQuery, setLocalQuery] = useState(query);
+  const [localRepo, setLocalRepo] = useState<string | null>(state.repo ?? null);
+  const setQuery = (v: string) => {
+    setLocalQuery(v);
+    updateAppState?.({ query: v });
+  };
+  const setRepo = (v: string | null) => {
+    setLocalRepo(v);
+    updateAppState?.({ repo: v });
+  };
+  const [cleanup, setCleanup] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; entry: DraftEntry } | null>(null);
+  const store = useDraftsStore();
   const sessionApiRef = useRef(sessionApi);
   sessionApiRef.current = sessionApi;
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const sessionsKey = sessions.map((s) => `${s.id}:${s.repo?.root ?? ''}`).join('|');
 
-  const load = useCallback(async () => {
-    const seen = new Set<string>();
-    const out: RepoGroup[] = [];
-    for (const s of sessionsRef.current) {
-      const api = sessionApiRef.current(s.id);
-      if (!api) continue;
-      const loc = await resolveScratchpad(api);
-      if (!loc || seen.has(loc.repoRoot)) continue;
-      seen.add(loc.repoRoot);
-      out.push({ loc, drafts: await listDrafts(api, loc) });
-    }
-    setGroups(out);
-  }, []);
+  const load = useCallback(
+    () =>
+      refreshDrafts(sessionsKey, sessionsRef.current, (id) => sessionApiRef.current(id)),
+    [sessionsKey],
+  );
 
+  // Refresh only while the view is open: now if the list is stale, then on an
+  // interval. The last result stays cached (in memory, and in the saved
+  // snapshot for the first open after a restart), so opening never starts empty.
   useEffect(() => {
-    void load();
+    const fresh = draftsStore.key === sessionsKey && Date.now() - draftsStore.fetchedAt < DRAFTS_STALE_MS;
+    if (!fresh) void load();
+    const timer = window.setInterval(() => void load(), VIEW_REFRESH_SECONDS * 1000);
+    return () => window.clearInterval(timer);
   }, [load, sessionsKey]);
 
-  const total = groups?.reduce((n, g) => n + g.drafts.length, 0) ?? 0;
-  const rowBtn =
-    'flex shrink-0 items-center justify-center rounded p-0.5 text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]';
+  // Save each new result so the next app start can show it at once.
+  const persisted = useRef<string | null>(null);
+  useEffect(() => {
+    if (!store.entries || store.fetchedAt === 0) return;
+    const entries = store.entries.slice(0, SNAPSHOT_MAX);
+    const json = JSON.stringify(entries);
+    if (json === persisted.current) return;
+    persisted.current = json;
+    updateAppState?.({ snapshot: { key: store.key, fetchedAt: store.fetchedAt, entries } satisfies DraftsSnapshot });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.fetchedAt]);
+
+  // The last scan wins over the saved one; either is shown while a rescan runs.
+  const saved = state.snapshot;
+  const entries = store.entries ?? saved?.entries ?? null;
+  const lastFetchedAt = store.fetchedAt || saved?.fetchedAt || 0;
+  const repos = entries ? repoNames(entries) : [];
+  // The repo filter is only offered — and only applied — when there is a choice.
+  const activeRepo = repos.length > 1 && localRepo !== null && repos.includes(localRepo) ? localRepo : null;
+  const visible = entries ? filterEntries(entries, localQuery, activeRepo) : [];
+  const groups = groupByRepo(visible);
+  const now = Date.now();
+
+  const open = (entry: DraftEntry, kind: OpenKind) => openTab?.({ path: entry.path, kind });
+
+  const trash = async (picked: DraftEntry[]) => {
+    const api = picked.length ? sessionApi(picked[0].sessionId) : undefined;
+    if (!api) throw new Error('No session available to run the cleanup.');
+    await api.exec(trashScript(picked.map((e) => e.path)));
+    setCleanup(false);
+    await load();
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg)]">
       <PanelHeader icon={<NotebookPen />} title="Scratchpad">
-        <span className="text-[11px] text-[var(--text-secondary)]">
-          {total} draft{total === 1 ? '' : 's'} · {groups?.length ?? 0} repo
-          {groups?.length === 1 ? '' : 's'}
+        <div className="min-w-0 flex-1">
+          <PanelSearch value={localQuery} onChange={setQuery} placeholder="Filter drafts…" />
+        </div>
+        {repos.length > 1 && (
+          <Dropdown
+            ariaLabel="Repo"
+            value={activeRepo ?? ''}
+            onChange={(v) => setRepo(v || null)}
+            options={[{ value: '', label: 'All repos' }, ...repos.map((r) => ({ value: r, label: r }))]}
+            className="w-40"
+          />
+        )}
+        <span className="text-[11px] text-[var(--text-secondary)]" data-tip="drafts shown / total">
+          {entries ? `${visible.length}/${entries.length}` : ''}
         </span>
-        <PanelHeaderSpacer />
-        <button
-          type="button"
-          onClick={() => void load()}
-          data-tip="Refresh"
-          aria-label="Refresh"
-          className={ghostButtonClass}
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={close}
-          data-tip="Close"
-          aria-label="Close"
-          className={ghostButtonClass}
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        {lastFetchedAt > 0 && (
+          <span className="text-[11px] text-[var(--text-secondary)]">
+            updated {relativeAgo(lastFetchedAt, now)}
+          </span>
+        )}
+        <PanelHeaderButton title="Refresh" onClick={() => void load()}>
+          <RefreshCw className={`h-3.5 w-3.5 ${store.loading ? 'animate-spin' : ''}`} />
+        </PanelHeaderButton>
+        <PanelHeaderButton title="Clean up old drafts…" onClick={() => setCleanup(true)}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </PanelHeaderButton>
       </PanelHeader>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {groups === null ? (
-          <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
-            Scanning session repos…
-          </div>
-        ) : groups.length === 0 ? (
-          <div className="px-2 py-3 text-xs italic text-[var(--text-secondary)]">
+      <div className="min-h-0 flex-1 overflow-y-auto py-1">
+        {entries === null ? (
+          <div className="p-4 text-xs text-[var(--text-secondary)]">Scanning session repos…</div>
+        ) : entries.length === 0 ? (
+          <div className="p-4 text-xs text-[var(--text-secondary)]">
             No drafts — create one from a session's menu or with `axn-scratch new &lt;name&gt;`.
           </div>
+        ) : groups.length === 0 ? (
+          <div className="p-4 text-xs italic text-[var(--text-secondary)]">No draft matches the filter.</div>
         ) : (
-          <div className="flex flex-col gap-3">
-            {groups.map((g) => (
-              <div key={g.loc.repoRoot}>
-                <div className="mb-1 flex items-center gap-2 px-2">
-                  <span className="text-xs font-semibold text-[var(--text-primary)]">
-                    {g.loc.repoName}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--text-secondary)]">
-                    {g.loc.repoRoot}
-                  </span>
-                  <button
-                    type="button"
-                    className={rowBtn}
-                    data-tip="Copy the AGENTS.md/CLAUDE.md hint for this repo"
-                    aria-label="Copy agent hint"
-                    onClick={() =>
-                      void shellServices()?.copyText(agentHintLines(g.loc).join('\n'))
-                    }
-                  >
-                    <ClipboardCopy className="h-3 w-3" />
-                  </button>
-                </div>
-                {g.loc.dirs.map((dir) => {
-                  const files = g.drafts.filter((f) => f.dir === dir);
-                  const exists = g.loc.existing.includes(dir);
-                  return (
-                    <div key={dir}>
-                      <button
-                        type="button"
-                        disabled={!exists}
-                        onClick={() =>
-                          openTab?.({ path: `${g.loc.repoRoot}/${dir}`, kind: 'browser' })
-                        }
-                        className="flex w-full items-center gap-2 rounded px-2 py-1 text-left transition enabled:hover:bg-[var(--surface)] disabled:opacity-50"
-                        data-tip={exists ? `${g.loc.repoRoot}/${dir}` : `${dir}/ — not created yet`}
-                      >
-                        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                        <span className="font-mono text-xs text-[var(--text-primary)]">
-                          {dir}/
-                        </span>
-                        {!exists && (
-                          <span className="rounded bg-[var(--orange)]/15 px-1 text-[10px] text-[var(--orange)]">
-                            not created
-                          </span>
-                        )}
-                      </button>
-                      {files.map((f) => (
-                        <button
-                          key={f.path}
-                          type="button"
-                          onClick={() => openTab?.({ path: f.path, kind: 'editor' })}
-                          data-tip={f.path}
-                          className="flex w-full items-center gap-2 rounded py-1 pl-7 pr-2 text-left transition hover:bg-[var(--surface)]"
-                        >
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                          <span className="min-w-0 truncate font-mono text-xs text-[var(--text-primary)]">
-                            {f.name}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
+          groups.map((g) => (
+            <RepoGroup key={g.repo} group={g} now={now} onOpen={open} onMenu={setMenu} />
+          ))
+        )}
+        {store.loading && entries !== null && (
+          <div className="px-3 text-[11px] italic text-[var(--text-secondary)]">refreshing…</div>
         )}
       </div>
+
+      {menu && (
+        <DraftMenu
+          x={menu.x}
+          y={menu.y}
+          path={menu.entry.path}
+          onClose={() => setMenu(null)}
+          openAs={(kind) => open(menu.entry, kind)}
+        />
+      )}
+
+      {cleanup && entries && (
+        <ScratchpadCleanupModal
+          entries={activeRepo ? entries.filter((e) => e.repo === activeRepo) : entries}
+          scope={activeRepo ?? 'all repos'}
+          onCancel={() => setCleanup(false)}
+          onConfirm={trash}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Right-click menu of a draft — the same four actions wherever a draft is
+ * listed (the scratchpad view, the session card): preview, edit, reveal in
+ * the file manager (only where the platform has one) and copy its path.
+ */
+function DraftMenu({
+  x,
+  y,
+  path,
+  onClose,
+  openAs,
+}: {
+  x: number;
+  y: number;
+  path: string;
+  onClose: () => void;
+  openAs: (kind: OpenKind) => void;
+}) {
+  const services = shellServices();
+  const items: [string, () => void][] = [
+    ['Open preview', () => openAs('preview')],
+    ['Edit', () => openAs('editor')],
+    ...(services?.revealPath
+      ? ([[services.revealLabel ?? revealLabel, () => services.revealPath?.(path)]] as [string, () => void][])
+      : []),
+    ['Copy path', () => void services?.copyText(path)],
+  ];
+  return (
+    <ContextMenu x={x} y={y} onClose={onClose}>
+      {items.map(([label, run]) => (
+        <button
+          key={label}
+          type="button"
+          className={menuItemClass}
+          onClick={() => {
+            onClose();
+            run();
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </ContextMenu>
+  );
+}
+
+/** One repo's drafts under a collapsible header, in the Docker view's list style. */
+function RepoGroup({
+  group,
+  now,
+  onOpen,
+  onMenu,
+}: {
+  group: RepoDrafts;
+  now: number;
+  onOpen: (entry: DraftEntry, kind: OpenKind) => void;
+  onMenu: (menu: { x: number; y: number; entry: DraftEntry }) => void;
+}) {
+  const collapsed = useCollapsed(group.repo);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => toggleCollapsed(group.repo)}
+        aria-expanded={!collapsed}
+        className="flex w-full items-center gap-1 px-2 pb-0.5 pt-1 text-[11px] font-semibold text-[var(--text-secondary)]"
+      >
+        {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        <Folder className="h-3 w-3" />
+        {group.repo}
+        <span className="font-normal">{group.entries.length}</span>
+      </button>
+      {!collapsed && (
+        <div className="border-l border-[var(--border)]" style={{ marginLeft: '14px' }}>
+          {group.entries.map((f) => (
+            <button
+              key={f.path}
+              type="button"
+              onClick={() => onOpen(f, 'preview')}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                onMenu({ x: e.clientX, y: e.clientY, entry: f });
+              }}
+              data-tip={f.path}
+              className="flex w-full items-center gap-2 px-3 py-1 text-left text-xs hover:bg-[var(--surface)]"
+            >
+              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
+              <span className="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]">{f.name}</span>
+              <span className="hidden w-32 shrink-0 truncate text-[11px] text-[var(--text-secondary)] sm:block">
+                {f.inRepo ? f.dir : 'central'}
+              </span>
+              <span className="w-16 shrink-0 text-right text-[11px] text-[var(--text-tertiary)]">
+                {f.modifiedAt !== undefined ? relativeAgo(f.modifiedAt, now) : ''}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CurrentDrafts({ ctx }: { ctx: Ctx }) {
+  const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  const drafts = stateOf(ctx).currentDrafts ?? [];
+  if (drafts.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[11px] text-[var(--text-secondary)]">current drafts</span>
+      {drafts.map((draft) => (
+        <button
+          key={draft.path}
+          type="button"
+          onClick={() => ctx.openTab({ path: draft.path, kind: 'preview' })}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setMenu({ x: e.clientX, y: e.clientY, path: draft.path });
+          }}
+          data-tip={draft.path}
+          className="flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] text-[var(--accent)] hover:bg-[var(--surface)] hover:underline"
+        >
+          <FileText className="h-3 w-3 shrink-0" />
+          <span className="min-w-0 truncate">{draft.name}</span>
+        </button>
+      ))}
+      {menu && (
+        <DraftMenu
+          x={menu.x}
+          y={menu.y}
+          path={menu.path}
+          onClose={() => setMenu(null)}
+          openAs={(kind) => ctx.openTab({ path: menu.path, kind })}
+        />
+      )}
     </div>
   );
 }
@@ -667,6 +1040,20 @@ export const scratchpadPlugin: SessionViewPlugin = {
       label: 'Auto-gitignore draft folders',
       description:
         'When the plugin creates a draft folder it seeds a `*` .gitignore, so drafts never pollute `git status`.',
+      type: 'boolean',
+      default: true,
+    },
+    {
+      key: 'recentDraftHours',
+      label: 'Recent drafts window (hours)',
+      description: 'Current drafts match identifiers in filenames modified within this window. Default: 24 hours.',
+      type: 'number',
+      default: DEFAULT_RECENT_DRAFT_HOURS,
+    },
+    {
+      key: 'showCurrentDrafts',
+      label: 'Show current drafts in session cards',
+      description: 'Shows recent identifier-matching drafts as preview buttons on the selected session card.',
       type: 'boolean',
       default: true,
     },
@@ -708,27 +1095,46 @@ export const scratchpadPlugin: SessionViewPlugin = {
     return items;
   },
   onSessionOpen: (ctx) => {
+    closedSessions.delete(ctx.session.id);
     void refreshDirs(ctx);
   },
   onOutput: (ctx) => {
     scheduleRefresh(ctx);
   },
   onClose: (ctx) => {
-    const timer = refreshTimers.get(ctx.session.id);
-    if (timer !== undefined) window.clearTimeout(timer);
-    refreshTimers.delete(ctx.session.id);
+    closedSessions.add(ctx.session.id);
+    for (const timers of [refreshTimers, pollTimers]) {
+      const timer = timers.get(ctx.session.id);
+      if (timer !== undefined) window.clearTimeout(timer);
+      timers.delete(ctx.session.id);
+    }
   },
   renderRail: ({ viewActive, toggleView }) => (
     <RailItem title="Scratchpad" onClick={toggleView} active={viewActive}>
       <NotebookPen />
     </RailItem>
   ),
-  renderView: ({ sessions, sessionApi, openTab, close }) => (
+  renderView: ({ sessions, sessionApi, openTab, appState, updateAppState }) => (
     <ScratchpadView
       sessions={sessions}
       sessionApi={sessionApi}
       openTab={openTab}
-      close={close}
+      appState={appState}
+      updateAppState={updateAppState}
     />
   ),
+  sessionFields: [
+    {
+      id: 'currentDrafts',
+      label: 'Current drafts',
+      kind: 'block',
+      zone: 'selected',
+      search: (ctx) => {
+        if (settingsOf(ctx).showCurrentDrafts === false) return null;
+        return (stateOf(ctx).currentDrafts ?? []).map((draft) => draft.name);
+      },
+      value: (ctx) =>
+        settingsOf(ctx).showCurrentDrafts === false ? null : <CurrentDrafts ctx={ctx} />,
+    },
+  ],
 };

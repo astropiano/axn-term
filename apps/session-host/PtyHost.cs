@@ -618,7 +618,12 @@ public sealed class PtyHost
             return new JsonObject { ["ok"] = false, ["error"] = "no such file or directory", ["resolved"] = resolved };
         }
 
-        return new JsonObject { ["ok"] = true, ["isFile"] = isFile, ["isDir"] = isDir, ["resolved"] = resolved };
+        var modifiedAt = new DateTimeOffset(File.GetLastWriteTimeUtc(resolved)).ToUnixTimeMilliseconds();
+        return new JsonObject
+        {
+            ["ok"] = true, ["isFile"] = isFile, ["isDir"] = isDir, ["resolved"] = resolved,
+            ["modifiedAt"] = modifiedAt,
+        };
     }
 
     private sealed record DirEntry(string name, bool isFile, bool isDirectory, bool isSymlink);
