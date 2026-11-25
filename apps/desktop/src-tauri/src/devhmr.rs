@@ -682,7 +682,7 @@ pub(crate) fn dev_hmr_set_repo(app: AppHandle, repo: Option<String>) -> Result<(
 #[tauri::command]
 pub(crate) fn dev_hmr_set_real_state(app: AppHandle, use_real_state: bool) -> Result<(), String> {
     let state = hmr_state(&app)?;
-    if state.child.lock().unwrap().is_some() {
+    if state.child.lock().unwrap().is_some() || state.adopted.lock().unwrap().is_some() {
         return Err("stop Vite before changing the state mode".to_string());
     }
     write_config(configured_repo().as_deref(), use_real_state)?;

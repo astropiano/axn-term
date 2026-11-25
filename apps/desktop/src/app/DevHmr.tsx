@@ -99,7 +99,7 @@ export function DevHmrWindow() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-[10px] uppercase tracking-wide text-[var(--text-secondary)]">
           vite:
         </span>
@@ -109,7 +109,10 @@ export function DevHmrWindow() {
             http://127.0.0.1:{status.port}
           </span>
         )}
-        <label className="flex items-center gap-1 whitespace-nowrap" data-tip="Use ~/.axn-term state and configuration">
+        <label
+          className="flex items-center gap-1 whitespace-nowrap"
+          data-tip={running ? 'Stop vite to change the state mode' : 'Use ~/.axn-term state and configuration'}
+        >
           <input
             type="checkbox"
             checked={status?.useRealState ?? false}

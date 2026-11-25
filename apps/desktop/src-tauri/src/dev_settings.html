@@ -6,11 +6,15 @@
 <style>
   body{margin:0;padding:16px;font:12px -apple-system,sans-serif;background:#16181d;color:#e5e5e5;display:flex;flex-direction:column;height:100vh;box-sizing:border-box;gap:12px}
   .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#8b8f98;margin-bottom:4px}
-  .row{display:flex;gap:8px;align-items:center}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   input{flex:1;min-width:0;background:#22242b;border:1px solid #3a3d46;color:#e5e5e5;border-radius:4px;padding:6px 8px;font:11px monospace;outline:none}
   button{background:#22242b;border:1px solid #3a3d46;color:#e5e5e5;border-radius:4px;padding:5px 10px;font:12px -apple-system,sans-serif;cursor:pointer}
   button:hover{background:#2c2f38}button:disabled{opacity:.4;cursor:default}
-  pre{flex:1;min-height:0;overflow:auto;background:#1c1e24;border:1px solid #3a3d46;border-radius:4px;padding:8px;font:10px/1.5 monospace;color:#8b8f98;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+  pre{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;background:#1c1e24;border:1px solid #3a3d46;border-radius:4px;padding:8px;font:10px/1.5 monospace;color:#8b8f98;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+  pre::-webkit-scrollbar{width:8px}
+  pre::-webkit-scrollbar-thumb{background:#3a3d46;border-radius:4px}
+  pre::-webkit-scrollbar-thumb:hover{background:#4a4d56}
+  pre::-webkit-scrollbar-track{background:transparent}
   #err{color:#f66;border:1px solid #3a3d46;border-radius:4px;padding:5px 10px;display:none;overflow-wrap:anywhere}
   .option{display:flex;gap:5px;align-items:center;white-space:nowrap}
   .option input{flex:0 0 auto;width:13px;height:13px;margin:0}.option small{color:#8b8f98}
@@ -61,15 +65,18 @@ async function refresh(){
     $('log').textContent = (s.log||[]).join('\n')||'vite output appears here';
     $('log').scrollTop = $('log').scrollHeight;
     $('realState').checked = !!s.useRealState;
-    $('realState').disabled = s.vite==='running'||s.vite==='starting';
+    const running = s.vite==='running'||s.vite==='starting';
+    $('realState').disabled = running;
+    $('realState').closest('label').title = running
+      ? 'Stop vite to change the state mode'
+      : 'Use ~/.axn-term state and configuration';
     $('warning').style.display = s.useRealState ? 'block' : 'none';
     $('conflict').style.display = s.realStateConflict ? 'block' : 'none';
     const h = s.portHolder;
     $('squatter').style.display = h ? 'flex' : 'none';
     if (h) $('squatterWho').textContent = `${h.command||'another process'}${h.pids&&h.pids.length?` (pid ${h.pids.join(', ')})`:''}`;
-    const run = s.vite==='running'||s.vite==='starting';
-    $('start').disabled = run||!s.repo||s.realStateConflict; $('stop').disabled = !run;
-    $('open').disabled = s.vite!=='running'||s.realStateConflict; $('install').disabled = !s.repo||run;
+    $('start').disabled = running||!s.repo||s.realStateConflict; $('stop').disabled = !running;
+    $('open').disabled = s.vite!=='running'||s.realStateConflict; $('install').disabled = !s.repo||running;
     if(!$('repo').value && s.repo) $('repo').value = s.repo;
   }catch(e){}
 }
