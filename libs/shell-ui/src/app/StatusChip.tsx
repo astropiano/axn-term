@@ -38,7 +38,11 @@ export function StatusChip({
   const content = (
     <>
       {icon}
-      {children}
+      {/* The mono font's glyphs sit ~1px above the box centre while the SVG icon is
+          centred exactly, so the text is centred on its own. */}
+      {children != null && (
+        <span className="inline-flex items-center gap-0.5 translate-y-px">{children}</span>
+      )}
     </>
   );
   if (href) {
