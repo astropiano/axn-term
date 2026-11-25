@@ -466,6 +466,7 @@ pub fn run() {
             devhmr::dev_hmr_set_real_state,
             devhmr::dev_hmr_start,
             devhmr::dev_hmr_stop,
+            devhmr::dev_hmr_free_port,
             devhmr::dev_hmr_install,
             devhmr::dev_hmr_open_main,
         ])
