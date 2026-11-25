@@ -40,9 +40,15 @@ pub(crate) fn enabled() -> bool {
 
 /// HMR's own control/config directory. This remains isolated even when the
 /// session data directory is deliberately switched to the real app directory.
+/// Honours the same env override the CLI uses (`AXN_TERM_CONTROL_DIR`, then
+/// the historical `AXN_TERM_STATE_DIR`), so flow tests and parallel dev
+/// instances don't collide on the real `~/.axn-term-hmr`.
 pub(crate) fn control_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("could not determine home directory".to_string())?;
-    let dir = home.join(HMR_STATE_DIR);
+    let dir = std::env::var_os("AXN_TERM_CONTROL_DIR")
+        .or_else(|| std::env::var_os("AXN_TERM_STATE_DIR"))
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(HMR_STATE_DIR)))
+        .ok_or("could not determine home directory".to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
 }
