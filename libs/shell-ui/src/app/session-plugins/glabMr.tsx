@@ -25,6 +25,7 @@ import {
   type MrRowEnv,
 } from './mrActions';
 import { CardChips } from './cardEnrichers';
+import { MrStatusChip, worstTone, type MrTone } from './mrStatus';
 import { MrDescription } from './mrDescription';
 import { shellQuote } from '../../shellQuote';
 import { sessionLastSelectedAt } from '../attention';
@@ -203,6 +204,88 @@ export function mrAwaitingOthers(
   mr: Pick<GlabMrItem, 'discussions' | 'openThreadCount'> & Partial<Pick<GlabMrItem, 'threadSummary'>>,
 ): boolean {
   return !!mr.threadSummary && mr.threadSummary.waitingForMe === 0 && openThreads(mr) > 0;
+}
+
+/** What the header chip needs from an MR/PR — the GitLab and GitHub session state both fit. */
+export interface MrStatusFacts {
+  draft: boolean;
+  conflicts: boolean;
+  /** head pipeline / aggregated checks, lowercased; null when none. */
+  pipeline: string | null;
+  /** `detailed_merge_status` (GitLab) or `mergeStateStatus` (GitHub), lowercased. */
+  mergeStatus: string;
+  /** Unresolved threads; undefined when the fetch failed. */
+  openThreads?: number;
+  discussionsResolved?: boolean;
+  threadSummary?: MrThreadSummary;
+  /** GitHub `reviewDecision === changes_requested`. */
+  changesRequested?: boolean;
+}
+
+const PIPELINE_RUNNING = ['running', 'pending', 'created', 'preparing', 'scheduled', 'waiting_for_resource'];
+
+/**
+ * The chip colour, shared by the GitLab and GitHub plugins (same thread
+ * colours as `ThreadIndicator`): red = your move — failing pipeline, conflicts,
+ * changes requested, a thread someone else answered last, or all green and
+ * ready to merge; orange = blocked on something outside the MR (a dependency
+ * MR, a rebase) or threads we could not load; yellow = waiting on others
+ * (pipeline running, every open thread last answered by you); green = nothing
+ * to do; gray = draft with nothing wrong. Highest severity wins; `reasons`
+ * explain it in the tooltip.
+ */
+export function mrStatusTone(f: MrStatusFacts): { tone: MrTone; reasons: string[] } {
+  const red: string[] = [];
+  const orange: string[] = [];
+  const yellow: string[] = [];
+  if (f.conflicts) red.push('merge conflicts');
+  if (f.pipeline === 'failed') red.push('pipeline failed');
+  if (f.changesRequested) red.push('changes requested');
+  const mine = f.threadSummary?.waitingForMe ?? 0;
+  if (mine > 0) red.push(`${mine} open thread${mine === 1 ? '' : 's'} waiting on you`);
+  const ready = f.mergeStatus === 'mergeable' || f.mergeStatus === 'clean';
+  if (ready && !f.draft && f.pipeline !== 'failed' && !f.conflicts) red.push('ready to merge — your move');
+
+  if (f.mergeStatus === 'blocked_status') orange.push('blocked by another merge request');
+  if (f.mergeStatus === 'need_rebase' || f.mergeStatus === 'behind') orange.push('needs a rebase');
+  const unknownThreads = f.openThreads === undefined && f.discussionsResolved === false;
+  if (unknownThreads) orange.push('open threads (details unavailable)');
+
+  if (f.pipeline && PIPELINE_RUNNING.includes(f.pipeline)) yellow.push(`pipeline ${f.pipeline}`);
+  const theirs = f.threadSummary?.waitingForOther ?? 0;
+  if (theirs > 0) yellow.push(`${theirs} open thread${theirs === 1 ? '' : 's'} waiting on others`);
+  if ((f.openThreads ?? 0) > 0 && !f.threadSummary && !unknownThreads) yellow.push('open threads');
+
+  if (red.length) return { tone: 'red', reasons: red };
+  if (orange.length) return { tone: 'orange', reasons: orange };
+  if (yellow.length) return { tone: 'yellow', reasons: yellow };
+  if (f.draft) return { tone: 'gray', reasons: ['draft'] };
+  return { tone: 'green', reasons: ['nothing to do'] };
+}
+
+/** The shared header chip for a session's MRs/PRs: first ref (+N), worst tone, reasons per item. */
+export function SessionMrChip({
+  forge,
+  icon,
+  items,
+}: {
+  forge: 'GitLab' | 'GitHub';
+  icon: ReactNode;
+  items: Array<MrStatusFacts & { reference: string; title: string; url: string }>;
+}) {
+  const verdicts = items.map((m) => ({ m, v: mrStatusTone(m) }));
+  const tone = worstTone(verdicts.map((x) => x.v.tone));
+  const tip = [
+    forge,
+    ...verdicts.map(({ m, v }) => `${m.reference} ${m.title}\n  ${v.reasons.join(' · ')}`),
+  ].join('\n');
+  const first = items[0];
+  return (
+    <MrStatusChip tone={tone} href={first.url} tip={tip} icon={icon}>
+      {first.reference}
+      {items.length > 1 ? `+${items.length - 1}` : ''}
+    </MrStatusChip>
+  );
 }
 
 /**
@@ -1643,21 +1726,7 @@ export const glabMrPlugin: SessionViewPlugin = {
         const state = ctx.pluginState as { mrs?: SessionMr[] } | undefined;
         const mrs = state?.mrs ?? [];
         if (mrs.length === 0) return null;
-        const first = mrs[0];
-        return (
-          <a
-            href={first.url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            data-tip={['GitLab', ...mrs.map((m) => `${m.reference} ${m.title}`)].join('\n')}
-            className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)] hover:underline"
-          >
-            <GitMerge className="h-2.5 w-2.5" />
-            {first.reference}
-            {mrs.length > 1 ? `+${mrs.length - 1}` : ''}
-          </a>
-        );
+        return <SessionMrChip forge="GitLab" icon={<GitMerge className="h-2.5 w-2.5" />} items={mrs} />;
       },
       tip: (ctx) => {
         const settings = ctx.pluginSettings as { showInTitle?: boolean } | undefined;
