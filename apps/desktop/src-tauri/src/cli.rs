@@ -425,6 +425,7 @@ fn session_line(args: &[String]) -> Result<String, String> {
 }
 
 /// `axn-term command [--window <label>] <axn-command> [args…]`.
+#[cfg(unix)]
 fn app_request(args: &[String]) -> Result<crate::control::AppRequest, String> {
     const USAGE: &str = "usage: axn-term command [--window <label>] <axn-command> [args…]";
     let (window, rest) = match args.split_first() {
@@ -539,6 +540,7 @@ mod session_tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn app_command_takes_an_optional_window() {
         let r = super::app_request(&args(&["--window", "w-2", "axn-views", "open", "http://x/", "MR"])).unwrap();
         assert_eq!(r.window.as_deref(), Some("w-2"));
@@ -549,6 +551,7 @@ mod session_tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn app_command_refuses_non_axn_lines_and_a_missing_window() {
         assert!(super::app_request(&args(&["rm", "-rf", "/"])).is_err());
         assert!(super::app_request(&args(&["--window"])).is_err());
