@@ -57,6 +57,7 @@ import {
   mrWaitingForMe,
   openThreads,
   summarizeOpenThreads,
+  SessionMrChip,
   ThreadIndicator,
   type GlabMrItem,
   type MrDiscussion,
@@ -1452,20 +1453,12 @@ export const ghPrPlugin: SessionViewPlugin = {
         const state = ctx.pluginState as { prs?: SessionPr[] } | undefined;
         const prs = state?.prs ?? [];
         if (prs.length === 0) return null;
-        const first = prs[0];
         return (
-          <a
-            href={first.url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            data-tip={['GitHub', ...prs.map((m) => `${m.reference} ${m.title}`)].join('\n')}
-            className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)] hover:underline"
-          >
-            <GitPullRequest className="h-2.5 w-2.5" />
-            {first.reference}
-            {prs.length > 1 ? `+${prs.length - 1}` : ''}
-          </a>
+          <SessionMrChip
+            forge="GitHub"
+            icon={<GitPullRequest className="h-2.5 w-2.5" />}
+            items={prs.map((p) => ({ ...p, pipeline: p.checks, changesRequested: p.reviewDecision === 'changes_requested' }))}
+          />
         );
       },
       tip: (ctx) => {

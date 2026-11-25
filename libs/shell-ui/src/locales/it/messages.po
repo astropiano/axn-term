@@ -14,7 +14,7 @@ msgstr "{0} · tramite {1}"
 msgid "{0} running {1} will be terminated"
 msgstr "{0} {1} in esecuzione verranno terminati"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:544
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:545
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} è in esecuzione nel checkout principale — isolarlo in un worktree?"
 
@@ -325,7 +325,7 @@ msgid "Default shell"
 msgstr "Shell predefinita"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:570
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:571
 msgid "Delete {0}"
 msgstr "Elimina {0}"
 
@@ -351,7 +351,7 @@ msgstr "Directory"
 msgid "disabled"
 msgstr "disabilitato"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:547
 msgid "Don't ask again"
 msgstr "Non chiedere più"
 
@@ -482,7 +482,7 @@ msgstr "Dimensione carattere (px)"
 msgid "For launchers such as the MR dashboard: `axn-term command axn-session create … --command`. Any program running as you can then start a command here, as with agterm."
 msgstr "Per launcher come la dashboard delle MR: `axn-term command axn-session create … --command`. Qualsiasi programma eseguito con il tuo utente può allora avviare un comando qui, come con agterm."
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:561
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:562
 msgid "Force remove"
 msgstr "Forza rimozione"
 
@@ -643,8 +643,8 @@ msgstr "Nuova sessione nella cartella…"
 msgid "New session in workspace"
 msgstr "Nuova sessione nel workspace"
 
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:399
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:411
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:400
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:412
 msgid "New session with agent…"
 msgstr "Nuova sessione con agente…"
 
@@ -668,7 +668,7 @@ msgstr "Nuovo workspace «{name}» in questa finestra"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "Nuovo workspace «{trimmed}» in questa finestra"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:545
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
 msgid "New worktree session"
 msgstr "Nuova sessione worktree"
 
@@ -964,7 +964,7 @@ msgstr "Rimuovi"
 msgid "Remove icon"
 msgstr "Rimuovi icona"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:462
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:463
 msgid "Remove worktree"
 msgstr "Rimuovi worktree"
 
@@ -1024,7 +1024,7 @@ msgstr "Riprova ora"
 msgid "Retrying…"
 msgstr "Nuovo tentativo…"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:458
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:459
 msgid "Review worktree changes"
 msgstr "Rivedi le modifiche del worktree"
 
@@ -1414,11 +1414,11 @@ msgid "Workspace header"
 msgstr "Intestazione dell'area di lavoro"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:560
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:561
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "Rimozione del worktree non riuscita (dirty?): {0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:569
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:570
 msgid "worktree removed — branch {0} kept"
 msgstr "worktree rimosso — branch {0} conservato"

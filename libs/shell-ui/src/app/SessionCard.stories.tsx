@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SessionItem } from './SessionPanel';
 import { PluginSettingsProvider } from './PluginSettingsProvider';
 import { StoryShellProviders } from './storyMocks';
+import { TooltipHost } from './Tooltip';
 import type { SessionCardLayout } from './sessionCardLayout';
 import type { RepoInfo, ShellSession } from '../types';
 import type { TaskStateSnapshot } from './useAgentTasks';
@@ -112,6 +113,21 @@ const mr = (iid: number, title: string, extra: Record<string, unknown> = {}) => 
   ...extra,
 });
 
+// Header-chip colours: [id, what it shows, MR overrides].
+const WAIT_OTHERS = { waitingForMe: 0, waitingForOther: 2 };
+const WAIT_ME = { waitingForMe: 1, waitingForOther: 1 };
+const MR_TONES: Array<[string, string, Record<string, unknown>]> = [
+  ['red-pipeline', 'red · pipeline failed', { pipeline: 'failed', mergeStatus: 'ci_must_pass' }],
+  ['red-conflict', 'red · merge conflicts', { conflicts: true, mergeStatus: 'conflict' }],
+  ['red-comment', 'red · thread answered, your move', { openThreads: 2, threadSummary: WAIT_ME, mergeStatus: 'discussions_not_resolved' }],
+  ['red-ready', 'red · green + ready to merge', { mergeStatus: 'mergeable' }],
+  ['orange-dep', 'orange · waiting on another MR', { mergeStatus: 'blocked_status' }],
+  ['yellow-threads', 'yellow · waiting on others', { openThreads: 2, threadSummary: WAIT_OTHERS, mergeStatus: 'discussions_not_resolved' }],
+  ['yellow-ci', 'yellow · pipeline running', { pipeline: 'running', mergeStatus: 'ci_still_running' }],
+  ['green', 'green · nothing to do', { mergeStatus: 'not_approved' }],
+  ['gray-draft', 'gray · draft', { draft: true, mergeStatus: 'draft_status' }],
+];
+
 const base = (id: string, name: string, extra: Partial<ShellSession>): ShellSession => ({
   id,
   workspaceId: 'w1',
@@ -169,6 +185,14 @@ const SESSIONS: ShellSession[] = [
       },
     },
   }),
+  // MR chip tones — one session per colour.
+  ...MR_TONES.map(([id, label, extra]) =>
+    base(`tone-${id}`, `${label}`, {
+      process: 'zsh',
+      repo: repo('ai-accelerator', `feature/tone-${id}`),
+      pluginState: { 'glab-mr': { mrs: [mr(700 + MR_TONES.length, label, { openThreads: 0, discussionsResolved: true, ...extra })] } },
+    }),
+  ),
   // Plain feature branch: no MR — Jira key from the branch, dirty + ahead.
   base('branch', 'ai-accelerator', {
     process: 'zsh',
@@ -341,6 +365,8 @@ const meta = {
         configYaml={configYaml((ctx.args as { layout: keyof typeof LAYOUTS }).layout)}
       >
         <Story />
+        {/* data-tip hovers (chips, badges) need the host the app mounts once. */}
+        <TooltipHost />
       </StoryShellProviders>
     ),
   ],
@@ -373,9 +399,6 @@ export const GithubPrSelected: Story = { args: { selected: 'pr' } };
 
 /** The worktree + persona session selected. */
 export const WorktreeSelected: Story = { args: { selected: 'wt' } };
-
-/** Light theme — filled chips stay readable. */
-export const LightTheme: Story = { globals: { theme: 'axn-light' } };
 
 /** `jira.status-colors` with a named color and hex values. */
 export const CustomStatusColors: Story = { args: { colors: 'custom' }, globals: { theme: 'axn-light' } };

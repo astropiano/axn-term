@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore, type CSSProperties } from 'react';
 import { useOptionalPluginSettings } from '../PluginSettingsProvider';
 import type { PluginSettings } from '../pluginSettings';
-import { shellServices } from '../../services';
+import { StatusChip } from '../StatusChip';
 import type { MrRef } from './mrActions';
 
 /**
@@ -299,28 +299,9 @@ export function CardChips({ subject, className }: { subject: CardSubject; classN
 
 /** One chip — a link when it carries `href` (opened externally). */
 export function ChipView({ chip }: { chip: CardChip }) {
-  const cls = 'inline-flex max-w-full items-center truncate rounded border px-1 py-px text-[9px] font-medium';
-  const style = chipStyle(chip);
-  return chip.href ? (
-    <a
-      href={chip.href}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const open = shellServices()?.openExternal;
-        if (open) open(chip.href!);
-        else window.open(chip.href, '_blank', 'noopener');
-      }}
-      onMouseDown={(e) => e.stopPropagation()}
-      data-tip={chip.tip}
-      style={style}
-      className={`${cls} hover:opacity-80`}
-    >
-      {chip.label}
-    </a>
-  ) : (
-    <span data-tip={chip.tip} style={style} className={cls}>
-      {chip.label}
-    </span>
+  return (
+    <StatusChip color={chip.color} tone={chip.tone} href={chip.href} tip={chip.tip}>
+      <span className="truncate">{chip.label}</span>
+    </StatusChip>
   );
 }

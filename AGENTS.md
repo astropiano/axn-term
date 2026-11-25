@@ -2980,7 +2980,7 @@ The app chrome (rail, session panel, tab strips, plugin view headers, dialogs) i
 - Metrics and motion: `--rail-w`, `--toolbar-h`, `--radius-sm|md|lg|xl`, `--dur-1|2`.
 - macOS overlay title bar: `data-titlebar="overlay"` on `<html>` (set in `apps/desktop/src/app/titlebar.ts`) turns on `--titlebar-h` / `--titlebar-overhang`, the room the rail and the session-panel toolbar leave for the traffic lights.
 
-Shared pieces to reuse instead of ad-hoc class strings: `app/chromeStyles.ts` (strip, ghost / primary / secondary buttons, field), `app/RailItem.tsx` (rail slots — plugins render it from `renderRail`), `app/PanelHeader.tsx` (plugin view header), `app/EmptyState.tsx` (empty and setup states), `tabStripClasses` / `tabStripTabClasses` in `app/tabStyles.ts`.
+Shared pieces to reuse instead of ad-hoc class strings: `app/StatusChip.tsx` (the coloured 16px title-row chip — `color` a theme colour name or hex, optional `href`/`icon`/`tip`; the branch chip and the MR/PR chip use it, the MR/PR colour is `mrStatusTone` in `glabMr.tsx`, shared by glab-mr and gh-pr), `app/chromeStyles.ts` (strip, ghost / primary / secondary buttons, field), `app/RailItem.tsx` (rail slots — plugins render it from `renderRail`), `app/PanelHeader.tsx` (plugin view header), `app/EmptyState.tsx` (empty and setup states), `tabStripClasses` / `tabStripTabClasses` in `app/tabStyles.ts`.
 
 ## Rail, session panel toggle and their shortcuts
 

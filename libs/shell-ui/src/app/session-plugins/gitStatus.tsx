@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { StatusChip } from '../StatusChip';
 import { GitBranch } from 'lucide-react';
 import { useShellServices } from '../../services';
 import { repoInfo } from '../gitClient';
@@ -125,6 +126,30 @@ function repoIndicators(repo: RepoInfo): { color: string; text: string }[] {
   return indicators;
 }
 
+/** The chip's hover text: where it is, then what is going on — counts included. */
+export function repoChipTip(repo: RepoInfo): string {
+  const n = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+  const lines = [repo.root, repo.branch ?? '(detached)'];
+  if (repo.dirty) {
+    lines.push(repo.changed ? `${n(repo.changed, 'file')} with uncommitted changes` : 'uncommitted changes');
+  }
+  if (repo.untracked > 0) lines.push(`${n(repo.untracked, 'untracked file')}`);
+  if (repo.ahead > 0) lines.push(`${n(repo.ahead, 'commit')} not pushed`);
+  if (repo.behind > 0) lines.push(`${n(repo.behind, 'commit')} to pull`);
+  if (repo.remoteBranchMissing) lines.push('remote branch missing');
+  if (lines.length === 2) lines.push('up to date');
+  return lines.join('\n');
+}
+
+/** Chip colour: red = remote branch gone, orange = something to pull, yellow = uncommitted changes, blue = unpushed commits, green = up to date. */
+export function repoChipColor(repo: RepoInfo): string {
+  if (repo.remoteBranchMissing) return 'red';
+  if (repo.behind > 0) return 'orange';
+  if (repo.dirty || repo.untracked > 0) return 'yellow';
+  if (repo.ahead > 0) return 'blue';
+  return 'green';
+}
+
 function GitStatus({
   ctx,
   repo,
@@ -204,34 +229,23 @@ function GitStatusRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition>({ x: 0, y: 0 });
-  const branch = repo.branch ?? '(detached)';
 
   return (
     <>
-      <span
-        className="flex shrink-0 items-center gap-1 font-mono text-[10px] leading-none"
-        data-tip={`${repo.root}\n${branch}`}
+      <StatusChip
+        color={repoChipColor(repo)}
+        tip={repoChipTip(repo)}
+        icon={<GitBranch className="h-2.5 w-2.5 shrink-0" />}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
           setMenuPos({ x: e.clientX, y: e.clientY });
           setMenuOpen(true);
         }}
-        // A held right-button would otherwise start the row's long-press
-        // session menu while the repo menu is already open.
-        onMouseDown={(e) => {
-          if (e.button === 2) e.stopPropagation();
-        }}
       >
-        <GitBranch className="h-2.5 w-2.5 shrink-0 text-[var(--cyan)]" />
-        <span className="flex shrink-0 items-center gap-0.5">
-          {repoIndicators(repo).map((ind, i) => (
-            <span key={i} className={ind.color}>
-              {ind.text}
-            </span>
-          ))}
-        </span>
-      </span>
+        {/* No per-indicator colours: the text takes the chip's own colour. */}
+        {repoIndicators(repo).map((ind) => ind.text).join(' ')}
+      </StatusChip>
       {menuOpen && (
         <RepoMenu
           ctx={ctx}

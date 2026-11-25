@@ -14,7 +14,7 @@ msgstr "{0} · 通过 {1}"
 msgid "{0} running {1} will be terminated"
 msgstr "将终止 {0} 个运行中的{1}"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:544
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:545
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} 正在主检出中运行 — 要隔离到 worktree 吗？"
 
@@ -325,7 +325,7 @@ msgid "Default shell"
 msgstr "默认 Shell"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:570
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:571
 msgid "Delete {0}"
 msgstr "删除 {0}"
 
@@ -351,7 +351,7 @@ msgstr "目录"
 msgid "disabled"
 msgstr "已禁用"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:547
 msgid "Don't ask again"
 msgstr "不再询问"
 
@@ -482,7 +482,7 @@ msgstr "字号（px）"
 msgid "For launchers such as the MR dashboard: `axn-term command axn-session create … --command`. Any program running as you can then start a command here, as with agterm."
 msgstr "用于 MR 仪表板等启动器：`axn-term command axn-session create … --command`。以你的用户身份运行的任何程序都可以在此启动命令，与 agterm 相同。"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:561
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:562
 msgid "Force remove"
 msgstr "强制移除"
 
@@ -643,8 +643,8 @@ msgstr "在文件夹中新建会话…"
 msgid "New session in workspace"
 msgstr "在工作区中新建会话"
 
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:399
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:411
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:400
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:412
 msgid "New session with agent…"
 msgstr "新建代理会话…"
 
@@ -668,7 +668,7 @@ msgstr "此窗口中的新工作区“{name}”"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "此窗口中的新工作区“{trimmed}”"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:545
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
 msgid "New worktree session"
 msgstr "新建 worktree 会话"
 
@@ -964,7 +964,7 @@ msgstr "移除"
 msgid "Remove icon"
 msgstr "移除图标"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:462
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:463
 msgid "Remove worktree"
 msgstr "移除 worktree"
 
@@ -1024,7 +1024,7 @@ msgstr "立即重试"
 msgid "Retrying…"
 msgstr "…"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:458
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:459
 msgid "Review worktree changes"
 msgstr "检查 worktree 更改"
 
@@ -1414,11 +1414,11 @@ msgid "Workspace header"
 msgstr "工作区标题"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:560
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:561
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "worktree 移除失败（有未提交更改？）：{0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:569
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:570
 msgid "worktree removed — branch {0} kept"
 msgstr "worktree 已移除 — 分支 {0} 已保留"

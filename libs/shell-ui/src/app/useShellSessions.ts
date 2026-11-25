@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { stripUserHost } from './shellTitle';
 import type { ShellStateStore } from '../platform';
 import { clearSessionRestoring } from './restoring';
 import type { PluginTabSet, ShellSession, WindowState, Workspace } from '../types';
@@ -781,7 +782,7 @@ export function useShellSessions(
    */
   const applySessionAutoName = useCallback(
     (sessionId: string, name: string) => {
-      const trimmed = name.trim();
+      const trimmed = stripUserHost(name.trim());
       if (!trimmed) return;
       setSessionsWithRef((prev) =>
         prev.map((s) =>
