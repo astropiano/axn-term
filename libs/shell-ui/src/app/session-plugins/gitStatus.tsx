@@ -126,12 +126,12 @@ function repoIndicators(repo: RepoInfo): { color: string; text: string }[] {
   return indicators;
 }
 
-/** Chip colour: red = remote branch gone, orange = behind origin, yellow = local changes, else cyan. */
+/** Chip colour: red = remote branch gone, orange = something to pull, blue = local changes or unpushed commits, green = up to date. */
 export function repoChipColor(repo: RepoInfo): string {
   if (repo.remoteBranchMissing) return 'red';
   if (repo.behind > 0) return 'orange';
-  if (repo.dirty || repo.untracked > 0) return 'yellow';
-  return 'cyan';
+  if (repo.dirty || repo.untracked > 0 || repo.ahead > 0) return 'blue';
+  return 'green';
 }
 
 function GitStatus({
