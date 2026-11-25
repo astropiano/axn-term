@@ -1,4 +1,5 @@
 import { GitFork } from 'lucide-react';
+import { StatusChip } from '../StatusChip';
 import { t } from '@lingui/core/macro';
 import { i18n } from '../../i18n';
 import type {
@@ -501,13 +502,13 @@ export const worktreesPlugin: SessionViewPlugin = {
         if (!wt) return null;
         const branch = worktreeBranch(ctx);
         return (
-          <span
-            className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--violet)]"
-            data-tip={`worktree ${branch}\n${wt.path}`}
+          <StatusChip
+            color="violet"
+            tip={`worktree ${branch}\n${wt.path}`}
+            icon={<GitFork className="h-2.5 w-2.5 shrink-0" />}
           >
-            <GitFork className="h-2.5 w-2.5 shrink-0" />
             <span className="max-w-16 truncate">{branch.replace(/^wt\//, '')}</span>
-          </span>
+          </StatusChip>
         );
       },
       tip: (ctx) => {

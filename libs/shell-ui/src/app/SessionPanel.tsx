@@ -1587,10 +1587,10 @@ export function SessionItem({
           {/* Status: idle shows nothing — the default state stays quiet. */}
           {session.status === 'running' && (session.progress ?? 0) > 0 ? (
             <span
-              className="flex shrink-0 items-center gap-1.5"
+              className="flex min-w-0 shrink items-center gap-1.5"
               data-tip={`running — ${session.progress}%`}
             >
-              <span className="h-1 w-10 overflow-hidden rounded-full bg-[var(--fill-2)]">
+              <span className="h-1 w-10 min-w-2 shrink overflow-hidden rounded-full bg-[var(--fill-2)]">
                 <span
                   className="block h-full rounded-full transition-all"
                   style={{
@@ -1599,7 +1599,7 @@ export function SessionItem({
                   }}
                 />
               </span>
-              <span className="text-[11px] tabular-nums text-[var(--text-secondary)]">
+              <span className="shrink-0 text-[11px] tabular-nums text-[var(--text-secondary)]">
                 {session.progress}%
               </span>
             </span>

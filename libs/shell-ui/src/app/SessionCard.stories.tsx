@@ -397,9 +397,6 @@ export const GithubPrSelected: Story = { args: { selected: 'pr' } };
 /** The worktree + persona session selected. */
 export const WorktreeSelected: Story = { args: { selected: 'wt' } };
 
-/** Light theme — filled chips stay readable. */
-export const LightTheme: Story = { globals: { theme: 'axn-light' } };
-
 /** `jira.status-colors` with a named color and hex values. */
 export const CustomStatusColors: Story = { args: { colors: 'custom' }, globals: { theme: 'axn-light' } };
 

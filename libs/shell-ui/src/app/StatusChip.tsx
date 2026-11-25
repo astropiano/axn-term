@@ -1,5 +1,5 @@
 import type { MouseEventHandler, ReactNode } from 'react';
-import { chipStyle } from './session-plugins/cardEnrichers';
+import { chipStyle, type CardChip } from './session-plugins/cardEnrichers';
 import { shellServices } from '../services';
 
 /**
@@ -15,13 +15,17 @@ import { shellServices } from '../services';
  */
 export function StatusChip({
   color,
+  tone,
   icon,
   href,
   tip,
   onContextMenu,
   children,
 }: {
-  color: string;
+  /** Named theme colour or hex; wins over `tone`. */
+  color?: string;
+  /** Card-enricher tone (`neutral`, `info`, `progress`, `done`, `warn`) when no colour is given. */
+  tone?: CardChip['tone'];
   icon?: ReactNode;
   href?: string;
   tip?: string;
@@ -29,8 +33,8 @@ export function StatusChip({
   children?: ReactNode;
 }) {
   const cls =
-    'inline-flex h-4 shrink-0 select-none items-center justify-center gap-0.5 self-center rounded border px-1 font-mono text-[9px] font-medium leading-none';
-  const style = chipStyle({ color });
+    'inline-flex h-4 max-w-full shrink-0 select-none items-center justify-center gap-0.5 self-center rounded border px-1 font-mono text-[9px] font-medium leading-none';
+  const style = chipStyle({ color, tone });
   const swallowRightButton: MouseEventHandler = (e) => {
     // A held right-button would otherwise start the row's long-press menu.
     if (e.button === 2) e.stopPropagation();
@@ -41,7 +45,7 @@ export function StatusChip({
       {/* The mono font's glyphs sit ~1px above the box centre while the SVG icon is
           centred exactly, so the text is centred on its own. */}
       {children != null && (
-        <span className="inline-flex items-center gap-0.5 translate-y-px">{children}</span>
+        <span className="inline-flex min-w-0 items-center gap-0.5 translate-y-px">{children}</span>
       )}
     </>
   );

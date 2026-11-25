@@ -1,4 +1,5 @@
 import { t } from '@lingui/core/macro';
+import { StatusChip } from '../StatusChip';
 import { PublishPanelStatus } from '../PanelStatusSection';
 import { i18n } from '../../i18n';
 import { Bot, Play } from 'lucide-react';
@@ -473,13 +474,12 @@ export const agentsPlugin: SessionViewPlugin = {
         const persona = personaOf(ctx.session);
         if (!persona) return null;
         return (
-          <span
-            className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] leading-none text-[var(--accent)]"
-            data-tip={`persona: ${persona}`}
-          >
-            <Bot className="h-2.5 w-2.5 shrink-0" />
-            <span className="max-w-16 truncate">{persona}</span>
-          </span>
+          // Icon only — persona names run long; the full name is the tooltip.
+          <StatusChip
+            color="accent"
+            tip={`persona: ${persona}`}
+            icon={<Bot className="h-2.5 w-2.5 shrink-0" />}
+          />
         );
       },
       tip: (ctx) => {

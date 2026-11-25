@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { StatusChip } from '../StatusChip';
 import type { ReactNode } from 'react';
 import { axnLog } from '../log';
 import { sessionLastSelectedAt } from '../attention';
@@ -503,9 +504,9 @@ function VibeRow({ ctx }: { ctx: SessionViewContext & PluginApi }): ReactNode {
   const session = ctx.getSession();
   if (!sessionNameRequiresAttention(session.name)) return null;
   return (
-    <span className="text-[11px] text-[var(--red)]" data-tip="Session name indicates action required">
+    <StatusChip color="red" tip="Session name indicates action required">
       !
-    </span>
+    </StatusChip>
   );
 }
 

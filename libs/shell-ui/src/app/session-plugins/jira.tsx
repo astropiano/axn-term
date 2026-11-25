@@ -514,6 +514,24 @@ function SessionTickets({ keys }: { keys: string[] }) {
   );
 }
 
+/**
+ * Title-row variant: only the ticket key, no status text — still coloured by
+ * status and linking to the ticket, with status and summary in the tooltip.
+ */
+function SessionTicketKeys({ keys }: { keys: string[] }) {
+  const enriched = useEnrichedKeys('jira', keys);
+  const visible = keys.filter((key) => enriched[key] !== null);
+  if (visible.length === 0) return null;
+  return (
+    <>
+      {visible.map((key) => {
+        const chip = enriched[key]?.chips?.[0] ?? { label: key, tone: 'neutral' as const };
+        return <ChipView key={key} chip={{ ...chip, label: key }} />;
+      })}
+    </>
+  );
+}
+
 /** The session's ticket keys when the plugin is active, else none. */
 function ticketsOf(ctx: SessionViewContext & PluginApi): string[] {
   const result = jiraConfig(ctx.pluginSettings as PluginSettingsSection | undefined);
@@ -700,6 +718,18 @@ export const jiraPlugin: SessionViewPlugin = {
       value: (ctx) => {
         const keys = ticketsOf(ctx);
         return keys.length ? <SessionTickets keys={keys} /> : null;
+      },
+    },
+    {
+      id: 'ticket',
+      label: 'Jira ticket (key only)',
+      kind: 'inline',
+      zone: 'title',
+      search: (ctx) =>
+        ticketsOf(ctx).flatMap((key) => (peekEnrichment('jira', key) === null ? [] : [key])),
+      value: (ctx) => {
+        const keys = ticketsOf(ctx);
+        return keys.length ? <SessionTicketKeys keys={keys} /> : null;
       },
     },
   ],
