@@ -308,13 +308,18 @@ export function PathActionMenu({
     </>
   );
 
-  const preview = !copyOnly && (
-    <div className={isMenu ? 'max-h-64 overflow-auto px-1.5 pb-1 pt-0.5' : 'max-h-64 overflow-auto p-2'}>
-      {isUrl ? (
-        <div className="break-all font-mono text-[11px] leading-snug text-[var(--text-primary)]">
-          {resolvedPath}
+  const preview =
+    !copyOnly &&
+    (isUrl ? (
+      isMenu ? (
+        <div className="max-h-64 overflow-auto px-1.5 pb-1 pt-0.5">
+          <div className="break-all font-mono text-[11px] leading-snug text-[var(--text-primary)]">
+            {resolvedPath}
+          </div>
         </div>
-      ) : (
+      ) : null
+    ) : (
+      <div className={isMenu ? 'max-h-64 overflow-auto px-1.5 pb-1 pt-0.5' : 'max-h-64 overflow-auto p-2'}>
         <FileHoverPreview
           resolvedPath={resolvedPath}
           isDir={isDir}
@@ -322,9 +327,8 @@ export function PathActionMenu({
           onKindChange={setFileKind}
           onPreview={openPreview}
         />
-      )}
-    </div>
-  );
+      </div>
+    ));
 
   if (isMenu) {
     return (
@@ -349,13 +353,20 @@ export function PathActionMenu({
 
   return (
     <>
-      <div className="flex items-start gap-1.5 border-b border-[var(--border)] px-2 py-1.5">
-        {actions}
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--text-secondary)]">
+      <div className="px-2.5 py-2">
+        <div className="flex flex-wrap items-center gap-1.5">{actions}</div>
+        <div
+          className="mt-1.5 break-all font-mono text-[11px] leading-tight text-[var(--text-secondary)] select-text"
+        >
           {resolvedPath}
-        </span>
+        </div>
       </div>
-      {preview}
+      {preview && (
+        <>
+          <div className="border-b border-[var(--border)]" />
+          {preview}
+        </>
+      )}
     </>
   );
 }
