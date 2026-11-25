@@ -132,6 +132,17 @@ pub fn socket_path(state_dir: &Path) -> PathBuf {
     state_dir.join(SOCKET_NAME)
 }
 
+/// A non-invasive liveness check for the instance that owns a control socket.
+#[cfg(unix)]
+pub fn is_running(path: &Path) -> bool {
+    UnixStream::connect(path).is_ok()
+}
+
+#[cfg(not(unix))]
+pub fn is_running(_path: &Path) -> bool {
+    false
+}
+
 // The socket is Unix-only: Windows terminals get no PTY secret (pty.rs) and
 // `axn-term session` reports the platform as unsupported (cli.rs).
 

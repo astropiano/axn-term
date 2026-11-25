@@ -442,7 +442,8 @@ fn app_request(args: &[String]) -> Result<crate::control::AppRequest, String> {
 }
 
 fn state_dir() -> PathBuf {
-    std::env::var("AXN_TERM_STATE_DIR")
+    std::env::var("AXN_TERM_CONTROL_DIR")
+        .or_else(|_| std::env::var("AXN_TERM_STATE_DIR"))
         .map(PathBuf::from)
         .or_else(|_| dirs::home_dir().map(|h| h.join(".axn-term")).ok_or(()))
         .unwrap_or_default()

@@ -151,7 +151,11 @@ pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 /// state.json). `None`: no socket (logged), the app still starts.
 #[cfg(unix)]
 pub(crate) fn claim_control_socket_or_exit() -> Option<std::os::unix::net::UnixListener> {
-    let path = match state_dir() {
+    let path = match if crate::devhmr::enabled() {
+        crate::devhmr::control_dir()
+    } else {
+        state_dir()
+    } {
         Ok(dir) => control::socket_path(&dir),
         Err(e) => {
             log::warn!("control socket disabled: {}", e);

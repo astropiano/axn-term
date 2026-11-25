@@ -10,6 +10,8 @@ interface DevHmrStatus {
   port: number | null;
   error: string | null;
   log: string[];
+  useRealState: boolean;
+  realStateConflict: boolean;
 }
 
 const VITE_LABEL: Record<DevHmrStatus['vite'], string> = {
@@ -106,6 +108,15 @@ export function DevHmrWindow() {
             http://127.0.0.1:{status.port}
           </span>
         )}
+        <label className="flex items-center gap-1 whitespace-nowrap" data-tip="Use ~/.axn-term state and configuration">
+          <input
+            type="checkbox"
+            checked={status?.useRealState ?? false}
+            disabled={busy || running}
+            onChange={(e) => run('dev_hmr_set_real_state', { useRealState: e.target.checked })}
+          />
+          <span>Use real axn-term state</span>
+        </label>
         <span className="flex-1" />
         {running ? (
           <button className={btn} disabled={busy} onClick={() => run('dev_hmr_stop')}>
@@ -114,7 +125,7 @@ export function DevHmrWindow() {
         ) : (
           <button
             className={btn}
-            disabled={busy || !status?.repo}
+            disabled={busy || !status?.repo || status?.realStateConflict}
             onClick={() => run('dev_hmr_start')}
           >
             Start
@@ -122,7 +133,7 @@ export function DevHmrWindow() {
         )}
         <button
           className={btn}
-          disabled={busy || status?.vite !== 'running'}
+          disabled={busy || status?.vite !== 'running' || status?.realStateConflict}
           onClick={() => run('dev_hmr_open_main')}
         >
           Open window
@@ -136,6 +147,18 @@ export function DevHmrWindow() {
           pnpm install
         </button>
       </div>
+
+      {status?.useRealState && (
+        <div className="rounded border border-[var(--warning,#d9a441)] px-2 py-1 text-[11px] text-[var(--warning,#d9a441)]">
+          Warning: real-state HMR shares application data with axn-term. Do not run both at the same time.
+        </div>
+      )}
+
+      {status?.realStateConflict && (
+        <div className="rounded border border-[var(--error,#f66)] px-2 py-1 text-[var(--error,#f66)]">
+          The normal axn-term app is currently running. Close it before starting real-state HMR.
+        </div>
+      )}
 
       {status?.error && (
         <div className="rounded border border-[var(--border)] px-2 py-1 text-[var(--error,#f66)]">

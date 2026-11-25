@@ -463,6 +463,7 @@ pub fn run() {
             logfile::log_dir,
             devhmr::dev_hmr_status,
             devhmr::dev_hmr_set_repo,
+            devhmr::dev_hmr_set_real_state,
             devhmr::dev_hmr_start,
             devhmr::dev_hmr_stop,
             devhmr::dev_hmr_install,

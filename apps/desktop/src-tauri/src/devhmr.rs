@@ -18,9 +18,10 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl};
 
-use crate::persist;
+use crate::{control, persist};
 
 const LOG_CAP: usize = 400;
+const HMR_STATE_DIR: &str = ".axn-term-hmr";
 
 /// True for the axn-term-hmr product and for `AXN_TERM_HMR=1` runs.
 pub(crate) fn enabled() -> bool {
@@ -35,6 +36,28 @@ pub(crate) fn enabled() -> bool {
             .map(|stem| stem == "axn-term-hmr")
             .unwrap_or(false)
     })
+}
+
+/// HMR's own control/config directory. This remains isolated even when the
+/// session data directory is deliberately switched to the real app directory.
+pub(crate) fn control_dir() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or("could not determine home directory".to_string())?;
+    let dir = home.join(HMR_STATE_DIR);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn use_real_state_file() -> Result<PathBuf, String> {
+    Ok(control_dir()?.join("dev-hmr.json"))
+}
+
+/// Whether the HMR session windows should use the normal application data.
+pub(crate) fn uses_real_state() -> bool {
+    std::fs::read_to_string(use_real_state_file().unwrap_or_default())
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|value| value.get("useRealState").and_then(serde_json::Value::as_bool))
+        .unwrap_or(false)
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -70,10 +93,12 @@ pub(crate) struct DevHmrStatus {
     port: Option<u16>,
     error: Option<String>,
     log: Vec<String>,
+    use_real_state: bool,
+    real_state_conflict: bool,
 }
 
 fn config_file() -> Result<PathBuf, String> {
-    Ok(persist::state_dir()?.join("dev-hmr.json"))
+    use_real_state_file()
 }
 
 pub(crate) fn configured_repo() -> Option<PathBuf> {
@@ -84,11 +109,19 @@ pub(crate) fn configured_repo() -> Option<PathBuf> {
     path.is_dir().then_some(path)
 }
 
-fn write_config(repo: Option<&Path>) -> Result<(), String> {
-    let dir = persist::state_dir()?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let json = serde_json::json!({ "repo": repo });
+fn write_config(repo: Option<&Path>, use_real_state: bool) -> Result<(), String> {
+    control_dir()?;
+    let json = serde_json::json!({ "repo": repo, "useRealState": use_real_state });
     persist::atomic_write(&config_file()?, json.to_string().as_bytes())
+}
+
+fn real_state_conflict() -> bool {
+    if !uses_real_state() {
+        return false;
+    }
+    let Some(home) = dirs::home_dir() else { return false };
+    let dir = home.join(".axn-term");
+    control::is_running(&control::socket_path(&dir))
 }
 
 fn push_log(state: &DevHmrState, line: String) {
@@ -119,6 +152,8 @@ fn status_of(app: &AppHandle, state: &DevHmrState) -> DevHmrStatus {
         port: *state.port.lock().unwrap(),
         error: state.error.lock().unwrap().clone(),
         log: state.log.lock().unwrap().iter().cloned().collect(),
+        use_real_state: uses_real_state(),
+        real_state_conflict: real_state_conflict(),
     }
 }
 
@@ -250,6 +285,9 @@ pub(crate) fn vite_origin(state: &DevHmrState) -> Option<tauri::Url> {
 /// piping output into the log ring. Marks the state Running when vite
 /// announces itself, then opens the main window.
 pub(crate) fn start_vite(app: AppHandle, state: &DevHmrState) -> Result<(), String> {
+    if real_state_conflict() {
+        return Err("the normal axn-term app is already running; close it before using real state".to_string());
+    }
     let repo = configured_repo().ok_or("no checkout configured")?;
     if !vite_dir(&repo).join("package.json").is_file() {
         return Err(format!(
@@ -464,7 +502,18 @@ pub(crate) fn dev_hmr_set_repo(app: AppHandle, repo: Option<String>) -> Result<(
     // Check the mode before writing, so a non-HMR build never touches the config.
     let state = hmr_state(&app)?;
     let path = repo.map(PathBuf::from).filter(|p| p.is_dir());
-    write_config(path.as_deref())?;
+    write_config(path.as_deref(), uses_real_state())?;
+    emit_status(&app, &state);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn dev_hmr_set_real_state(app: AppHandle, use_real_state: bool) -> Result<(), String> {
+    let state = hmr_state(&app)?;
+    if state.child.lock().unwrap().is_some() {
+        return Err("stop Vite before changing the state mode".to_string());
+    }
+    write_config(configured_repo().as_deref(), use_real_state)?;
     emit_status(&app, &state);
     Ok(())
 }
