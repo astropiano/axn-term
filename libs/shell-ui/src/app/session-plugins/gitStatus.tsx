@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { StatusChip } from '../StatusChip';
 import { GitBranch } from 'lucide-react';
 import { useShellServices } from '../../services';
 import { repoInfo } from '../gitClient';
@@ -125,6 +126,14 @@ function repoIndicators(repo: RepoInfo): { color: string; text: string }[] {
   return indicators;
 }
 
+/** Chip colour: red = remote branch gone, orange = behind origin, yellow = local changes, else cyan. */
+export function repoChipColor(repo: RepoInfo): string {
+  if (repo.remoteBranchMissing) return 'red';
+  if (repo.behind > 0) return 'orange';
+  if (repo.dirty || repo.untracked > 0) return 'yellow';
+  return 'cyan';
+}
+
 function GitStatus({
   ctx,
   repo,
@@ -208,30 +217,23 @@ function GitStatusRow({
 
   return (
     <>
-      <span
-        className="flex shrink-0 items-center gap-1 font-mono text-[10px] leading-none"
-        data-tip={`${repo.root}\n${branch}`}
+      <StatusChip
+        color={repoChipColor(repo)}
+        tip={`${repo.root}\n${branch}`}
+        icon={<GitBranch className="h-2.5 w-2.5 shrink-0" />}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
           setMenuPos({ x: e.clientX, y: e.clientY });
           setMenuOpen(true);
         }}
-        // A held right-button would otherwise start the row's long-press
-        // session menu while the repo menu is already open.
-        onMouseDown={(e) => {
-          if (e.button === 2) e.stopPropagation();
-        }}
       >
-        <GitBranch className="h-2.5 w-2.5 shrink-0 text-[var(--cyan)]" />
-        <span className="flex shrink-0 items-center gap-0.5">
-          {repoIndicators(repo).map((ind, i) => (
-            <span key={i} className={ind.color}>
-              {ind.text}
-            </span>
-          ))}
-        </span>
-      </span>
+        {repoIndicators(repo).map((ind, i) => (
+          <span key={i} className={ind.color}>
+            {ind.text}
+          </span>
+        ))}
+      </StatusChip>
       {menuOpen && (
         <RepoMenu
           ctx={ctx}

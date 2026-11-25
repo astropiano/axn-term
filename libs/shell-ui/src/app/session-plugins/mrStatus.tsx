@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react';
-import { chipStyle } from './cardEnrichers';
-import { shellServices } from '../../services';
+import { StatusChip } from '../StatusChip';
 
 /**
- * The header chip of a session's merge/pull request — one component for the
- * GitLab and GitHub plugins. The colour (`MrTone`) comes from the shared
- * `mrStatusTone` in glabMr.tsx, so both forges classify "your move" the same way.
+ * The header chip of a session's merge/pull request — the shared
+ * `StatusChip` coloured by `MrTone`, which the GitLab and GitHub plugins get
+ * from the one `mrStatusTone` rule in glabMr.tsx.
  */
 
 export type MrTone = 'red' | 'orange' | 'yellow' | 'green' | 'gray';
@@ -31,23 +30,8 @@ export function MrStatusChip({
   children: ReactNode;
 }) {
   return (
-    <a
-      href={href}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const open = shellServices()?.openExternal;
-        if (open) open(href);
-        else window.open(href, '_blank', 'noopener');
-      }}
-      onMouseDown={(e) => e.stopPropagation()}
-      data-tip={tip}
-      data-mr-tone={tone}
-      style={chipStyle({ color: tone })}
-      className="inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-px font-mono text-[9px] font-medium leading-none hover:opacity-80"
-    >
-      {icon}
+    <StatusChip color={tone} href={href} tip={tip} icon={icon}>
       {children}
-    </a>
+    </StatusChip>
   );
 }
