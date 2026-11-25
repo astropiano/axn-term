@@ -10,6 +10,9 @@ interface DevHmrStatus {
   port: number | null;
   error: string | null;
   log: string[];
+  useRealState: boolean;
+  realStateConflict: boolean;
+  portHolder: { pids: number[]; command: string | null; cwd: string | null } | null;
 }
 
 const VITE_LABEL: Record<DevHmrStatus['vite'], string> = {
@@ -96,7 +99,7 @@ export function DevHmrWindow() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-[10px] uppercase tracking-wide text-[var(--text-secondary)]">
           vite:
         </span>
@@ -106,6 +109,18 @@ export function DevHmrWindow() {
             http://127.0.0.1:{status.port}
           </span>
         )}
+        <label
+          className="flex items-center gap-1 whitespace-nowrap"
+          data-tip={running ? 'Stop vite to change the state mode' : 'Use ~/.axn-term state and configuration'}
+        >
+          <input
+            type="checkbox"
+            checked={status?.useRealState ?? false}
+            disabled={busy || running}
+            onChange={(e) => run('dev_hmr_set_real_state', { useRealState: e.target.checked })}
+          />
+          <span>Use real axn-term state</span>
+        </label>
         <span className="flex-1" />
         {running ? (
           <button className={btn} disabled={busy} onClick={() => run('dev_hmr_stop')}>
@@ -114,7 +129,7 @@ export function DevHmrWindow() {
         ) : (
           <button
             className={btn}
-            disabled={busy || !status?.repo}
+            disabled={busy || !status?.repo || status?.realStateConflict}
             onClick={() => run('dev_hmr_start')}
           >
             Start
@@ -122,7 +137,7 @@ export function DevHmrWindow() {
         )}
         <button
           className={btn}
-          disabled={busy || status?.vite !== 'running'}
+          disabled={busy || status?.vite !== 'running' || status?.realStateConflict}
           onClick={() => run('dev_hmr_open_main')}
         >
           Open window
@@ -137,15 +152,54 @@ export function DevHmrWindow() {
         </button>
       </div>
 
+      {status?.useRealState && (
+        <div className="rounded border border-[var(--warning,#d9a441)] px-2 py-1 text-[11px] text-[var(--warning,#d9a441)]">
+          Warning: real-state HMR shares application data with axn-term. Do not run both at the same time.
+        </div>
+      )}
+
+      {status?.portHolder && (
+        <div className="flex items-center gap-2 rounded border border-[var(--warning,#d9a441)] px-2 py-1 text-[11px] text-[var(--warning,#d9a441)]">
+          <span className="min-w-0 break-all">
+            port is held by {status.portHolder.command || 'another process'}
+            {status.portHolder.pids.length > 0 && ` (pid ${status.portHolder.pids.join(', ')})`}
+          </span>
+          <span className="flex-1" />
+          <button
+            className={btn}
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await invoke('dev_hmr_free_port');
+                await invoke('dev_hmr_start');
+              } catch (e) {
+                console.error('dev_hmr_free_port/dev_hmr_start', e);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Kill &amp; start
+          </button>
+        </div>
+      )}
+
+      {status?.realStateConflict && (
+        <div className="rounded border border-[var(--error,#f66)] px-2 py-1 text-[var(--error,#f66)]">
+          The normal axn-term app is currently running. Close it before starting real-state HMR.
+        </div>
+      )}
+
       {status?.error && (
-        <div className="rounded border border-[var(--border)] px-2 py-1 text-[var(--error,#f66)]">
+        <div className="rounded border border-[var(--border)] px-2 py-1 break-all text-[var(--error,#f66)]">
           {status.error}
         </div>
       )}
 
       <pre
         ref={logRef}
-        className="min-h-0 flex-1 overflow-auto rounded border border-[var(--border)] bg-[var(--surface)] p-2 font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-[var(--text-secondary)]"
+        className="min-h-0 flex-1 overflow-auto rounded border border-[var(--border)] bg-[var(--surface)] p-2 font-mono text-[10px] leading-relaxed break-all whitespace-pre-wrap text-[var(--text-secondary)]"
       >
         {status?.log.join('\n') || 'vite output appears here'}
       </pre>

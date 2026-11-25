@@ -21,8 +21,9 @@ pub(crate) fn state_dir() -> Result<PathBuf, String> {
         return Ok(path);
     }
     let home = dirs::home_dir().ok_or("could not determine home directory".to_string())?;
-    // axn-term-hmr gets its own config/plugins/kv dir — never the real app's.
-    if crate::devhmr::enabled() {
+    // HMR normally gets its own config/plugins/kv dir. The control window can
+    // opt into the real app data when the developer wants a faithful session.
+    if crate::devhmr::enabled() && !crate::devhmr::uses_real_state() {
         return Ok(home.join(".axn-term-hmr"));
     }
     Ok(home.join(".axn-term"))
@@ -299,10 +300,10 @@ pub(crate) fn load_window_state_blocking(
     window_id: String,
 ) -> Result<Option<JsonValue>, String> {
     let _guard = state.state_file_lock.lock().map_err(|e| e.to_string())?;
-    // axn-term-hmr never touches disk — the window state lives in memory for
-    // the process lifetime (a page reload still finds it), nothing survives
-    // an app restart.
-    if crate::devhmr::enabled() {
+    // Isolated axn-term-hmr never touches disk — its window state lives in
+    // memory for the process lifetime. Real-state HMR follows the normal
+    // persisted path below.
+    if crate::devhmr::enabled() && !crate::devhmr::uses_real_state() {
         let mem = state.mem_shell_state.lock().map_err(|e| e.to_string())?;
         let target = JsonValue::String(window_id);
         return Ok(mem
@@ -363,7 +364,7 @@ pub(crate) fn save_window_state_blocking(
     if let Some(obj) = window_state.as_object_mut() {
         obj.insert("id".to_string(), JsonValue::String(window_id.clone()));
     }
-    if crate::devhmr::enabled() {
+    if crate::devhmr::enabled() && !crate::devhmr::uses_real_state() {
         let mut mem = state.mem_shell_state.lock().map_err(|e| e.to_string())?;
         let target = JsonValue::String(window_id);
         mem.windows.retain(|w| w.get("id") != Some(&target));
@@ -407,7 +408,7 @@ pub(crate) fn save_window_state_blocking(
 
 pub(crate) fn delete_window_state_sync(state: &AppState, window_id: &str) -> Result<(), String> {
     let _guard = state.state_file_lock.lock().map_err(|e| e.to_string())?;
-    if crate::devhmr::enabled() {
+    if crate::devhmr::enabled() && !crate::devhmr::uses_real_state() {
         let mut mem = state.mem_shell_state.lock().map_err(|e| e.to_string())?;
         let target = JsonValue::String(window_id.to_string());
         mem.windows.retain(|w| w.get("id") != Some(&target));

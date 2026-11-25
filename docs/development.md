@@ -112,6 +112,16 @@ can never clobber the real app's state, while a page reload still finds
 its state. `AXN_TERM_HMR=1` exercises the same code path under a plain
 `pnpm dev:desktop` run.
 
+The HMR settings window also has an opt-in **Use real axn-term state and
+configuration** setting. It makes the HMR session use `~/.axn-term` for
+window/session state, plugins, config, themes, KV data, and external plugins;
+isolated HMR data remains the default. The setting is stored in HMR's own
+control directory, and changing it requires stopping Vite first. HMR checks
+the normal application's control socket before starting and refuses to start
+real-state mode while the normal app is running. The warning remains visible
+while the setting is enabled because both applications must not share the
+same data directory concurrently.
+
 **Use axn-term-hmr when:**
 
 - You are iterating on the frontend (`libs/shell-ui`, `apps/desktop/src`,

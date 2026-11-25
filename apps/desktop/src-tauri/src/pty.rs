@@ -361,6 +361,11 @@ pub(crate) fn spawn_pty(
     if let Ok(dir) = state_dir() {
         cmd.env("AXN_TERM_STATE_DIR", dir);
     }
+    if crate::devhmr::enabled() {
+        if let Ok(dir) = crate::devhmr::control_dir() {
+            cmd.env("AXN_TERM_CONTROL_DIR", dir);
+        }
+    }
     // `axn-term session …` from inside this terminal authenticates as this
     // PTY with the secret (control.rs); AXN_TERM_CLI finds the binary even
     // when the .app is not on PATH.

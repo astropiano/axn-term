@@ -18,9 +18,10 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl};
 
-use crate::persist;
+use crate::{control, persist};
 
 const LOG_CAP: usize = 400;
+const HMR_STATE_DIR: &str = ".axn-term-hmr";
 
 /// True for the axn-term-hmr product and for `AXN_TERM_HMR=1` runs.
 pub(crate) fn enabled() -> bool {
@@ -35,6 +36,34 @@ pub(crate) fn enabled() -> bool {
             .map(|stem| stem == "axn-term-hmr")
             .unwrap_or(false)
     })
+}
+
+/// HMR's own control/config directory. This remains isolated even when the
+/// session data directory is deliberately switched to the real app directory.
+/// Honours the same env override the CLI uses (`AXN_TERM_CONTROL_DIR`, then
+/// the historical `AXN_TERM_STATE_DIR`), so flow tests and parallel dev
+/// instances don't collide on the real `~/.axn-term-hmr`.
+pub(crate) fn control_dir() -> Result<PathBuf, String> {
+    let dir = std::env::var_os("AXN_TERM_CONTROL_DIR")
+        .or_else(|| std::env::var_os("AXN_TERM_STATE_DIR"))
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(HMR_STATE_DIR)))
+        .ok_or("could not determine home directory".to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn use_real_state_file() -> Result<PathBuf, String> {
+    Ok(control_dir()?.join("dev-hmr.json"))
+}
+
+/// Whether the HMR session windows should use the normal application data.
+pub(crate) fn uses_real_state() -> bool {
+    std::fs::read_to_string(use_real_state_file().unwrap_or_default())
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|value| value.get("useRealState").and_then(serde_json::Value::as_bool))
+        .unwrap_or(false)
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -59,6 +88,34 @@ pub(crate) struct DevHmrState {
     /// The port our running vite serves on — the external webview origin.
     /// `None` until vite is ready and again once it exits.
     port: Mutex<Option<u16>>,
+    /// Pid of an adopted vite — one we did not spawn but whose cwd is this
+    /// checkout's apps/desktop. Cleared on stop/exit.
+    adopted: Mutex<Option<i32>>,
+}
+
+/// Who is listening on the HMR port while our vite is not running — a stale
+/// vite of this checkout (adoptable), a vite of another checkout, or an
+/// unrelated process (the white-screen squatter case).
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PortHolder {
+    /// Pids listening on the port (usually one: the vite node process).
+    pub pids: Vec<i32>,
+    /// `ps` command line of the first listener.
+    pub command: Option<String>,
+    /// cwd of the first listener — identifies which checkout a vite serves.
+    pub cwd: Option<String>,
+}
+
+impl PortHolder {
+    fn describe(&self) -> String {
+        match (&self.command, self.pids.first()) {
+            (Some(cmd), Some(pid)) => format!("`{cmd}` (pid {pid})"),
+            (Some(cmd), None) => format!("`{cmd}`"),
+            (None, Some(pid)) => format!("pid {pid}"),
+            (None, None) => "an unknown process".to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -70,10 +127,15 @@ pub(crate) struct DevHmrStatus {
     port: Option<u16>,
     error: Option<String>,
     log: Vec<String>,
+    use_real_state: bool,
+    real_state_conflict: bool,
+    /// Set while the port is held by a process we did not spawn — lets the
+    /// settings page offer "Kill & start" instead of a dead spawn.
+    port_holder: Option<PortHolder>,
 }
 
 fn config_file() -> Result<PathBuf, String> {
-    Ok(persist::state_dir()?.join("dev-hmr.json"))
+    use_real_state_file()
 }
 
 pub(crate) fn configured_repo() -> Option<PathBuf> {
@@ -84,11 +146,19 @@ pub(crate) fn configured_repo() -> Option<PathBuf> {
     path.is_dir().then_some(path)
 }
 
-fn write_config(repo: Option<&Path>) -> Result<(), String> {
-    let dir = persist::state_dir()?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let json = serde_json::json!({ "repo": repo });
+fn write_config(repo: Option<&Path>, use_real_state: bool) -> Result<(), String> {
+    control_dir()?;
+    let json = serde_json::json!({ "repo": repo, "useRealState": use_real_state });
     persist::atomic_write(&config_file()?, json.to_string().as_bytes())
+}
+
+fn real_state_conflict() -> bool {
+    if !uses_real_state() {
+        return false;
+    }
+    let Some(home) = dirs::home_dir() else { return false };
+    let dir = home.join(".axn-term");
+    control::is_running(&control::socket_path(&dir))
 }
 
 fn push_log(state: &DevHmrState, line: String) {
@@ -112,13 +182,23 @@ fn emit_status(app: &AppHandle, state: &DevHmrState) {
 
 fn status_of(app: &AppHandle, state: &DevHmrState) -> DevHmrStatus {
     let _ = app;
+    let vite = *state.status.lock().unwrap();
+    // Only worth an lsof when nothing of ours is using the port — keeps the
+    // per-log-line emits cheap while vite boots and chatters.
+    let port_holder = match vite {
+        ViteStatus::Idle | ViteStatus::Exited => hmr_port_holder(),
+        _ => None,
+    };
     DevHmrStatus {
         enabled: true,
         repo: configured_repo().map(|p| p.to_string_lossy().into_owned()),
-        vite: *state.status.lock().unwrap(),
+        vite,
         port: *state.port.lock().unwrap(),
         error: state.error.lock().unwrap().clone(),
         log: state.log.lock().unwrap().iter().cloned().collect(),
+        use_real_state: uses_real_state(),
+        real_state_conflict: real_state_conflict(),
+        port_holder,
     }
 }
 
@@ -238,6 +318,112 @@ fn vite_dir(repo: &Path) -> PathBuf {
     repo.join("apps/desktop")
 }
 
+/// Who is listening on the HMR port, if anyone. A refused connection is a
+/// free port — the cheap path start_vite takes on every normal run.
+fn hmr_port_holder() -> Option<PortHolder> {
+    use std::net::TcpStream;
+    let addr: std::net::SocketAddr = match format!("{AXN_HMR_HOST}:{AXN_HMR_PORT}").parse() {
+        Ok(a) => a,
+        Err(_) => return None,
+    };
+    if TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300)).is_err() {
+        return None;
+    }
+    Some(port_holder_details())
+}
+
+#[cfg(unix)]
+fn port_holder_details() -> PortHolder {
+    let pids: Vec<i32> = Command::new("lsof")
+        .args(["-nP", &format!("-iTCP:{AXN_HMR_PORT}"), "-sTCP:LISTEN", "-t"])
+        .output()
+        .ok()
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .filter_map(|l| l.trim().parse().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    let command = pids.first().and_then(|pid| {
+        Command::new("ps")
+            .args(["-o", "command=", "-p", &pid.to_string()])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty())
+    });
+    let cwd = pids.first().and_then(|pid| process_cwd(*pid));
+    PortHolder { pids, command, cwd }
+}
+
+#[cfg(unix)]
+fn process_cwd(pid: i32) -> Option<String> {
+    Command::new("lsof")
+        .args(["-a", "-p", &pid.to_string(), "-d", "cwd", "-Fn"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .find_map(|l| l.strip_prefix('n').map(str::to_string))
+        })
+}
+
+#[cfg(not(unix))]
+fn port_holder_details() -> PortHolder {
+    PortHolder { pids: Vec::new(), command: None, cwd: None }
+}
+
+/// True when the port holder is a vite dev server running in this checkout's
+/// apps/desktop — adoptable rather than a squatter to kill.
+fn holder_serves_repo(holder: &PortHolder, repo: &Path) -> bool {
+    let is_vite = holder
+        .command
+        .as_deref()
+        .map(|c| c.contains("vite"))
+        .unwrap_or(false);
+    let same_dir = holder
+        .cwd
+        .as_deref()
+        .and_then(|cwd| std::fs::canonicalize(cwd).ok())
+        .zip(std::fs::canonicalize(vite_dir(repo)).ok())
+        .map(|(a, b)| a == b)
+        .unwrap_or(false);
+    is_vite && same_dir
+}
+
+/// The port is already served by this checkout's vite — take it over: own
+/// the origin, mark Running, open the main window, and watch for its exit
+/// so the state returns to Exited when it eventually dies.
+fn adopt_vite(app: &AppHandle, state: &DevHmrState, holder: &PortHolder, repo: &Path) {
+    *state.port.lock().unwrap() = Some(AXN_HMR_PORT);
+    *state.adopted.lock().unwrap() = holder.pids.first().copied();
+    push_log(
+        state,
+        format!("adopting the vite already serving {} — {}", repo.display(), holder.describe()),
+    );
+    set_status(app, state, ViteStatus::Running, None);
+    open_main_window(app);
+
+    let app = app.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let state = app.state::<DevHmrState>();
+        if state.adopted.lock().unwrap().is_none() {
+            break; // stopped or replaced by our own spawn
+        }
+        if hmr_port_holder().is_none() {
+            *state.port.lock().unwrap() = None;
+            *state.adopted.lock().unwrap() = None;
+            if *state.status.lock().unwrap() == ViteStatus::Running {
+                set_status(&app, &state, ViteStatus::Exited, None);
+            }
+            break;
+        }
+    });
+}
+
 /// The origin session windows load in dev mode — set once vite announced
 /// itself on its port and cleared when it exits, so no window is pointed at
 /// a port some other process holds.
@@ -250,6 +436,9 @@ pub(crate) fn vite_origin(state: &DevHmrState) -> Option<tauri::Url> {
 /// piping output into the log ring. Marks the state Running when vite
 /// announces itself, then opens the main window.
 pub(crate) fn start_vite(app: AppHandle, state: &DevHmrState) -> Result<(), String> {
+    if real_state_conflict() {
+        return Err("the normal axn-term app is already running; close it before using real state".to_string());
+    }
     let repo = configured_repo().ok_or("no checkout configured")?;
     if !vite_dir(&repo).join("package.json").is_file() {
         return Err(format!(
@@ -263,6 +452,25 @@ pub(crate) fn start_vite(app: AppHandle, state: &DevHmrState) -> Result<(), Stri
     let port = AXN_HMR_PORT;
 
     stop_vite(state);
+
+    // A squatter makes `--strictPort` exit before vite ever announces itself
+    // — the old white-screen failure. Detect it up front: adopt a vite that
+    // already serves this checkout, refuse (and name the holder) otherwise.
+    if let Some(holder) = hmr_port_holder() {
+        if holder_serves_repo(&holder, &repo) {
+            log::info!("axn-term-hmr: adopting the vite already serving {} — {}", repo.display(), holder.describe());
+            adopt_vite(&app, state, &holder, &repo);
+            return Ok(());
+        }
+        let msg = format!(
+            "port {port} is already held by {} — kill it from the dev settings (\"Kill & start\")",
+            holder.describe()
+        );
+        log::warn!("axn-term-hmr: {msg}");
+        set_status(&app, state, ViteStatus::Exited, Some(msg.clone()));
+        return Err(msg);
+    }
+
     set_status(&app, state, ViteStatus::Starting, None);
     push_log(state, format!("$ pnpm exec vite --port {port} --strictPort ({})", repo.display()));
 
@@ -354,6 +562,8 @@ pub(crate) fn stop_vite(state: &DevHmrState) {
     if let Some(mut child) = guard.take() {
         kill_process_group(&mut child);
     }
+    // An adopted vite is not ours — it keeps serving after Stop.
+    *state.adopted.lock().unwrap() = None;
     *state.status.lock().unwrap() = ViteStatus::Idle;
     *state.port.lock().unwrap() = None;
 }
@@ -464,7 +674,18 @@ pub(crate) fn dev_hmr_set_repo(app: AppHandle, repo: Option<String>) -> Result<(
     // Check the mode before writing, so a non-HMR build never touches the config.
     let state = hmr_state(&app)?;
     let path = repo.map(PathBuf::from).filter(|p| p.is_dir());
-    write_config(path.as_deref())?;
+    write_config(path.as_deref(), uses_real_state())?;
+    emit_status(&app, &state);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn dev_hmr_set_real_state(app: AppHandle, use_real_state: bool) -> Result<(), String> {
+    let state = hmr_state(&app)?;
+    if state.child.lock().unwrap().is_some() || state.adopted.lock().unwrap().is_some() {
+        return Err("stop Vite before changing the state mode".to_string());
+    }
+    write_config(configured_repo().as_deref(), use_real_state)?;
     emit_status(&app, &state);
     Ok(())
 }
@@ -481,6 +702,40 @@ pub(crate) fn dev_hmr_stop(app: AppHandle) -> Result<(), String> {
     stop_vite(&state);
     emit_status(&app, &state);
     Ok(())
+}
+
+/// SIGKILL whatever is squatting on the HMR port and wait for it to release.
+/// Only reachable while our own vite is not running — killing it would just
+/// be Stop.
+#[tauri::command]
+pub(crate) fn dev_hmr_free_port(app: AppHandle) -> Result<(), String> {
+    let state = hmr_state(&app)?;
+    if state.child.lock().unwrap().is_some() {
+        return Err("stop vite first".to_string());
+    }
+    let Some(holder) = hmr_port_holder() else { return Ok(()) };
+    #[cfg(unix)]
+    {
+        use nix::sys::signal::{kill, Signal};
+        use nix::unistd::Pid;
+        for pid in &holder.pids {
+            let _ = kill(Pid::from_raw(*pid), Signal::SIGKILL);
+        }
+        // Give the OS a moment to release the listener before the caller
+        // retries the spawn.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while hmr_port_holder().is_some() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+    #[cfg(not(unix))]
+    return Err("freeing the port is only supported on unix".to_string());
+    #[cfg(unix)]
+    {
+        push_log(&state, format!("killed port {AXN_HMR_PORT} holder {}", holder.describe()));
+        emit_status(&app, &state);
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -505,6 +760,44 @@ mod tests {
         assert_eq!(hmr_state(app.handle()).err().as_deref(), Some("dev HMR mode is not enabled"));
         app.manage(DevHmrState::default());
         assert!(hmr_state(app.handle()).is_ok());
+    }
+
+    fn holder(command: &str, cwd: &Path) -> PortHolder {
+        PortHolder {
+            pids: vec![4242],
+            command: Some(command.to_string()),
+            cwd: Some(cwd.to_string_lossy().into_owned()),
+        }
+    }
+
+    #[test]
+    fn a_vite_in_this_checkout_is_adopted_everything_else_is_a_squatter() {
+        let repo = std::env::temp_dir().join(format!("axn-hmr-adopt-{}", std::process::id()));
+        std::fs::create_dir_all(vite_dir(&repo)).unwrap();
+        let repo = std::fs::canonicalize(&repo).unwrap();
+
+        // The adoptable case: a vite whose cwd is <repo>/apps/desktop.
+        assert!(holder_serves_repo(
+            &holder("node ./node_modules/vite/bin/vite.js --port 5914", &vite_dir(&repo)),
+            &repo
+        ));
+        // A vite serving a DIFFERENT checkout is a squatter, not adoptable.
+        let other = repo.join("../other-checkout");
+        std::fs::create_dir_all(&other).unwrap();
+        assert!(!holder_serves_repo(
+            &holder("node ./node_modules/vite/bin/vite.js --port 5914", &other),
+            &repo
+        ));
+        // Same directory but not a vite.
+        assert!(!holder_serves_repo(&holder("python3 -m http.server 5914", &vite_dir(&repo)), &repo));
+        // No details at all.
+        assert!(!holder_serves_repo(
+            &PortHolder { pids: vec![1], command: None, cwd: None },
+            &repo
+        ));
+
+        let _ = std::fs::remove_dir_all(&repo);
+        let _ = std::fs::remove_dir_all(&other);
     }
 
     #[cfg(unix)]
