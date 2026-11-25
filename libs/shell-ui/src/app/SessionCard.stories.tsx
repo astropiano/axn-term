@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SessionItem } from './SessionPanel';
 import { PluginSettingsProvider } from './PluginSettingsProvider';
 import { StoryShellProviders } from './storyMocks';
+import { TooltipHost } from './Tooltip';
 import type { SessionCardLayout } from './sessionCardLayout';
 import type { RepoInfo, ShellSession } from '../types';
 import type { TaskStateSnapshot } from './useAgentTasks';
@@ -364,6 +365,8 @@ const meta = {
         configYaml={configYaml((ctx.args as { layout: keyof typeof LAYOUTS }).layout)}
       >
         <Story />
+        {/* data-tip hovers (chips, badges) need the host the app mounts once. */}
+        <TooltipHost />
       </StoryShellProviders>
     ),
   ],
