@@ -236,18 +236,22 @@ function rememberClaudeLast(ctx: SessionViewContext & PluginApi, state: ClaudePl
 // Claude Code prints its resume hint on exit (double Ctrl-C, /exit, /quit):
 //   Resume this session with:
 //   claude --resume <id>
-// or, inside a worktree, `claude --worktree "<name>" --resume <id>` / the
-// short `claude -w "<name>" -r <id>`. The trailing newline marks the line
-// complete, so an id split across output chunks is never taken half-way.
+// echoing the flags the session was launched with — `claude --model haiku
+// --resume <id>` — and inside a worktree `claude --worktree "<name>" --resume
+// <id>` / the short `claude -w "<name>" -r <id>`. The trailing newline marks
+// the line complete, so an id split across output chunks is never taken
+// half-way.
 const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
 const RESUME_HINT_RE =
-  /Resume this session with:[ \t]*\r?\n[ \t]*claude(?: (?:--worktree|-w) "([^"\r\n]+)")? (?:--resume|-r) ([A-Za-z0-9][A-Za-z0-9._-]*)[ \t]*\r?\n/g;
+  /Resume this session with:[ \t]*\r?\n[ \t]*claude((?:[ \t]+[^\r\n]*?)?)[ \t]+(?:--resume|-r)[ \t]+([A-Za-z0-9][A-Za-z0-9._-]*)[ \t]*\r?\n/g;
+const HINT_WORKTREE_RE = /(?:^|[ \t])(?:--worktree|-w)[ \t]+"([^"\r\n]+)"/;
 
 export function parseClaudeResumeHint(output: string): { id: string; worktree?: string } | undefined {
   let last: RegExpExecArray | undefined;
   for (const m of output.replace(ANSI_RE, '').matchAll(RESUME_HINT_RE)) last = m;
   if (!last) return undefined;
-  return last[1] ? { id: last[2], worktree: last[1] } : { id: last[2] };
+  const worktree = HINT_WORKTREE_RE.exec(last[1] ?? '')?.[1];
+  return worktree ? { id: last[2], worktree } : { id: last[2] };
 }
 
 // Exit capture: once claude is closing (onClose's Ctrl-C, or any exit seen

@@ -210,6 +210,18 @@ function getTargetSessionId(env) {
   return undefined;
 }
 
+/**
+ * A flow started from inside a Claude Code session inherits that session's
+ * CLAUDE_CODE_* / CLAUDECODE variables. A real claude launched in the app then
+ * believes it is a child session: it writes no transcript and prints no
+ * resume hint — nothing like the user's own terminals. Drop them.
+ */
+function withoutParentAgentEnv(source) {
+  return Object.fromEntries(
+    Object.entries(source).filter(([key]) => key !== "CLAUDECODE" && !key.startsWith("CLAUDE_CODE_") && key !== "CLAUDE_PID"),
+  );
+}
+
 async function startApp(env) {
   const stateDir = env.AXN_TERM_STATE_DIR;
   if (!stateDir) throw new Error("AXN_TERM_STATE_DIR not set");
@@ -237,7 +249,7 @@ async function startApp(env) {
   const logFd = openSync(join(stateDir, "axn-term.log"), "a");
   const child = spawn(binary, [], {
     env: {
-      ...process.env,
+      ...withoutParentAgentEnv(process.env),
       AXN_TERM_STATE_DIR: stateDir,
       AXN_TERM_REMOTE_CONTROL_PORT: env.AXN_TERM_REMOTE_CONTROL_PORT,
       AXN_TERM_REMOTE_CONTROL_TOKEN: env.AXN_TERM_REMOTE_CONTROL_TOKEN,
@@ -1922,7 +1934,9 @@ async function runClaudeTitled(env, withPrompt) {
     for (;;) {
       if (Date.now() > deadline) throw new Error(`claude never became ready; ${(await fresh()).slice(-400)}`);
       const out = await fresh();
-      if (!trusted && /Yes,\s*I trust/.test(out)) {
+      // The TUI positions words with cursor moves, so match the text without escapes.
+      const text = out.replace(/\x1b\[[0-9;?<>]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
+      if (!trusted && /Yes,?\s*I\s*trust/.test(text)) {
         // The prompt defaults to "No, exit" — move down, confirm.
         await sleep(500);
         await writeToSession(env, id, "\x1b[B");
