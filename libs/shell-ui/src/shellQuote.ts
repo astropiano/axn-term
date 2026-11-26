@@ -98,3 +98,12 @@ export function parseEchoReply(result: string | false | undefined): string | und
     return undefined;
   }
 }
+
+/**
+ * Wrap `text` in bracketed-paste markers for an agent's input. ESC (and the
+ * 8-bit CSI) are dropped from the text first so a payload carrying
+ * `ESC[201~` cannot end the paste early and arrive as raw keystrokes.
+ */
+export function bracketedPaste(text: string): string {
+  return `\x1b[200~${text.replace(/[\x1b\x9b]/g, '')}\x1b[201~`;
+}

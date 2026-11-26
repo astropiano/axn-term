@@ -1,5 +1,6 @@
 import type { DiffComment } from '../types';
 import { fnv1a } from './gitReview';
+import { bracketedPaste } from '../shellQuote';
 
 /**
  * Anchored diff comments — the pure half of the git-inspect review feature.
@@ -132,6 +133,7 @@ export function reanchorComments(
   comments: DiffComment[],
   path: string,
   content: { original?: string; modified?: string },
+  options?: { commitHash?: string },
 ): DiffComment[] | null {
   const sideLines = {
     old: content.original != null ? content.original.split('\n') : null,
@@ -141,9 +143,11 @@ export function reanchorComments(
     old: content.original != null ? fnv1a(content.original) : undefined,
     new: content.modified != null ? fnv1a(content.modified) : undefined,
   };
+  const scopeCommit = options?.commitHash;
   let changed = false;
   const next = comments.map((c) => {
     if (c.path !== path) return c;
+    if ((c.commitHash ?? undefined) !== scopeCommit) return c;
     const lines = sideLines[c.side];
     const diffId = sideIds[c.side];
     if (diffId === undefined) return c; // that side not loaded — keep as-is
@@ -210,4 +214,27 @@ export function buildCommentsPrompt(subject: string, comments: DiffComment[]): s
 /** Comments worth sending or surfacing as open work. */
 export function actionableComments(comments: DiffComment[]): DiffComment[] {
   return comments.filter((c) => c.resolution !== 'done');
+}
+
+/** Comments visible on `path` in the current view (`commitHash` = historical commit, undefined = worktree/compare). */
+export function commentsForFile(
+  comments: DiffComment[],
+  path: string,
+  commitHash?: string,
+): DiffComment[] {
+  return comments.filter((c) => c.path === path && (c.commitHash ?? undefined) === commitHash);
+}
+
+/** Subject line passed to `buildCommentsPrompt` for worktree, base-compare, or historical commit views. */
+export function diffPromptSubject(opts: {
+  commitHash?: string;
+  base?: string;
+}): string {
+  if (opts.commitHash) return `commit ${opts.commitHash.slice(0, 7)}`;
+  return `worktree diff${opts.base ? ` vs ${opts.base}` : ''}`;
+}
+
+/** Bracketed-paste payload (ESC/CSI stripped) + CR to submit in an agent TUI. */
+export function sendCommentsPayload(prompt: string): string {
+  return `${bracketedPaste(prompt)}\r`;
 }

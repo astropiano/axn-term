@@ -27,8 +27,11 @@ import {
   actionableComments,
   buildCommentsPrompt,
   captureAnchor,
+  commentsForFile,
+  diffPromptSubject,
   nextCommentId,
   reanchorComments,
+  sendCommentsPayload,
 } from './diffComments';
 import { pickFromList } from './pickerHost';
 import { defaultTabLabel } from './subshellPromote';
@@ -750,7 +753,7 @@ export function GitInspectView({
   );
 
   const selectCommit = useCallback(
-    async (commit: GitCommit) => {
+    async (commit: GitCommit, initialPath?: string) => {
       setSel({ kind: 'commit', commit });
       setSelFile(null);
       // Flush before setDiff(null) unmounts the diff editor.
@@ -783,9 +786,9 @@ export function GitInspectView({
         const files = parseNameStatusZ(out);
         setCommitFiles(files);
         if (files.length > 0) {
-          const first = files[0];
-          setSelFile({ path: first.path, oldPath: first.oldPath });
-          void loadCommitDiff(commit, first);
+          const picked = (initialPath ? files.find((f) => f.path === initialPath) : undefined) ?? files[0];
+          setSelFile({ path: picked.path, oldPath: picked.oldPath });
+          void loadCommitDiff(commit, picked);
         }
       } catch (e) {
         setError(String(e));
@@ -964,12 +967,23 @@ export function GitInspectView({
   // 'resolution' is user triage (open/done/deferred); 'status' is anchor
   // health (active/moved/stale).
 
+  const isCompare =
+    sel.kind === 'commit' &&
+    !!compare &&
+    'mergeBase' in compare &&
+    !!head &&
+    sel.commit.hash === head &&
+    sel.commit.parents[0] === compare.mergeBase;
+  const activeCommitHash = sel.kind === 'commit' && !isCompare ? sel.commit.hash : undefined;
   const comments = tab.comments ?? [];
-  const fileComments = selFile ? comments.filter((c) => c.path === selFile.path) : [];
+  const fileComments = selFile ? commentsForFile(comments, selFile.path, activeCommitHash) : [];
   const openCount = actionableComments(comments).length;
+  const hasAgentTarget =
+    (session.editors ?? []).some((e) => e.kind === 'shell' && (e.agent || e.agentActive)) || canTalk;
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [composer, setComposer] = useState<DiffSelection | null>(null);
   const [composerBody, setComposerBody] = useState('');
+  const pendingRevealRef = useRef<{ path: string; side: 'old' | 'new'; line: number } | null>(null);
 
   const patchComments = useCallback(
     (next: DiffComment[]) => onUpdateTab?.({ comments: next }),
@@ -978,13 +992,28 @@ export function GitInspectView({
 
   // Re-anchor the viewed file's comments whenever its diff content changes.
   useEffect(() => {
-    if (!selFile || !diff || comments.length === 0) return;
-    const next = reanchorComments(comments, selFile.path, {
-      original: diff.original,
-      modified: diff.modified,
-    });
+    if (!selFile || !diff || diff.binary || comments.length === 0) return;
+    const next = reanchorComments(
+      comments,
+      selFile.path,
+      {
+        original: diff.original,
+        modified: diff.modified,
+      },
+      { commitHash: activeCommitHash },
+    );
     if (next) patchComments(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diff, selFile?.path, activeCommitHash]);
+
+  // Reveal a comment line once its target file finishes loading into MonacoDiff.
+  useEffect(() => {
+    const pending = pendingRevealRef.current;
+    if (!pending || !diff || selFile?.path !== pending.path) return;
+    pendingRevealRef.current = null;
+    if (!diff.binary && !diff.note) {
+      diffApiRef.current?.reveal(pending.side, pending.line);
+    }
   }, [diff, selFile?.path]);
 
   const addComment = useCallback(() => {
@@ -997,6 +1026,8 @@ export function GitInspectView({
       path: selFile.path,
       oldPath: selFile.oldPath,
       side: composer.side,
+      ...(sel.kind === 'worktree' && selFile.area ? { area: selFile.area } : {}),
+      ...(activeCommitHash ? { commitHash: activeCommitHash } : {}),
       range: [composer.startLine, composer.endLine],
       anchor: captureAnchor(sideLines, composer.startLine, composer.endLine),
       body,
@@ -1008,7 +1039,74 @@ export function GitInspectView({
     setComposer(null);
     setComposerBody('');
     setCommentsOpen(true);
-  }, [composer, composerBody, comments, diff, patchComments, selFile]);
+  }, [activeCommitHash, composer, composerBody, comments, diff, patchComments, sel.kind, selFile]);
+
+  const revealComment = useCallback(
+    (c: DiffComment) => {
+      const targetReveal = { path: c.path, side: c.side, line: c.range[0] };
+      if (
+        c.path === selFile?.path &&
+        (c.commitHash ?? undefined) === activeCommitHash &&
+        (!c.area || sel.kind !== 'worktree' || c.area === selFile.area)
+      ) {
+        diffApiRef.current?.reveal(c.side, c.range[0]);
+        return;
+      }
+      if (c.commitHash) {
+        if (sel.kind === 'commit' && !isCompare && sel.commit.hash === c.commitHash) {
+          const cf = commitFiles.find((f) => f.path === c.path);
+          if (cf) {
+            pendingRevealRef.current = targetReveal;
+            selectCommitFile(cf);
+            return;
+          }
+        } else {
+          const targetCommit = commits.find((cm) => cm.hash === c.commitHash);
+          if (targetCommit) {
+            pendingRevealRef.current = targetReveal;
+            void selectCommit(targetCommit, c.path);
+            return;
+          }
+        }
+        setError(`Commit ${c.commitHash.slice(0, 7)} or file ${c.path} is not available in the current view`);
+        return;
+      }
+      if (sel.kind === 'commit' && isCompare) {
+        const cf = commitFiles.find((f) => f.path === c.path);
+        if (cf) {
+          pendingRevealRef.current = targetReveal;
+          selectCommitFile(cf);
+          return;
+        }
+      }
+      if (status) {
+        const areas: Array<NonNullable<FileSel['area']>> = c.area
+          ? [c.area, ...(['unstaged', 'conflicted', 'staged', 'untracked'] as const).filter((a) => a !== c.area)]
+          : ['unstaged', 'conflicted', 'staged', 'untracked'];
+        for (const area of areas) {
+          const found = status[area].find((f) => f.path === c.path);
+          if (found) {
+            pendingRevealRef.current = targetReveal;
+            selectWorktreeFile(found, area);
+            return;
+          }
+        }
+      }
+      setError(`File ${c.path} is no longer in the current diff`);
+    },
+    [
+      activeCommitHash,
+      commitFiles,
+      commits,
+      isCompare,
+      sel,
+      selFile,
+      selectCommit,
+      selectCommitFile,
+      selectWorktreeFile,
+      status,
+    ],
+  );
 
   const setResolution = useCallback(
     (id: string, resolution: DiffComment['resolution']) => {
@@ -1029,10 +1127,7 @@ export function GitInspectView({
    * \r submits it. No agent tab → seed a fresh review-agent talk tab.
    */
   const sendComments = useCallback(async () => {
-    const subject =
-      sel.kind === 'commit'
-        ? `commit ${sel.commit.hash.slice(0, 7)}`
-        : `worktree diff${base ? ` vs ${base}` : ''}`;
+    const subject = diffPromptSubject({ commitHash: activeCommitHash, base });
     const prompt = buildCommentsPrompt(subject, comments);
     if (!prompt) return;
     const agentTabs = (session.editors ?? []).filter(
@@ -1047,16 +1142,25 @@ export function GitInspectView({
       target = key ? agentTabs.find((t) => t.id === key) : undefined;
       if (!target) return; // dismissed
     }
-    const payload = `\x1b[200~${prompt}\x1b[201~\r`;
+    const payload = sendCommentsPayload(prompt);
     if (target) {
-      const ok = backend.writeWhenRaw
-        ? await backend.writeWhenRaw(target.id, payload).catch(() => false)
-        : undefined;
-      if (ok !== true) backend.write(target.id, payload);
+      if (backend.writeWhenRaw) {
+        const ok = await backend.writeWhenRaw(target.id, payload).catch(() => false);
+        if (!ok) {
+          setError(
+            `Agent tab "${target.label ?? defaultTabLabel(target)}" is not ready for input — make sure the agent is still running.`,
+          );
+          return;
+        }
+      } else {
+        backend.write(target.id, payload);
+      }
     } else if (reviewAgent && onOpenSubShell) {
       onOpenSubShell(talkCommand(reviewAgent, prompt), root, 'review comments', reviewAgent);
+    } else {
+      setError('No running agent tab found and no review agent is configured in Git Inspect settings.');
     }
-  }, [backend, base, comments, onOpenSubShell, reviewAgent, root, sel, session.editors]);
+  }, [activeCommitHash, backend, base, comments, onOpenSubShell, reviewAgent, root, session.editors]);
 
   /**
    * How to fetch the diff for each explanation key — registered on render
@@ -1708,8 +1812,12 @@ export function GitInspectView({
                 <button
                   type="button"
                   onClick={() => void sendComments()}
-                  disabled={openCount === 0}
-                  data-tip="Send open + deferred comments into the agent's input"
+                  disabled={openCount === 0 || !hasAgentTarget}
+                  data-tip={
+                    hasAgentTarget
+                      ? "Send open + deferred comments into the agent's input"
+                      : 'Open an agent tab or configure a review agent in Git Inspect settings'
+                  }
                   className="flex shrink-0 items-center gap-1 rounded bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] text-[var(--accent)] transition hover:bg-[var(--accent)]/25 disabled:opacity-40"
                 >
                   <Send className="h-3 w-3" />
@@ -1723,16 +1831,9 @@ export function GitInspectView({
                 >
                   <button
                     type="button"
-                    onClick={() =>
-                      c.path === selFile?.path &&
-                      diffApiRef.current?.reveal(c.side, c.range[0])
-                    }
+                    onClick={() => revealComment(c)}
                     data-tip={c.path}
-                    className={`max-w-40 shrink-0 truncate font-mono ${
-                      c.path === selFile?.path
-                        ? 'text-[var(--accent)] hover:underline'
-                        : 'text-[var(--text-secondary)]'
-                    }`}
+                    className="max-w-40 shrink-0 truncate font-mono text-[var(--accent)] hover:underline"
                   >
                     {c.path.split('/').pop()}:{c.range[0]}
                     {c.range[1] !== c.range[0] ? `-${c.range[1]}` : ''}

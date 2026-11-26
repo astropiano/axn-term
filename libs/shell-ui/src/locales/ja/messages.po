@@ -180,7 +180,7 @@ msgstr "プログラムからのクリップボード書き込み"
 msgid "Close"
 msgstr "閉じる"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3186
+#: libs/shell-ui/src/app/ShellApp.tsx:3187
 msgid "Close tab"
 msgstr "タブを閉じる"
 
@@ -1220,7 +1220,7 @@ msgstr "{0} としてサインイン中"
 msgid "Start {0} in…"
 msgstr "{0} を開始する場所…"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3503
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3495
 msgid "Start workflow…"
 msgstr "ワークフローを開始…"
 

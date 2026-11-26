@@ -210,6 +210,10 @@ export interface DiffComment {
   oldPath?: string;
   /** Which diff side the comment anchors: 'new' = post-image/worktree. */
   side: 'old' | 'new';
+  /** Worktree area when captured from a worktree diff (for drawer navigation). */
+  area?: 'staged' | 'unstaged' | 'untracked' | 'conflicted';
+  /** Commit SHA when captured on a specific historical commit (not compare/worktree). */
+  commitHash?: string;
   /** File-space line range at capture time (1-based, end inclusive). */
   range: [number, number];
   anchor: {

@@ -180,7 +180,7 @@ msgstr "Écritures du presse-papiers par les programmes"
 msgid "Close"
 msgstr "Fermer"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3186
+#: libs/shell-ui/src/app/ShellApp.tsx:3187
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
@@ -1220,7 +1220,7 @@ msgstr "Connecté en tant que {0}"
 msgid "Start {0} in…"
 msgstr "Démarrer {0} dans…"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3503
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3495
 msgid "Start workflow…"
 msgstr "Démarrer le workflow…"
 

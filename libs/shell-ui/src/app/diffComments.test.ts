@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCommentsPrompt,
   captureAnchor,
+  commentsForFile,
+  diffPromptSubject,
   nextCommentId,
   reanchor,
   reanchorComments,
+  sendCommentsPayload,
 } from './diffComments';
 import { fnv1a } from './gitReview';
 import type { DiffComment } from '../types';
@@ -167,5 +170,42 @@ describe('buildCommentsPrompt', () => {
   it('returns null when nothing is sendable', () => {
     expect(buildCommentsPrompt('d', [makeComment({ resolution: 'done' })])).toBeNull();
     expect(buildCommentsPrompt('d', [])).toBeNull();
+  });
+});
+
+describe('commit scoping & payload safety', () => {
+  it('scopes reanchorComments and commentsForFile to matching commitHash vs worktree', () => {
+    const wt = makeComment();
+    const commitComment = makeComment({ commitHash: 'abcdef1234567' });
+    const edited = ['// header', ...FILE].join('\n');
+
+    // Worktree refresh re-anchors wt, leaves historical commit comment untouched.
+    const wtNext = reanchorComments([wt, commitComment], 'src/f.ts', { modified: edited });
+    expect(wtNext).not.toBeNull();
+    expect(wtNext![0].status).toBe('moved');
+    expect(wtNext![1]).toBe(commitComment);
+
+    // Commit view refresh ignores worktree comments and only touches that commit.
+    expect(
+      reanchorComments([wt, commitComment], 'src/f.ts', { modified: edited }, { commitHash: 'other' }),
+    ).toBeNull();
+
+    expect(commentsForFile([wt, commitComment], 'src/f.ts')).toEqual([wt]);
+    expect(commentsForFile([wt, commitComment], 'src/f.ts', 'abcdef1234567')).toEqual([
+      commitComment,
+    ]);
+  });
+
+  it('formats compare/worktree vs commit prompt subjects', () => {
+    expect(diffPromptSubject({ base: 'origin/main' })).toBe('worktree diff vs origin/main');
+    expect(diffPromptSubject({})).toBe('worktree diff');
+    expect(diffPromptSubject({ commitHash: 'abcdef1234567', base: 'origin/main' })).toBe(
+      'commit abcdef1',
+    );
+  });
+
+  it('wraps sendCommentsPayload in bracketed paste and strips escape sequences', () => {
+    const payload = sendCommentsPayload('fix\x1b[201~;rm -rf ~\x9b201~now');
+    expect(payload).toBe('\x1b[200~fix[201~;rm -rf ~201~now\x1b[201~\r');
   });
 });
