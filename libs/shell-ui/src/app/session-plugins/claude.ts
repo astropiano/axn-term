@@ -214,17 +214,18 @@ function claudeResumeCommand(state: ClaudePluginState, sessionCwd: string | unde
 /**
  * Publish the just-exited claude conversation as this agent's last session
  * (app-level pluginData — see agentResume.ts): the captured id's exact
- * `claude --resume <id>` line (with its --worktree when one was hinted),
- * else `claude -c` — continue the latest conversation in the directory.
- * Unlike claudeResumeCommand the `cd` prefix is always folded in — the
- * menu resume can run from any session's shell.
+ * `claude --resume <id>` line (with its --worktree when one was hinted).
+ * Without an id nothing is recorded: an empty conversation. Unlike
+ * claudeResumeCommand the `cd` prefix is always folded in — the menu resume
+ * can run from any session's shell.
  */
 function rememberClaudeLast(ctx: SessionViewContext & PluginApi, state: ClaudePluginState): void {
+  // claude prints its resume id only for a conversation that has content — no
+  // id means an empty one (opened and left), which is not worth resuming.
+  if (!state.claudeResumeId) return;
   const cwd = state.claudeCwd ?? ctx.getSession().cwd;
   const worktree = state.claudeWorktree ? ` --worktree ${shellQuote(state.claudeWorktree)}` : '';
-  const resume = state.claudeResumeId
-    ? `claude${worktree} --resume ${state.claudeResumeId}`
-    : 'claude -c';
+  const resume = `claude${worktree} --resume ${state.claudeResumeId}`;
   rememberLastAgentSession(ctx, 'claude', {
     name: state.claudeResumeId,
     cwd,
@@ -475,8 +476,15 @@ export const claudePlugin: SessionViewPlugin = {
       else if (isClaudeProcess(ctx.getSession().process)) finishRestore(ctx, 'ok');
     }
 
-    // The conversation's name (`/rename`, topic) only exists while claude runs.
-    if (isClaudeProcess(ctx.getSession().process)) noteAgentTitle(ctx, 'claude', text);
+    // The conversation's name (`/rename`, topic) only exists while claude
+    // runs. A fresh run forgets the previous run's name, so a conversation
+    // that never recorded (empty) cannot lend its name to the next one.
+    if (isClaudeProcess(ctx.getSession().process)) {
+      if (!state.claudeActive && (state as { seenTitle?: string }).seenTitle) {
+        ctx.updatePluginState({ seenTitle: undefined });
+      }
+      noteAgentTitle(ctx, 'claude', text);
+    }
 
     // Remember that this session ran claude, and in which directory, so the
     // conversation can be continued after the terminal session is reopened.

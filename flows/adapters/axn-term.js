@@ -1905,6 +1905,77 @@ async function broadcastCheck(env) {
   return `broadcast ok: ls reached ${s1.name} + ${s2.name}, select ${s2.name} leaves it the only target`;
 }
 
+/**
+ * Start real claude in the session, answer its trust prompt, name the
+ * conversation with /rename (and optionally send one tiny prompt to haiku so
+ * the conversation has content), then wait until the plugin has seen the name.
+ */
+async function runClaudeTitled(env, withPrompt) {
+  const id = env.AXN_TERM_SESSION_ID;
+  const title = `axn-flow-${randomBytes(3).toString("hex")}`;
+  try {
+    const before = (await getSessionOutput(env, id)).length;
+    const fresh = async () => (await getSessionOutput(env, id)).slice(before);
+    await writeToSession(env, id, "claude --model haiku\r");
+    let trusted = false;
+    const deadline = Date.now() + 45000;
+    for (;;) {
+      if (Date.now() > deadline) throw new Error(`claude never became ready; ${(await fresh()).slice(-400)}`);
+      const out = await fresh();
+      if (!trusted && /Yes,\s*I trust/.test(out)) {
+        // The prompt defaults to "No, exit" — move down, confirm.
+        await sleep(500);
+        await writeToSession(env, id, "\x1b[B");
+        await sleep(500);
+        await writeToSession(env, id, "\r");
+        trusted = true;
+      }
+      // claude sets its title (✳ Claude Code) once the TUI is up.
+      if (/\x1b\]0;[^\x07]*Claude Code/.test(out)) break;
+      await sleep(500);
+    }
+    // Type the command, let the input settle, submit separately (a combined
+    // write is taken as pasted text by some TUIs).
+    await writeToSession(env, id, `/rename ${title}`);
+    await sleep(1000);
+    await writeToSession(env, id, "\r");
+    await waitForState(
+      env,
+      (state) =>
+        (state.windows ?? [])
+          .flatMap((w) => w.sessions ?? [])
+          .find((s) => s.id === id)?.pluginState?.claude?.seenTitle === title,
+      30000,
+    ).catch(() => {
+      throw new Error(`plugin never saw the title '${title}' while claude ran`);
+    });
+    if (withPrompt) {
+      await sleep(1000);
+      await writeToSession(env, id, "Reply with exactly: ok");
+      await sleep(1000);
+      await writeToSession(env, id, "\r");
+      // claude animates its title glyph while it works (◐…) and shows ✳ when
+      // idle again: wait for a busy title, then an idle one.
+      const titles = (out) => [...out.matchAll(/\x1b\]0;([^\x07\x1b]*)(?:\x07|\x1b\\)/g)].map((m) => m[1]);
+      const done = Date.now() + 90000;
+      let busy = false;
+      for (;;) {
+        if (Date.now() > done) throw new Error("claude never finished answering");
+        const t = titles(await fresh()).filter(Boolean).pop() ?? "";
+        if (t && !t.startsWith("✳")) busy = true;
+        else if (busy && t.startsWith("✳")) break;
+        await sleep(1000);
+      }
+    }
+  } catch (error) {
+    await closeApp(env);
+    throw new Error(`${error.message}; ${logTail(env)}`);
+  }
+  env.AXN_TERM_CLAUDE_TITLE = title;
+  env.AXN_TERM_EXPECT_RECORD = withPrompt ? "true" : "false";
+  return `claude titled: ${title}${withPrompt ? " (with a conversation)" : " (empty)"}`;
+}
+
 export async function run(step, env) {
   const action = step.args?.action ?? "help";
 
@@ -2421,80 +2492,49 @@ export async function run(step, env) {
       return `claude restored: ${captured}`;
     }
 
-    // Real claude: launch it, name the conversation with /rename (no model
-    // call) and wait until the plugin has seen that name — claude clears its
-    // terminal title on exit, so the name must be caught while it runs.
-    case "runClaudeTitled": {
-      const id = env.AXN_TERM_SESSION_ID;
-      const title = `axn-flow-${randomBytes(3).toString("hex")}`;
-      try {
-        const before = (await getSessionOutput(env, id)).length;
-        const fresh = async () => (await getSessionOutput(env, id)).slice(before);
-        await writeToSession(env, id, "claude\r");
-        let trusted = false;
-        const deadline = Date.now() + 45000;
-        for (;;) {
-          if (Date.now() > deadline) throw new Error(`claude never became ready; ${(await fresh()).slice(-400)}`);
-          const out = await fresh();
-          if (!trusted && /Yes,\s*I trust/.test(out)) {
-            // The prompt defaults to "No, exit" — move down, confirm.
-            await sleep(500);
-            await writeToSession(env, id, "\x1b[B");
-            await sleep(500);
-            await writeToSession(env, id, "\r");
-            trusted = true;
-          }
-          // claude sets its title (✳ Claude Code) once the TUI is up.
-          if (/\x1b\]0;[^\x07]*Claude Code/.test(out)) break;
-          await sleep(500);
-        }
-        // Type the command, let the input settle, submit separately (a
-        // combined write is taken as pasted text by some TUIs).
-        await writeToSession(env, id, `/rename ${title}`);
-        await sleep(1000);
-        await writeToSession(env, id, "\r");
-        await waitForState(
-          env,
-          (state) =>
-            (state.windows ?? [])
-              .flatMap((w) => w.sessions ?? [])
-              .find((s) => s.id === id)?.pluginState?.claude?.seenTitle === title,
-          30000,
-        ).catch(() => {
-          throw new Error(`plugin never saw the title '${title}' while claude ran; ${logTail(env)}`);
-        });
-      } catch (error) {
-        await closeApp(env);
-        throw error;
-      }
-      env.AXN_TERM_CLAUDE_TITLE = title;
-      return `claude titled: ${title}`;
-    }
+    // Real claude: launch it, name the conversation with /rename and wait
+    // until the plugin has seen the name — claude clears its terminal title
+    // on exit, so the name must be caught while it runs. `runClaudeEmpty`
+    // sends no prompt (no model call, no conversation: nothing may be
+    // recorded); `runClaudeConversation` sends one tiny prompt to haiku.
+    case "runClaudeEmpty":
+      return await runClaudeTitled(env, false);
+    case "runClaudeConversation":
+      return await runClaudeTitled(env, true);
 
-    // Leave claude with /exit and wait until the resume record exists.
+    // Leave claude with /exit. An empty conversation must leave no resume
+    // record; a real one must.
     case "exitClaude": {
       const id = env.AXN_TERM_SESSION_ID;
+      const expectRecord = env.AXN_TERM_EXPECT_RECORD === "true";
+      const session = (state) =>
+        (state.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id);
       try {
         await writeToSession(env, id, "/exit");
         await sleep(1000);
         await writeToSession(env, id, "\r");
         await waitForState(
           env,
-          (state) => {
-            const s = (state.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id);
-            return !/claude/i.test(s?.process ?? "") && !!s?.pluginState?.claude?.last;
-          },
+          (state) =>
+            !/claude/i.test(session(state)?.process ?? "") &&
+            (!expectRecord || !!session(state)?.pluginState?.claude?.last),
           45000,
         );
+        if (!expectRecord) {
+          // Past the plugin's exit-capture window, then a state flush.
+          await sleep(8000);
+          const last = session(readStateFile(env))?.pluginState?.claude?.last;
+          if (last) throw new Error(`an empty conversation was recorded: ${JSON.stringify(last)}`);
+        }
       } catch (error) {
         await closeApp(env);
-        throw new Error(`claude exit not recorded: ${error.message}; ${logTail(env)}`);
+        throw new Error(`claude exit: ${error.message}; ${logTail(env)}`);
       }
-      return "claude exited";
+      return expectRecord ? "claude exited, resume record exists" : "claude exited, nothing recorded";
     }
 
-    // The saved resume record carries the name given while claude ran, and
-    // it is in the right-click list.
+    // The saved resume record carries the name given while claude ran, the
+    // conversation id, and is in the right-click list.
     case "verifyClaudeTitle": {
       const title = env.AXN_TERM_CLAUDE_TITLE;
       const s = (readStateFile(env).windows ?? [])
@@ -2504,6 +2544,9 @@ export async function run(step, env) {
       const last = claude.last;
       if (last?.title !== title) {
         throw new Error(`resume record title is ${JSON.stringify(last?.title)}, expected '${title}': ${JSON.stringify(last)}`);
+      }
+      if (!/--resume \S+/.test(last.command ?? "")) {
+        throw new Error(`resume record has no conversation id: ${JSON.stringify(last)}`);
       }
       if (claude.history?.[0]?.title !== title) {
         throw new Error(`history[0] is ${JSON.stringify(claude.history?.[0])}, expected title '${title}'`);

@@ -405,15 +405,18 @@ describe('claude plugin', () => {
     });
   });
 
-  it('falls back to claude -c when no hint was captured', () => {
+  it('records nothing when no hint was captured — an empty conversation', () => {
     const h = makeCtx('claude', { output: 'no hint' });
     claudePlugin.onProcessEnd?.(h.ctx);
-    expect(lastOf(h)).toEqual({
-      name: undefined,
-      cwd: '/repo',
-      command: `cd '/repo' && claude -c`,
-      at: expect.any(Number),
+    expect(lastOf(h)).toBeUndefined();
+  });
+
+  it('a name seen in an empty run does not leak into the next conversation', () => {
+    const h = makeCtx('claude', { process: 'claude' }, {
+      pluginState: { claudeActive: false, seenTitle: 'empty-run-name' },
     });
+    claudePlugin.onOutput?.(h.ctx, 'x');
+    expect((h.ctx.pluginState as { seenTitle?: string }).seenTitle).toBeUndefined();
   });
 });
 
