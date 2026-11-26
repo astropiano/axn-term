@@ -57,12 +57,19 @@ import {
   mrWaitingForMe,
   openThreads,
   summarizeOpenThreads,
+  SessionMergedChip,
   SessionMrChip,
   ThreadIndicator,
   type GlabMrItem,
   type MrDiscussion,
   type MrThreadSummary,
 } from './glabMr';
+import {
+  findMerged,
+  repoSig,
+  type MergedCandidate,
+  type SessionMerged,
+} from './mrMerged';
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -153,6 +160,8 @@ const sessionLastKey = new Map<string, string>();
 
 export interface RawPrListItem {
   number?: number;
+  headRefOid?: string;
+  mergedAt?: string;
   title?: string;
   isDraft?: boolean;
   url?: string;
@@ -213,6 +222,14 @@ export function decisionFromReviews(
 /** `gh pr list` for the PRs whose head is `branch` (branch single-quoted: git allows `$(…)` in names). */
 export function prListCommand(branch: string): string {
   return forgeCliCommand('gh', `pr list --head ${shellQuote(branch)} --json ${PR_LIST_FIELDS} -L 10`);
+}
+
+/** `gh pr list --state merged` for the branch: its merged PRs with the head they merged at. */
+export function mergedPrListCommand(branch: string): string {
+  return forgeCliCommand(
+    'gh',
+    `pr list --head ${shellQuote(branch)} --state merged --json number,title,url,headRefOid,mergedAt,isCrossRepository,headRepositoryOwner -L 5`,
+  );
 }
 
 /**
@@ -339,11 +356,12 @@ async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
   const root = session.repo?.root;
   const branch = session.repo?.branch;
   const had =
-    (((ctx.pluginState as { prs?: SessionPr[] } | undefined)?.prs?.length) ?? 0) > 0;
+    (((ctx.pluginState as { prs?: SessionPr[] } | undefined)?.prs?.length) ?? 0) > 0 ||
+    !!(ctx.pluginState as { merged?: SessionMerged | null } | undefined)?.merged;
   const hostname = (ctx.pluginSettings as { hostname?: unknown } | undefined)?.hostname;
   // A repo on GitLab is glab-mr's — don't spawn gh for it on every refresh.
   if (!root || !branch || forgeOfRemote(session.repo?.remote, { github: hostname }) === 'gitlab') {
-    if (had) ctx.updatePluginState({ prs: [] });
+    if (had) ctx.updatePluginState({ prs: [], merged: null });
     return;
   }
 
@@ -392,7 +410,45 @@ async function refreshSessionPrs(ctx: SessionViewContext & PluginApi) {
     };
   });
 
-  ctx.updatePluginState({ prs });
+  ctx.updatePluginState({
+    prs,
+    merged: prs.length === 0 ? await mergedFor(ctx, root, branch, hostname) : null,
+  });
+}
+
+/** The branch's merged PR when no open one exists and HEAD continues it. */
+async function mergedFor(
+  ctx: SessionViewContext & PluginApi,
+  root: string,
+  branch: string,
+  _hostname: unknown,
+): Promise<SessionMerged | null> {
+  let list: RawPrListItem[];
+  try {
+    const parsed = JSON.parse((await ctx.exec(mergedPrListCommand(branch), root)) || '[]') as unknown;
+    list = Array.isArray(parsed) ? (parsed as RawPrListItem[]) : [];
+  } catch {
+    return null;
+  }
+  if (list.some((item) => item.isCrossRepository)) {
+    list = ownPrs(list, await pushOwners(ctx, root, branch, ctx.getSession().repo?.remote));
+  }
+  const candidates: MergedCandidate[] = list.flatMap((item) =>
+    item.headRefOid
+      ? [
+          {
+            reference: `#${item.number}`,
+            title: item.title ?? '',
+            url: item.url ?? '',
+            sha: item.headRefOid,
+            mergedAt: item.mergedAt,
+          },
+        ]
+      : [],
+  );
+  return (
+    (await findMerged(candidates, (script) => ctx.exec(script, root), repoSig(ctx.getSession().repo))) ?? null
+  );
 }
 
 function scheduleSessionRefresh(
@@ -412,7 +468,10 @@ function scheduleSessionRefresh(
         const branch = session.repo?.branch;
         const key = root && branch ? `${root}@${branch}` : '';
         const stale = Date.now() - (sessionLastFetch.get(id) ?? 0) > PR_STALE_MS;
-        if (key !== sessionLastKey.get(id) || stale) {
+        // a merged branch: new commits/edits since the last probe change the chip
+        const merged = (ctx.pluginState as { merged?: SessionMerged | null } | undefined)?.merged;
+        const moved = !!merged && merged.sig !== repoSig(session.repo);
+        if (key !== sessionLastKey.get(id) || stale || moved) {
           void refreshSessionPrs(ctx);
         }
       },
@@ -1452,7 +1511,12 @@ export const ghPrPlugin: SessionViewPlugin = {
         if (settings?.showInTitle === false) return null;
         const state = ctx.pluginState as { prs?: SessionPr[] } | undefined;
         const prs = state?.prs ?? [];
-        if (prs.length === 0) return null;
+        if (prs.length === 0) {
+          const merged = (ctx.pluginState as { merged?: SessionMerged | null } | undefined)?.merged;
+          return merged ? (
+            <SessionMergedChip forge="GitHub" icon={<GitPullRequest className="h-2.5 w-2.5" />} merged={merged} />
+          ) : null;
+        }
         return (
           <SessionMrChip
             forge="GitHub"
@@ -1466,7 +1530,10 @@ export const ghPrPlugin: SessionViewPlugin = {
         if (settings?.showInTitle === false) return null;
         const prs =
           (ctx.pluginState as { prs?: SessionPr[] } | undefined)?.prs ?? [];
-        if (prs.length === 0) return null;
+        if (prs.length === 0) {
+          const merged = (ctx.pluginState as { merged?: SessionMerged | null } | undefined)?.merged;
+          return merged ? `${merged.reference}: merged — ${merged.title}` : null;
+        }
         const first = prs[0];
         return `${first.reference}${prs.length > 1 ? ` +${prs.length - 1}` : ''}: open pull request${prs.length > 1 ? 's' : ''} on this branch — ${first.title}`;
       },

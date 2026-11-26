@@ -27,6 +27,13 @@ import {
 import { CardChips } from './cardEnrichers';
 import { MrStatusChip, worstTone, type MrTone } from './mrStatus';
 import { MrDescription } from './mrDescription';
+import {
+  findMerged,
+  mergedVerdict,
+  repoSig,
+  type MergedCandidate,
+  type SessionMerged,
+} from './mrMerged';
 import { shellQuote } from '../../shellQuote';
 import { sessionLastSelectedAt } from '../attention';
 import { getSessionViewPlugins, isPluginEnabled } from './index';
@@ -222,6 +229,25 @@ export interface MrStatusFacts {
   changesRequested?: boolean;
 }
 
+/** The chip for a branch whose MR/PR already merged (see `mrMerged.ts`). */
+export function SessionMergedChip({
+  forge,
+  icon,
+  merged,
+}: {
+  forge: 'GitLab' | 'GitHub';
+  icon: ReactNode;
+  merged: SessionMerged;
+}) {
+  const { tone, reasons } = mergedVerdict(merged);
+  const tip = [forge, `${merged.reference} ${merged.title}`, `  ${reasons.join(' · ')}`].join('\n');
+  return (
+    <MrStatusChip tone={tone} href={merged.url} tip={tip} icon={icon}>
+      {merged.reference} {tone === 'violet' ? 'merged' : 'merged+'}
+    </MrStatusChip>
+  );
+}
+
 const PIPELINE_RUNNING = ['running', 'pending', 'created', 'preparing', 'scheduled', 'waiting_for_resource'];
 
 /**
@@ -335,6 +361,8 @@ async function currentMrUser(ctx: SessionViewContext & PluginApi, hostname: unkn
 
 interface RawMrListItem {
   iid?: number;
+  sha?: string;
+  merged_at?: string;
   title?: string;
   draft?: boolean;
   web_url?: string;
@@ -367,6 +395,8 @@ interface RawMrDiscussion {
   notes?: {
     resolvable?: boolean;
     resolved?: boolean | null;
+    /** GitLab's own bookkeeping ("changed the description", …) — never a reply. */
+    system?: boolean;
     created_at?: string;
     author?: { username?: string };
   }[];
@@ -383,13 +413,23 @@ export function countOpenThreads(discussions: RawMrDiscussion[]): number {
   ).length;
 }
 
-function normalizeRestDiscussions(discussions: RawMrDiscussion[]): MrDiscussion[] {
-  return discussions.map((discussion) => ({
-    resolvable: discussion.notes?.some((note) => note.resolvable === true) ?? false,
-    resolved: discussion.notes?.every((note) => note.resolved === true) ?? false,
-    notes: (discussion.notes ?? []).map((note) => note.author?.username ?? '').filter(Boolean),
-    lastAt: discussion.notes?.[discussion.notes.length - 1]?.created_at,
-  }));
+/**
+ * REST discussions → the shared thread shape. A thread is resolved when none
+ * of its resolvable notes is open — a system note inside it (`resolved: null`)
+ * must neither keep it open nor count as the last word, or a finished thread
+ * reads as "waiting on you" (same rule as `countOpenThreads`).
+ */
+export function normalizeRestDiscussions(discussions: RawMrDiscussion[]): MrDiscussion[] {
+  return discussions.map((discussion) => {
+    const notes = discussion.notes ?? [];
+    const replies = notes.filter((note) => note.system !== true);
+    return {
+      resolvable: notes.some((note) => note.resolvable === true),
+      resolved: !notes.some((note) => note.resolvable === true && note.resolved !== true),
+      notes: replies.map((note) => note.author?.username ?? '').filter(Boolean),
+      lastAt: replies[replies.length - 1]?.created_at,
+    };
+  });
 }
 
 async function fetchAllRestDiscussions(
@@ -416,11 +456,12 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
   const root = session.repo?.root;
   const branch = session.repo?.branch;
   const had =
-    (((ctx.pluginState as { mrs?: SessionMr[] } | undefined)?.mrs?.length) ?? 0) > 0;
+    (((ctx.pluginState as { mrs?: SessionMr[] } | undefined)?.mrs?.length) ?? 0) > 0 ||
+    !!(ctx.pluginState as { merged?: SessionMerged | null } | undefined)?.merged;
   const hostname = (ctx.pluginSettings as { hostname?: unknown } | undefined)?.hostname;
   // A repo on GitHub is gh-pr's — don't spawn glab for it on every refresh.
   if (!root || !branch || forgeOfRemote(session.repo?.remote, { gitlab: hostname }) === 'github') {
-    if (had) ctx.updatePluginState({ mrs: [] });
+    if (had) ctx.updatePluginState({ mrs: [], merged: null });
     return;
   }
 
@@ -488,7 +529,38 @@ async function refreshSessionMrs(ctx: SessionViewContext & PluginApi) {
     }),
   );
 
-  ctx.updatePluginState({ mrs });
+  ctx.updatePluginState({ mrs, merged: mrs.length === 0 ? await mergedFor(ctx, root, branch) : null });
+}
+
+/** The branch's merged MR when no open one exists and HEAD continues it. */
+async function mergedFor(
+  ctx: SessionViewContext & PluginApi,
+  root: string,
+  branch: string,
+): Promise<SessionMerged | null> {
+  let list: RawMrListItem[];
+  try {
+    const parsed = JSON.parse((await ctx.exec(mergedMrListCommand(branch), root)) || '[]') as unknown;
+    list = Array.isArray(parsed) ? (parsed as RawMrListItem[]) : [];
+  } catch {
+    return null;
+  }
+  const candidates: MergedCandidate[] = list.flatMap((item) =>
+    item.sha
+      ? [
+          {
+            reference: item.references?.short ?? `!${item.iid}`,
+            title: item.title ?? '',
+            url: item.web_url ?? '',
+            sha: item.sha,
+            mergedAt: item.merged_at,
+          },
+        ]
+      : [],
+  );
+  return (
+    (await findMerged(candidates, (script) => ctx.exec(script, root), repoSig(ctx.getSession().repo))) ?? null
+  );
 }
 
 function scheduleSessionRefresh(
@@ -508,7 +580,10 @@ function scheduleSessionRefresh(
         const branch = session.repo?.branch;
         const key = root && branch ? `${root}@${branch}` : '';
         const stale = Date.now() - (sessionLastFetch.get(id) ?? 0) > MR_STALE_MS;
-        if (key !== sessionLastKey.get(id) || stale) {
+        // a merged branch: new commits/edits since the last probe change the chip
+        const merged = (ctx.pluginState as { merged?: SessionMerged | null } | undefined)?.merged;
+        const moved = !!merged && merged.sig !== repoSig(session.repo);
+        if (key !== sessionLastKey.get(id) || stale || moved) {
           void refreshSessionMrs(ctx);
         }
       },
@@ -707,7 +782,7 @@ const MR_OVERVIEW_QUERY = `query { currentUser { username
 // notes(last: 20): only a thread's newest notes matter — `mrWaitingForMe`
 // reads who wrote last — the same window as gh-pr's `comments(last: 20)`.
 const mrDiscussionsFields = (afterVar?: string) =>
-  `discussions(first: 100${afterVar ? `, after: $${afterVar}` : ''}) { pageInfo { hasNextPage endCursor } nodes { resolvable resolved notes(last: 20) { nodes { createdAt author { username } } } } }`;
+  `discussions(first: 100${afterVar ? `, after: $${afterVar}` : ''}) { pageInfo { hasNextPage endCursor } nodes { resolvable resolved notes(last: 20) { nodes { createdAt system author { username } } } } }`;
 
 /** MRs per discussions query, and how many such queries run at once. */
 const DISCUSSION_BATCH = 8;
@@ -812,7 +887,7 @@ interface RawGqlMr {
     nodes?: {
       resolvable?: boolean;
       resolved?: boolean;
-      notes?: { nodes?: { createdAt?: string; author?: { username?: string } }[] };
+      notes?: { nodes?: { createdAt?: string; system?: boolean; author?: { username?: string } }[] };
     }[];
   };
 }
@@ -853,12 +928,15 @@ function normalizeMr(raw: RawGqlMr): GlabMrItem {
 }
 
 function normalizeDiscussions(raw: RawGqlMr['discussions']): MrDiscussion[] {
-  return (raw?.nodes ?? []).map((d) => ({
-    resolvable: d.resolvable ?? false,
-    resolved: d.resolved ?? false,
-    notes: (d.notes?.nodes ?? []).map((n) => n.author?.username ?? ''),
-    lastAt: d.notes?.nodes?.[d.notes.nodes.length - 1]?.createdAt,
-  }));
+  return (raw?.nodes ?? []).map((d) => {
+    const replies = (d.notes?.nodes ?? []).filter((n) => n.system !== true);
+    return {
+      resolvable: d.resolvable ?? false,
+      resolved: d.resolved ?? false,
+      notes: replies.map((n) => n.author?.username ?? ''),
+      lastAt: replies[replies.length - 1]?.createdAt,
+    };
+  });
 }
 
 /** The same key `normalizeMr` gives the item. */
@@ -887,6 +965,11 @@ let refreshInFlight: Promise<void> | null = null;
 /** `glab mr list` for the MRs whose source is `branch` (single-quoted: git allows `$(…)` in names). */
 export function mrListCommand(branch: string): string {
   return forgeCliCommand('glab', `mr list -s ${shellQuote(branch)} -F json -P 10`);
+}
+
+/** `glab mr list --merged` for the branch: its merged MRs with the head they merged at. */
+export function mergedMrListCommand(branch: string): string {
+  return forgeCliCommand('glab', `mr list -s ${shellQuote(branch)} --merged -F json -P 5`);
 }
 
 /** The app-wide overview command (`--hostname` for self-hosted GitLab). */
@@ -1725,7 +1808,12 @@ export const glabMrPlugin: SessionViewPlugin = {
         if (settings?.showInTitle === false) return null;
         const state = ctx.pluginState as { mrs?: SessionMr[] } | undefined;
         const mrs = state?.mrs ?? [];
-        if (mrs.length === 0) return null;
+        if (mrs.length === 0) {
+          const merged = (ctx.pluginState as { merged?: SessionMerged | null } | undefined)?.merged;
+          return merged ? (
+            <SessionMergedChip forge="GitLab" icon={<GitMerge className="h-2.5 w-2.5" />} merged={merged} />
+          ) : null;
+        }
         return <SessionMrChip forge="GitLab" icon={<GitMerge className="h-2.5 w-2.5" />} items={mrs} />;
       },
       tip: (ctx) => {
@@ -1733,7 +1821,10 @@ export const glabMrPlugin: SessionViewPlugin = {
         if (settings?.showInTitle === false) return null;
         const mrs =
           (ctx.pluginState as { mrs?: SessionMr[] } | undefined)?.mrs ?? [];
-        if (mrs.length === 0) return null;
+        if (mrs.length === 0) {
+          const merged = (ctx.pluginState as { merged?: SessionMerged | null } | undefined)?.merged;
+          return merged ? `${merged.reference}: merged — ${merged.title}` : null;
+        }
         const first = mrs[0];
         return `${first.reference}${mrs.length > 1 ? ` +${mrs.length - 1}` : ''}: open merge request${mrs.length > 1 ? 's' : ''} on this branch — ${first.title}`;
       },

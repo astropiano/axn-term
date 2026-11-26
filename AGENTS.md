@@ -1313,6 +1313,8 @@ rail/panel/row/view surfaces plus a `changes requested` badge; rows carry
 the shared `mrActions` providers (dev-workflow's `review` button resolves
 `pull/N/head`).
 
+**Merged branches** (shared `session-plugins/mrMerged.ts`): when a session's branch has no open MR/PR, both plugins also ask the forge for its merged ones (`glab mr list --merged`, `gh pr list --state merged`) and keep the newest whose source head (GitLab `sha`, GitHub `headRefOid`) is an ancestor of the local HEAD — squash merges make the merge commit useless for this, and a reused branch name's older MR is skipped because its head is not in the history. The result lives in pluginState `merged` (not in `mrs`/`prs`, so watchers, Jira keys and the panel block never see it) and the title chip shows `<ref> merged` in violet, or `<ref> merged+` in orange with the reasons (new commits since the merge, uncommitted/untracked files) in the tooltip. The probe's repo signature (`ahead/dirty/untracked`) is stored with it, so a change re-runs the probe instead of waiting for the 5-minute refresh. Thread state in REST discussions ignores system notes (`normalizeRestDiscussions`) — a resolved thread holding one used to read as "waiting on you".
+
 Both forge plugins are on by default and stay quiet where they don't apply
 (shared helpers in `session-plugins/forge.ts`):
 

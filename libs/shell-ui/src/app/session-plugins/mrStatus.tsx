@@ -7,9 +7,9 @@ import { StatusChip } from '../StatusChip';
  * from the one `mrStatusTone` rule in glabMr.tsx.
  */
 
-export type MrTone = 'red' | 'orange' | 'yellow' | 'green' | 'gray';
+export type MrTone = 'red' | 'orange' | 'yellow' | 'green' | 'violet' | 'gray';
 
-const SEVERITY: MrTone[] = ['red', 'orange', 'yellow', 'green', 'gray'];
+const SEVERITY: MrTone[] = ['red', 'orange', 'yellow', 'green', 'violet', 'gray'];
 
 /** The most urgent tone of several (red first). */
 export function worstTone(tones: MrTone[]): MrTone {
