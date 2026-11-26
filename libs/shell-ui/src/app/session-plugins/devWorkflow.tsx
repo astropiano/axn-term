@@ -2901,6 +2901,7 @@ function DevWorkflowView({
     null,
   );
   const [over, setOver] = useState<string | null>(null);
+  const dragTimer = useRef<number | undefined>(undefined);
 
   const dropInstance = (sessionId: string) => {
     const next = { ...instances };
@@ -2954,19 +2955,25 @@ function DevWorkflowView({
                   drag.workflow === def.id &&
                   drag.from !== state &&
                   transitionAllowed(def, drag.from, state);
+                // The column the card is dragged from stays untouched: WebKit
+                // cancels a drag whose source gets restyled (opacity makes a
+                // new compositing layer) while `dragstart` is still running.
+                const isSource = drag !== null && drag.workflow === def.id && drag.from === state;
                 const dropCls = drag
-                  ? canDrop
-                    ? over === overKey
-                      ? ' border-[var(--accent)] bg-[var(--surface-hover)]'
-                      : ' border-dashed border-[var(--accent)]'
-                    : ' cursor-not-allowed opacity-50'
+                  ? isSource
+                    ? ''
+                    : canDrop
+                      ? over === overKey
+                        ? ' border-[var(--accent)] bg-[var(--surface-hover)]'
+                        : ' border-dashed border-[var(--accent)]'
+                      : ' cursor-not-allowed opacity-50'
                   : '';
                 return (
                 <div
                   key={state}
-                  aria-disabled={drag !== null && !canDrop}
+                  aria-disabled={drag !== null && !canDrop && !isSource}
                   data-tip={
-                    drag
+                    drag && !isSource
                       ? canDrop
                         ? t`Drop here to move from ${drag.from} to ${state}`
                         : t`Cannot move from ${drag.from} to ${state}`
@@ -3048,9 +3055,12 @@ function DevWorkflowView({
                             e.stopPropagation();
                             e.dataTransfer.setData('application/x-axn-workflow-session', sessionId);
                             e.dataTransfer.effectAllowed = 'move';
-                            setDrag({ sessionId, workflow: def.id, from: inst.state });
+                            // After dragstart returns: restyling during it cancels the drag in WebKit.
+                            const started = { sessionId, workflow: def.id, from: inst.state };
+                            dragTimer.current = window.setTimeout(() => setDrag(started), 0);
                           }}
                           onDragEnd={() => {
+                            window.clearTimeout(dragTimer.current);
                             setDrag(null);
                             setOver(null);
                           }}
