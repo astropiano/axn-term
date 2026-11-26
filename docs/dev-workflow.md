@@ -52,6 +52,8 @@ dev-workflow:
       transitions:                 # optional allowlist; absent = free movement
         plan: [plan-review]        # only restricts listed source states —
         plan-review: [plan, implement]  # unlisted states (implement…) move freely
+      card:                         # optional kanban-card content
+        fields: [summary, ticket, vars, navigation, actions]
       steps:                       # per state: a map of named actions
         plan:
           description: "Draft and critique the plan"  # reserved key — describes the state
@@ -78,6 +80,14 @@ dev-workflow:
 
 `workflows` is a free-form map in the plugin's plugins.yaml section. It is
 edited by hand — the declarative `settings` fields only cover scalars.
+
+`card.fields` controls the extra content shown on this workflow's kanban
+cards. The default is `[summary, ticket, vars, navigation, actions]`; omit a
+field to hide that section. `summary` shows the session summary, `ticket`
+shows Jira/forge enrichment, `vars` shows editable workflow variables,
+`navigation` shows the previous/next state controls, and `actions` shows the
+state's Run buttons. The session name and process icon, plus the remove
+control, remain available so cards are still identifiable and manageable.
 
 `steps.<state>` is a **map of named actions**. Two sugar forms are
 recognized: a step value carrying `agent`/`command`/`prompt`/`prompt-file`/

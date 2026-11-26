@@ -2,8 +2,9 @@ import { t } from '@lingui/core/macro';
 import { PublishPanelStatus } from '../PanelStatusSection';
 import { i18n } from '../../i18n';
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { load as loadYaml, dump as dumpYaml } from 'js-yaml';
-import { AlertTriangle, ChevronLeft, ChevronRight, Columns3, Loader2, Play, Workflow } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Columns3, GripVertical, Loader2, Play, Workflow } from 'lucide-react';
 import type { ShellSession, Workspace } from '../../types';
 import { SessionIcon } from '../SessionPanel';
 import { RailItem } from '../RailItem';
@@ -214,6 +215,8 @@ export interface WorkflowDef {
    * when it finds nothing.
    */
   clone?: 'first' | 'session';
+  /** Optional workflow-card content. Unlisted sections use the default card. */
+  card?: WorkflowCardField[];
   /** Runnable actions per state — several named actions may share one state. */
   steps: Record<string, WorkflowAction[]>;
   /**
@@ -235,6 +238,15 @@ export interface WorkflowDef {
    */
   workspace?: string;
 }
+
+export type WorkflowCardField = 'summary' | 'ticket' | 'vars' | 'navigation' | 'actions';
+const DEFAULT_WORKFLOW_CARD: WorkflowCardField[] = [
+  'summary',
+  'ticket',
+  'vars',
+  'navigation',
+  'actions',
+];
 
 export interface WorkflowTickets {
   /** Enricher id whose fields carry the status (default `jira`). */
@@ -433,6 +445,16 @@ export function parseWorkflows(settings: unknown): WorkflowDef[] {
         ? (to as unknown[]).filter((s): s is string => typeof s === 'string')
         : [];
     }
+    const cardRaw = w.card;
+    const cardValues =
+      cardRaw && typeof cardRaw === 'object' && !Array.isArray(cardRaw)
+        ? (cardRaw as Record<string, unknown>).fields
+        : cardRaw;
+    const card = Array.isArray(cardValues)
+      ? cardValues.filter((v): v is WorkflowCardField =>
+          typeof v === 'string' && DEFAULT_WORKFLOW_CARD.includes(v as WorkflowCardField),
+        )
+      : undefined;
     const steps: WorkflowDef['steps'] = {};
     const descriptions: Record<string, string> = {};
     const stepsRaw = (w.steps ?? {}) as Record<string, unknown>;
@@ -481,6 +503,7 @@ export function parseWorkflows(settings: unknown): WorkflowDef[] {
       })(),
       transitions: Object.keys(transitions).length > 0 ? transitions : undefined,
       clone: w.clone === 'session' ? 'session' : undefined,
+      card: card && card.length > 0 ? card : undefined,
       tickets: parseWorkflowTickets(w.tickets, states),
       steps,
       descriptions: Object.keys(descriptions).length > 0 ? descriptions : undefined,
@@ -2911,6 +2934,7 @@ function DevWorkflowView({
       </div>
       {defs.map((def) => {
         const cards = Object.entries(instances).filter(([, i]) => i.workflow === def.id);
+        const cardFields = new Set<WorkflowCardField>(def.card ?? DEFAULT_WORKFLOW_CARD);
         const ticketList = def.tickets?.query
           ? ticketLists.get(ticketListKey(def.tickets.source, def.tickets.query))
           : undefined;
@@ -2935,11 +2959,19 @@ function DevWorkflowView({
                     ? over === overKey
                       ? ' border-[var(--accent)] bg-[var(--surface-hover)]'
                       : ' border-dashed border-[var(--accent)]'
-                    : ' opacity-60'
+                    : ' cursor-not-allowed opacity-50'
                   : '';
                 return (
                 <div
                   key={state}
+                  aria-disabled={drag !== null && !canDrop}
+                  data-tip={
+                    drag
+                      ? canDrop
+                        ? t`Drop here to move from ${drag.from} to ${state}`
+                        : t`Cannot move from ${drag.from} to ${state}`
+                      : undefined
+                  }
                   onDragOver={(e) => {
                     if (!canDrop) return;
                     e.preventDefault();
@@ -3005,7 +3037,15 @@ function DevWorkflowView({
                         <div
                           key={sessionId}
                           draggable={live}
+                          // WebKit otherwise treats dragging selectable card
+                          // text as a selection instead of starting HTML5 DnD.
+                          style={
+                            live
+                              ? ({ WebkitUserDrag: 'element', userSelect: 'none' } as CSSProperties)
+                              : undefined
+                          }
                           onDragStart={(e) => {
+                            e.stopPropagation();
                             e.dataTransfer.setData('application/x-axn-workflow-session', sessionId);
                             e.dataTransfer.effectAllowed = 'move';
                             setDrag({ sessionId, workflow: def.id, from: inst.state });
@@ -3021,6 +3061,10 @@ function DevWorkflowView({
                           }`}
                         >
                           <div className="flex items-center gap-1.5">
+                            <GripVertical
+                              aria-hidden="true"
+                              className="h-3 w-3 shrink-0 text-[var(--text-tertiary)]"
+                            />
                             {/* flex wrapper blockifies SessionIcon's inline
                                 span so its h-/w- classes apply — without it a
                                 raw-svg icon (width=100%) resolves against the
@@ -3040,7 +3084,7 @@ function DevWorkflowView({
                               {inst.sessionName ?? sessionId}
                             </span>
                           </div>
-                          {session?.summary && (
+                          {cardFields.has('summary') && session?.summary && (
                             <div
                               className="line-clamp-3 whitespace-pre-line break-words text-[11px] text-[var(--text-secondary)]"
                               data-tip={session.summary}
@@ -3048,21 +3092,23 @@ function DevWorkflowView({
                               {session.summary}
                             </div>
                           )}
-                          <TicketCardInfo
-                            def={def}
-                            state={inst.state}
-                            subject={{
-                              vars: live
-                                ? ((sessionApi(sessionId)?.pluginState as BindingState | undefined)
-                                    ?.vars ?? inst.vars)
-                                : inst.vars,
-                              session: {
-                                name: inst.sessionName ?? session?.name,
-                                cwd: inst.cwd,
-                              },
-                            }}
-                          />
-                          {(def.vars?.length ?? 0) > 0 && (
+                          {cardFields.has('ticket') && (
+                            <TicketCardInfo
+                              def={def}
+                              state={inst.state}
+                              subject={{
+                                vars: live
+                                  ? ((sessionApi(sessionId)?.pluginState as BindingState | undefined)
+                                      ?.vars ?? inst.vars)
+                                  : inst.vars,
+                                session: {
+                                  name: inst.sessionName ?? session?.name,
+                                  cwd: inst.cwd,
+                                },
+                              }}
+                            />
+                          )}
+                          {cardFields.has('vars') && (def.vars?.length ?? 0) > 0 && (
                             <div className="mt-0.5 flex flex-col gap-0.5">
                               {def.vars!.map((spec) => {
                                 const vars = live
@@ -3085,6 +3131,7 @@ function DevWorkflowView({
                               })}
                             </div>
                           )}
+                          {cardFields.has('navigation') && (
                           <div className="mt-1 flex items-center justify-between">
                             <span className="flex w-4 justify-start">
                               {live && canPrev && (
@@ -3125,7 +3172,8 @@ function DevWorkflowView({
                               )}
                             </span>
                           </div>
-                          {actions.length > 0 && (
+                          )}
+                          {cardFields.has('actions') && actions.length > 0 && (
                             <div className="mt-1 flex flex-col gap-1">
                               {actions.map((action) => {
                                 const info = actionRunInfo(action, proc, inst.state);

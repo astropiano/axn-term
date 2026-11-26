@@ -256,6 +256,18 @@ function wf(sub: string) {
 }
 
 describe('parseWorkflows', () => {
+  it('parses optional workflow card fields and ignores unknown fields', () => {
+    const [def] = parseWorkflows({
+      workflows: {
+        w: {
+          states: ['a'],
+          card: { fields: ['summary', 'actions', 'nope'] },
+        },
+      },
+    });
+    expect(def.card).toEqual(['summary', 'actions']);
+  });
+
   it('parses workflows, camelizes nested keys, infers format', () => {
     const defs = parseWorkflows(WORKFLOW_SETTINGS);
     expect(defs).toHaveLength(3);
