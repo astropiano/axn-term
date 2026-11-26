@@ -375,6 +375,20 @@ function buildInitialState(stateDir, cwd, variant, devinSessionName) {
     devinSession.output = "";
   }
 
+  if (variant === "claude-title") {
+    // A plain shell for REAL claude: the flow launches it, names the
+    // conversation with /rename and exits — the resume record must carry
+    // that name although claude clears its terminal title on exit. A stable
+    // scratch folder, so claude's trust prompt is answered once, not per run.
+    const flowCwd = join(tmpdir(), "axn-term-flow-claude");
+    mkdirSync(flowCwd, { recursive: true });
+    devinSession.name = "shell";
+    devinSession.topic = "shell";
+    devinSession.cwd = flowCwd;
+    devinSession.pluginState = undefined;
+    devinSession.output = "";
+  }
+
   if (variant === "worktrees" || variant === "mr-review") {
     // A plain shell session in a real git repo — the worktrees plugin's
     // playground. No devin/pluginState; the nudge test drives a fake devin
@@ -785,6 +799,11 @@ fi
     plugins += `claude:
   enabled: true
   restore-session: true
+`;
+  }
+  if (variant === "claude-title") {
+    plugins += `claude:
+  enabled: true
 `;
   }
   if (variant === "hardening") {
@@ -2400,6 +2419,99 @@ export async function run(step, env) {
         await closeApp(env);
       }
       return `claude restored: ${captured}`;
+    }
+
+    // Real claude: launch it, name the conversation with /rename (no model
+    // call) and wait until the plugin has seen that name — claude clears its
+    // terminal title on exit, so the name must be caught while it runs.
+    case "runClaudeTitled": {
+      const id = env.AXN_TERM_SESSION_ID;
+      const title = `axn-flow-${randomBytes(3).toString("hex")}`;
+      try {
+        const before = (await getSessionOutput(env, id)).length;
+        const fresh = async () => (await getSessionOutput(env, id)).slice(before);
+        await writeToSession(env, id, "claude\r");
+        let trusted = false;
+        const deadline = Date.now() + 45000;
+        for (;;) {
+          if (Date.now() > deadline) throw new Error(`claude never became ready; ${(await fresh()).slice(-400)}`);
+          const out = await fresh();
+          if (!trusted && /Yes,\s*I trust/.test(out)) {
+            // The prompt defaults to "No, exit" — move down, confirm.
+            await sleep(500);
+            await writeToSession(env, id, "\x1b[B");
+            await sleep(500);
+            await writeToSession(env, id, "\r");
+            trusted = true;
+          }
+          // claude sets its title (✳ Claude Code) once the TUI is up.
+          if (/\x1b\]0;[^\x07]*Claude Code/.test(out)) break;
+          await sleep(500);
+        }
+        // Type the command, let the input settle, submit separately (a
+        // combined write is taken as pasted text by some TUIs).
+        await writeToSession(env, id, `/rename ${title}`);
+        await sleep(1000);
+        await writeToSession(env, id, "\r");
+        await waitForState(
+          env,
+          (state) =>
+            (state.windows ?? [])
+              .flatMap((w) => w.sessions ?? [])
+              .find((s) => s.id === id)?.pluginState?.claude?.seenTitle === title,
+          30000,
+        ).catch(() => {
+          throw new Error(`plugin never saw the title '${title}' while claude ran; ${logTail(env)}`);
+        });
+      } catch (error) {
+        await closeApp(env);
+        throw error;
+      }
+      env.AXN_TERM_CLAUDE_TITLE = title;
+      return `claude titled: ${title}`;
+    }
+
+    // Leave claude with /exit and wait until the resume record exists.
+    case "exitClaude": {
+      const id = env.AXN_TERM_SESSION_ID;
+      try {
+        await writeToSession(env, id, "/exit");
+        await sleep(1000);
+        await writeToSession(env, id, "\r");
+        await waitForState(
+          env,
+          (state) => {
+            const s = (state.windows ?? []).flatMap((w) => w.sessions ?? []).find((x) => x.id === id);
+            return !/claude/i.test(s?.process ?? "") && !!s?.pluginState?.claude?.last;
+          },
+          45000,
+        );
+      } catch (error) {
+        await closeApp(env);
+        throw new Error(`claude exit not recorded: ${error.message}; ${logTail(env)}`);
+      }
+      return "claude exited";
+    }
+
+    // The saved resume record carries the name given while claude ran, and
+    // it is in the right-click list.
+    case "verifyClaudeTitle": {
+      const title = env.AXN_TERM_CLAUDE_TITLE;
+      const s = (readStateFile(env).windows ?? [])
+        .flatMap((w) => w.sessions ?? [])
+        .find((x) => x.id === env.AXN_TERM_SESSION_ID);
+      const claude = s?.pluginState?.claude ?? {};
+      const last = claude.last;
+      if (last?.title !== title) {
+        throw new Error(`resume record title is ${JSON.stringify(last?.title)}, expected '${title}': ${JSON.stringify(last)}`);
+      }
+      if (claude.history?.[0]?.title !== title) {
+        throw new Error(`history[0] is ${JSON.stringify(claude.history?.[0])}, expected title '${title}'`);
+      }
+      if (claude.seenTitle !== undefined) {
+        throw new Error(`seenTitle should be cleared after the record, got ${JSON.stringify(claude.seenTitle)}`);
+      }
+      return `resume record carries '${last.title}' (${last.command})`;
     }
 
     // Write remote-control settings into the run's config.yaml. Runs inside

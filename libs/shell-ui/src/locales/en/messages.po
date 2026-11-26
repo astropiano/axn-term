@@ -1030,10 +1030,14 @@ msgstr "Reset to process name"
 #~ msgstr "Resume {0} session{1}"
 
 #. placeholder {0}: name ? ` '${name}'` : ''
-#: libs/shell-ui/src/app/session-plugins/agentResume.ts:262
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:38
+#: libs/shell-ui/src/app/session-plugins/agentResume.ts:375
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:64
 msgid "Resume {agent} session{0}"
 msgstr "Resume {agent} session{0}"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:70
+msgid "Resume an earlier {agent} session"
+msgstr "Resume an earlier {agent} session"
 
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:766
 msgid "Resume viewport"

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - real claude resume record carries the conversation name"
+        description="Launches real claude in an axn-term session, names the conversation with /rename, exits with /exit and checks the saved resume record (last + history) carries the name although claude clears its terminal title on exit. No model call is made.">
+    <tags>
+      <tag>axn-term</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="claude-title" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Create a temp state dir (real claude, no fake binary)">
+        <assert that="contains" value="state dir prepared" description="The test harness is ready"/>
+      </step>
+
+      <step adapter="axn-term" action="start" description="Launch axn-term with the temp state dir">
+        <assert that="contains" value="app started" description="The app started"/>
+      </step>
+
+      <step adapter="axn-term" action="runClaudeTitled" description="Run real claude, /rename the conversation, wait for the plugin to see the name">
+        <assert that="contains" value="claude titled:" description="The name was seen while claude ran"/>
+      </step>
+
+      <step adapter="axn-term" action="exitClaude" description="/exit claude and wait for the resume record">
+        <assert that="contains" value="claude exited" description="claude ended and the record exists"/>
+      </step>
+
+      <step adapter="axn-term" action="verifyClaudeTitle" description="The resume record and history carry the name">
+        <assert that="contains" value="resume record carries" description="Record carries the conversation name"/>
+      </step>
+
+      <step adapter="axn-term" action="close" description="Close axn-term (state saved)">
+        <assert that="contains" value="app closed" description="The app closed"/>
+      </step>
+
+      <step adapter="axn-term" action="verifyClaudeTitle" description="The name survives in the saved state">
+        <assert that="contains" value="resume record carries" description="Persisted record carries the name"/>
+      </step>
+    </steps>
+  </flow>
+</flows>

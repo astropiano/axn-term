@@ -9,6 +9,7 @@ import { declaredActive } from './declaredProgress';
 import {
   agentResumeMenuItem,
   forgetLastAgentSession,
+  noteAgentTitle,
   rememberLastAgentSession,
 } from './agentResume';
 import { agentResumePanel } from './agentResumePanel';
@@ -658,6 +659,7 @@ export const vibePlugin: SessionViewPlugin = {
     }
 
     if (isActive) {
+      noteAgentTitle(ctx, 'vibe', text);
       armIdleTimer(ctx);
       if (state.attention) patch.attention = undefined;
     }

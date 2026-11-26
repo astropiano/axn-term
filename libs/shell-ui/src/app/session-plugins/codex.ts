@@ -2,7 +2,7 @@ import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin'
 import { axnLog } from '../log';
 import { codexHookSpec } from './codexHooks';
 import { registerAgentLauncher } from './agentRegistry';
-import { agentResumeMenuItem, rememberLastAgentSession } from './agentResume';
+import { agentResumeMenuItem, noteAgentTitle, rememberLastAgentSession } from './agentResume';
 import { agentResumePanel } from './agentResumePanel';
 import { agentCommand } from './devWorkflow';
 import { shellQuote, shellWord } from '../../shellQuote';
@@ -104,8 +104,9 @@ export const codexPlugin: SessionViewPlugin = {
     rememberCodexLast(ctx);
   },
 
-  onOutput: (ctx) => {
+  onOutput: (ctx, text) => {
     if (!isCodexProcess(ctx.session.process)) return;
+    noteAgentTitle(ctx, 'codex', text);
     const state = getState(ctx);
     if (!state.codexSeen) {
       ctx.updatePluginState({ codexSeen: true });

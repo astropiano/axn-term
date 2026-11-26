@@ -1,4 +1,9 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act } from 'react';
+import { createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import { SettingsProvider } from '../../SettingsProvider';
 import type { ShellSession } from '../../types';
 import type { MenuScope, SessionViewContext, PluginApi } from './plugin';
 
@@ -10,9 +15,14 @@ vi.mock('@tauri-apps/api/event', () => ({
 import {
   agentResumeMenuItem,
   clearAgentLasts,
+  agentHistory,
+  cleanAgentTitle,
   forgetLastAgentSession,
   lastAgentSession,
+  lastOscTitle,
+  noteAgentTitle,
   rememberLastAgentSession,
+  upsertAgentHistory,
   stripAgentTitlePrefix,
 } from './agentResume';
 import { agentResumePanel } from './agentResumePanel';
@@ -25,6 +35,8 @@ import { antigravityPlugin } from './antigravity';
 
 import { opencodePlugin } from './opencode';
 import { vibePlugin } from './vibe';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 type Ctx = SessionViewContext & PluginApi;
 
@@ -537,7 +549,7 @@ describe('stripAgentTitlePrefix', () => {
 
 describe('session title capture', () => {
   it('records the process-reported title with the agent prefix stripped', () => {
-    const h = makeCtx('devin', { autoName: 'devin: grey-party' });
+    const h = makeCtx('devin', { autoName: 'devin: grey-party', process: 'devin' });
     rememberLastAgentSession(h.ctx, 'devin', {
       name: 'grey-party',
       command: 'devin -r grey-party',
@@ -567,7 +579,7 @@ describe('session title capture', () => {
   });
 
   it('a changed title re-stamps the record', () => {
-    const h = makeCtx('claude', { autoName: 'first title' }, {
+    const h = makeCtx('claude', { autoName: 'first title', process: 'claude' }, {
       pluginState: { last: { name: 'abc', command: 'claude --resume abc', at: 5 } },
     });
     rememberLastAgentSession(h.ctx, 'claude', { name: 'abc', command: 'claude --resume abc' });
@@ -641,9 +653,171 @@ describe('agentResumePanel', () => {
 
   it('clicking the button writes the stored command into the PTY', async () => {
     const h = makeCtx('devin', {}, { pluginState: { last } });
-    const el = agentResumePanel(h.ctx, 'devin') as ReactElement<{ children: ReactElement }>;
-    const button = el.props.children as ReactElement<{ onClick: () => void }>;
-    button.props.onClick();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(agentResumePanel(h.ctx, 'devin'));
+    });
+    await act(async () => {
+      host.querySelector('button')!.click();
+    });
     await vi.waitFor(() => expect(h.writes).toEqual([`${last.command}\r`]));
+    await act(async () => root.unmount());
+    host.remove();
+  });
+});
+
+describe('agent title capture while the agent runs', () => {
+  it('cleans spinner glyphs, the agent prefix and generic defaults', () => {
+    expect(cleanAgentTitle('◐ labtitle-xyz', 'claude')).toBe('labtitle-xyz');
+    expect(cleanAgentTitle('✳ labtitle-xyz', 'claude')).toBe('labtitle-xyz');
+    expect(cleanAgentTitle('⠂ Fix auth', 'claude')).toBe('Fix auth');
+    expect(cleanAgentTitle('devin: grey-party', 'devin')).toBe('grey-party');
+    expect(cleanAgentTitle('✳ Claude Code', 'claude')).toBeUndefined();
+    expect(cleanAgentTitle('', 'claude')).toBeUndefined();
+    expect(cleanAgentTitle(undefined, 'claude')).toBeUndefined();
+  });
+
+  it('reads the last non-empty OSC title of a chunk', () => {
+    expect(lastOscTitle('a\x1b]0;first\x07b\x1b]2;second\x1b\\c')).toBe('second');
+    expect(lastOscTitle('x\x1b]0;kept\x07y\x1b]0;\x07')).toBe('kept');
+    expect(lastOscTitle('no title here')).toBeUndefined();
+  });
+
+  it('notes the name from output, and records it after the agent cleared its title', () => {
+    const h = makeCtx('claude', { process: 'claude', autoName: '' });
+    noteAgentTitle(h.ctx, 'claude', 'x\x1b]0;✳ Claude Code\x07');
+    expect((h.ctx.pluginState as { seenTitle?: string }).seenTitle).toBeUndefined();
+    noteAgentTitle(h.ctx, 'claude', 'x\x1b]0;◐ labtitle-xyz\x07');
+    expect((h.ctx.pluginState as { seenTitle?: string }).seenTitle).toBe('labtitle-xyz');
+    // the agent exits: it sets an empty title, the shell reports its own
+    (h.session as { process?: string; autoName?: string }).process = undefined;
+    (h.session as { autoName?: string }).autoName = '~/code/repo';
+    rememberLastAgentSession(h.ctx, 'claude', { name: 'abc', command: 'claude --resume abc' });
+    expect(lastOf(h)).toMatchObject({ name: 'abc', title: 'labtitle-xyz' });
+    expect((h.ctx.pluginState as { seenTitle?: string }).seenTitle).toBeUndefined();
+  });
+
+  it('does not note anything from a shell prompt title', () => {
+    const h = makeCtx('claude', { process: undefined, autoName: '~/code/repo' });
+    rememberLastAgentSession(h.ctx, 'claude', { command: 'claude -c' });
+    expect((lastOf(h) as { title?: string }).title).toBeUndefined();
+  });
+
+  it('keeps the earlier title of the same conversation when this run saw none', () => {
+    const h = makeCtx('claude', {}, {
+      pluginState: {
+        last: { name: 'abc', title: 'Old name', command: 'claude --resume abc', at: 5 },
+      },
+    });
+    rememberLastAgentSession(h.ctx, 'claude', { name: 'abc', command: 'claude --resume abc' });
+    expect(lastOf(h)).toMatchObject({ title: 'Old name' });
+  });
+});
+
+describe('resume button right-click list', () => {
+  it('lists the remembered conversations and resumes the one picked', async () => {
+    const h = makeCtx('claude', {}, {
+      pluginState: {
+        last: { name: 'b', title: 'Beta', cwd: '/repo', command: 'claude --resume b', at: 20 },
+        history: [
+          { name: 'b', title: 'Beta', cwd: '/repo', command: 'claude --resume b', at: 20 },
+          { name: 'a', title: 'Alpha', cwd: '/other', command: "cd /other && claude --resume a", at: 10 },
+        ],
+      },
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(createElement(SettingsProvider, null, agentResumePanel(h.ctx, 'claude')));
+    });
+    const button = host.querySelector('button')!;
+    expect(button.textContent).toContain("'Beta'");
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    });
+    const rows = [...document.body.querySelectorAll('button')].filter((b) => b !== button);
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringContaining('Beta'),
+      expect.stringContaining('Alpha'),
+    ]);
+    expect(rows[1].textContent).toContain('other');
+    await act(async () => {
+      rows[1].click();
+    });
+    await vi.waitFor(() => expect(h.writes).toEqual(['cd /other && claude --resume a\r']));
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it('has no list with a single remembered conversation', async () => {
+    const h = makeCtx('claude', {}, {
+      pluginState: { last: { name: 'b', title: 'Beta', cwd: '/repo', command: 'claude --resume b', at: 20 } },
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(createElement(SettingsProvider, null, agentResumePanel(h.ctx, 'claude')));
+    });
+    const button = host.querySelector('button')!;
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    });
+    expect(document.body.querySelectorAll('button')).toHaveLength(1);
+    await act(async () => root.unmount());
+    host.remove();
+  });
+});
+
+describe('agent history', () => {
+  const rec = (name: string, at: number, title = name) => ({
+    name,
+    title,
+    cwd: '/repo',
+    command: `claude --resume ${name}`,
+    at,
+  });
+
+  it('upserts newest first, moves a resumed conversation to the front and caps the list', () => {
+    let h = upsertAgentHistory([], rec('a', 1));
+    h = upsertAgentHistory(h, rec('b', 2));
+    h = upsertAgentHistory(h, rec('a', 3));
+    expect(h.map((e) => e.name)).toEqual(['a', 'b']);
+    for (let i = 0; i < 8; i += 1) h = upsertAgentHistory(h, rec(`n${i}`, 10 + i));
+    expect(h).toHaveLength(5);
+    expect(h[0].name).toBe('n7');
+  });
+
+  it('keeps conversations without an id apart by folder', () => {
+    const a = { command: 'claude -c', cwd: '/a', at: 1 };
+    const b = { command: 'claude -c', cwd: '/b', at: 2 };
+    expect(upsertAgentHistory(upsertAgentHistory([], a), b)).toHaveLength(2);
+  });
+
+  it('remembers each recorded conversation and lists them newest first', () => {
+    const h = makeCtx('claude');
+    rememberLastAgentSession(h.ctx, 'claude', { name: 'a', title: 'Alpha', cwd: '/repo', command: 'claude --resume a' });
+    rememberLastAgentSession(h.ctx, 'claude', { name: 'b', title: 'Beta', cwd: '/other', command: 'cd /other && claude --resume b' });
+    expect(agentHistory(h.ctx).map((e) => e.title)).toEqual(['Beta', 'Alpha']);
+    expect(lastOf(h)).toMatchObject({ name: 'b' });
+  });
+
+  it('reads a record written before the list existed', () => {
+    const h = makeCtx('claude', {}, {
+      pluginState: { last: { name: 'old', command: 'claude --resume old', at: 3 } },
+    });
+    expect(agentHistory(h.ctx).map((e) => e.name)).toEqual(['old']);
+  });
+
+  it('forgetting the last drops it from the list and promotes the next one', () => {
+    const h = makeCtx('claude');
+    rememberLastAgentSession(h.ctx, 'claude', { name: 'a', title: 'Alpha', command: 'claude --resume a' });
+    rememberLastAgentSession(h.ctx, 'claude', { name: 'b', title: 'Beta', command: 'claude --resume b' });
+    forgetLastAgentSession(h.ctx, 'claude', 'b');
+    expect(agentHistory(h.ctx).map((e) => e.name)).toEqual(['a']);
+    expect(lastOf(h)).toMatchObject({ name: 'a' });
   });
 });

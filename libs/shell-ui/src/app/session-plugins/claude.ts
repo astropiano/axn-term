@@ -8,6 +8,7 @@ import { registerAgentLauncher } from './agentRegistry';
 import {
   agentResumeMenuItem,
   forgetLastAgentSession,
+  noteAgentTitle,
   rememberLastAgentSession,
 } from './agentResume';
 import { agentResumePanel } from './agentResumePanel';
@@ -473,6 +474,9 @@ export const claudePlugin: SessionViewPlugin = {
       if (RESTORE_FAILED_RE.test(pendingRestore.recent)) finishRestore(ctx, 'gone');
       else if (isClaudeProcess(ctx.getSession().process)) finishRestore(ctx, 'ok');
     }
+
+    // The conversation's name (`/rename`, topic) only exists while claude runs.
+    if (isClaudeProcess(ctx.getSession().process)) noteAgentTitle(ctx, 'claude', text);
 
     // Remember that this session ran claude, and in which directory, so the
     // conversation can be continued after the terminal session is reopened.

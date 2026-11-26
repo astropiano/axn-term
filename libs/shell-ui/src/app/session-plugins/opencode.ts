@@ -4,6 +4,7 @@ import { registerAgentLauncher } from './agentRegistry';
 import {
   agentResumeMenuItem,
   lastAgentSession,
+  noteAgentTitle,
   rememberLastAgentSession,
 } from './agentResume';
 import { agentResumePanel } from './agentResumePanel';
@@ -193,8 +194,9 @@ export const opencodePlugin: SessionViewPlugin = {
     })();
   },
 
-  onOutput: (ctx) => {
+  onOutput: (ctx, text) => {
     if (!isOpencodeProcess(ctx.session.process)) return;
+    noteAgentTitle(ctx, 'opencode', text);
     const state = getState(ctx);
     if (!state.opencodeSeen || !state.opencodeActive) {
       // A fresh foreground run — stamp its start so session-list captures
