@@ -336,6 +336,21 @@ describe('session ticket sources', () => {
     // an earlier source still wins
     expect(sessionTicketKeys({ mrTitles: [], branch: 'AIACC-1-x', cwd: '/w/VECTORDB-29-y' }, keys)).toEqual(['AIACC-1']);
   });
+
+  it('prefers advertised identifiers over MR titles and branch names', () => {
+    expect(
+      sessionTicketKeys(
+        {
+          identifiers: ['MGNL-9 from pull request'],
+          mrTitles: ['AIACC-1 title'],
+          branch: 'AIACC-2-branch',
+          name: 'AIACC-3 name',
+          cwd: '/w/AIACC-4',
+        },
+        ['AIACC', 'MGNL'],
+      ),
+    ).toEqual(['MGNL-9']);
+  });
 });
 
 describe('sessionsTicketKeys', () => {

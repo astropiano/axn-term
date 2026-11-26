@@ -28,6 +28,8 @@ export interface SessionIdentifierContext {
   session: ShellSession;
   pluginSettings: unknown;
   pluginState: unknown;
+  /** Identifiers published by other enabled plugins for this session. */
+  getOtherIdentifiers?: () => SessionIdentifier[];
 }
 
 /** The rail-view operations every plugin ctx carries (backed by `app/viewHost.ts`). */
@@ -1105,19 +1107,23 @@ export function createPluginApi(
   const live = () => deps.getLiveSession?.(session.id) ?? session;
   const enabledPlugins = () =>
     deps.plugins.filter((p) => isPluginEnabled(p, deps.pluginSettings, deps.plugins));
-  const getSessionIdentifiers = (): SessionIdentifier[] =>
-    enabledPlugins().flatMap((p) => {
-      if (!p.sessionIdentifiers) return [];
-      try {
-        return p.sessionIdentifiers({
-          session: live(),
-          pluginSettings: deps.pluginSettings[p.settingsKey ?? p.id],
-          pluginState: (live().pluginState ?? {})[p.stateKey ?? p.id],
-        });
-      } catch {
-        return [];
-      }
-    });
+  const queryIdentifiers = (excludePluginId?: string): SessionIdentifier[] =>
+    enabledPlugins()
+      .filter((p) => !excludePluginId || p.id !== excludePluginId)
+      .flatMap((p) => {
+        if (!p.sessionIdentifiers) return [];
+        try {
+          return p.sessionIdentifiers({
+            session: live(),
+            pluginSettings: deps.pluginSettings[p.settingsKey ?? p.id],
+            pluginState: (live().pluginState ?? {})[p.stateKey ?? p.id],
+            getOtherIdentifiers: () => queryIdentifiers(p.id),
+          });
+        } catch {
+          return [];
+        }
+      });
+  const getSessionIdentifiers = (): SessionIdentifier[] => queryIdentifiers(plugin.id);
   const writeToSession = async (data: string) => {
     await deps.backend.write(ptyId, data);
   };

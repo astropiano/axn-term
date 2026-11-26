@@ -15,7 +15,14 @@ import {
   Check,
   GitPullRequestClosed,
 } from 'lucide-react';
-import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
+import type {
+  PluginApi,
+  SessionIdentifier,
+  SessionIdentifierContext,
+  SessionViewContext,
+  SessionViewPlugin,
+} from './plugin';
+import { extractTicketFromTitle } from './glabMr';
 import type { ShellSession, SessionAttention} from '../../types';
 import { sessionLastSelectedAt } from '../attention';
 import { getSessionViewPlugins, isPluginEnabled } from './index';
@@ -1436,12 +1443,43 @@ function GhPrView({
 // Plugin definition
 // ---------------------------------------------------------------------------
 
+/** Publishes ticket keys spotted in the session's pull request titles via ticketRegex. */
+export function ghPrIdentifiers(ctx: SessionIdentifierContext): SessionIdentifier[] {
+  const settings = ctx.pluginSettings as { ticketRegex?: string } | undefined;
+  if (!settings?.ticketRegex) return [];
+  const prs = (ctx.pluginState as { prs?: { title?: string }[] } | undefined)?.prs;
+  if (!Array.isArray(prs) || prs.length === 0) return [];
+
+  const out: SessionIdentifier[] = [];
+  const seen = new Set<string>();
+  for (const pr of prs) {
+    const ticket = extractTicketFromTitle(pr.title, settings.ticketRegex);
+    if (ticket && !seen.has(ticket)) {
+      seen.add(ticket);
+      out.push({
+        value: ticket,
+        source: 'gh-pr',
+        label: 'PR',
+      });
+    }
+  }
+  return out;
+}
+
 export const ghPrPlugin: SessionViewPlugin = {
   id: 'gh-pr',
   title: 'GitHub pull requests',
   logo: 'GitPullRequest',
   version: '0.1.0',
+  sessionIdentifiers: ghPrIdentifiers,
   settings: [
+    {
+      key: 'ticketRegex',
+      label: 'Ticket regex',
+      description:
+        'Regex for spotting ticket keys in pull request titles (e.g. `[A-Z][A-Z0-9_]+-\\d+`). When set, spotted tickets are advertised as session identifiers.',
+      type: 'string',
+    },
     {
       key: 'showInPanel',
       label: 'Show pull requests in the session panel',
