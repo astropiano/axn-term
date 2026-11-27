@@ -1027,7 +1027,7 @@ msgstr "Ripristina il nome del processo"
 #~ msgstr "Riprendi sessione {0}{1}"
 
 #. placeholder {0}: name ? ` '${name}'` : ''
-#: libs/shell-ui/src/app/session-plugins/agentResume.ts:375
+#: libs/shell-ui/src/app/session-plugins/agentResume.ts:379
 #: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:64
 msgid "Resume {agent} session{0}"
 msgstr "Riprendi sessione {agent}{0}"

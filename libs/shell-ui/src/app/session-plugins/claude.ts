@@ -215,22 +215,56 @@ function claudeResumeCommand(state: ClaudePluginState, sessionCwd: string | unde
  * Publish the just-exited claude conversation as this agent's last session
  * (app-level pluginData — see agentResume.ts): the captured id's exact
  * `claude --resume <id>` line (with its --worktree when one was hinted).
- * Without an id nothing is recorded: an empty conversation. Unlike
+ * Without an id — or when the transcript shows the conversation never got
+ * an answer — nothing is recorded. Unlike
  * claudeResumeCommand the `cd` prefix is always folded in — the menu resume
  * can run from any session's shell.
  */
-function rememberClaudeLast(ctx: SessionViewContext & PluginApi, state: ClaudePluginState): void {
+function rememberClaudeLast(ctx: SessionViewContext & PluginApi, state: ClaudePluginState): Promise<void> {
   // claude prints its resume id only for a conversation that has content — no
   // id means an empty one (opened and left), which is not worth resuming.
-  if (!state.claudeResumeId) return;
+  if (!state.claudeResumeId) return Promise.resolve();
   const cwd = state.claudeCwd ?? ctx.getSession().cwd;
   const worktree = state.claudeWorktree ? ` --worktree ${shellQuote(state.claudeWorktree)}` : '';
   const resume = `claude${worktree} --resume ${state.claudeResumeId}`;
-  rememberLastAgentSession(ctx, 'claude', {
-    name: state.claudeResumeId,
-    cwd,
-    command: cwd ? `cd ${shellQuote(cwd)} && ${resume}` : resume,
+  const id = state.claudeResumeId;
+  return conversationIsEmpty(ctx, cwd, id).then((empty) => {
+    if (empty) {
+      axnLog('debug', 'claude', `conversation ${id} is empty — not recorded`);
+      return;
+    }
+    rememberLastAgentSession(ctx, 'claude', {
+      name: id,
+      cwd,
+      command: cwd ? `cd ${shellQuote(cwd)} && ${resume}` : resume,
+    });
   });
+}
+
+/**
+ * True when claude's transcript of this conversation exists and holds no
+ * assistant message — it was opened, maybe named (/rename), and left. claude
+ * prints the resume hint for those too. Anything unknown (no cwd, the file
+ * unreadable, no exec) counts as not empty: a real conversation must never
+ * be dropped.
+ */
+async function conversationIsEmpty(
+  ctx: SessionViewContext & PluginApi,
+  cwd: string | undefined,
+  id: string,
+): Promise<boolean> {
+  if (!cwd || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) return false;
+  // claude keys the project folder by the cwd with every non-alphanumeric
+  // character replaced by '-'.
+  const folder = cwd.replace(/[^A-Za-z0-9]/g, '-');
+  try {
+    const out = await ctx.exec(
+      `f="\${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/projects/${shellQuote(folder)}/${shellQuote(id)}.jsonl; if [ -f "$f" ] && ! grep -q '"type":"assistant"' "$f"; then echo empty; fi`,
+    );
+    return /\bempty\b/.test(out ?? '');
+  } catch {
+    return false;
+  }
 }
 
 // Claude Code prints its resume hint on exit (double Ctrl-C, /exit, /quit):
@@ -306,7 +340,7 @@ function adoptResumeHint(
     ctx.updatePluginState({ claudeResumeId: hint.id, claudeWorktree: hint.worktree });
     axnLog('debug', 'claude-close', `session ${ctx.session.id}: captured resume id ${hint.id}`);
   }
-  rememberClaudeLast(ctx, {
+  void rememberClaudeLast(ctx, {
     ...getStateLive(ctx),
     claudeResumeId: hint.id,
     claudeWorktree: hint.worktree,
@@ -452,7 +486,7 @@ export const claudePlugin: SessionViewPlugin = {
         beginExitCapture(ctx, PASSIVE_CAPTURE_MS);
         // Publish the just-exited conversation as the last session — a hint
         // arriving inside the capture upgrades the record to the exact id.
-        rememberClaudeLast(ctx, getStateLive(ctx));
+        void rememberClaudeLast(ctx, getStateLive(ctx));
       }
     }
   },
@@ -628,7 +662,7 @@ export const claudePlugin: SessionViewPlugin = {
     const pending = exitCaptures.get(ctx.session.id);
     if (pending) {
       await pending.done;
-      rememberClaudeLast(ctx, getStateLive(ctx));
+      await rememberClaudeLast(ctx, getStateLive(ctx));
       return;
     }
     if (!isClaudeProcess(ctx.getSession().process)) {
@@ -649,9 +683,9 @@ export const claudePlugin: SessionViewPlugin = {
       await Promise.race([capture.done, pause(1_500)]);
     }
     await capture.done;
-    // No hint within the capture window still leaves a resumable last
-    // session — `claude -c` continues the latest conversation in its dir.
-    rememberClaudeLast(ctx, getStateLive(ctx));
+    // A hint that arrived in the window was recorded when it came in; with
+    // none there is no conversation id to record.
+    await rememberClaudeLast(ctx, getStateLive(ctx));
   },
 };
 

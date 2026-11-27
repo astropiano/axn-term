@@ -82,6 +82,10 @@ export function cleanAgentTitle(raw: string | undefined, agent: string): string 
   if (!raw) return undefined;
   const title = stripAgentTitlePrefix(raw.replace(/^[\p{So}\p{Cf}\s]+/u, '').trim(), agent);
   if (!title || GENERIC_AGENT_TITLES.has(title.toLowerCase())) return undefined;
+  // The shell's own title (`user@host: ~/dir`, a bare path) — what arrives in
+  // the moments after the agent exits, while the foreground poll still says
+  // the agent runs. Never a conversation name.
+  if (/^[\w.+-]+@[\w.-]+:/.test(title) || /^[/~]/.test(title)) return undefined;
   return title;
 }
 

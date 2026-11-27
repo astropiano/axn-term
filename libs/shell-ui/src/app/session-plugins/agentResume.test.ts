@@ -70,6 +70,7 @@ function makeCtx(
     appData?: Record<string, unknown>;
     pluginSettings?: Record<string, unknown>;
     runCommand?: (line: string) => string | false | undefined | Promise<string | false | undefined>;
+    exec?: (command: string) => Promise<string>;
   } = {},
 ): Harness {
   const session: ShellSession = {
@@ -107,7 +108,7 @@ function makeCtx(
     pluginSettings: opts.pluginSettings ?? {},
     getSession: () => session,
     getSessionCount: () => 1,
-    exec: async () => '',
+    exec: opts.exec ?? (async () => ''),
     waitForSessionOutput: async () => true,
     getCwd: async () => session.cwd ?? null,
     getTty: async () => null,
@@ -381,28 +382,57 @@ describe('devin plugin', () => {
 describe('claude plugin', () => {
   const hint = 'Resume this session with:\nclaude --resume abc-123\n';
 
-  it('records the exit-hint id as the last session on process end', () => {
+  it('records the exit-hint id as the last session on process end', async () => {
     const h = makeCtx('claude', { output: hint }, { pluginState: { claudeCwd: '/repo' } });
     claudePlugin.onProcessEnd?.(h.ctx);
-    expect(lastOf(h)).toEqual({
-      name: 'abc-123',
-      cwd: '/repo',
-      command: `cd '/repo' && claude --resume abc-123`,
-      at: expect.any(Number),
-    });
+    await vi.waitFor(() =>
+      expect(lastOf(h)).toEqual({
+        name: 'abc-123',
+        cwd: '/repo',
+        command: `cd '/repo' && claude --resume abc-123`,
+        at: expect.any(Number),
+      }),
+    );
   });
 
-  it('keeps the worktree in the recorded resume line', () => {
+  it('keeps the worktree in the recorded resume line', async () => {
     const h = makeCtx('claude', {
       output: 'Resume this session with:\nclaude --worktree "feat-x" --resume abc-1\n',
     });
     claudePlugin.onProcessEnd?.(h.ctx);
-    expect(lastOf(h)).toEqual({
-      name: 'abc-1',
-      cwd: '/repo',
-      command: `cd '/repo' && claude --worktree 'feat-x' --resume abc-1`,
-      at: expect.any(Number),
+    await vi.waitFor(() =>
+      expect(lastOf(h)).toEqual({
+        name: 'abc-1',
+        cwd: '/repo',
+        command: `cd '/repo' && claude --worktree 'feat-x' --resume abc-1`,
+        at: expect.any(Number),
+      }),
+    );
+  });
+
+  it('records nothing for a conversation whose transcript has no answer', async () => {
+    const commands: string[] = [];
+    const h = makeCtx('claude', { output: hint }, {
+      pluginState: { claudeCwd: '/private/var/x.y/work' },
+      exec: async (command) => {
+        commands.push(command);
+        return 'empty\n';
+      },
     });
+    claudePlugin.onProcessEnd?.(h.ctx);
+    await vi.waitFor(() => expect(commands).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(lastOf(h)).toBeUndefined();
+    // claude's project folder: the cwd with every non-alphanumeric as '-'
+    expect(commands[0]).toContain("/projects/'-private-var-x-y-work'/'abc-123'.jsonl");
+  });
+
+  it('records the conversation when the transcript is unknown or unreadable', async () => {
+    for (const exec of [async () => '', async () => { throw new Error('no exec'); }]) {
+      const h = makeCtx('claude', { output: hint }, { pluginState: { claudeCwd: '/repo' }, exec });
+      claudePlugin.onProcessEnd?.(h.ctx);
+      await vi.waitFor(() => expect(lastOf(h)).toMatchObject({ name: 'abc-123' }));
+    }
   });
 
   it('records nothing when no hint was captured — an empty conversation', () => {
@@ -679,6 +709,10 @@ describe('agent title capture while the agent runs', () => {
     expect(cleanAgentTitle('devin: grey-party', 'devin')).toBe('grey-party');
     expect(cleanAgentTitle('✳ Claude Code', 'claude')).toBeUndefined();
     expect(cleanAgentTitle('', 'claude')).toBeUndefined();
+    // the shell's own title right after the agent exits
+    expect(cleanAgentTitle('alex@mac: ~/code/repo', 'claude')).toBeUndefined();
+    expect(cleanAgentTitle('/var/folders/x/axn-term-flow-claude', 'claude')).toBeUndefined();
+    expect(cleanAgentTitle('~/code/repo', 'claude')).toBeUndefined();
     expect(cleanAgentTitle(undefined, 'claude')).toBeUndefined();
   });
 
