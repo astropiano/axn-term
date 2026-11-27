@@ -421,7 +421,7 @@ async function restoreStorm(step) {
   const sessions = Number(a.sessions ?? 12);
   const banner = Number(a.banner ?? 256);
   const runs = runCount(step, 3);
-  const col = { idle: [], cpu: [], web: [], main: [], rss: [], lagMax: [], lagOver50: [], lagSum: [], headless: [], visible: [], flush: [], bytes: [], first: [] };
+  const col = { queue: [], idle: [], cpu: [], web: [], main: [], rss: [], lagMax: [], lagOver50: [], lagSum: [], headless: [], visible: [], flush: [], bytes: [], first: [] };
   for (let i = 0; i < runs; i++) {
     const app = await launch({ restore: sessions, select: "first", trace: true, bannerKb: banner });
     try {
@@ -445,6 +445,7 @@ async function restoreStorm(step) {
       const cpu = cpuByKind(app.pid);
       const stats = readTrace(app).filter((e) => e.name === "output_stats").pop();
       const o = stats?.detail ? JSON.parse(stats.detail) : {};
+      col.queue.push(o.queuePeakKb);
       col.idle.push(idleAt);
       col.cpu.push(sumCpu(cpu));
       col.web.push(cpu.web);
@@ -475,6 +476,7 @@ async function restoreStorm(step) {
   metric(`${p}.headless_ms`, { samples: col.headless, unit: "ms", digits: 0, description: "sync time in the headless-buffer chunk handlers" });
   metric(`${p}.visible_ms`, { samples: col.visible, unit: "ms", digits: 0, description: "sync time in the mounted terminal's chunk handler" });
   metric(`${p}.flush_ms`, { samples: col.flush, unit: "ms", digits: 0, description: "batched plugin/state flush time" });
+  metric(`${p}.queue_peak_kb`, { samples: col.queue, unit: "KB", digits: 0, better: "none", description: "most output waiting in the headless-buffer queues at once" });
   metric(`${p}.output_mb`, { samples: col.bytes, unit: "MB", digits: 1, better: "none", description: "bytes the frontend received" });
   meta({ sessions, banner, runs });
   return `restore storm measured (${sessions} sessions × ${banner} KB)`;

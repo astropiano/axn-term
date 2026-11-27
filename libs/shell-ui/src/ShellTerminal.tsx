@@ -38,6 +38,7 @@ import {
   type TargetAction,
   type TextTarget,
 } from './app/textTargets';
+import { setPtyPaused } from './app/ptyPause';
 import { perfMark } from './perf';
 import { timeOutput } from './app/outputStats';
 
@@ -508,8 +509,8 @@ export function ShellTerminal({
     // own PTY id.
     const ptyId = session.mainPtyId ?? session.id;
     const flow = createFlowControl(
-      () => backend.pause?.(ptyId),
-      () => backend.resume?.(ptyId),
+      () => setPtyPaused(backend, ptyId, 'view', true),
+      () => setPtyPaused(backend, ptyId, 'view', false),
     );
     const shell = settings.defaultShell?.trim() || undefined;
     const pty = acquirePty(backend, ptyId, () => {

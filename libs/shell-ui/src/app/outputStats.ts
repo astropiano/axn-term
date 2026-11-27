@@ -1,4 +1,5 @@
 import { perfMark } from '../perf';
+import { bufferQueueStats } from '../terminalRegistry';
 
 /**
  * Perf-trace counters for the output path — what a restore storm costs the
@@ -62,6 +63,7 @@ function start(): void {
   setInterval(() => {
     const json = JSON.stringify({
       ...stats,
+      queuePeakKb: Math.round(bufferQueueStats().peakQueuedBytes / 1024),
       headlessMs: Math.round(stats.headlessMs),
       visibleMs: Math.round(stats.visibleMs),
       flushMs: Math.round(stats.flushMs),

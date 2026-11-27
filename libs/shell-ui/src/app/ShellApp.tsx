@@ -42,7 +42,8 @@ import {
 } from './session-plugins';
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
 import { timeOutput } from './outputStats';
-import { dropSessionBuffer, keepPtyAlive, serializeTerminal, sessionBufferIds, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf, trackSessionBuffer } from '../terminalRegistry';
+import { setPtyPaused } from './ptyPause';
+import { dropSessionBuffer, keepPtyAlive, setBufferPriority, writeSessionBuffer, serializeTerminal, sessionBufferIds, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf, trackSessionBuffer } from '../terminalRegistry';
 import { acquirePty, syncRetainedPtys } from '../ptyLifetime';
 import { foregroundStatusPatch } from '../foregroundStatus';
 import { agentInputPluginFor } from './session-plugins/agentHookBridge';
@@ -634,6 +635,9 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   selectedWorkspaceIdRef.current = selectedWorkspaceId;
   sessionsRef.current = sessions;
   selectedSessionIdRef.current = selectedSessionId;
+  useEffect(() => {
+    setBufferPriority(selectedSessionId ?? undefined);
+  }, [selectedSessionId]);
   workspacesRef.current = workspaces;
   selectedSessionRef.current = selectedSession;
   pluginTabsRef.current = pluginTabs;
@@ -1065,7 +1069,10 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       // The headless buffer keeps the session's screen current while no
       // view is mounted — plugins read it via getScreenLines, a remount
       // serializes it for the repaint.
-      const buffer = trackSessionBuffer(sessionId);
+      trackSessionBuffer(sessionId, {
+        pause: () => setPtyPaused(backend, ptyId, 'buffer', true),
+        resume: () => setPtyPaused(backend, ptyId, 'buffer', false),
+      });
       const decoder = new TextDecoder();
       // PTY chunks split escape sequences mid-way — hold back a trailing
       // incomplete sequence so stripAnsi never leaks `7;file://` /
@@ -1074,7 +1081,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       offs.push(
         backend.onOutput(ptyId, (bytes) =>
           timeOutput('headless', bytes.length, () => {
-            buffer.write(bytes);
+            writeSessionBuffer(sessionId, bytes);
             const [complete, tail] = splitAnsiTail(
               pending + decoder.decode(bytes, { stream: true }),
             );
