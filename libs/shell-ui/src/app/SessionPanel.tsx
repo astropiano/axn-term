@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fra
 import { useIconBag, resolveProcessIcon } from './iconModel';
 import { ContextMenu, menuItemClass } from '../ContextMenu';
 import { broadcastSet, useBroadcastMarked, useBroadcastSet } from './broadcastSet';
-import { Plus, Save, FolderOpen, FolderCog, FolderPlus, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText, PanelLeft, Radio, Check, AlertTriangle, MoreHorizontal } from 'lucide-react';
+import { Plus, Save, FolderOpen, FolderCog, FolderPlus, Search, Bot, ChevronRight, ChevronDown, ChevronUp, Trash2, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText, PanelLeft, Radio, Check, AlertTriangle, MoreHorizontal } from 'lucide-react';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
 import { pluginSessionFields } from './session-plugins/plugin';
