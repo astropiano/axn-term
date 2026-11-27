@@ -142,8 +142,9 @@ export interface AppSettings {
    */
   terminalClipboardWrites?: 'focused' | 'off';
   /**
-   * How many sessions start at once while a window restores (default 3): the
-   * selected one first, the next released when a started one has settled.
+   * How many sessions start at once while a window restores (default: half
+   * the cores, 2 to 6): the selected one first, the next released when a
+   * started one has settled.
    * `0` starts them all at once, as before.
    */
   restoreConcurrency?: number;

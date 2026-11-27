@@ -44,7 +44,7 @@ import {
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
 import { timeOutput } from './outputStats';
 import { setPtyPaused } from './ptyPause';
-import { createRestoreQueue, createSettleSignal } from './restoreQueue';
+import { createRestoreQueue, createSettleSignal, defaultRestoreConcurrency } from './restoreQueue';
 import { dropSessionBuffer, keepPtyAlive, setBufferPriority, writeSessionBuffer, serializeTerminal, sessionBufferIds, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf, trackSessionBuffer } from '../terminalRegistry';
 import { acquirePty, syncRetainedPtys } from '../ptyLifetime';
 import { foregroundStatusPatch } from '../foregroundStatus';
@@ -156,7 +156,9 @@ const SMALL_SCREEN_QUERY = '(max-width: 639px)';
 /** How often batched terminal output reaches session state and plugins. */
 const OUTPUT_FLUSH_INTERVAL_MS = 50;
 /** Sessions whose shells start at once while a window restores. */
-const RESTORE_CONCURRENCY = 3;
+const RESTORE_CONCURRENCY = defaultRestoreConcurrency(
+  typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency,
+);
 /** Output quiet for this long (and no plugin restore running) = a restored session has settled. */
 const RESTORE_QUIET_MS = 500;
 /** …but never hold a restore slot longer than this. */

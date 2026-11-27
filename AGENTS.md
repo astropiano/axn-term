@@ -648,6 +648,22 @@ graceful interrupt + resume-hint capture) before tearing the PTY down —
 an inline confirm appears first when `session.process` reports a live
 foreground process.
 
+A window's sessions are **restored a few at a time** (`app/restoreQueue.ts`,
+wired in ShellApp's spawn effect): all together their login shells (and agent
+restore commands) saturate every core and the session on screen gets its
+prompt last. `restoreConcurrency` in config.yaml (default half the cores, 2 to
+6; `0` = all at once, as before) is how many sessions start at once, the
+selected one first; the next is released when a started session has *settled* — output
+quiet for 500 ms and no plugin restore overlay raised on it, 10 s at most —
+because an agent's heavy start-up begins only after the prompt. A view that
+mounts (the user selects a session still waiting) spawns its own PTY on the
+spot, outside the queue. Separately the headless session buffers are written
+through `app/outputScheduler.ts` (at most two parse at once, the selected
+session first, a queue past 4 MB pauses its PTY — vote-counted with the view's
+own flow control, `ptyPause.ts`). Measure with `flows/axn-term-perf.xml`
+("perf - restore storm" / "select a waiting session"; `flows/PERF.md`) — on
+macOS the perf lib samples with `ps`.
+
 Session views mount plugin-style: only the selected session renders a
 `ShellTerminal` — unselected sessions have no xterm view at all. PTY
 lifetime is session-owned, not view-owned: `acquirePty`

@@ -205,7 +205,7 @@ msgstr "程序写入剪贴板"
 msgid "Close"
 msgstr "关闭"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3274
+#: libs/shell-ui/src/app/ShellApp.tsx:3369
 msgid "Close tab"
 msgstr "关闭标签页"
 

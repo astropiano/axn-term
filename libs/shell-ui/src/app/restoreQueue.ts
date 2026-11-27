@@ -15,6 +15,17 @@
  * on the spot, and `prioritize` only reorders the ones nobody asked for.
  */
 
+/**
+ * How many sessions to start at once by default: half the cores, 2 to 6. A
+ * shell's start-up is single-threaded, so up to about that many run without
+ * slowing the one on screen (measured: the visible prompt stays at ~1.5 s from
+ * 1 to 6 at once, against ~3.6 s with all 24 together), while the whole
+ * restore still finishes in a few seconds.
+ */
+export function defaultRestoreConcurrency(cores: number | undefined): number {
+  return Math.min(6, Math.max(2, Math.floor((cores && cores > 0 ? cores : 8) / 2)));
+}
+
 export interface RestoreQueueOptions {
   /** Sessions starting at once — a function so a setting change applies to the sessions still waiting. */
   concurrency?: number | (() => number);

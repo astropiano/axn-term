@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRestoreQueue, createSettleSignal } from './restoreQueue';
+import { createRestoreQueue, createSettleSignal, defaultRestoreConcurrency } from './restoreQueue';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -138,5 +138,19 @@ describe('createSettleSignal', () => {
     busy = false;
     await new Promise((r) => setTimeout(r, 30));
     expect(done).toBe(true);
+  });
+});
+
+describe('defaultRestoreConcurrency', () => {
+  it('is half the cores, between 2 and 6', () => {
+    expect(defaultRestoreConcurrency(2)).toBe(2);
+    expect(defaultRestoreConcurrency(4)).toBe(2);
+    expect(defaultRestoreConcurrency(8)).toBe(4);
+    expect(defaultRestoreConcurrency(11)).toBe(5);
+    expect(defaultRestoreConcurrency(32)).toBe(6);
+  });
+  it('falls back to a middle value when the core count is unknown', () => {
+    expect(defaultRestoreConcurrency(undefined)).toBe(4);
+    expect(defaultRestoreConcurrency(0)).toBe(4);
   });
 });
