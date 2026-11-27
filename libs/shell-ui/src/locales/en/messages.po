@@ -152,6 +152,11 @@ msgstr "Built-in font"
 msgid "Cancel"
 msgstr "Cancel"
 
+#. placeholder {0}: drag.from
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:2979
+msgid "Cannot move from {0} to {state}"
+msgstr "Cannot move from {0} to {state}"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:653
 msgid "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
 msgstr "Cell renderer for terminals. Auto uses GPU (WebGL) and falls back automatically. Force canvas/DOM if you hit rendering glitches."
@@ -389,6 +394,11 @@ msgstr "Don't ask again"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:338
 msgid "done"
 msgstr "done"
+
+#. placeholder {0}: drag.from
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:2978
+msgid "Drop here to move from {0} to {state}"
+msgstr "Drop here to move from {0} to {state}"
 
 #: libs/shell-ui/src/app/session-plugins/externalViews.tsx:238
 msgid "Each view gets its own rail item. Give a URL, or a command that prints one when the view opens (for addresses carrying a token — it is never saved)."
@@ -1262,7 +1272,7 @@ msgstr "Signed in as {0}"
 msgid "Start {0} in…"
 msgstr "Start {0} in…"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3495
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3553
 msgid "Start workflow…"
 msgstr "Start workflow…"
 
