@@ -15,7 +15,7 @@ import { useSessionBackend, useShellPlatform } from '../services';
 import { availableLocales, localeNames } from '../i18n';
 import { getSessionViewPlugins, isPluginEnabled, pluginDependencies } from './session-plugins';
 import { PanelSearch, PluginIcon } from './SessionPanel';
-import { collectIconBag } from './iconModel';
+import { collectIconBag, pluginIconKey, pluginIconOverride } from './iconModel';
 import type { PluginSettingField, SessionViewPlugin } from './session-plugins';
 import { isSandboxedPlugin } from './session-plugins/sandbox';
 import { getFilePreviewPlugins, isFilePreviewEnabled } from './preview-plugins';
@@ -1041,9 +1041,14 @@ function PluginsTab({
  * plugin id is the process name, so this field and that row edit the same
  * icon.
  */
-function PluginLogoField({ plugin }: { plugin: { id: string; logo?: string; processPattern?: RegExp } }) {
+function PluginLogoField({
+  plugin,
+}: {
+  plugin: { id: string; iconKey?: string; logo?: string; processPattern?: RegExp };
+}) {
   const { settings, updateSettings } = useSettings();
-  const override = collectIconBag(settings)[plugin.id] ?? '';
+  const key = pluginIconKey(plugin);
+  const override = pluginIconOverride(collectIconBag(settings), plugin) ?? '';
   const [draft, setDraft] = useState<string | null>(null);
 
   function commit() {
@@ -1052,10 +1057,14 @@ function PluginLogoField({ plugin }: { plugin: { id: string; logo?: string; proc
     const customIcons = { ...(settings.customIcons ?? {}) };
     const sessionIcons = { ...(settings.sessionIcons ?? {}) };
     const pluginIcons = { ...(settings.pluginIcons ?? {}) };
-    if (value) customIcons[plugin.id] = value;
-    else delete customIcons[plugin.id];
-    delete sessionIcons[plugin.id];
-    delete pluginIcons[plugin.id];
+    if (value) customIcons[key] = value;
+    else delete customIcons[key];
+    // the key itself, and an entry an earlier version left under the id
+    for (const k of new Set([key, plugin.id])) {
+      if (k !== key) delete customIcons[k];
+      delete sessionIcons[k];
+      delete pluginIcons[k];
+    }
     updateSettings({ customIcons, sessionIcons, pluginIcons });
     setDraft(null);
   }

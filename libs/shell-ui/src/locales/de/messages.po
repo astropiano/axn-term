@@ -34,7 +34,7 @@ msgstr "{label} (Hex)"
 msgid "{label}: theme {slot}"
 msgstr "{label}: Theme-Farbe {slot}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1259
+#: libs/shell-ui/src/app/SettingsModal.tsx:1268
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "Ein Lucide-Icon-Name (z. B. <0>GitFork</0>) oder ein Inline-SVG-Tag, z. B. <1>{SVG_HINT_EXAMPLE}</1>"
 
@@ -42,8 +42,8 @@ msgstr "Ein Lucide-Icon-Name (z. B. <0>GitFork</0>) oder ein Inline-SVG-Tag, z. 
 #~ msgid "Account"
 #~ msgstr "Konto"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1284
-#: libs/shell-ui/src/app/SettingsModal.tsx:1286
+#: libs/shell-ui/src/app/SettingsModal.tsx:1293
+#: libs/shell-ui/src/app/SettingsModal.tsx:1295
 msgid "Add icon"
 msgstr "Icon hinzufügen"
 
@@ -63,7 +63,7 @@ msgstr "Erweitert"
 msgid "All"
 msgstr "Alle"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1088
+#: libs/shell-ui/src/app/SettingsModal.tsx:1097
 msgid "Also used as the session icon while this process is foreground."
 msgstr "Wird auch als Sitzungssymbol verwendet, solange dieser Prozess im Vordergrund ist."
 
@@ -127,7 +127,7 @@ msgstr "Integrierte Schrift"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1270
+#: libs/shell-ui/src/app/SettingsModal.tsx:1279
 #: libs/shell-ui/src/app/TagModal.tsx:185
 msgid "Cancel"
 msgstr "Abbrechen"
@@ -367,7 +367,7 @@ msgstr "Jede Ansicht erhält ein eigenes Element in der Leiste. Gib eine URL an 
 msgid "Edit"
 msgstr "Bearbeiten"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1213
+#: libs/shell-ui/src/app/SettingsModal.tsx:1222
 msgid "Edit icon"
 msgstr "Icon bearbeiten"
 
@@ -587,7 +587,7 @@ msgstr "Laden…"
 msgid "Log level"
 msgstr "Log-Level"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1068
+#: libs/shell-ui/src/app/SettingsModal.tsx:1077
 msgid "Logo"
 msgstr "Logo"
 
@@ -676,7 +676,7 @@ msgstr "Neue Worktree-Session"
 msgid "no clients"
 msgstr "keine Clients"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1223
+#: libs/shell-ui/src/app/SettingsModal.tsx:1232
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "Keine Icons konfiguriert — jede Session zeigt das Standard-Terminal-Icon."
 
@@ -877,7 +877,7 @@ msgstr "Vorschau"
 msgid "Preview unavailable"
 msgstr "Vorschau nicht verfügbar"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1232
+#: libs/shell-ui/src/app/SettingsModal.tsx:1241
 msgid "Process"
 msgstr "Prozess"
 
@@ -960,7 +960,7 @@ msgstr "Remote-Zugriff"
 msgid "Remove"
 msgstr "Entfernen"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1216
+#: libs/shell-ui/src/app/SettingsModal.tsx:1225
 msgid "Remove icon"
 msgstr "Icon entfernen"
 
@@ -1061,7 +1061,7 @@ msgstr "sandboxed — keine Berechtigungen (kein Shell-, Datei- oder Terminalzug
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1278
+#: libs/shell-ui/src/app/SettingsModal.tsx:1287
 msgid "Save"
 msgstr "Speichern"
 

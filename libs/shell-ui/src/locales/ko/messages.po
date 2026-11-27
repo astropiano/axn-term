@@ -34,7 +34,7 @@ msgstr "{label} (16진수)"
 msgid "{label}: theme {slot}"
 msgstr "{label}: 테마 {slot}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1259
+#: libs/shell-ui/src/app/SettingsModal.tsx:1268
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "Lucide 아이콘 이름(예: <0>GitFork</0>) 또는 인라인 SVG 태그(예: <1>{SVG_HINT_EXAMPLE}</1>)"
 
@@ -42,8 +42,8 @@ msgstr "Lucide 아이콘 이름(예: <0>GitFork</0>) 또는 인라인 SVG 태그
 #~ msgid "Account"
 #~ msgstr "계정"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1284
-#: libs/shell-ui/src/app/SettingsModal.tsx:1286
+#: libs/shell-ui/src/app/SettingsModal.tsx:1293
+#: libs/shell-ui/src/app/SettingsModal.tsx:1295
 msgid "Add icon"
 msgstr "아이콘 추가"
 
@@ -63,7 +63,7 @@ msgstr "고급"
 msgid "All"
 msgstr "전체"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1088
+#: libs/shell-ui/src/app/SettingsModal.tsx:1097
 msgid "Also used as the session icon while this process is foreground."
 msgstr "이 프로세스가 포그라운드에 있는 동안 세션 아이콘으로도 사용됩니다."
 
@@ -127,7 +127,7 @@ msgstr "기본 제공 글꼴"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1270
+#: libs/shell-ui/src/app/SettingsModal.tsx:1279
 #: libs/shell-ui/src/app/TagModal.tsx:185
 msgid "Cancel"
 msgstr "취소"
@@ -367,7 +367,7 @@ msgstr "각 보기는 레일에 고유한 항목을 갖습니다. URL을 입력�
 msgid "Edit"
 msgstr "편집"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1213
+#: libs/shell-ui/src/app/SettingsModal.tsx:1222
 msgid "Edit icon"
 msgstr "아이콘 편집"
 
@@ -587,7 +587,7 @@ msgstr "불러오는 중…"
 msgid "Log level"
 msgstr "로그 레벨"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1068
+#: libs/shell-ui/src/app/SettingsModal.tsx:1077
 msgid "Logo"
 msgstr "로고"
 
@@ -677,7 +677,7 @@ msgstr "새 워크트리 세션"
 msgid "no clients"
 msgstr "클라이언트 없음"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1223
+#: libs/shell-ui/src/app/SettingsModal.tsx:1232
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "설정된 아이콘이 없습니다 — 모든 세션에 기본 터미널 아이콘이 표시됩니다."
 
@@ -879,7 +879,7 @@ msgstr "미리보기"
 msgid "Preview unavailable"
 msgstr "미리보기를 사용할 수 없음"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1232
+#: libs/shell-ui/src/app/SettingsModal.tsx:1241
 msgid "Process"
 msgstr "프로세스"
 
@@ -962,7 +962,7 @@ msgstr "원격 접근"
 msgid "Remove"
 msgstr "제거"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1216
+#: libs/shell-ui/src/app/SettingsModal.tsx:1225
 msgid "Remove icon"
 msgstr "아이콘 제거"
 
@@ -1063,7 +1063,7 @@ msgstr "샌드박스 — 권한 없음 (셸, 파일, 터미널 접근 불가)"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1278
+#: libs/shell-ui/src/app/SettingsModal.tsx:1287
 msgid "Save"
 msgstr "저장"
 

@@ -713,6 +713,12 @@ export interface SessionViewPlugin {
    * editing either side updates both.
    */
   logo?: string;
+  /**
+   * The icon-bag key when it is not the plugin id: the process name the
+   * plugin's sessions run as (antigravity → `agy`), so the Logo field and the
+   * `agy` row of the Session-icons editor are one entry. Unset = the id.
+   */
+  iconKey?: string;
   /** Plugin version (`x.y.z`); shown in Settings and matched by `dependsOn`. */
   version?: string;
   /**

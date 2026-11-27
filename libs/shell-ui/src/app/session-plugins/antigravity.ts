@@ -92,6 +92,8 @@ export const antigravityPlugin: SessionViewPlugin = {
   id: 'antigravity',
   title: 'antigravity',
   logo: 'Bot',
+  // its sessions run as `agy` — one icon entry for the plugin and the process
+  iconKey: 'agy',
   version: '0.1.0',
   stateKey: 'antigravity',
   settingsKey: 'antigravity',
@@ -185,7 +187,7 @@ export const antigravityPlugin: SessionViewPlugin = {
       label: 'Resume Antigravity',
       kind: 'block',
       zone: 'selected',
-      value: (ctx) => agentResumePanel(ctx, 'antigravity', antigravityPlugin.logo),
+      value: (ctx) => agentResumePanel(ctx, 'antigravity', antigravityPlugin),
     },
   ],
   // A submitted command starts new shell work — a terminal badge left by a

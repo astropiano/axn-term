@@ -37,12 +37,12 @@ function folderOf(cwd: string | undefined): string {
 function ResumeButton({
   ctx,
   agent,
-  logo,
+  plugin,
   last,
 }: {
   ctx: SessionViewContext & PluginApi;
   agent: string;
-  logo?: string;
+  plugin?: { logo?: string; iconKey?: string };
   last: AgentLastSession;
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -65,8 +65,8 @@ function ResumeButton({
         className="flex max-w-full items-center gap-1.5 rounded border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--accent)] hover:bg-[var(--bg)]"
       >
         {/* the agent's mark — the plugin's logo, or the user's override from the icon bag */}
-        {logo !== undefined ? (
-          <PluginIcon plugin={{ id: agent, logo }} className="h-3 w-3 shrink-0" />
+        {plugin?.logo !== undefined ? (
+          <PluginIcon plugin={{ id: agent, ...plugin }} className="h-3 w-3 shrink-0" />
         ) : (
           <Play className="h-2.5 w-2.5 shrink-0" />
         )}
@@ -114,11 +114,11 @@ function ResumeButton({
 export function agentResumePanel(
   ctx: SessionViewContext & PluginApi,
   agent: string,
-  logo?: string,
+  plugin?: { logo?: string; iconKey?: string },
 ): ReactNode {
   const settings = ctx.pluginSettings as { resumeButton?: boolean } | undefined;
   if (settings?.resumeButton === false) return null;
   const last = resumableAgentLast(ctx, agent);
   if (!last) return null;
-  return <ResumeButton ctx={ctx} agent={agent} logo={logo} last={last} />;
+  return <ResumeButton ctx={ctx} agent={agent} plugin={plugin} last={last} />;
 }

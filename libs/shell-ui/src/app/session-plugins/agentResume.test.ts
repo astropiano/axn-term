@@ -811,7 +811,11 @@ describe('resume button right-click list', () => {
 });
 
 describe('resume button icon', () => {
-  const mount = async (bag: Record<string, string>, logo: string | undefined) => {
+  const mount = async (
+    bag: Record<string, string>,
+    plugin: { logo?: string; iconKey?: string } | undefined,
+    agent = 'claude',
+  ) => {
     const h = makeCtx('claude', {}, {
       pluginState: { last: { name: 'b', title: 'Beta', cwd: '/repo', command: 'claude --resume b', at: 20 } },
     });
@@ -823,7 +827,7 @@ describe('resume button icon', () => {
         createElement(
           IconBagContext.Provider,
           { value: bag },
-          createElement(SettingsProvider, null, agentResumePanel(h.ctx, 'claude', logo)),
+          createElement(SettingsProvider, null, agentResumePanel(h.ctx, agent, plugin)),
         ),
       );
     });
@@ -833,15 +837,29 @@ describe('resume button icon', () => {
   it('shows the icon set for the plugin in the one icon bag (Settings → Plugins → Logo)', async () => {
     const { host, root } = await mount(
       { claude: '<svg viewBox="0 0 10 10"><circle id="mine" cx="5" cy="5" r="4"/></svg>' },
-      'Bot',
+      { logo: 'Bot' },
     );
     expect(host.querySelector('button span[class*="h-3"] circle#mine')).not.toBeNull();
     await act(async () => root.unmount());
     host.remove();
   });
 
+  it('antigravity: the icon lives under agy, an entry left under the plugin id still counts', async () => {
+    const svg = (id: string) => `<svg viewBox="0 0 10 10"><circle id="${id}" r="4"/></svg>`;
+    const agy = { logo: 'Bot', iconKey: 'agy' };
+    const both = await mount({ agy: svg('agy-icon'), antigravity: svg('old-icon') }, agy, 'antigravity');
+    expect(both.host.querySelector('circle#agy-icon')).not.toBeNull();
+    expect(both.host.querySelector('circle#old-icon')).toBeNull();
+    await act(async () => both.root.unmount());
+    both.host.remove();
+    const legacy = await mount({ antigravity: svg('old-icon') }, agy, 'antigravity');
+    expect(legacy.host.querySelector('circle#old-icon')).not.toBeNull();
+    await act(async () => legacy.root.unmount());
+    legacy.host.remove();
+  });
+
   it('falls back to the plugin logo without an override, and to the play icon without a logo', async () => {
-    const withLogo = await mount({}, 'Bot');
+    const withLogo = await mount({}, { logo: 'Bot' });
     expect(withLogo.host.querySelector('button svg')).not.toBeNull();
     await act(async () => withLogo.root.unmount());
     withLogo.host.remove();

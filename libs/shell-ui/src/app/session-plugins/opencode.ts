@@ -269,7 +269,7 @@ export const opencodePlugin: SessionViewPlugin = {
       label: 'Resume opencode',
       kind: 'block',
       zone: 'selected',
-      value: (ctx) => agentResumePanel(ctx, 'opencode', opencodePlugin.logo),
+      value: (ctx) => agentResumePanel(ctx, 'opencode', opencodePlugin),
     },
   ],
   // OpenCode exits with the session (no graceful-close capture): keep the

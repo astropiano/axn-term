@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
   collectIconBag,
   resolveIcon,
+  pluginIconKey,
+  pluginIconOverride,
   resolveProcessIcon,
   registerIconPlugin,
   resetIconPlugins,
@@ -48,6 +50,15 @@ describe('resolveProcessIcon', () => {
     expect(resolveProcessIcon('agy', {})).toBe('Bot');
   });
 
+  it('antigravity is one entry: the `agy` key serves the process and the plugin', () => {
+    registerIconPlugin({ id: 'antigravity', iconKey: 'agy', logo: 'Bot', processPattern: /^(agy|antigravity)/i });
+    expect(resolveProcessIcon('agy', { agy: 'Rocket' })).toBe('Rocket');
+    // an entry an earlier version left under the plugin id still applies …
+    expect(resolveProcessIcon('agy', { antigravity: 'Old' })).toBe('Old');
+    // … until `agy` is set, which wins
+    expect(resolveProcessIcon('agy', { antigravity: 'Old', agy: 'Rocket' })).toBe('Rocket');
+  });
+
   it('a plugin without a declared logo supplies no fallback', () => {
     registerIconPlugin({ id: 'worktrees', processPattern: /^git/ });
     expect(resolveProcessIcon('git', {})).toBe('SquareTerminal');
@@ -63,5 +74,19 @@ describe('resolveProcessIcon', () => {
     expect(resolveProcessIcon('agy', { agy: 'Rocket' })).toBe('Rocket');
     // …and a plugin-id override applies when no process entry exists.
     expect(resolveProcessIcon('agy', { antigravity: 'Rocket' })).toBe('Rocket');
+  });
+});
+
+describe('pluginIconKey / pluginIconOverride', () => {
+  it('uses the id unless the plugin names another key', () => {
+    expect(pluginIconKey({ id: 'claude' })).toBe('claude');
+    expect(pluginIconKey({ id: 'antigravity', iconKey: 'agy' })).toBe('agy');
+  });
+
+  it('reads the key, with the id as a legacy fallback only when a key is set', () => {
+    expect(pluginIconOverride({ claude: 'A' }, { id: 'claude' })).toBe('A');
+    expect(pluginIconOverride({ antigravity: 'Old' }, { id: 'antigravity', iconKey: 'agy' })).toBe('Old');
+    expect(pluginIconOverride({ antigravity: 'Old', agy: 'New' }, { id: 'antigravity', iconKey: 'agy' })).toBe('New');
+    expect(pluginIconOverride({}, { id: 'antigravity', iconKey: 'agy' })).toBeUndefined();
   });
 });

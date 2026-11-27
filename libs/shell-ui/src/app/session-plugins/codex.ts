@@ -134,7 +134,7 @@ export const codexPlugin: SessionViewPlugin = {
       label: 'Resume Codex',
       kind: 'block',
       zone: 'selected',
-      value: (ctx) => agentResumePanel(ctx, 'codex', codexPlugin.logo),
+      value: (ctx) => agentResumePanel(ctx, 'codex', codexPlugin),
     },
   ],
   // A submitted command starts new shell work — a terminal badge left by a

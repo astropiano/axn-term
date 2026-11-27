@@ -34,7 +34,7 @@ msgstr "{label}（十六进制）"
 msgid "{label}: theme {slot}"
 msgstr "{label}：主题 {slot}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1259
+#: libs/shell-ui/src/app/SettingsModal.tsx:1268
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "一个 Lucide 图标名称（如 <0>GitFork</0>）或内联 SVG 标签，例如 <1>{SVG_HINT_EXAMPLE}</1>"
 
@@ -42,8 +42,8 @@ msgstr "一个 Lucide 图标名称（如 <0>GitFork</0>）或内联 SVG 标签�
 #~ msgid "Account"
 #~ msgstr "账户"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1284
-#: libs/shell-ui/src/app/SettingsModal.tsx:1286
+#: libs/shell-ui/src/app/SettingsModal.tsx:1293
+#: libs/shell-ui/src/app/SettingsModal.tsx:1295
 msgid "Add icon"
 msgstr "添加图标"
 
@@ -63,7 +63,7 @@ msgstr "高级"
 msgid "All"
 msgstr "全部"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1088
+#: libs/shell-ui/src/app/SettingsModal.tsx:1097
 msgid "Also used as the session icon while this process is foreground."
 msgstr "此进程位于前台时也用作会话图标。"
 
@@ -127,7 +127,7 @@ msgstr "内置字体"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1270
+#: libs/shell-ui/src/app/SettingsModal.tsx:1279
 #: libs/shell-ui/src/app/TagModal.tsx:185
 msgid "Cancel"
 msgstr "取消"
@@ -367,7 +367,7 @@ msgstr "每个视图在侧栏中都有自己的项目。请填写 URL，或填�
 msgid "Edit"
 msgstr "编辑"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1213
+#: libs/shell-ui/src/app/SettingsModal.tsx:1222
 msgid "Edit icon"
 msgstr "编辑图标"
 
@@ -587,7 +587,7 @@ msgstr "加载中…"
 msgid "Log level"
 msgstr "日志级别"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1068
+#: libs/shell-ui/src/app/SettingsModal.tsx:1077
 msgid "Logo"
 msgstr "徽标"
 
@@ -676,7 +676,7 @@ msgstr "新建 worktree 会话"
 msgid "no clients"
 msgstr "无客户端"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1223
+#: libs/shell-ui/src/app/SettingsModal.tsx:1232
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "未配置图标 — 每个会话都显示默认终端图标。"
 
@@ -877,7 +877,7 @@ msgstr "预览"
 msgid "Preview unavailable"
 msgstr "预览不可用"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1232
+#: libs/shell-ui/src/app/SettingsModal.tsx:1241
 msgid "Process"
 msgstr "进程"
 
@@ -960,7 +960,7 @@ msgstr "远程访问"
 msgid "Remove"
 msgstr "移除"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1216
+#: libs/shell-ui/src/app/SettingsModal.tsx:1225
 msgid "Remove icon"
 msgstr "移除图标"
 
@@ -1061,7 +1061,7 @@ msgstr "已沙箱化 — 无权限（无 shell、文件或终端访问）"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1278
+#: libs/shell-ui/src/app/SettingsModal.tsx:1287
 msgid "Save"
 msgstr "保存"
 

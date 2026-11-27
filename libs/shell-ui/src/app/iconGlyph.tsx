@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ComponentType } from 'react';
 import { Bot, SquareTerminal } from 'lucide-react';
 import dynamicIconImports from 'lucide-react/dynamicIconImports';
-import { useIconBag, resolveIcon, type IconBag } from './iconModel';
+import { useIconBag, pluginIconOverride, type IconBag } from './iconModel';
 import { sanitizeSvgIcon, svgIconContainStyle } from './sanitizeSvg';
 
 /**
@@ -78,11 +78,14 @@ export function SessionIconGlyph({
   return <IconComponent className={className} />;
 }
 
-export function resolvePluginIcon(plugin: { id: string; logo?: string }, bag: IconBag): string {
+export function resolvePluginIcon(
+  plugin: { id: string; iconKey?: string; logo?: string },
+  bag: IconBag,
+): string {
   // Declaring `logo` is the has-an-icon capability: without it a plugin
   // shows the generic Puzzle and the bag is not consulted.
   if (plugin.logo === undefined) return 'Puzzle';
-  return resolveIcon(bag, plugin.id, plugin.logo);
+  return pluginIconOverride(bag, plugin) ?? plugin.logo;
 }
 
 /** A plugin's logo: `pluginIcons` override, else the declared `logo`, else a generic Puzzle. */
@@ -90,7 +93,7 @@ export function PluginIcon({
   plugin,
   className = 'h-4 w-4 shrink-0',
 }: {
-  plugin: { id: string; logo?: string };
+  plugin: { id: string; iconKey?: string; logo?: string };
   className?: string;
 }) {
   const bag = useIconBag();
