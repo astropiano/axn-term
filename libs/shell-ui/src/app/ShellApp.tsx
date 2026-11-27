@@ -29,6 +29,7 @@ import { useEditorClose } from './useEditorClose';
 import { BrowserView } from './BrowserView';
 import { SubShellView } from './SubShellView';
 import { PreviewView } from './PreviewView';
+import { perfMark } from '../perf';
 import { backendFileService, resolvePath } from './fileService';
 import { useShellSessions, MAX_OUTPUT_LENGTH } from './useShellSessions';
 import { useAgentTasks } from './useAgentTasks';
@@ -177,6 +178,7 @@ interface RailSlot {
 }
 
 export function ShellApp({ backend, services, platform, fileReader, tasksWsUrl }: ShellAppProps) {
+  useEffect(() => perfMark('app_mounted'), []);
   useEffect(() => {
     // Load Monaco in the background once startup has settled, so it never
     // competes with the first terminals but the first editor still opens fast.

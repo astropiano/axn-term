@@ -180,7 +180,7 @@ msgstr "프로그램의 클립보드 쓰기"
 msgid "Close"
 msgstr "닫기"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3184
+#: libs/shell-ui/src/app/ShellApp.tsx:3186
 msgid "Close tab"
 msgstr "탭 닫기"
 

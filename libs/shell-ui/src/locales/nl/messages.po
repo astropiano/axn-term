@@ -180,7 +180,7 @@ msgstr "Klembordschrijfacties van programma's"
 msgid "Close"
 msgstr "Sluiten"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3184
+#: libs/shell-ui/src/app/ShellApp.tsx:3186
 msgid "Close tab"
 msgstr "Tabblad sluiten"
 

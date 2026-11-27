@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { stripUserHost } from './shellTitle';
+import { perfMark } from '../perf';
 import type { ShellStateStore } from '../platform';
 import { clearSessionRestoring } from './restoring';
 import type { PluginTabSet, ShellSession, WindowState, Workspace } from '../types';
@@ -364,6 +365,7 @@ export function useShellSessions(
 
     loadWindowState(stateStore, windowId)
       .then((saved) => {
+        perfMark('state_loaded');
         if (cancelled) return;
         // A tear-off window with no saved state boots without a shell: the
         // session it was opened for arrives by adoption.

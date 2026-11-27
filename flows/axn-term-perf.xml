@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  axn-term desktop performance flows. Every step prints AXN_METRIC lines that
+  `axn-dev flow` stores in flows/.reports/; label runs and compare them:
+
+    axn-dev flow -f flows/axn-term-perf.xml - -label before
+    … change code, rebuild (pnpm tauri build - -no-bundle) …
+    axn-dev flow -f flows/axn-term-perf.xml - -label after
+    axn-dev flow compare -f flows/axn-term-perf.xml before after
+
+  (double dashes written as "- -" because XML comments cannot contain them.)
+  Binary: AXN_TERM_BINARY (default target/release/axn-term). Fewer runs:
+  AXN_PERF_QUICK=1. Budgets below are loose — they catch big regressions;
+  use `compare` for the real numbers. See flows/PERF.md.
+-->
+<flows>
+  <flow name="axn-term perf - static sizes"
+        description="Release binary and frontend bundle sizes (what gets parsed before the first render).">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="static" description="Measure binary and bundle sizes">
+        <assert that="contains" value="static sizes measured" description="Sizes were measured"/>
+        <assert that="metric" name="static.binary_mb" max="40" description="Binary stays under 40 MB"/>
+        <assert that="metric" name="static.entry_js_kb" max="3000" description="Entry JS stays under 3 MB (Monaco must stay lazy)"/>
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term perf - startup fresh"
+        description="Cold start with an empty state dir: Rust up, window, shell spawned, first prompt; memory and idle CPU.">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="startup" description="Start the app 7 times with a fresh state">
+        <assert that="contains" value="startup fresh measured" description="Startup was measured"/>
+        <assert that="metric" name="startup.fresh.prompt_ms" max="3000" description="First prompt within 3 s"/>
+        <assert that="metric" name="startup.fresh.idle_cpu_pct" max="10" description="Idle CPU under 10 % of a core"/>
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term perf - startup restore 12 (selected first)"
+        description="Restore of 12 saved sessions (200 KB scrollback each) with the first one selected.">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="startup" sessions="12" select="first" description="Start the app 5 times restoring 12 sessions">
+        <assert that="contains" value="startup restore12_first measured" description="Restore startup was measured"/>
+        <assert that="metric" name="startup.restore12_first.prompt_ms" max="4000" description="Selected session's prompt within 4 s"/>
+        <assert that="metric" name="startup.restore12_first.all_shells_ms" max="6000" description="All 12 shells within 6 s"/>
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term perf - startup restore 12 (selected last)"
+        description="Same restore, but the selected session is last in the render order — catches work done for hidden sessions first.">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="startup" sessions="12" select="last" description="Start the app 5 times restoring 12 sessions, last one selected">
+        <assert that="contains" value="startup restore12_last measured" description="Restore startup was measured"/>
+        <assert that="metric" name="startup.restore12_last.prompt_ms" max="4000" description="Selected session's prompt within 4 s"/>
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term perf - startup phases"
+        description="Where startup time goes, from the app's AXN_TERM_PERF_TRACE: exec, Rust init, window, webview load, JS eval, React mount, state load, terminal open, PTY spawn, shell start, first paint.">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="phases" description="Trace 7 starts and split them into phases">
+        <assert that="contains" value="startup phases measured" description="The binary supports the perf trace and phases were measured"/>
+        <assert that="metric" name="phases.total_ms" max="3000" description="Spawn to first painted output within 3 s"/>
+        <assert that="metric" name="phases.external_requests" max="0" description="No requests to outside hosts at startup"/>
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term perf - throughput"
+        description="Heavy output: cat of 32 MB plain text, cat of 16 MB coloured text, seq of 2M lines — time until the shell is done and until everything is on screen, CPU per process.">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="throughput" description="Run each workload 3 times">
+        <assert that="contains" value="throughput measured" description="Throughput was measured"/>
+        <assert that="metric" name="throughput.cat_plain_32mb.screen_ms" max="15000" description="32 MB cat on screen within 15 s"/>
+        <assert that="metric" name="throughput.seq_2m_lines.screen_ms" max="20000" description="2M lines on screen within 20 s"/>
+        <assert that="metric" name="throughput.seq_2m_lines.cpu_s" max="40" description="2M lines cost under 40 CPU-s"/>
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term perf - ctrl-c during flood"
+        description="Ctrl-C after 1.5 s of unbounded output: how fast the prompt is back and the screen has caught up (flow control).">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="interrupt" description="Interrupt a flood 3 times">
+        <assert that="contains" value="interrupt measured" description="Interrupt was measured"/>
+        <assert that="metric" name="interrupt.screen_ms" max="5000" description="Screen settles within 5 s of Ctrl-C"/>
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term perf - keystroke echo"
+        description="Key written to the PTY until its echo is back in the app (PTY path, without the UI).">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="echo" keys="100" description="Type 100 keys and time each echo">
+        <assert that="contains" value="echo measured" description="Echo was measured"/>
+        <assert that="metric" name="echo.pty_roundtrip_ms" max="50" description="Median echo under 50 ms"/>
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term perf - session switch"
+        description="Only the selected session mounts a terminal, so every switch serializes the old scrollback, disposes xterm + renderer, mounts fresh and replays. Measures select → remount latency and RSS drift across the run.">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="switch" sessions="4" runs="8" description="Switch between 4 restored sessions 8 times">
+        <assert that="contains" value="switch measured" description="Switch was measured"/>
+        <assert that="metric" name="switch.term_open_ms" max="2000" description="Remount within 2 s of the select command"/>
+        <assert that="metric" name="switch.rss_delta_mb" max="100" description="No more than 100 MB RSS growth across the run"/>
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term perf - output reaches the frontend"
+        description="Correctness guard for the output pipeline: 3 MB of output followed by a marker must arrive in the frontend's session output.">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="output" description="Print 3 MB and a marker, find it in the frontend state">
+        <assert that="contains" value="frontend received the output" description="The marker reached the frontend"/>
+      </step>
+    </steps>
+  </flow>
+</flows>

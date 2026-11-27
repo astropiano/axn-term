@@ -29,3 +29,4 @@ export * from './app/restoring';
 export { encodeBootIntent, parseBootIntent, type WindowBootIntent } from './app/sessionTearOff';
 export * from './app/session-plugins';
 export * from './app/preview-plugins';
+export { perfMark } from './perf';

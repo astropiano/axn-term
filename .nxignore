@@ -1,0 +1,2 @@
+# Git worktrees live under .claude/worktrees/ — never treat them as workspace projects.
+.claude/
