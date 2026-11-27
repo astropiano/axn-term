@@ -14,11 +14,11 @@ msgstr "{0} · {1} 経由"
 msgid "{0} running {1} will be terminated"
 msgstr "実行中の{1} {0} 件が終了されます"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:765
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:545
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} がメインチェックアウトで実行中 — worktree に隔離しますか？"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2362
+#: libs/shell-ui/src/app/SessionPanel.tsx:2213
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} 件待機中"
 
@@ -58,14 +58,6 @@ msgstr "ビューを追加"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:687
 msgid "Advanced"
 msgstr "詳細設定"
-
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:60
-msgid "agent"
-msgstr "エージェント"
-
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:50
-msgid "Agent"
-msgstr "エージェント"
 
 #: libs/shell-ui/src/app/session-plugins/TagFilter.tsx:66
 msgid "All"
@@ -188,7 +180,7 @@ msgstr "プログラムからのクリップボード書き込み"
 msgid "Close"
 msgstr "閉じる"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3274
+#: libs/shell-ui/src/app/ShellApp.tsx:3166
 msgid "Close tab"
 msgstr "タブを閉じる"
 
@@ -197,7 +189,7 @@ msgstr "タブを閉じる"
 msgid "Close this view"
 msgstr "このビューを閉じる"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:578
+#: libs/shell-ui/src/app/SessionPanel.tsx:554
 msgid "Collapse"
 msgstr "折りたたむ"
 
@@ -273,11 +265,6 @@ msgstr "コピー"
 msgid "Copy image to clipboard"
 msgstr "画像をクリップボードにコピー"
 
-#: libs/shell-ui/src/app/TargetCard.tsx:92
-#: libs/shell-ui/src/app/TargetCard.tsx:96
-msgid "Copy key"
-msgstr "キーをコピー"
-
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:640
 msgid "Copy link"
 msgstr "リンクをコピー"
@@ -291,8 +278,6 @@ msgstr "パスをコピー"
 msgid "Copy selection"
 msgstr "選択範囲をコピー"
 
-#: libs/shell-ui/src/app/TargetCard.tsx:92
-#: libs/shell-ui/src/app/TargetCard.tsx:96
 #: libs/shell-ui/src/PathActionMenu.tsx:284
 #: libs/shell-ui/src/PathActionMenu.tsx:288
 msgid "Copy URL"
@@ -306,10 +291,6 @@ msgstr "{0} を開けませんでした"
 #: libs/shell-ui/src/app/SettingsModal.tsx:343
 msgid "Could not parse the file as YAML."
 msgstr "ファイルを YAML として解析できませんでした。"
-
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:543
-msgid "Create or reuse this ticket's worktree and open a session in it"
-msgstr "このチケットのワークツリーを作成または再利用し、そこでセッションを開く"
 
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:52
 msgid "current"
@@ -344,7 +325,7 @@ msgid "Default shell"
 msgstr "デフォルトシェル"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:791
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:571
 msgid "Delete {0}"
 msgstr "{0} を削除"
 
@@ -353,7 +334,7 @@ msgid "Delete {name}"
 msgstr "{name} を削除"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:621
+#: libs/shell-ui/src/app/SessionPanel.tsx:597
 msgid "Delete workspace"
 msgstr "ワークスペースを削除"
 
@@ -370,7 +351,7 @@ msgstr "ディレクトリ"
 msgid "disabled"
 msgstr "無効"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:767
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:547
 msgid "Don't ask again"
 msgstr "再度確認しない"
 
@@ -390,7 +371,7 @@ msgstr "編集"
 msgid "Edit icon"
 msgstr "アイコンを編集"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:861
+#: libs/shell-ui/src/app/SessionPanel.tsx:826
 msgid "Edit summary…"
 msgstr "要約を編集…"
 
@@ -420,7 +401,7 @@ msgstr "セッション一覧の末尾"
 #~ msgid "Enter code {0} in the browser to finish sign-in."
 #~ msgstr "ブラウザでコード {0} を入力してサインインを完了してください。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:578
+#: libs/shell-ui/src/app/SessionPanel.tsx:554
 msgid "Expand"
 msgstr "展開"
 
@@ -436,7 +417,7 @@ msgstr "エクスポート…"
 msgid "Exported."
 msgstr "エクスポートしました。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:845
+#: libs/shell-ui/src/app/SessionPanel.tsx:810
 msgid "F2 · double-click"
 msgstr "F2 · ダブルクリック"
 
@@ -449,7 +430,7 @@ msgstr "失敗"
 #~ msgid "Failed: {0}"
 #~ msgstr "\\u5931\\u6557\\uff1a{0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:843
+#: libs/shell-ui/src/app/SessionPanel.tsx:808
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "より速く: 選択中のセッションで F2、または名前をダブルクリック"
 
@@ -469,7 +450,7 @@ msgstr "タグで絞り込み: {tag}"
 msgid "Filter plugins…"
 msgstr "プラグインを絞り込む…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:269
+#: libs/shell-ui/src/app/SessionPanel.tsx:264
 msgid "Filter sessions…"
 msgstr "セッションを絞り込む…"
 
@@ -501,7 +482,7 @@ msgstr "フォントサイズ（px）"
 msgid "For launchers such as the MR dashboard: `axn-term command axn-session create … --command`. Any program running as you can then start a command here, as with agterm."
 msgstr "MR ダッシュボードなどのランチャー向け: `axn-term command axn-session create … --command`。あなたのユーザーで動くどのプログラムも、agterm と同様にここでコマンドを開始できるようになります。"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:782
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:562
 msgid "Force remove"
 msgstr "強制削除"
 
@@ -626,11 +607,11 @@ msgstr "実行ファイル名またはプラグイン ID を Lucide アイコン
 msgid "Move “{sessionName}” to workspace"
 msgstr "「{sessionName}」をワークスペースへ移動"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:993
+#: libs/shell-ui/src/app/SessionPanel.tsx:945
 msgid "Move to new window"
 msgstr "新しいウィンドウへ移動"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:977
+#: libs/shell-ui/src/app/SessionPanel.tsx:929
 msgid "Move to workspace…"
 msgstr "ワークスペースへ移動…"
 
@@ -638,7 +619,7 @@ msgstr "ワークスペースへ移動…"
 msgid "needs attention"
 msgstr "要対応"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1633
+#: libs/shell-ui/src/app/SessionPanel.tsx:1493
 msgid "Needs you"
 msgstr "要対応"
 
@@ -646,7 +627,7 @@ msgstr "要対応"
 msgid "New name for {name}"
 msgstr "{name} の新しい名前"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2559
+#: libs/shell-ui/src/app/SessionPanel.tsx:2399
 msgid "New session"
 msgstr "新しいセッション"
 
@@ -654,16 +635,16 @@ msgstr "新しいセッション"
 msgid "New session button"
 msgstr "新規セッションボタン"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2683
+#: libs/shell-ui/src/app/SessionPanel.tsx:2523
 msgid "New session in folder…"
 msgstr "フォルダーで新しいセッション…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:607
+#: libs/shell-ui/src/app/SessionPanel.tsx:583
 msgid "New session in workspace"
 msgstr "ワークスペースで新しいセッション"
 
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:408
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:420
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:400
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:412
 msgid "New session with agent…"
 msgstr "エージェントで新しいセッション…"
 
@@ -676,7 +657,7 @@ msgstr "「{0}」の新しいセッションはこのフォルダで開始され
 msgid "New tag colour"
 msgstr "新しいタグの色"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:289
+#: libs/shell-ui/src/app/SessionPanel.tsx:284
 msgid "New workspace"
 msgstr "新しいワークスペース"
 
@@ -687,7 +668,7 @@ msgstr "このウィンドウの新しいワークスペース「{name}」"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "このウィンドウの新しいワークスペース「{trimmed}」"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:766
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
 msgid "New worktree session"
 msgstr "新しい worktree セッション"
 
@@ -795,7 +776,7 @@ msgstr "開く"
 msgid "Open {title}"
 msgstr "{title} を開く"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2663
+#: libs/shell-ui/src/app/SessionPanel.tsx:2503
 msgid "Open a saved workspace set file"
 msgstr "保存したワークスペースセットファイルを開く"
 
@@ -818,7 +799,6 @@ msgid "Open in workspace"
 msgstr "ワークスペースで開く"
 
 #: libs/shell-ui/src/app/AppContextMenu.tsx:143
-#: libs/shell-ui/src/app/TargetCard.tsx:71
 msgid "Open link"
 msgstr "リンクを開く"
 
@@ -830,11 +810,11 @@ msgstr "ログフォルダを開く…"
 msgid "Open preview in a tab"
 msgstr "タブでプレビューを開く"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2671
+#: libs/shell-ui/src/app/SessionPanel.tsx:2511
 msgid "Open workspace set from file…"
 msgstr "ファイルからワークスペースセットを開く…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2327
+#: libs/shell-ui/src/app/SessionPanel.tsx:2178
 msgid "Open…"
 msgstr "開く…"
 
@@ -880,7 +860,7 @@ msgstr "権限:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "同じアカウントでサインインしたスマートフォンとブラウザーが接続できます"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2678
+#: libs/shell-ui/src/app/SessionPanel.tsx:2518
 msgid "Pick a folder — the new session starts in it"
 msgstr "フォルダーを選択 — 新しいセッションはそこで開始"
 
@@ -984,7 +964,7 @@ msgstr "削除"
 msgid "Remove icon"
 msgstr "アイコンを削除"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:683
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:463
 msgid "Remove worktree"
 msgstr "worktree を削除"
 
@@ -992,17 +972,13 @@ msgstr "worktree を削除"
 msgid "Rename {name}"
 msgstr "{name} の名前を変更"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1573
+#: libs/shell-ui/src/app/SessionPanel.tsx:1433
 msgid "Rename session"
 msgstr "セッション名を変更"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:584
 msgid "Render session summaries (set via axn-session-summary)"
 msgstr "セッションサマリーを表示（axn-session-summary で設定）"
-
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:412
-msgid "Repository"
-msgstr "リポジトリ"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
@@ -1019,11 +995,11 @@ msgstr "{tag} の色をリセット"
 msgid "Reset to derived colour ({0})"
 msgstr "派生色に戻す ({0})"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:808
+#: libs/shell-ui/src/app/SessionPanel.tsx:773
 msgid "Reset to process name"
 msgstr "プロセス名に戻す"
 
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:66
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:74
 msgid "Resume"
 msgstr "再開"
 
@@ -1039,11 +1015,11 @@ msgstr "再開"
 msgid "Resume {agent} session{0}"
 msgstr "{agent} セッションを再開{0}"
 
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:66
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:74
 msgid "Resume {quoted}"
 msgstr "{quoted} を再開"
 
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:72
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:80
 msgid "Resume an earlier {agent} session"
 msgstr "以前の {agent} セッションを再開"
 
@@ -1063,7 +1039,7 @@ msgstr "すぐ"
 msgid "Retrying…"
 msgstr "…"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:679
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:459
 msgid "Review worktree changes"
 msgstr "worktree の変更を確認"
 
@@ -1075,7 +1051,7 @@ msgstr "シェルタブで実行"
 msgid "Run the login in a shell, then check again."
 msgstr "シェルでログインを実行してから、再確認してください。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2622
+#: libs/shell-ui/src/app/SessionPanel.tsx:2462
 msgid "Running"
 msgstr "実行中"
 
@@ -1089,7 +1065,7 @@ msgstr "サンドボックス — 権限なし（シェル、ファイル、タ�
 msgid "Save"
 msgstr "保存"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2323
+#: libs/shell-ui/src/app/SessionPanel.tsx:2174
 msgid "Save workspace set"
 msgstr "ワークスペースセットを保存"
 
@@ -1135,8 +1111,8 @@ msgstr "サーバーアドレス"
 #~ msgid "Server URL"
 #~ msgstr "サーバーURL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1609
-#: libs/shell-ui/src/app/SessionPanel.tsx:1611
+#: libs/shell-ui/src/app/SessionPanel.tsx:1469
+#: libs/shell-ui/src/app/SessionPanel.tsx:1471
 msgid "Session actions"
 msgstr "セッションの操作"
 
@@ -1168,7 +1144,7 @@ msgstr "セッションの要約"
 msgid "Session: {0}"
 msgstr "セッション：{0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2617
+#: libs/shell-ui/src/app/SessionPanel.tsx:2457
 msgid "Sessions"
 msgstr "セッション"
 
@@ -1193,8 +1169,8 @@ msgstr "設定"
 #~ msgid "shell"
 #~ msgstr "shell"
 
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:44
 #: libs/shell-ui/src/app/SessionTabStrip.tsx:50
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:60
 msgid "Shell"
 msgstr "シェル"
 
@@ -1202,11 +1178,11 @@ msgstr "シェル"
 msgid "Shell font"
 msgstr "シェルフォント"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2355
+#: libs/shell-ui/src/app/SessionPanel.tsx:2206
 msgid "Show all sessions"
 msgstr "すべてのセッションを表示"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2355
+#: libs/shell-ui/src/app/SessionPanel.tsx:2206
 msgid "Show only sessions that need you"
 msgstr "対応が必要なセッションのみ表示"
 
@@ -1238,18 +1214,9 @@ msgstr "サインイン済み"
 msgid "Signed in as {0}"
 msgstr "{0} としてサインイン中"
 
-#. placeholder {0}: target.key
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:411
-msgid "Start {0} in…"
-msgstr "{0} を開始する場所…"
-
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3495
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3518
 msgid "Start workflow…"
 msgstr "ワークフローを開始…"
-
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:542
-msgid "Start worktree"
-msgstr "ワークツリーを開始"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:991
 msgid "Status display"
@@ -1462,11 +1429,11 @@ msgid "Workspace header"
 msgstr "ワークスペースのヘッダー"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:781
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:561
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "worktree の削除に失敗（dirty?）: {0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:790
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:570
 msgid "worktree removed — branch {0} kept"
 msgstr "worktree を削除 — ブランチ {0} は保持"

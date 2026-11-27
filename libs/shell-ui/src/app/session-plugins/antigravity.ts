@@ -185,7 +185,7 @@ export const antigravityPlugin: SessionViewPlugin = {
       label: 'Resume Antigravity',
       kind: 'block',
       zone: 'selected',
-      value: (ctx) => agentResumePanel(ctx, 'antigravity'),
+      value: (ctx) => agentResumePanel(ctx, 'antigravity', antigravityPlugin.logo),
     },
   ],
   // A submitted command starts new shell work — a terminal badge left by a

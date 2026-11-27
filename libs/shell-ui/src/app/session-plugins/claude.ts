@@ -570,7 +570,7 @@ export const claudePlugin: SessionViewPlugin = {
       label: 'Resume Claude Code',
       kind: 'block',
       zone: 'selected',
-      value: (ctx) => agentResumePanel(ctx, 'claude'),
+      value: (ctx) => agentResumePanel(ctx, 'claude', claudePlugin.logo),
     },
   ],
   // A submitted command starts new shell work — a terminal badge left by a

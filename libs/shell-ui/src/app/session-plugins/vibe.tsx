@@ -590,7 +590,7 @@ export const vibePlugin: SessionViewPlugin = {
       zone: 'selected',
       value: (ctx) => (
         <>
-          {agentResumePanel(ctx, 'vibe')}
+          {agentResumePanel(ctx, 'vibe', vibePlugin.logo)}
           <VibeTasks ctx={ctx} />
         </>
       ),

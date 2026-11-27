@@ -4,6 +4,7 @@ import { act } from 'react';
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SettingsProvider } from '../../SettingsProvider';
+import { IconBagContext } from '../iconModel';
 import type { ShellSession } from '../../types';
 import type { MenuScope, SessionViewContext, PluginApi } from './plugin';
 
@@ -806,6 +807,49 @@ describe('resume button right-click list', () => {
     expect(document.body.querySelectorAll('button')).toHaveLength(1);
     await act(async () => root.unmount());
     host.remove();
+  });
+});
+
+describe('resume button icon', () => {
+  const mount = async (bag: Record<string, string>, logo: string | undefined) => {
+    const h = makeCtx('claude', {}, {
+      pluginState: { last: { name: 'b', title: 'Beta', cwd: '/repo', command: 'claude --resume b', at: 20 } },
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        createElement(
+          IconBagContext.Provider,
+          { value: bag },
+          createElement(SettingsProvider, null, agentResumePanel(h.ctx, 'claude', logo)),
+        ),
+      );
+    });
+    return { host, root };
+  };
+
+  it('shows the icon set for the plugin in the one icon bag (Settings → Plugins → Logo)', async () => {
+    const { host, root } = await mount(
+      { claude: '<svg viewBox="0 0 10 10"><circle id="mine" cx="5" cy="5" r="4"/></svg>' },
+      'Bot',
+    );
+    expect(host.querySelector('button span[class*="h-3"] circle#mine')).not.toBeNull();
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it('falls back to the plugin logo without an override, and to the play icon without a logo', async () => {
+    const withLogo = await mount({}, 'Bot');
+    expect(withLogo.host.querySelector('button svg')).not.toBeNull();
+    await act(async () => withLogo.root.unmount());
+    withLogo.host.remove();
+    const none = await mount({ claude: '<svg viewBox="0 0 10 10"><circle id="mine" r="4"/></svg>' }, undefined);
+    expect(none.host.querySelector('circle#mine')).toBeNull();
+    expect(none.host.querySelector('button svg')).not.toBeNull();
+    await act(async () => none.root.unmount());
+    none.host.remove();
   });
 });
 

@@ -780,7 +780,7 @@ export const devinPlugin: SessionViewPlugin = {
       zone: 'selected',
       value: (ctx) => (
         <>
-          {agentResumePanel(ctx, 'devin')}
+          {agentResumePanel(ctx, 'devin', devinPlugin.logo)}
           <DevinTasks ctx={ctx} />
         </>
       ),
