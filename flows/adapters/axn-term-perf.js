@@ -408,6 +408,78 @@ async function sessionSwitch(step) {
   }
 }
 
+// ---------- restore storm: what a restore costs the system ----------
+//
+// Restores `sessions` sessions whose shells each print `banner` KB before
+// their first prompt, and measures until the app is quiet again: wall time,
+// CPU (app + WebKit), peak memory, and — from the app's own `output_stats`
+// trace mark — the main-thread time spent in the output handlers and how late
+// a 20 ms timer fired (the freeze a user feels).
+
+async function restoreStorm(step) {
+  const a = args(step);
+  const sessions = Number(a.sessions ?? 12);
+  const banner = Number(a.banner ?? 256);
+  const runs = runCount(step, 3);
+  const col = { idle: [], cpu: [], web: [], main: [], rss: [], lagMax: [], lagOver50: [], lagSum: [], headless: [], visible: [], flush: [], bytes: [], first: [] };
+  for (let i = 0; i < runs; i++) {
+    const app = await launch({ restore: sessions, select: "first", trace: true, bannerKb: banner });
+    try {
+      let peak = rssMb(app.pid);
+      const t0 = app.t0;
+      let prev = sumCpu(cpuByKind(app.pid));
+      let prevT = now();
+      let quiet = 0;
+      let idleAt = null;
+      while (now() - t0 < 120000) {
+        await sleep(250);
+        peak = Math.max(peak, rssMb(app.pid));
+        const c = sumCpu(cpuByKind(app.pid));
+        const ct = now();
+        const pct = ((c - prev) / ((ct - prevT) / 1000)) * 100;
+        prev = c;
+        prevT = ct;
+        quiet = pct < 5 ? quiet + 1 : 0;
+        if (quiet >= 4) { idleAt = ct - t0 - 1000; break; }
+      }
+      const cpu = cpuByKind(app.pid);
+      const stats = readTrace(app).filter((e) => e.name === "output_stats").pop();
+      const o = stats?.detail ? JSON.parse(stats.detail) : {};
+      col.idle.push(idleAt);
+      col.cpu.push(sumCpu(cpu));
+      col.web.push(cpu.web);
+      col.main.push(cpu.main);
+      col.rss.push(peak);
+      col.first.push(app.marks.prompt);
+      col.lagMax.push(o.lagMaxMs);
+      col.lagOver50.push(o.lagOver50);
+      col.lagSum.push(o.lagSumMs);
+      col.headless.push(o.headlessMs);
+      col.visible.push(o.visibleMs);
+      col.flush.push(o.flushMs);
+      col.bytes.push(o.bytes != null ? o.bytes / 1048576 : null);
+    } finally {
+      await close(app);
+    }
+  }
+  const p = `restore.${sessions}x${banner}kb`;
+  metric(`${p}.first_prompt_ms`, { samples: col.first, unit: "ms", digits: 0, description: "selected session's first prompt, from spawn" });
+  metric(`${p}.idle_ms`, { samples: col.idle, unit: "ms", digits: 0, description: "spawn → the app is quiet again (CPU < 5 % for 1 s)" });
+  metric(`${p}.cpu_s`, { samples: col.cpu, unit: "s", digits: 1, description: "CPU seconds, app + WebKit, for the whole restore" });
+  metric(`${p}.cpu_web_s`, { samples: col.web, unit: "s", digits: 1, description: "CPU in the WebKit content process (xterm, plugins, React)" });
+  metric(`${p}.cpu_main_s`, { samples: col.main, unit: "s", digits: 1, description: "CPU in the app process (Rust readers, IPC)" });
+  metric(`${p}.rss_peak_mb`, { samples: col.rss, unit: "MB", digits: 0, description: "peak resident memory, app + WebKit" });
+  metric(`${p}.lag_max_ms`, { samples: col.lagMax, unit: "ms", digits: 0, description: "longest main-thread stall (20 ms timer fired this late)" });
+  metric(`${p}.lag_sum_ms`, { samples: col.lagSum, unit: "ms", digits: 0, description: "total main-thread stall time" });
+  metric(`${p}.lag_over50`, { samples: col.lagOver50, unit: "stalls", digits: 0, description: "stalls longer than 50 ms" });
+  metric(`${p}.headless_ms`, { samples: col.headless, unit: "ms", digits: 0, description: "sync time in the headless-buffer chunk handlers" });
+  metric(`${p}.visible_ms`, { samples: col.visible, unit: "ms", digits: 0, description: "sync time in the mounted terminal's chunk handler" });
+  metric(`${p}.flush_ms`, { samples: col.flush, unit: "ms", digits: 0, description: "batched plugin/state flush time" });
+  metric(`${p}.output_mb`, { samples: col.bytes, unit: "MB", digits: 1, better: "none", description: "bytes the frontend received" });
+  meta({ sessions, banner, runs });
+  return `restore storm measured (${sessions} sessions × ${banner} KB)`;
+}
+
 export async function run(step) {
   const action = args(step).action ?? "help";
   switch (action) {
@@ -419,8 +491,9 @@ export async function run(step) {
     case "echo": return echo(step);
     case "output": return output(step);
     case "switch": return sessionSwitch(step);
+    case "restoreStorm": return restoreStorm(step);
     default:
-      throw new Error(`unknown action '${action}' — static | startup | phases | throughput | interrupt | echo | output | switch`);
+      throw new Error(`unknown action '${action}' — static | startup | phases | throughput | interrupt | echo | output | switch | restoreStorm`);
   }
 }
 

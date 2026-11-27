@@ -41,6 +41,7 @@ import {
   isPluginEnabled,
 } from './session-plugins';
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
+import { timeOutput } from './outputStats';
 import { dropSessionBuffer, keepPtyAlive, serializeTerminal, sessionBufferIds, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf, trackSessionBuffer } from '../terminalRegistry';
 import { acquirePty, syncRetainedPtys } from '../ptyLifetime';
 import { foregroundStatusPatch } from '../foregroundStatus';
@@ -992,7 +993,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // per-chunk updates re-rendered the whole app thousands of times a second
   // during bursts (`cat` of a big file, build logs). The terminal itself
   // writes every chunk immediately; only the text copy for plugins waits.
-  const flushSessionOutput = useCallback(() => {
+  const flushSessionOutput = useCallback(() => timeOutput('flush', 0, () => {
     if (outputFlushTimerRef.current !== null) {
       clearTimeout(outputFlushTimerRef.current);
       outputFlushTimerRef.current = null;
@@ -1017,7 +1018,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         if (plugin.hookSpec) maybeWireHookSpec(plugin, ctx);
       }
     }
-  }, [appendSessionOutput, buildPluginApi]);
+  }), [appendSessionOutput, buildPluginApi]);
   flushSessionOutputRef.current = flushSessionOutput;
 
   const handleSessionOutput = useCallback((sessionId: string, text: string) => {
@@ -1071,15 +1072,17 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       // `2;ls` fragments into retained output and plugin hooks.
       let pending = '';
       offs.push(
-        backend.onOutput(ptyId, (bytes) => {
-          buffer.write(bytes);
-          const [complete, tail] = splitAnsiTail(
-            pending + decoder.decode(bytes, { stream: true }),
-          );
-          pending = tail;
-          const text = stripAnsi(complete);
-          if (text) handleSessionOutput(sessionId, text);
-        }),
+        backend.onOutput(ptyId, (bytes) =>
+          timeOutput('headless', bytes.length, () => {
+            buffer.write(bytes);
+            const [complete, tail] = splitAnsiTail(
+              pending + decoder.decode(bytes, { stream: true }),
+            );
+            pending = tail;
+            const text = stripAnsi(complete);
+            if (text) handleSessionOutput(sessionId, text);
+          }),
+        ),
       );
 
       // cwd + foreground-process polling used to ride each session's

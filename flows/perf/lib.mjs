@@ -2,7 +2,7 @@
 // launching a release binary with an isolated state dir, driving it through
 // the remote-control server, sampling /proc for CPU and memory, and printing
 // AXN_METRIC lines for the axn-dev flow runner.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import {
   existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync,
@@ -65,7 +65,13 @@ export function meta(obj) {
 
 export function binaryPath() {
   const b = process.env.AXN_TERM_BINARY ?? "target/release/axn-term";
-  const p = isAbsolute(b) ? b : resolve(REPO, b);
+  let p = isAbsolute(b) ? b : resolve(REPO, b);
+  // A bare binary cannot host WKWebView on macOS (the web content process
+  // dies at window creation) — use the bundled .app binary next to it.
+  if (process.platform === "darwin" && existsSync(p)) {
+    const bundled = join(dirname(p), "bundle/macos/axn-term.app/Contents/MacOS/axn-term");
+    if (existsSync(bundled)) p = bundled;
+  }
   if (!existsSync(p)) {
     throw new Error(`axn-term binary not found: ${p} — build it (pnpm tauri build --no-bundle) or set AXN_TERM_BINARY`);
   }
@@ -88,6 +94,31 @@ export function dataDir() {
 }
 
 // ---------- /proc sampling ----------
+
+// On macOS there is no /proc: `ps` gives the same numbers. WebKit's helper
+// processes are XPC services parented to launchd, not children of the app, so
+// they are told apart by pid: the ones that appeared after the app started
+// are its own (see `snapshotWebKit` in `launch`) — keep the machine quiet of
+// other WebKit apps while a run is going.
+const IS_DARWIN = process.platform === "darwin";
+const webkitBaseline = new Map(); // app pid → pids that existed before it started
+
+function psTable() {
+  const out = execFileSync("ps", ["-axo", "pid=,ppid=,cputime=,rss=,comm="], { encoding: "utf8", maxBuffer: 16 << 20 });
+  const rows = [];
+  for (const line of out.split("\n")) {
+    const m = /^\s*(\d+)\s+(\d+)\s+([\d:.]+)\s+(\d+)\s+(.*)$/.exec(line);
+    if (!m) continue;
+    const t = m[3].split(":").map(Number);
+    const cpu = t.reduce((acc, v) => acc * 60 + v, 0);
+    rows.push({ pid: +m[1], ppid: +m[2], cpu, rss: +m[4], comm: m[5].split("/").pop(), path: m[5] });
+  }
+  return rows;
+}
+
+export function snapshotWebKit() {
+  return new Set(psTable().filter((r) => r.path.includes("com.apple.WebKit.")).map((r) => r.pid));
+}
 
 function readStat(pid) {
   try {
@@ -114,6 +145,7 @@ function rssKb(pid) {
 // it hosts.
 const SHELLISH = new Set(["bash", "sh", "cat", "seq", "printf", "axn-login-shel", "env", "sleep", "ps", "head", "tr", "fold"]);
 function appProcs(rootPid) {
+  if (IS_DARWIN) return appProcsDarwin(rootPid);
   const all = [];
   for (const d of readdirSync("/proc")) {
     if (/^\d+$/.test(d)) {
@@ -140,8 +172,33 @@ function appProcs(rootPid) {
   return out;
 }
 
+function appProcsDarwin(rootPid) {
+  const rows = psTable();
+  const before = webkitBaseline.get(rootPid) ?? new Set();
+  const out = [];
+  const kids = new Map();
+  for (const r of rows) {
+    if (!kids.has(r.ppid)) kids.set(r.ppid, []);
+    kids.get(r.ppid).push(r);
+  }
+  const walk = (pid) => {
+    for (const c of kids.get(pid) ?? []) {
+      if (SHELLISH.has(c.comm) || c.comm.startsWith("-")) continue;
+      out.push(c);
+      walk(c.pid);
+    }
+  };
+  const root = rows.find((r) => r.pid === rootPid);
+  if (root) out.push(root);
+  walk(rootPid);
+  for (const r of rows) {
+    if (r.path.includes("com.apple.WebKit.") && !before.has(r.pid)) out.push(r);
+  }
+  return out;
+}
+
 const kindOf = (p, rootPid) =>
-  p.pid === rootPid ? "main" : p.comm.startsWith("WebKitWeb") ? "web" : p.comm.startsWith("WebKitNet") ? "net" : p.comm.startsWith("WebKitGPU") ? "gpu" : "other";
+  p.pid === rootPid ? "main" : /WebKit\.WebContent|^WebKitWeb/.test(p.comm) ? "web" : /WebKit\.Networking|^WebKitNet/.test(p.comm) ? "net" : /WebKit\.GPU|^WebKitGPU/.test(p.comm) ? "gpu" : "other";
 
 /** CPU seconds so far, per process kind (main = the app binary, web = WebKit content). */
 export function cpuByKind(rootPid) {
@@ -155,7 +212,7 @@ export const sumCpu = (o) => Object.values(o).reduce((a, b) => a + b, 0);
 /** Resident memory in MB for the app and its WebKit helpers. */
 export function rssMb(rootPid) {
   let kb = 0;
-  for (const p of appProcs(rootPid)) kb += rssKb(p.pid);
+  for (const p of appProcs(rootPid)) kb += IS_DARWIN ? p.rss : rssKb(p.pid);
   return kb / 1024;
 }
 
@@ -232,15 +289,25 @@ function restoreState(stateDir, sessions, select) {
  * window exists), shell (selected session's PTY spawned), prompt (its first
  * prompt reached Rust), allShells (every restored session spawned).
  */
-export async function launch({ restore = 0, select = "first", trace = false } = {}) {
+export async function launch({ restore = 0, select = "first", trace = false, bannerKb = 0 } = {}) {
   const runsDir = join(tmpdir(), "axn-term-perf");
   mkdirSync(runsDir, { recursive: true });
   const stateDir = mkdtempSync(join(runsDir, "s-"));
   const binDir = join(stateDir, "bin");
   mkdirSync(binDir);
   // Plain bash with a fixed prompt: keeps the user's dotfiles out of timings.
-  writeFileSync(join(binDir, "axn-login-shell"),
-    `#!/bin/sh\nexec env PS1='AXNREADY$ ' /bin/bash --noprofile --norc "$@"\n`, { mode: 0o755 });
+  if (bannerKb > 0) {
+    // A shell that prints `bannerKb` KB of coloured lines before its first
+    // prompt — what a restored session's start-up looks like (rc output, a
+    // resumed agent redrawing its history).
+    writeFileSync(join(binDir, "rc"),
+      `yes "$(printf '\\033[32mok\\033[0m  compiled src/module/file.ts in 12ms \\033[2m(cached)\\033[0m')" | head -n ${Math.ceil((bannerKb * 1024) / 70)}\n`);
+    writeFileSync(join(binDir, "axn-login-shell"),
+      `#!/bin/sh\nexec env PS1='AXNREADY$ ' /bin/bash --noprofile --rcfile "${join(binDir, "rc")}" "$@"\n`, { mode: 0o755 });
+  } else {
+    writeFileSync(join(binDir, "axn-login-shell"),
+      `#!/bin/sh\nexec env PS1='AXNREADY$ ' /bin/bash --noprofile --norc "$@"\n`, { mode: 0o755 });
+  }
   const target = restore > 0 ? restoreState(stateDir, restore, select) : undefined;
   const traceFile = trace ? join(stateDir, "perf-trace.jsonl") : undefined;
 
@@ -249,6 +316,7 @@ export async function launch({ restore = 0, select = "first", trace = false } = 
   const base = `http://127.0.0.1:${port}`;
   const rc = (path, init = {}) =>
     fetch(base + path, { ...init, headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` } });
+  const webkitBefore = IS_DARWIN ? snapshotWebKit() : undefined;
   const logFd = openSync(join(stateDir, "axn-term.log"), "a");
   const spawnEpoch = Date.now();
   const t0 = now();
@@ -265,6 +333,7 @@ export async function launch({ restore = 0, select = "first", trace = false } = 
     },
     stdio: ["ignore", logFd, logFd],
   });
+  if (webkitBefore) webkitBaseline.set(child.pid, webkitBefore);
   live.add(child);
   let exited = false;
   child.on("exit", () => {
