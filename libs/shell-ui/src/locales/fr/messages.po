@@ -14,17 +14,25 @@ msgstr "{0} · via {1}"
 msgid "{0} running {1} will be terminated"
 msgstr "{0} {1} en cours seront terminés"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:545
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:765
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} s'exécute dans le checkout principal — l'isoler dans un worktree ?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2213
+#: libs/shell-ui/src/app/SessionPanel.tsx:2271
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} en attente"
 
 #: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:126
 msgid "{cli} is installed"
 msgstr "{cli} est installé"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:25
+msgid "{days}d ago"
+msgstr "il y a {days} j"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:23
+msgid "{h}h ago"
+msgstr "il y a {h} h"
 
 #: libs/shell-ui/src/app/session-plugins/TagColorInput.tsx:72
 msgid "{label} (hex)"
@@ -33,6 +41,10 @@ msgstr "{label} (hex)"
 #: libs/shell-ui/src/app/session-plugins/TagColorInput.tsx:51
 msgid "{label}: theme {slot}"
 msgstr "{label} : couleur du thème {slot}"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:21
+msgid "{min}m ago"
+msgstr "il y a {min} min"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:1268
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
@@ -58,6 +70,14 @@ msgstr "Ajouter une vue"
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:687
 msgid "Advanced"
 msgstr "Avancé"
+
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:60
+msgid "agent"
+msgstr "agent"
+
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:50
+msgid "Agent"
+msgstr "Agent"
 
 #: libs/shell-ui/src/app/session-plugins/TagFilter.tsx:66
 msgid "All"
@@ -180,7 +200,7 @@ msgstr "Écritures du presse-papiers par les programmes"
 msgid "Close"
 msgstr "Fermer"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3166
+#: libs/shell-ui/src/app/ShellApp.tsx:3274
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
@@ -189,7 +209,7 @@ msgstr "Fermer l'onglet"
 msgid "Close this view"
 msgstr "Fermer cette vue"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:554
+#: libs/shell-ui/src/app/SessionPanel.tsx:576
 msgid "Collapse"
 msgstr "Replier"
 
@@ -265,6 +285,11 @@ msgstr "Copier"
 msgid "Copy image to clipboard"
 msgstr "Copier l'image dans le presse-papiers"
 
+#: libs/shell-ui/src/app/TargetCard.tsx:92
+#: libs/shell-ui/src/app/TargetCard.tsx:96
+msgid "Copy key"
+msgstr "Copier la clé"
+
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:640
 msgid "Copy link"
 msgstr "Copier le lien"
@@ -278,6 +303,8 @@ msgstr "Copier le chemin"
 msgid "Copy selection"
 msgstr "Copier la sélection"
 
+#: libs/shell-ui/src/app/TargetCard.tsx:92
+#: libs/shell-ui/src/app/TargetCard.tsx:96
 #: libs/shell-ui/src/PathActionMenu.tsx:284
 #: libs/shell-ui/src/PathActionMenu.tsx:288
 msgid "Copy URL"
@@ -291,6 +318,10 @@ msgstr "Impossible d’ouvrir {0}"
 #: libs/shell-ui/src/app/SettingsModal.tsx:343
 msgid "Could not parse the file as YAML."
 msgstr "Impossible de lire le fichier en YAML."
+
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:543
+msgid "Create or reuse this ticket's worktree and open a session in it"
+msgstr "Créer ou réutiliser le worktree de ce ticket et y ouvrir une session"
 
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:52
 msgid "current"
@@ -325,7 +356,7 @@ msgid "Default shell"
 msgstr "Shell par défaut"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:571
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:791
 msgid "Delete {0}"
 msgstr "Supprimer {0}"
 
@@ -334,7 +365,7 @@ msgid "Delete {name}"
 msgstr "Supprimer {name}"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:597
+#: libs/shell-ui/src/app/SessionPanel.tsx:619
 msgid "Delete workspace"
 msgstr "Supprimer le workspace"
 
@@ -351,7 +382,7 @@ msgstr "Répertoire"
 msgid "disabled"
 msgstr "désactivé"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:547
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:767
 msgid "Don't ask again"
 msgstr "Ne plus demander"
 
@@ -371,7 +402,7 @@ msgstr "Modifier"
 msgid "Edit icon"
 msgstr "Modifier l'icône"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:826
+#: libs/shell-ui/src/app/SessionPanel.tsx:859
 msgid "Edit summary…"
 msgstr "Modifier le résumé…"
 
@@ -401,7 +432,7 @@ msgstr "Fin de la liste des sessions"
 #~ msgid "Enter code {0} in the browser to finish sign-in."
 #~ msgstr "Saisissez le code {0} dans le navigateur pour terminer la connexion."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:554
+#: libs/shell-ui/src/app/SessionPanel.tsx:576
 msgid "Expand"
 msgstr "Déplier"
 
@@ -417,7 +448,7 @@ msgstr "Exporter…"
 msgid "Exported."
 msgstr "Exporté."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:810
+#: libs/shell-ui/src/app/SessionPanel.tsx:843
 msgid "F2 · double-click"
 msgstr "F2 · double-clic"
 
@@ -430,7 +461,7 @@ msgstr "échec"
 #~ msgid "Failed: {0}"
 #~ msgstr "\\u00c9chec : {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:808
+#: libs/shell-ui/src/app/SessionPanel.tsx:841
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "Plus rapide : F2 sur la session sélectionnée ou double-clic sur son nom"
 
@@ -450,7 +481,7 @@ msgstr "Filtrer par tag : {tag}"
 msgid "Filter plugins…"
 msgstr "Filtrer les plugins…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:264
+#: libs/shell-ui/src/app/SessionPanel.tsx:267
 msgid "Filter sessions…"
 msgstr "Filtrer les sessions…"
 
@@ -482,7 +513,7 @@ msgstr "Taille de police (px)"
 msgid "For launchers such as the MR dashboard: `axn-term command axn-session create … --command`. Any program running as you can then start a command here, as with agterm."
 msgstr "Pour les lanceurs comme le tableau de bord des MR : `axn-term command axn-session create … --command`. Tout programme lancé sous votre compte peut alors démarrer une commande ici, comme avec agterm."
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:562
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:782
 msgid "Force remove"
 msgstr "Forcer la suppression"
 
@@ -607,11 +638,11 @@ msgstr "Associez les noms d'exécutables ou les identifiants de plugins à une i
 msgid "Move “{sessionName}” to workspace"
 msgstr "Déplacer « {sessionName} » vers le workspace"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:945
+#: libs/shell-ui/src/app/SessionPanel.tsx:991
 msgid "Move to new window"
 msgstr "Déplacer vers une nouvelle fenêtre"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:929
+#: libs/shell-ui/src/app/SessionPanel.tsx:975
 msgid "Move to workspace…"
 msgstr "Déplacer vers le workspace…"
 
@@ -619,7 +650,7 @@ msgstr "Déplacer vers le workspace…"
 msgid "needs attention"
 msgstr "à vérifier"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1493
+#: libs/shell-ui/src/app/SessionPanel.tsx:1542
 msgid "Needs you"
 msgstr "Vous attend"
 
@@ -627,7 +658,7 @@ msgstr "Vous attend"
 msgid "New name for {name}"
 msgstr "Nouveau nom pour {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2399
+#: libs/shell-ui/src/app/SessionPanel.tsx:2468
 msgid "New session"
 msgstr "Nouvelle session"
 
@@ -635,16 +666,16 @@ msgstr "Nouvelle session"
 msgid "New session button"
 msgstr "Bouton nouvelle session"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2523
+#: libs/shell-ui/src/app/SessionPanel.tsx:2592
 msgid "New session in folder…"
 msgstr "Nouvelle session dans un dossier…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:583
+#: libs/shell-ui/src/app/SessionPanel.tsx:605
 msgid "New session in workspace"
 msgstr "Nouvelle session dans le workspace"
 
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:400
-#: libs/shell-ui/src/app/session-plugins/agents.tsx:412
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:408
+#: libs/shell-ui/src/app/session-plugins/agents.tsx:420
 msgid "New session with agent…"
 msgstr "Nouvelle session avec agent…"
 
@@ -657,7 +688,7 @@ msgstr "Les nouvelles sessions dans « {0} » démarrent dans ce dossier. Laisse
 msgid "New tag colour"
 msgstr "Nouvelle couleur de tag"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:284
+#: libs/shell-ui/src/app/SessionPanel.tsx:287
 msgid "New workspace"
 msgstr "Nouveau workspace"
 
@@ -668,7 +699,7 @@ msgstr "Nouveau workspace « {name} » dans cette fenêtre"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "Nouveau workspace « {trimmed} » dans cette fenêtre"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:766
 msgid "New worktree session"
 msgstr "Nouvelle session worktree"
 
@@ -740,6 +771,10 @@ msgstr "Non connecté"
 msgid "not yet"
 msgstr "pas encore"
 
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:20
+msgid "now"
+msgstr "à l’instant"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:674
 msgid "Off"
 msgstr "Désactivé"
@@ -776,7 +811,7 @@ msgstr "Ouvrir"
 msgid "Open {title}"
 msgstr "Ouvrir {title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2503
+#: libs/shell-ui/src/app/SessionPanel.tsx:2572
 msgid "Open a saved workspace set file"
 msgstr "Ouvrir un fichier de jeu de workspaces enregistré"
 
@@ -799,6 +834,7 @@ msgid "Open in workspace"
 msgstr "Ouvrir dans le workspace"
 
 #: libs/shell-ui/src/app/AppContextMenu.tsx:143
+#: libs/shell-ui/src/app/TargetCard.tsx:71
 msgid "Open link"
 msgstr "Ouvrir le lien"
 
@@ -810,11 +846,11 @@ msgstr "Ouvrir le dossier des journaux…"
 msgid "Open preview in a tab"
 msgstr "Ouvrir l'aperçu dans un onglet"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2511
+#: libs/shell-ui/src/app/SessionPanel.tsx:2580
 msgid "Open workspace set from file…"
 msgstr "Ouvrir un jeu de workspaces depuis un fichier…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2178
+#: libs/shell-ui/src/app/SessionPanel.tsx:2236
 msgid "Open…"
 msgstr "Ouvrir…"
 
@@ -860,7 +896,7 @@ msgstr "permissions :"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "les téléphones et navigateurs connectés au même compte peuvent s'y joindre"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2518
+#: libs/shell-ui/src/app/SessionPanel.tsx:2587
 msgid "Pick a folder — the new session starts in it"
 msgstr "Choisir un dossier — la nouvelle session y démarre"
 
@@ -964,7 +1000,7 @@ msgstr "Supprimer"
 msgid "Remove icon"
 msgstr "Supprimer l'icône"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:463
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:683
 msgid "Remove worktree"
 msgstr "Supprimer le worktree"
 
@@ -972,13 +1008,17 @@ msgstr "Supprimer le worktree"
 msgid "Rename {name}"
 msgstr "Renommer {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1433
+#: libs/shell-ui/src/app/SessionPanel.tsx:1482
 msgid "Rename session"
 msgstr "Renommer la session"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:584
 msgid "Render session summaries (set via axn-session-summary)"
 msgstr "Afficher les résumés de session (via axn-session-summary)"
+
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:412
+msgid "Repository"
+msgstr "Dépôt"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
@@ -995,11 +1035,11 @@ msgstr "Réinitialiser la couleur de {tag}"
 msgid "Reset to derived colour ({0})"
 msgstr "Revenir à la couleur dérivée ({0})"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:773
+#: libs/shell-ui/src/app/SessionPanel.tsx:806
 msgid "Reset to process name"
 msgstr "Rétablir le nom du processus"
 
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:74
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:75
 msgid "Resume"
 msgstr "Reprendre"
 
@@ -1015,11 +1055,11 @@ msgstr "Reprendre"
 msgid "Resume {agent} session{0}"
 msgstr "Reprendre la session {agent}{0}"
 
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:74
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:75
 msgid "Resume {quoted}"
 msgstr "Reprendre {quoted}"
 
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:80
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:81
 msgid "Resume an earlier {agent} session"
 msgstr "Reprendre une session {agent} précédente"
 
@@ -1039,7 +1079,7 @@ msgstr "Réessayer"
 msgid "Retrying…"
 msgstr "Nouvelle tentative…"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:459
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:679
 msgid "Review worktree changes"
 msgstr "Vérifier les changements du worktree"
 
@@ -1051,7 +1091,7 @@ msgstr "Exécuter dans un onglet shell"
 msgid "Run the login in a shell, then check again."
 msgstr "Lancez la connexion dans un shell, puis vérifiez à nouveau."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2462
+#: libs/shell-ui/src/app/SessionPanel.tsx:2531
 msgid "Running"
 msgstr "Actives"
 
@@ -1065,7 +1105,7 @@ msgstr "sandboxé — aucune permission (pas d'accès shell, fichiers ou termina
 msgid "Save"
 msgstr "Enregistrer"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2174
+#: libs/shell-ui/src/app/SessionPanel.tsx:2232
 msgid "Save workspace set"
 msgstr "Enregistrer le jeu de workspaces"
 
@@ -1111,8 +1151,8 @@ msgstr "Adresse du serveur"
 #~ msgid "Server URL"
 #~ msgstr "URL du serveur"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1469
-#: libs/shell-ui/src/app/SessionPanel.tsx:1471
+#: libs/shell-ui/src/app/SessionPanel.tsx:1518
+#: libs/shell-ui/src/app/SessionPanel.tsx:1520
 msgid "Session actions"
 msgstr "Actions de la session"
 
@@ -1144,7 +1184,7 @@ msgstr "Résumé de la session"
 msgid "Session: {0}"
 msgstr "Session : {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2457
+#: libs/shell-ui/src/app/SessionPanel.tsx:2526
 msgid "Sessions"
 msgstr "Sessions"
 
@@ -1169,8 +1209,8 @@ msgstr "Réglages"
 #~ msgid "shell"
 #~ msgstr "shell"
 
-#: libs/shell-ui/src/app/SessionTabStrip.tsx:44
 #: libs/shell-ui/src/app/SessionTabStrip.tsx:50
+#: libs/shell-ui/src/app/SessionTabStrip.tsx:60
 msgid "Shell"
 msgstr "Shell"
 
@@ -1178,11 +1218,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Police du shell"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2206
+#: libs/shell-ui/src/app/SessionPanel.tsx:2264
 msgid "Show all sessions"
 msgstr "Afficher toutes les sessions"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2206
+#: libs/shell-ui/src/app/SessionPanel.tsx:2264
 msgid "Show only sessions that need you"
 msgstr "Afficher uniquement les sessions qui vous attendent"
 
@@ -1214,9 +1254,18 @@ msgstr "Connecté"
 msgid "Signed in as {0}"
 msgstr "Connecté en tant que {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3518
+#. placeholder {0}: target.key
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:411
+msgid "Start {0} in…"
+msgstr "Démarrer {0} dans…"
+
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3495
 msgid "Start workflow…"
 msgstr "Démarrer le workflow…"
+
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:542
+msgid "Start worktree"
+msgstr "Démarrer un worktree"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:991
 msgid "Status display"
@@ -1429,11 +1478,11 @@ msgid "Workspace header"
 msgstr "En-tête de l'espace de travail"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:561
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:781
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "Échec de la suppression du worktree (dirty ?) : {0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:570
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:790
 msgid "worktree removed — branch {0} kept"
 msgstr "worktree supprimé — branche {0} conservée"

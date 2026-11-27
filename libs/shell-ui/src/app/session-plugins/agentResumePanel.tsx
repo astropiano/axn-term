@@ -17,11 +17,12 @@ import {
 export function ageLabel(at: number, now = Date.now()): string {
   if (!at) return '';
   const min = Math.max(0, Math.round((now - at) / 60_000));
-  if (min < 1) return 'now';
-  if (min < 60) return `${min}m ago`;
+  if (min < 1) return i18n._(t`now`);
+  if (min < 60) return i18n._(t`${min}m ago`);
   const h = Math.round(min / 60);
-  if (h < 48) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
+  if (h < 48) return i18n._(t`${h}h ago`);
+  const days = Math.round(h / 24);
+  return i18n._(t`${days}d ago`);
 }
 
 /** The folder a record ran in, shortened to its last segment. */
