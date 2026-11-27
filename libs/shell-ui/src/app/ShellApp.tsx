@@ -1,3 +1,4 @@
+import { createTargetHost, registerTargetHost } from './textTargets';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Trans } from '@lingui/react/macro';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -920,6 +921,23 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     sandboxRuntime.selectSession = (sessionId) =>
       selectSessionRef.current?.(sessionId);
   }, [buildPluginApi, mergePluginData]);
+
+  // Text targets (ticket keys, tracker links …): the terminal link provider
+  // and chips ask this host for the enabled plugins' readers and actions.
+  useEffect(
+    () =>
+      registerTargetHost(
+        createTargetHost({
+          plugins: () => enabledPluginsRef.current,
+          settings: () => pluginSettingsRef.current,
+          sessions: () => sessionsRef.current,
+          selectedSessionId: () => selectedSessionIdRef.current ?? undefined,
+          buildApi: buildPluginApi,
+          selectSession: (sessionId) => selectSessionRef.current?.(sessionId),
+        }),
+      ),
+    [buildPluginApi],
+  );
 
   useEffect(() => {
     syncSandboxes(

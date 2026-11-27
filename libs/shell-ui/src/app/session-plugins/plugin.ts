@@ -11,6 +11,7 @@ import { getScreenLines } from '../../terminalRegistry';
 import { setSessionRestoring } from '../restoring';
 import { axnLog } from '../log';
 import { activeView, onViewChanged, openView, removeView, selectView } from '../viewHost';
+import type { TargetAction, TargetActionContext, TextTarget, TextTargetReader } from '../textTargets';
 
 export interface SessionViewContext {
   session: ShellSession;
@@ -716,6 +717,14 @@ export interface SessionViewPlugin {
   settingsKey?: string;
   /** Publishes stable values that other session plugins may consume. */
   sessionIdentifiers?: (ctx: SessionIdentifierContext) => SessionIdentifier[];
+  /**
+   * Recognizes this plugin's targets in text the app shows — bare
+   * occurrences in terminal lines (`scan`) and URLs (`fromUrl`). Hovering one
+   * opens a card with every plugin's `targetActions` (`app/textTargets.ts`).
+   */
+  textTargets?: TextTargetReader;
+  /** Buttons this plugin offers on a recognized target's hover card. */
+  targetActions?: (target: TextTarget, ctx: TargetActionContext) => TargetAction[];
   /**
    * Whether the plugin is active when the user has not set `<id>.enabled` in
    * plugins.yaml. Defaults to `true` for built-in plugins; external plugins

@@ -22,7 +22,7 @@ import type {
   SessionViewContext,
   SessionViewPlugin,
 } from './plugin';
-import { extractTicketFromTitle } from './glabMr';
+import { extractTicketFromTitle } from '../ticketKeys';
 import type { ShellSession, SessionAttention} from '../../types';
 import { sessionLastSelectedAt } from '../attention';
 import { getSessionViewPlugins, isPluginEnabled } from './index';

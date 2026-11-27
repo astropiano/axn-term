@@ -319,7 +319,8 @@ describe('worktree creation', () => {
     const cmd = worktreesPlugin.commands![0];
     const out = await (cmd as PluginCommand).run!(h.ctx, 'My Fix', 'axn-worktree My Fix');
     expect(out).toBe(false);
-    const dir = `/home/tester/worktrees/axn-term-wt-my-fix`;
+    // One scheme for every worktree: <repo>-<name> on wt/<name>.
+    const dir = `/home/tester/worktrees/axn-term-my-fix`;
     expect(h.execCalls.some((c) => c.command.includes(`'${dir}'`))).toBe(true);
     expect(h.execCalls.some((c) => c.command.includes(`-b 'wt/my-fix'`))).toBe(true);
     expect(h.openedSessions[0]).toEqual({ cwd: dir, name: 'my-fix' });

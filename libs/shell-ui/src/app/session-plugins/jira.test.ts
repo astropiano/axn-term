@@ -146,6 +146,13 @@ describe('splitStatus / parseBulkFetch', () => {
         tip: 'Embeddings REST endpoint\nStory · Ann',
         href: 'https://example.atlassian.net/browse/AIACC-717',
         tone: 'progress',
+        target: {
+          kind: 'ticket',
+          key: 'AIACC-717',
+          url: 'https://example.atlassian.net/browse/AIACC-717',
+          source: 'jira',
+          summary: 'Embeddings REST endpoint',
+        },
       },
     ]);
     expect(out['AIACC-717'].fields?.['jira.status']).toBe('In Progress');
@@ -210,7 +217,7 @@ describe('buildRequestScript', () => {
   });
 });
 
-import { parseSearch } from './jira';
+import { jiraTextTargets, parseSearch } from './jira';
 
 describe('parseSearch', () => {
   it('maps search issues to tickets', () => {
@@ -370,5 +377,35 @@ describe('sessionsTicketKeys', () => {
         keys,
       ),
     ).toEqual(['AIACC-1', 'MGNL-2']);
+  });
+});
+
+describe('jiraTextTargets', () => {
+  const settings = {
+    enabled: true,
+    baseUrl: 'https://example.atlassian.net',
+    email: 'me@example.com',
+    projectKeys: 'AIACC',
+    token: 't',
+  };
+
+  it('finds bare keys of the configured projects with their ranges', () => {
+    const found = jiraTextTargets.scan!('see aiacc-7 and UTF-8', settings);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({
+      start: 4,
+      end: 11,
+      target: { kind: 'ticket', key: 'AIACC-7', source: 'jira', url: 'https://example.atlassian.net/browse/AIACC-7' },
+    });
+  });
+
+  it('reads browse links on the configured site only', () => {
+    expect(jiraTextTargets.fromUrl!('https://example.atlassian.net/browse/AIACC-7', settings)?.key).toBe('AIACC-7');
+    expect(jiraTextTargets.fromUrl!('https://other.net/browse/AIACC-7', settings)).toBeUndefined();
+  });
+
+  it('is silent while the plugin is not configured', () => {
+    expect(jiraTextTargets.scan!('AIACC-7', { ...settings, enabled: false })).toEqual([]);
+    expect(jiraTextTargets.fromUrl!('https://example.atlassian.net/browse/AIACC-7', {})).toBeUndefined();
   });
 });
