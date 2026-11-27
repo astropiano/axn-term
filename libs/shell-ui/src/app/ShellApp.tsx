@@ -19,6 +19,7 @@ import { RestoringOverlay } from './RestoringOverlay';
 import { TooltipHost } from './Tooltip';
 import {
   clearSessionRestoring,
+  isSessionRestoring,
   setSessionRestoring,
   useRestoring,
 } from './restoring';
@@ -43,7 +44,7 @@ import {
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
 import { timeOutput } from './outputStats';
 import { setPtyPaused } from './ptyPause';
-import { createRestoreQueue } from './restoreQueue';
+import { createRestoreQueue, createSettleSignal } from './restoreQueue';
 import { dropSessionBuffer, keepPtyAlive, setBufferPriority, writeSessionBuffer, serializeTerminal, sessionBufferIds, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf, trackSessionBuffer } from '../terminalRegistry';
 import { acquirePty, syncRetainedPtys } from '../ptyLifetime';
 import { foregroundStatusPatch } from '../foregroundStatus';
@@ -156,6 +157,10 @@ const SMALL_SCREEN_QUERY = '(max-width: 639px)';
 const OUTPUT_FLUSH_INTERVAL_MS = 50;
 /** Sessions whose shells start at once while a window restores. */
 const RESTORE_CONCURRENCY = 3;
+/** Output quiet for this long (and no plugin restore running) = a restored session has settled. */
+const RESTORE_QUIET_MS = 500;
+/** …but never hold a restore slot longer than this. */
+const RESTORE_SLOT_TIMEOUT_MS = 10_000;
 
 
 
@@ -1712,7 +1717,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // (restoreQueue.ts): all together their login shells saturate every core and
   // the one the user is looking at gets its prompt last. The leases are taken
   // at once; only the spawn itself waits its turn.
-  const restoreQueueRef = useRef(createRestoreQueue({ concurrency: RESTORE_CONCURRENCY }));
+  const restoreQueueRef = useRef(createRestoreQueue({ concurrency: RESTORE_CONCURRENCY, readyTimeoutMs: RESTORE_SLOT_TIMEOUT_MS }));
   const queuedForRestoreRef = useRef(new Set<string>());
   const firstOutputWaitersRef = useRef(new Map<string, () => void>());
   const spawnHandlesRef = useRef(new Map<string, ReturnType<typeof acquirePty>>());
@@ -1758,11 +1763,19 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         queue.enqueue(sessionId, async () => {
           const current = spawnHandlesRef.current.get(sessionId);
           if (!current) return undefined;
-          // The first output is the signal that this shell is up (its rc has
-          // run) and the next one may start; the session's headless buffer
-          // subscription reports it (`firstOutputWaitersRef`).
+          // The slot is free once the session has settled: its first output has
+          // come (the rc ran), the output has been quiet for a moment and no
+          // plugin restore (`devin -r`, `claude --resume`) is still running on
+          // it — that agent start-up is the heavy part and begins only after the
+          // prompt. The session's headless buffer subscription reports each
+          // output (`firstOutputWaitersRef`).
           const waiters = firstOutputWaitersRef.current;
-          const firstOutput = new Promise<void>((resolve) => waiters.set(sessionId, resolve));
+          const signal = createSettleSignal({
+            quietMs: RESTORE_QUIET_MS,
+            isBusy: () => isSessionRestoring(sessionId),
+          });
+          waiters.set(sessionId, signal.touch);
+          const firstOutput = signal.settled;
           let spawned = false;
           try {
             spawned = await current.start();

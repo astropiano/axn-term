@@ -94,3 +94,39 @@ export function createRestoreQueue(options: RestoreQueueOptions = {}): RestoreQu
     },
   };
 }
+
+export interface SettleSignalOptions {
+  /** Output must have been quiet this long. */
+  quietMs: number;
+  /** A plugin restore (or similar) is still running — keep waiting. */
+  isBusy: () => boolean;
+  setTimeoutFn?: (fn: () => void, ms: number) => unknown;
+  clearTimeoutFn?: (handle: unknown) => void;
+}
+
+/**
+ * "This restored session has settled": resolves once output has come and then
+ * gone quiet for `quietMs` with nothing still running on it. `touch()` is
+ * called for every chunk of output; the first one starts the clock, each later
+ * one restarts it. Nothing resolves before the first output.
+ */
+export function createSettleSignal(options: SettleSignalOptions): { settled: Promise<void>; touch(): void } {
+  const setT = options.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
+  const clearT = options.clearTimeoutFn ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+  let timer: unknown;
+  let resolveFn!: () => void;
+  const settled = new Promise<void>((resolve) => (resolveFn = resolve));
+  const arm = () => {
+    timer = setT(() => {
+      if (options.isBusy()) arm();
+      else resolveFn();
+    }, options.quietMs);
+  };
+  return {
+    settled,
+    touch() {
+      if (timer !== undefined) clearT(timer);
+      arm();
+    },
+  };
+}

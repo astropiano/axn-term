@@ -408,6 +408,54 @@ async function sessionSwitch(step) {
   }
 }
 
+// ---------- restore + switch: selecting a session that is still waiting ----------
+//
+// Right after the first prompt, select the session that is restored last and
+// time how long until its shell prints. With everything started at once it is
+// already up (or racing the others); with the restore queue it must start on
+// the spot, ahead of the sessions still waiting their turn.
+
+async function restoreSwitch(step) {
+  const a = args(step);
+  const sessions = Number(a.sessions ?? 24);
+  const rcMs = Number(a.rc ?? 400);
+  const runs = runCount(step, 3);
+  const upIn = [];
+  const waited = [];
+  for (let i = 0; i < runs; i++) {
+    const app = await launch({ restore: sessions, select: "first", trace: true, rcCpuMs: rcMs });
+    try {
+      const state = JSON.parse(readFileSync(join(app.stateDir, "state.json"), "utf8"));
+      const ids = state.windows[0].sessions.map((s) => s.id);
+      const target = ids[ids.length - 1];
+      const first = (id) => readTrace(app).find((e) => e.name === "pty_first_output" && e.detail === id);
+      const tSelect = Date.now();
+      const alreadyUp = !!first(target) && first(target).epochMs <= tSelect;
+      await app.rc(`/sessions/${app.sid}/command`, {
+        method: "POST",
+        body: JSON.stringify({ line: `axn-session select ${target}` }),
+      });
+      const deadline = tSelect + 60000;
+      let up;
+      while (Date.now() < deadline && up === undefined) {
+        const ev = first(target);
+        if (ev) up = Math.max(0, ev.epochMs - tSelect);
+        else await sleep(20);
+      }
+      if (up === undefined) throw new Error(`the last session never printed within 60 s`);
+      upIn.push(Math.round(up));
+      waited.push(alreadyUp ? 0 : 1);
+    } finally {
+      await close(app);
+    }
+  }
+  const p = `restore_switch.${sessions}_rc${rcMs}`;
+  metric(`${p}.select_to_prompt_ms`, { samples: upIn, unit: "ms", digits: 0, description: "select the last-restored session right after the first prompt → its shell printed (0 = it was already up)" });
+  metric(`${p}.was_waiting`, { samples: waited, unit: "runs", digits: 0, better: "none", description: "1 when the session had not started yet at the select (the case this measures)" });
+  meta({ sessions, rcMs, runs, upIn, waited });
+  return `restore switch measured (${sessions} sessions, rc ${rcMs} ms)`;
+}
+
 // ---------- restore storm: what a restore costs the system ----------
 //
 // Restores `sessions` sessions whose shells each print `banner` KB before
@@ -507,8 +555,9 @@ export async function run(step) {
     case "output": return output(step);
     case "switch": return sessionSwitch(step);
     case "restoreStorm": return restoreStorm(step);
+    case "restoreSwitch": return restoreSwitch(step);
     default:
-      throw new Error(`unknown action '${action}' — static | startup | phases | throughput | interrupt | echo | output | switch | restoreStorm`);
+      throw new Error(`unknown action '${action}' — static | startup | phases | throughput | interrupt | echo | output | switch | restoreStorm | restoreSwitch`);
   }
 }
 

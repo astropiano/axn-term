@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRestoreQueue } from './restoreQueue';
+import { createRestoreQueue, createSettleSignal } from './restoreQueue';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -89,5 +89,35 @@ describe('createRestoreQueue', () => {
     q.cancel('c');
     await new Promise((r) => setTimeout(r, 50));
     expect(started).toEqual(['a', 'd', 'b']);
+  });
+});
+
+describe('createSettleSignal', () => {
+  it('settles only after output, once it has been quiet', async () => {
+    const sig = createSettleSignal({ quietMs: 20, isBusy: () => false });
+    let done = false;
+    void sig.settled.then(() => (done = true));
+    await new Promise((r) => setTimeout(r, 40));
+    expect(done).toBe(false); // no output yet
+    sig.touch();
+    await new Promise((r) => setTimeout(r, 10));
+    sig.touch(); // more output restarts the clock
+    await new Promise((r) => setTimeout(r, 12));
+    expect(done).toBe(false);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(done).toBe(true);
+  });
+
+  it('keeps waiting while a plugin restore is still running', async () => {
+    let busy = true;
+    const sig = createSettleSignal({ quietMs: 10, isBusy: () => busy });
+    let done = false;
+    void sig.settled.then(() => (done = true));
+    sig.touch();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(done).toBe(false);
+    busy = false;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(done).toBe(true);
   });
 });
