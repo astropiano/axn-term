@@ -133,7 +133,7 @@ export function FileHoverPreview({
   );
 }
 
-const actionButtonClass =
+export const actionButtonClass =
   'flex shrink-0 items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 text-[11px] text-[var(--text-primary)] transition hover:text-[var(--accent)]';
 
 /** Item/divider styles live in ContextMenu; re-exported for existing imports. */

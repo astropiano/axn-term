@@ -30,8 +30,6 @@ import { MR_ROLES, type MrRole } from './forge';
 import { normalizeReviewAgent } from '../gitReview';
 import {
   checkoutsOf,
-  localCheckouts,
-  parseRepoRoots,
   remoteMatchesProject,
   type RepoCheckout,
 } from '../repoDirectory';
@@ -39,10 +37,18 @@ import { ticketListKey, useTicketLists, type Ticket } from './ticketSources';
 import type { PluginSettings } from '../pluginSettings';
 import { shellServices } from '../../services';
 import {
+  mainCheckoutOf,
   normPath,
+  prepareTicketWorktree,
+  resolveMainCheckout,
+  ticketRepoCandidates,
+  ticketWorktreeScript,
   worktreeBranchFor,
   worktreeDirFor,
 } from './worktrees';
+
+// Moved to the worktrees plugin (one worktree convention); re-exported for importers.
+export { mainCheckoutOf, ticketWorktreeScript };
 import type {
   PluginApi,
   PluginCommand,
@@ -2101,29 +2107,6 @@ const pendingReviews = new Map<
 >();
 
 /**
- * The main checkout behind `root`, given git's absolute common dir
- * (`git rev-parse --path-format=absolute --git-common-dir`). A linked
- * worktree's common dir is the main checkout's `.git`, so its parent is the
- * repo every review worktree hangs off — without this, a review started from
- * a session in `…/worktrees/foo` nested its worktree at
- * `…/worktrees/worktrees/foo-mr-N`. Bare repos and unexpected output keep
- * `root`.
- */
-export function mainCheckoutOf(root: string, commonDir: string): string {
-  const dir = commonDir.trim().replace(/\/+$/, '');
-  if (!dir.startsWith('/') || !dir.endsWith('/.git')) return root;
-  return dir.slice(0, -'/.git'.length) || root;
-}
-
-/** `mainCheckoutOf` through git; any failure keeps `root`. */
-async function resolveMainCheckout(api: Ctx, root: string): Promise<string> {
-  const out = await api
-    .exec(`git -C ${shellQuote(root)} rev-parse --path-format=absolute --git-common-dir`, root)
-    .catch(() => '');
-  return mainCheckoutOf(root, String(out ?? ''));
-}
-
-/**
  * The 'review' contribution rendered on MR rows in glab-mr: resolve the
  * session whose repo hosts the MR, fetch the merge/pull-request head ref
  * (GitLab `merge-requests/N/head`, GitHub `pull/N/head`), create a worktree
@@ -2343,46 +2326,9 @@ export interface TicketStartEnv {
 }
 
 /**
- * Main checkouts a ticket can start in: repo-dir providers (axn-dev) plus the
- * forge plugins' `repo-roots`, and the repos of open sessions that are not
- * themselves linked worktrees.
- */
-async function ticketRepoCandidates(host: Ctx, env: TicketStartEnv): Promise<string[]> {
-  const roots = [
-    ...parseRepoRoots(env.settings['glab-mr']?.repoRoots),
-    ...parseRepoRoots(env.settings['gh-pr']?.repoRoots),
-  ];
-  const found = await localCheckouts((c, cwd) => host.exec(c, cwd), roots).catch(() => []);
-  const paths = new Set<string>();
-  for (const c of found) if (c.isMain !== false) paths.add(normPath(c.path));
-  for (const s of env.sessions) {
-    const root = s.repo?.root;
-    if (root && !/\/worktrees\//.test(root)) paths.add(normPath(root));
-  }
-  return [...paths].sort((a, b) => a.localeCompare(b));
-}
-
-/** Shell script: reuse or create the ticket worktree off the default branch. */
-export function ticketWorktreeScript(root: string, dir: string, branch: string): string {
-  const r = shellQuote(root);
-  const d = shellQuote(dir);
-  const b = shellQuote(branch);
-  return [
-    `if git -C ${d} rev-parse --is-inside-work-tree >/dev/null 2>&1; then exit 0; fi`,
-    `git -C ${r} fetch origin >/dev/null 2>&1 || true`,
-    `base=$(git -C ${r} symbolic-ref -q --short refs/remotes/origin/HEAD || echo HEAD)`,
-    `if git -C ${r} show-ref --verify --quiet ${shellQuote(`refs/heads/${branch}`)}; then`,
-    `  git -C ${r} worktree add ${d} ${b}`,
-    'else',
-    `  git -C ${r} worktree add -b ${b} ${d} "$base"`,
-    'fi',
-  ].join('\n');
-}
-
-/**
- * Start a backlog ticket: pick a repo, reuse or create
- * `<parent>/worktrees/<repo>-<KEY>` on `wt/<KEY>` (off origin's default
- * branch), open a session there and stage the binding — the ticket var
+ * Start a backlog ticket: pick a repo, reuse or create the ticket's
+ * worktree (`prepareTicketWorktree` — `<parent>/worktrees/<repo>-<KEY>-<slug>`
+ * on `wt/<KEY>-<slug>` off origin's default branch, or the one it already has), open a session there and stage the binding — the ticket var
  * filled, started in the state its tracker status enters at. A session
  * already open in that worktree is selected instead. Resolves an error
  * message, or undefined (also when the picker is dismissed).
@@ -2394,7 +2340,7 @@ export async function startTicket(
 ): Promise<string | undefined> {
   const host = env.sessions.map((s) => env.apiFor(s.id)).find(Boolean);
   if (!host) return 'open any session first — it runs the git commands';
-  const candidates = await ticketRepoCandidates(host, env);
+  const candidates = await ticketRepoCandidates(host, env.sessions, env.settings);
   if (candidates.length === 0) {
     return 'no local repo found — open a session in the repo, or set repo-roots on glab-mr/gh-pr';
   }
@@ -2408,17 +2354,23 @@ export async function startTicket(
     })),
   });
   if (!root) return undefined;
-  const dir = worktreeDirFor(root, ticket.key);
+  const wt = (env.settings.worktrees ?? {}) as { worktreeRoot?: string; nameAgent?: string };
+  let dir: string;
+  let branch: string;
+  try {
+    ({ dir, branch } = await prepareTicketWorktree(
+      host,
+      root,
+      { key: ticket.key, summary: ticket.summary },
+      { worktreeRoot: wt.worktreeRoot, nameAgent: wt.nameAgent },
+    ));
+  } catch (e) {
+    return `${ticket.key} worktree failed: ${String(e).split('\n')[0].slice(0, 200)}`;
+  }
   const open = env.sessions.find((s) => normPath(s.repo?.root ?? s.cwd) === normPath(dir));
   if (open) {
     env.selectSession(open.id);
     return undefined;
-  }
-  const branch = worktreeBranchFor(ticket.key);
-  try {
-    await host.exec(ticketWorktreeScript(root, dir, branch), root);
-  } catch (e) {
-    return `${ticket.key} worktree failed: ${String(e).split('\n')[0].slice(0, 200)}`;
   }
   const varKey = def.tickets?.var ?? 'ticket';
   const vars = expandVars(def, { [varKey]: ticket.key }, {

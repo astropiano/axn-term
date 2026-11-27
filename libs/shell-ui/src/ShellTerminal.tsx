@@ -29,6 +29,15 @@ import { isAppChromeShortcut, isAppNavigationShortcut, isReloadShortcut } from '
 import { useShellServices } from './services';
 import { axnLog } from './app/log';
 import { createFlowControl } from './flowControl';
+import { TargetCard } from './app/TargetCard';
+import {
+  scanTextTargets,
+  targetId,
+  textTargetActions,
+  textTargetFromUrl,
+  type TargetAction,
+  type TextTarget,
+} from './app/textTargets';
 
 import '@xterm/xterm/css/xterm.css';
 
@@ -71,6 +80,9 @@ interface HoverCardState {
   isDir: boolean;
   isUrl?: boolean;
   copyOnly?: boolean;
+  /** A plugin-recognized target (ticket, …): the card is its `TargetCard`. */
+  target?: TextTarget;
+  targetActions?: TargetAction[];
 }
 
 const URL_TOKEN = /^https?:\/\/\S+$/i;
@@ -210,6 +222,29 @@ export function ShellTerminal({
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       setHoverCard({ x, y, resolvedPath: stat.path, isDir: stat.isDir, isUrl, copyOnly });
+    }, delay);
+  };
+
+  /** The card of a plugin-recognized target; `url` when the hovered link is one. */
+  const showTargetCard = (
+    event: MouseEvent,
+    target: TextTarget,
+    url: string | undefined,
+    delay = HOVER_DELAY_MS,
+  ) => {
+    clearHoverTimers();
+    hoverShowTimer.current = setTimeout(() => {
+      const rect = terminalRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setHoverCard({
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        resolvedPath: url ?? `target:${targetId(target)}`,
+        isDir: false,
+        isUrl: url !== undefined,
+        target,
+        targetActions: textTargetActions(target, sessionRef.current.id),
+      });
     }, delay);
   };
 
@@ -614,12 +649,38 @@ export function ShellTerminal({
             const lineIndex = bufferLineNumber - 1;
             const text = getLinkLine(lineIndex)?.text ?? '';
             const candidates = extractLinkTokens(text, 32, 2);
-            if (candidates.length === 0) {
+            // Plugin-recognized targets (bare ticket keys, …) — see
+            // app/textTargets.ts. Ones inside a URL token belong to the URL.
+            const targets = scanTextTargets(text);
+            if (candidates.length === 0 && targets.length === 0) {
               callback(undefined);
               return;
             }
+            // xterm 6 clears the hovered link and re-fires leave+hover on
+            // every viewport re-render (output, scroll) and on resize —
+            // restarting the 500ms show delay each time would starve it
+            // forever. Once the card is visible just keep it alive — retarget
+            // only to a different identity, since re-showing the same card at
+            // the latest event position makes it chase the cursor (or jump
+            // under it) while the user moves to click a button. While a show
+            // is already pending, only cancel the pending hide. After a
+            // synthetic leave ate the pending show, a re-hover of the same
+            // target shows instantly.
+            const onLinkHover = (identity: string, show: (delay?: number) => void) => {
+              if (hoverCardRef.current) {
+                cancelHideHoverCard();
+                if (hoverCardRef.current.resolvedPath !== identity) show(0);
+              } else if (hoverShowTimer.current) {
+                cancelHideHoverCard();
+              } else {
+                const reHover = lastHoverPathRef.current === identity;
+                lastHoverPathRef.current = identity;
+                show(reHover ? 0 : undefined);
+              }
+            };
             void (async () => {
               const links: ILink[] = [];
+              const urlRanges: Array<[number, number]> = [];
               for (const c of candidates) {
                 const end = c.start + c.token.length;
                 // A scheme token may continue onto the rows below; a plain
@@ -630,6 +691,15 @@ export function ShellTerminal({
                 const resolved = await resolveToken(wrapped?.url ?? c.token);
                 if (!resolved) continue;
                 const { stat, isUrl } = resolved;
+                if (isUrl) urlRanges.push([c.start, end]);
+                // A URL a plugin recognizes (a ticket page) gets the target
+                // card when anyone offers an action on it: "Open link" first,
+                // then the actions.
+                const urlTarget = isUrl ? textTargetFromUrl(stat.path) : undefined;
+                const withTarget =
+                  urlTarget && textTargetActions(urlTarget, sessionRef.current.id).length > 0
+                    ? urlTarget
+                    : undefined;
                 const last = wrapped?.segments[wrapped.segments.length - 1];
                 const link: ILink = {
                   range:
@@ -664,35 +734,36 @@ export function ShellTerminal({
                 // Files always get the preview card; a reconstructed URL gets
                 // one too so the joined link can be seen and copied before
                 // opening it.
-                if (!isUrl || wrapped) {
-                  link.hover = (event: MouseEvent) => {
-                    // xterm 6 clears the hovered link and re-fires
-                    // leave+hover on every viewport re-render (output,
-                    // scroll) and on resize — restarting the 500ms show
-                    // delay each time would starve it forever. Once the
-                    // card is visible just keep it alive — retarget only to
-                    // a different path, since re-showing the same card at the
-                    // latest event position makes it chase the cursor (or
-                    // jump under it) while the user moves to click a button.
-                    // While a show is already pending, only cancel the
-                    // pending hide. After a synthetic leave ate the pending
-                    // show, a re-hover of the same target shows instantly.
-                    if (hoverCardRef.current) {
-                      cancelHideHoverCard();
-                      if (hoverCardRef.current.resolvedPath !== stat.path) {
-                        showHoverCard(event, stat, isUrl, 0);
-                      }
-                    } else if (hoverShowTimer.current) {
-                      cancelHideHoverCard();
-                    } else {
-                      const reHover = lastHoverPathRef.current === stat.path;
-                      lastHoverPathRef.current = stat.path;
-                      showHoverCard(event, stat, isUrl, reHover ? 0 : undefined);
-                    }
-                  };
+                if (withTarget) {
+                  link.hover = (event: MouseEvent) =>
+                    onLinkHover(stat.path, (delay) => showTargetCard(event, withTarget, stat.path, delay));
+                  link.leave = () => scheduleHideHoverCard();
+                } else if (!isUrl || wrapped) {
+                  link.hover = (event: MouseEvent) =>
+                    onLinkHover(stat.path, (delay) => showHoverCard(event, stat, isUrl, delay));
                   link.leave = () => scheduleHideHoverCard();
                 }
                 links.push(link);
+              }
+              for (const m of targets) {
+                if (urlRanges.some(([a, b]) => m.start < b && m.end > a)) continue;
+                const identity = `target:${targetId(m.target)}`;
+                links.push({
+                  range: {
+                    start: { x: m.start + 1, y: bufferLineNumber },
+                    end: { x: m.end, y: bufferLineNumber },
+                  },
+                  text: text.slice(m.start, m.end),
+                  // A click opens the card at once (also the touch path).
+                  activate: (event: MouseEvent) => {
+                    if (event.button !== 0) return;
+                    showTargetCard(event, m.target, undefined, 0);
+                  },
+                  hover: (event: MouseEvent) =>
+                    onLinkHover(identity, (delay) => showTargetCard(event, m.target, undefined, delay)),
+                  leave: () => scheduleHideHoverCard(),
+                  decorations: { pointerCursor: true, underline: true },
+                });
               }
               callback(links.length > 0 ? links : undefined);
             })();
@@ -1034,16 +1105,25 @@ export function ShellTerminal({
           onMouseMove={cancelHideHoverCard}
           onMouseLeave={() => scheduleHideHoverCard()}
         >
-          <PathActionMenu
-            resolvedPath={hoverCard.resolvedPath}
-            isDir={hoverCard.isDir}
-            isUrl={hoverCard.isUrl}
-            sessionId={session.id}
-            copyOnly={hoverCard.copyOnly}
-            onEdit={(p) => onEditorRequestRef.current?.(session.id, p)}
-            onPreview={(p) => onPreviewRequestRef.current?.(session.id, p)}
-            onDismiss={() => setHoverCard(null)}
-          />
+          {hoverCard.target ? (
+            <TargetCard
+              target={hoverCard.target}
+              actions={hoverCard.targetActions ?? []}
+              url={hoverCard.isUrl ? hoverCard.resolvedPath : undefined}
+              onDismiss={() => setHoverCard(null)}
+            />
+          ) : (
+            <PathActionMenu
+              resolvedPath={hoverCard.resolvedPath}
+              isDir={hoverCard.isDir}
+              isUrl={hoverCard.isUrl}
+              sessionId={session.id}
+              copyOnly={hoverCard.copyOnly}
+              onEdit={(p) => onEditorRequestRef.current?.(session.id, p)}
+              onPreview={(p) => onPreviewRequestRef.current?.(session.id, p)}
+              onDismiss={() => setHoverCard(null)}
+            />
+          )}
         </div>
       )}
     </div>

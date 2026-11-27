@@ -191,29 +191,8 @@ export function summarizeOpenThreads(
   return summary;
 }
 
-/**
- * Try to extract a ticket key from an MR title using a configured regex pattern.
- * If the pattern defines a capture group (e.g. `([A-Z]+-\\d+)`), the first group
- * is returned; otherwise the entire match is used. Returns uppercase-normalized
- * ticket key or undefined if not matched or pattern is invalid.
- */
-export function extractTicketFromTitle(
-  title: string | undefined,
-  pattern: unknown,
-): string | undefined {
-  if (!title || typeof pattern !== 'string') return undefined;
-  const trimmed = pattern.trim();
-  if (!trimmed) return undefined;
-  try {
-    const re = new RegExp(trimmed, 'i');
-    const m = re.exec(title);
-    if (!m) return undefined;
-    const raw = (m[1] ?? m[0]).trim();
-    return raw ? raw.toUpperCase() : undefined;
-  } catch {
-    return undefined;
-  }
-}
+import { extractTicketFromTitle } from '../ticketKeys';
+export { extractTicketFromTitle };
 
 /** Publishes ticket keys spotted in the session's merge request titles via ticketRegex. */
 export function glabMrIdentifiers(ctx: SessionIdentifierContext): SessionIdentifier[] {

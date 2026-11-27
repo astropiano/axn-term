@@ -14,7 +14,7 @@ msgstr "{0} · via {1}"
 msgid "{0} running {1} will be terminated"
 msgstr "{0} {1} en cours seront terminés"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:545
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:765
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} s'exécute dans le checkout principal — l'isoler dans un worktree ?"
 
@@ -180,7 +180,7 @@ msgstr "Écritures du presse-papiers par les programmes"
 msgid "Close"
 msgstr "Fermer"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3166
+#: libs/shell-ui/src/app/ShellApp.tsx:3184
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
@@ -265,6 +265,11 @@ msgstr "Copier"
 msgid "Copy image to clipboard"
 msgstr "Copier l'image dans le presse-papiers"
 
+#: libs/shell-ui/src/app/TargetCard.tsx:92
+#: libs/shell-ui/src/app/TargetCard.tsx:96
+msgid "Copy key"
+msgstr "Copier la clé"
+
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:640
 msgid "Copy link"
 msgstr "Copier le lien"
@@ -278,6 +283,8 @@ msgstr "Copier le chemin"
 msgid "Copy selection"
 msgstr "Copier la sélection"
 
+#: libs/shell-ui/src/app/TargetCard.tsx:92
+#: libs/shell-ui/src/app/TargetCard.tsx:96
 #: libs/shell-ui/src/PathActionMenu.tsx:284
 #: libs/shell-ui/src/PathActionMenu.tsx:288
 msgid "Copy URL"
@@ -291,6 +298,10 @@ msgstr "Impossible d’ouvrir {0}"
 #: libs/shell-ui/src/app/SettingsModal.tsx:343
 msgid "Could not parse the file as YAML."
 msgstr "Impossible de lire le fichier en YAML."
+
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:543
+msgid "Create or reuse this ticket's worktree and open a session in it"
+msgstr "Créer ou réutiliser le worktree de ce ticket et y ouvrir une session"
 
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:52
 msgid "current"
@@ -325,7 +336,7 @@ msgid "Default shell"
 msgstr "Shell par défaut"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:571
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:791
 msgid "Delete {0}"
 msgstr "Supprimer {0}"
 
@@ -351,7 +362,7 @@ msgstr "Répertoire"
 msgid "disabled"
 msgstr "désactivé"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:547
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:767
 msgid "Don't ask again"
 msgstr "Ne plus demander"
 
@@ -482,7 +493,7 @@ msgstr "Taille de police (px)"
 msgid "For launchers such as the MR dashboard: `axn-term command axn-session create … --command`. Any program running as you can then start a command here, as with agterm."
 msgstr "Pour les lanceurs comme le tableau de bord des MR : `axn-term command axn-session create … --command`. Tout programme lancé sous votre compte peut alors démarrer une commande ici, comme avec agterm."
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:562
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:782
 msgid "Force remove"
 msgstr "Forcer la suppression"
 
@@ -668,7 +679,7 @@ msgstr "Nouveau workspace « {name} » dans cette fenêtre"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "Nouveau workspace « {trimmed} » dans cette fenêtre"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:766
 msgid "New worktree session"
 msgstr "Nouvelle session worktree"
 
@@ -799,6 +810,7 @@ msgid "Open in workspace"
 msgstr "Ouvrir dans le workspace"
 
 #: libs/shell-ui/src/app/AppContextMenu.tsx:143
+#: libs/shell-ui/src/app/TargetCard.tsx:71
 msgid "Open link"
 msgstr "Ouvrir le lien"
 
@@ -964,7 +976,7 @@ msgstr "Supprimer"
 msgid "Remove icon"
 msgstr "Supprimer l'icône"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:463
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:683
 msgid "Remove worktree"
 msgstr "Supprimer le worktree"
 
@@ -979,6 +991,10 @@ msgstr "Renommer la session"
 #: libs/shell-ui/src/app/SettingsModal.tsx:584
 msgid "Render session summaries (set via axn-session-summary)"
 msgstr "Afficher les résumés de session (via axn-session-summary)"
+
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:412
+msgid "Repository"
+msgstr "Dépôt"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
@@ -1024,7 +1040,7 @@ msgstr "Réessayer"
 msgid "Retrying…"
 msgstr "Nouvelle tentative…"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:459
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:679
 msgid "Review worktree changes"
 msgstr "Vérifier les changements du worktree"
 
@@ -1199,9 +1215,18 @@ msgstr "Connecté"
 msgid "Signed in as {0}"
 msgstr "Connecté en tant que {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3551
+#. placeholder {0}: target.key
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:411
+msgid "Start {0} in…"
+msgstr "Démarrer {0} dans…"
+
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3503
 msgid "Start workflow…"
 msgstr "Démarrer le workflow…"
+
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:542
+msgid "Start worktree"
+msgstr "Démarrer un worktree"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:991
 msgid "Status display"
@@ -1414,11 +1439,11 @@ msgid "Workspace header"
 msgstr "En-tête de l'espace de travail"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:561
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:781
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "Échec de la suppression du worktree (dirty ?) : {0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:570
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:790
 msgid "worktree removed — branch {0} kept"
 msgstr "worktree supprimé — branche {0} conservée"

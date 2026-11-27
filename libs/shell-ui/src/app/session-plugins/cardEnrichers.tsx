@@ -3,6 +3,8 @@ import { useOptionalPluginSettings } from '../PluginSettingsProvider';
 import type { PluginSettings } from '../pluginSettings';
 import { StatusChip } from '../StatusChip';
 import type { MrRef } from './mrActions';
+import { TargetHover } from '../TargetHover';
+import type { TextTarget } from '../textTargets';
 
 /**
  * Card enrichers — a cross-plugin capability: any plugin can add context
@@ -38,6 +40,8 @@ export interface CardChip {
    * Anything else is ignored.
    */
   color?: string;
+  /** What the chip stands for — gives it the target's hover card (`app/textTargets.ts`). */
+  target?: TextTarget;
 }
 
 export interface CardEnrichment {
@@ -297,11 +301,23 @@ export function CardChips({ subject, className }: { subject: CardSubject; classN
   );
 }
 
-/** One chip — a link when it carries `href` (opened externally). */
-export function ChipView({ chip }: { chip: CardChip }) {
-  return (
+/**
+ * One chip — a link when it carries `href` (opened externally). A chip with a
+ * `target` also opens the target's hover card when plugins offer actions on
+ * it (`app/textTargets.ts`); `originSessionId` is the session the card acts
+ * for (default: the selected one).
+ */
+export function ChipView({ chip, originSessionId }: { chip: CardChip; originSessionId?: string }) {
+  const view = (
     <StatusChip color={chip.color} tone={chip.tone} href={chip.href} tip={chip.tip}>
       <span className="truncate">{chip.label}</span>
     </StatusChip>
+  );
+  return chip.target ? (
+    <TargetHover target={chip.target} originSessionId={originSessionId}>
+      {view}
+    </TargetHover>
+  ) : (
+    view
   );
 }

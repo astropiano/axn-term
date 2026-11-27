@@ -25,6 +25,7 @@ import type {
   SessionViewPlugin,
 } from './plugin';
 import { registerTicketSource, type Ticket } from './ticketSources';
+import type { TextTargetReader, TicketTarget } from '../textTargets';
 
 /**
  * Jira plugin — first slice: a card enricher only. Cards whose MR title,
@@ -145,29 +146,10 @@ export function jiraConfig(section: PluginSettingsSection | undefined): JiraConf
   };
 }
 
-/** First issue key of a configured project in `text` (case-insensitive, uppercased). */
-export function findIssueKey(text: string | undefined, projectKeys: string[]): string | undefined {
-  if (!text || projectKeys.length === 0) return undefined;
-  const alt = projectKeys.map((k) => k.replace(/[^A-Z0-9_]/g, '')).join('|');
-  // Not glued to a longer word on the left (`XAIACC-1`), not a longer
-  // number on the right — `_`/`/`/`-` around it are fine (branch names).
-  const re = new RegExp(`(?<![A-Za-z0-9])(${alt})-(\\d+)(?!\\d)`, 'i');
-  const m = re.exec(text);
-  return m ? `${m[1].toUpperCase()}-${m[2]}` : undefined;
-}
-
-/** Every distinct issue key of a configured project in `text`, in order. */
-export function findIssueKeys(text: string | undefined, projectKeys: string[]): string[] {
-  if (!text || projectKeys.length === 0) return [];
-  const alt = projectKeys.map((k) => k.replace(/[^A-Z0-9_]/g, '')).join('|');
-  const re = new RegExp(`(?<![A-Za-z0-9])(${alt})-(\\d+)(?!\\d)`, 'gi');
-  const out: string[] = [];
-  for (const m of text.matchAll(re)) {
-    const key = `${m[1].toUpperCase()}-${m[2]}`;
-    if (!out.includes(key)) out.push(key);
-  }
-  return out;
-}
+// The matcher lives in `app/ticketKeys.ts`, shared with the forge plugins
+// and the hover targets; re-exported for existing importers.
+import { findIssueKey, findIssueKeys, issueKeyFromUrl, scanIssueKeys } from '../ticketKeys';
+export { findIssueKey, findIssueKeys };
 
 /** What a session offers for ticket derivation (see `sessionTicketKeys`). */
 export interface SessionTicketSources {
@@ -344,6 +326,7 @@ export function issueEnrichment(
         href: url,
         tone: TONE_BY_CATEGORY[category] ?? 'neutral',
         color: statusColor(colors, status, category),
+        target: { kind: 'ticket', key: issue.key, url, source: 'jira', summary: f.summary || undefined },
       },
     ],
     fields: {
@@ -425,6 +408,44 @@ async function fetchIssues(
   return out;
 }
 
+/** A hover target for `key`: its browse URL, the summary once cached, a lookup otherwise. */
+function ticketTarget(key: string, config: JiraConfig): TicketTarget {
+  const summary = peekEnrichment('jira', key)?.fields?.['jira.summary'] || undefined;
+  return {
+    kind: 'ticket',
+    key,
+    url: `${config.baseUrl}/browse/${key}`,
+    source: 'jira',
+    summary,
+    resolveSummary: async () => {
+      if (summary) return summary;
+      const found = await fetchIssues(config, [key]).catch(() => ({}) as Record<string, CardEnrichment>);
+      return found[key]?.fields?.['jira.summary'] || undefined;
+    },
+  };
+}
+
+/**
+ * Tickets in text: bare keys of the configured projects (the same matcher
+ * the session identifiers use — `app/ticketKeys.ts`) and `<base-url>/browse/KEY`
+ * links. A key Jira already answered as unknown is skipped.
+ */
+export const jiraTextTargets: TextTargetReader = {
+  scan: (text, settings) => {
+    const result = jiraConfig(settings as PluginSettingsSection | undefined);
+    if (!result.ok) return [];
+    return scanIssueKeys(text, result.config.projectKeys)
+      .filter((m) => peekEnrichment('jira', m.key) !== null)
+      .map((m) => ({ start: m.start, end: m.end, target: ticketTarget(m.key, result.config) }));
+  },
+  fromUrl: (url, settings) => {
+    const result = jiraConfig(settings as PluginSettingsSection | undefined);
+    if (!result.ok) return undefined;
+    const key = issueKeyFromUrl(url, result.config.baseUrl, result.config.projectKeys);
+    return key ? ticketTarget(key, result.config) : undefined;
+  },
+};
+
 /** Most tickets a backlog query returns (one page). */
 export const SEARCH_LIMIT = 50;
 
@@ -505,11 +526,16 @@ registerTicketSource({
   settingsKey: jiraSettingsKey,
 });
 
+/** A not-yet-fetched key: neutral, still a hover target. */
+function fallbackChip(key: string): CardChip {
+  return { label: key, tone: 'neutral', target: { kind: 'ticket', key, source: 'jira' } };
+}
+
 /**
  * A session's tickets as chips — `KEY · Status` once the bulk fetch lands,
  * the bare key until then (or for keys Jira does not know).
  */
-function SessionTickets({ keys }: { keys: string[] }) {
+function SessionTickets({ keys, sessionId }: { keys: string[]; sessionId?: string }) {
   const enriched = useEnrichedKeys('jira', keys);
   // Jira answered without a key: not a real ticket (a folder like
   // ai-accelerator-1 reads as ACCELERATOR-1) — show nothing for it.
@@ -518,8 +544,8 @@ function SessionTickets({ keys }: { keys: string[] }) {
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-1">
       {visible.map((key) => {
-        const chip = enriched[key]?.chips?.[0] ?? { label: key, tone: 'neutral' as const };
-        return <ChipView key={key} chip={chip} />;
+        const chip = enriched[key]?.chips?.[0] ?? fallbackChip(key);
+        return <ChipView key={key} chip={chip} originSessionId={sessionId} />;
       })}
     </span>
   );
@@ -529,15 +555,15 @@ function SessionTickets({ keys }: { keys: string[] }) {
  * Title-row variant: only the ticket key, no status text — still coloured by
  * status and linking to the ticket, with status and summary in the tooltip.
  */
-function SessionTicketKeys({ keys }: { keys: string[] }) {
+function SessionTicketKeys({ keys, sessionId }: { keys: string[]; sessionId?: string }) {
   const enriched = useEnrichedKeys('jira', keys);
   const visible = keys.filter((key) => enriched[key] !== null);
   if (visible.length === 0) return null;
   return (
     <>
       {visible.map((key) => {
-        const chip = enriched[key]?.chips?.[0] ?? { label: key, tone: 'neutral' as const };
-        return <ChipView key={key} chip={{ ...chip, label: key }} />;
+        const chip = enriched[key]?.chips?.[0] ?? fallbackChip(key);
+        return <ChipView key={key} chip={{ ...chip, label: key }} originSessionId={sessionId} />;
       })}
     </>
   );
@@ -722,6 +748,7 @@ export const jiraPlugin: SessionViewPlugin = {
   version: '0.1.0',
   defaultEnabled: false,
   sessionIdentifiers: jiraIdentifiers,
+  textTargets: jiraTextTargets,
   renderRail: ({ sessions, pluginSettings, viewActive, toggleView }) => (
     <JiraRail
       sessions={sessions}
@@ -754,7 +781,7 @@ export const jiraPlugin: SessionViewPlugin = {
         }),
       value: (ctx) => {
         const keys = ticketsOf(ctx);
-        return keys.length ? <SessionTickets keys={keys} /> : null;
+        return keys.length ? <SessionTickets keys={keys} sessionId={ctx.session.id} /> : null;
       },
     },
     {
@@ -766,7 +793,7 @@ export const jiraPlugin: SessionViewPlugin = {
         ticketsOf(ctx).flatMap((key) => (peekEnrichment('jira', key) === null ? [] : [key])),
       value: (ctx) => {
         const keys = ticketsOf(ctx);
-        return keys.length ? <SessionTicketKeys keys={keys} /> : null;
+        return keys.length ? <SessionTicketKeys keys={keys} sessionId={ctx.session.id} /> : null;
       },
     },
   ],

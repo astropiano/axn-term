@@ -14,7 +14,7 @@ msgstr "{0} · {1} 경유"
 msgid "{0} running {1} will be terminated"
 msgstr "실행 중인 {1} {0}개가 종료됩니다"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:545
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:765
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent}이(가) 메인 체크아웃에서 실행 중 — 워크트리로 격리할까요?"
 
@@ -180,7 +180,7 @@ msgstr "프로그램의 클립보드 쓰기"
 msgid "Close"
 msgstr "닫기"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3166
+#: libs/shell-ui/src/app/ShellApp.tsx:3184
 msgid "Close tab"
 msgstr "탭 닫기"
 
@@ -265,6 +265,11 @@ msgstr "복사"
 msgid "Copy image to clipboard"
 msgstr "클립보드에 이미지 복사"
 
+#: libs/shell-ui/src/app/TargetCard.tsx:92
+#: libs/shell-ui/src/app/TargetCard.tsx:96
+msgid "Copy key"
+msgstr "키 복사"
+
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:640
 msgid "Copy link"
 msgstr "링크 복사"
@@ -278,6 +283,8 @@ msgstr "경로 복사"
 msgid "Copy selection"
 msgstr "선택 영역 복사"
 
+#: libs/shell-ui/src/app/TargetCard.tsx:92
+#: libs/shell-ui/src/app/TargetCard.tsx:96
 #: libs/shell-ui/src/PathActionMenu.tsx:284
 #: libs/shell-ui/src/PathActionMenu.tsx:288
 msgid "Copy URL"
@@ -291,6 +298,10 @@ msgstr "{0}을(를) 열 수 없습니다"
 #: libs/shell-ui/src/app/SettingsModal.tsx:343
 msgid "Could not parse the file as YAML."
 msgstr "파일을 YAML로 파싱할 수 없습니다."
+
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:543
+msgid "Create or reuse this ticket's worktree and open a session in it"
+msgstr "이 티켓의 워크트리를 만들거나 재사용하고 그 안에서 세션 열기"
 
 #: libs/shell-ui/src/app/MoveToWorkspaceModal.tsx:52
 msgid "current"
@@ -325,7 +336,7 @@ msgid "Default shell"
 msgstr "기본 셸"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:571
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:791
 msgid "Delete {0}"
 msgstr "{0} 삭제"
 
@@ -351,7 +362,7 @@ msgstr "디렉터리"
 msgid "disabled"
 msgstr "비활성화됨"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:547
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:767
 msgid "Don't ask again"
 msgstr "다시 묻지 않기"
 
@@ -482,7 +493,7 @@ msgstr "글꼴 크기 (px)"
 msgid "For launchers such as the MR dashboard: `axn-term command axn-session create … --command`. Any program running as you can then start a command here, as with agterm."
 msgstr "MR 대시보드 같은 런처용: `axn-term command axn-session create … --command`. 내 계정으로 실행되는 모든 프로그램이 agterm처럼 여기서 명령을 시작할 수 있게 됩니다."
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:562
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:782
 msgid "Force remove"
 msgstr "강제 삭제"
 
@@ -669,7 +680,7 @@ msgstr "이 창에 새 워크스페이스 “{name}”"
 #~ msgid "New workspace “{trimmed}” in this window"
 #~ msgstr "이 창에 새 워크스페이스 “{trimmed}”"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:546
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:766
 msgid "New worktree session"
 msgstr "새 워크트리 세션"
 
@@ -801,6 +812,7 @@ msgid "Open in workspace"
 msgstr "워크스페이스에서 열기"
 
 #: libs/shell-ui/src/app/AppContextMenu.tsx:143
+#: libs/shell-ui/src/app/TargetCard.tsx:71
 msgid "Open link"
 msgstr "링크 열기"
 
@@ -966,7 +978,7 @@ msgstr "제거"
 msgid "Remove icon"
 msgstr "아이콘 제거"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:463
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:683
 msgid "Remove worktree"
 msgstr "워크트리 삭제"
 
@@ -981,6 +993,10 @@ msgstr "세션 이름 바꾸기"
 #: libs/shell-ui/src/app/SettingsModal.tsx:584
 msgid "Render session summaries (set via axn-session-summary)"
 msgstr "세션 요약 표시 (axn-session-summary로 설정)"
+
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:412
+msgid "Repository"
+msgstr "저장소"
 
 #. placeholder {0}: dep.id
 #. placeholder {1}: dep.version ? ` ${dep.version}` : ''
@@ -1026,7 +1042,7 @@ msgstr "지금 다시 시도"
 msgid "Retrying…"
 msgstr "재시도 중…"
 
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:459
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:679
 msgid "Review worktree changes"
 msgstr "워크트리 변경 사항 검토"
 
@@ -1201,9 +1217,18 @@ msgstr "로그인됨"
 msgid "Signed in as {0}"
 msgstr "{0}(으)로 로그인됨"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3551
+#. placeholder {0}: target.key
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:411
+msgid "Start {0} in…"
+msgstr "{0} 시작 위치…"
+
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3503
 msgid "Start workflow…"
 msgstr "워크플로 시작…"
+
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:542
+msgid "Start worktree"
+msgstr "워크트리 시작"
 
 #: libs/shell-ui/src/app/SettingsModal.tsx:991
 msgid "Status display"
@@ -1416,11 +1441,11 @@ msgid "Workspace header"
 msgstr "작업 공간 헤더"
 
 #. placeholder {0}: String(e)
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:561
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:781
 msgid "worktree remove failed (dirty?): {0}"
 msgstr "워크트리 삭제 실패 (변경 사항 있음?): {0}"
 
 #. placeholder {0}: wt.branch
-#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:570
+#: libs/shell-ui/src/app/session-plugins/worktrees.tsx:790
 msgid "worktree removed — branch {0} kept"
 msgstr "워크트리 삭제됨 — 브랜치 {0} 유지"

@@ -10,6 +10,11 @@ import type {
 } from './plugin';
 import type { SessionBanner, Workspace } from '../../types';
 import { sh, shellQuote, shellRaw } from '../../shellQuote';
+import type { ShellSession } from '../../types';
+import type { PluginSettings } from '../pluginSettings';
+import { localCheckouts, parseRepoRoots } from '../repoDirectory';
+import { pickFromList } from '../pickerHost';
+import type { TargetActionContext, TicketTarget } from '../textTargets';
 
 type Ctx = SessionViewContext & PluginApi;
 
@@ -27,7 +32,7 @@ interface WorktreesSettings {
   agents?: string;
   /** Agent command used by "New worktree with agent". */
   defaultAgent?: string;
-  /** Agent asked to suggest a worktree name for an MR (`<agent> -p <prompt>`). */
+  /** Agent asked to suggest a worktree name for an MR or ticket (`<agent> -p <prompt>`). */
   nameAgent?: string;
   /** Parent dir for new worktrees (default: `<repo-parent>/worktrees`). */
   worktreeRoot?: string;
@@ -212,9 +217,9 @@ async function createWorktreeSession(
   seed?: string,
 ): Promise<void> {
   const slug = slugify(name ?? '') || `w-${Date.now().toString(36)}`;
+  // One scheme for every worktree: `<repo>-<name>` on `wt/<name>`.
   const branch = worktreeBranchFor(slug);
-  // Dir suffix is the slugified branch — axn-dev's <repo>-<branch-slug> shape.
-  const dir = worktreeDirFor(repoRoot, slugify(branch), settingsOf(ctx).worktreeRoot);
+  const dir = worktreeDirFor(repoRoot, slug, settingsOf(ctx).worktreeRoot);
   try {
     await ctx.exec(addWorktreeCmd(repoRoot, dir, branch), repoRoot);
   } catch (e) {
@@ -223,6 +228,208 @@ async function createWorktreeSession(
   }
   pendingWorktrees.set(dir, { repoRoot, branch, seed });
   ctx.openSession(dir, slug);
+}
+
+// ── Ticket worktrees ─────────────────────────────────────────────────
+// One naming scheme for every worktree the app creates:
+// `<parent>/worktrees/<repo>-<name>` on branch `wt/<name>`. A ticket's name is
+// `<KEY>-<slug>` (the slug from its summary, or the `name-agent`'s
+// suggestion), so the kanban's Start and the hover card's "Start worktree"
+// land on the same checkout.
+
+/**
+ * The main checkout behind `root`, given git's absolute common dir
+ * (`git rev-parse --path-format=absolute --git-common-dir`). A linked
+ * worktree's common dir is the main checkout's `.git`, so its parent is the
+ * repo every worktree hangs off — without this, a review started from a
+ * session in `…/worktrees/foo` nested its worktree at
+ * `…/worktrees/worktrees/foo-mr-N`. Bare repos and unexpected output keep
+ * `root`.
+ */
+export function mainCheckoutOf(root: string, commonDir: string): string {
+  const dir = commonDir.trim().replace(/\/+$/, '');
+  if (!dir.startsWith('/') || !dir.endsWith('/.git')) return root;
+  return dir.slice(0, -'/.git'.length) || root;
+}
+
+/** `mainCheckoutOf` through git; any failure keeps `root`. */
+export async function resolveMainCheckout(api: Pick<Ctx, 'exec'>, root: string): Promise<string> {
+  const out = await api
+    .exec(`git -C ${shellQuote(root)} rev-parse --path-format=absolute --git-common-dir`, root)
+    .catch(() => '');
+  return mainCheckoutOf(root, String(out ?? ''));
+}
+
+/** Most characters of a ticket worktree's slug — cut at a word boundary. */
+const TICKET_SLUG_MAX = 40;
+
+/** A ticket summary → its worktree slug ('' when nothing usable remains). */
+export function ticketSlug(summary: string | undefined): string {
+  const slug = slugify(summary ?? '').replace(/[._]+/g, '-').replace(/-{2,}/g, '-');
+  if (slug.length <= TICKET_SLUG_MAX) return slug.replace(/-+$/, '');
+  const cut = slug.slice(0, TICKET_SLUG_MAX + 1);
+  const at = cut.lastIndexOf('-');
+  return (at > 0 ? cut.slice(0, at) : cut.slice(0, TICKET_SLUG_MAX)).replace(/-+$/, '');
+}
+
+/** `<KEY>-<slug>`, or the bare key when there is no slug. */
+export function ticketWorktreeName(key: string, slug?: string): string {
+  const s = ticketSlug(slug);
+  return s ? `${key.toUpperCase()}-${s}` : key.toUpperCase();
+}
+
+/**
+ * The existing worktree of ticket `key` in `git worktree list --porcelain`
+ * output — matched by the key in the folder name or the branch, so the
+ * older `<repo>-<KEY>` (kanban) and `<repo>-wt-<key>-…` (worktrees plugin)
+ * layouts are reused instead of duplicated. The main checkout never counts.
+ */
+export function findTicketWorktree(
+  porcelain: string,
+  key: string,
+): { path: string; branch?: string } | undefined {
+  const re = new RegExp(`(?<![A-Za-z0-9])${key.replace(/[^A-Za-z0-9]/g, '\\$&')}(?!\\d)`, 'i');
+  const blocks = porcelain.split(/\n\s*\n/).filter((b) => b.trim());
+  for (const [i, block] of blocks.entries()) {
+    if (i === 0) continue; // the main checkout
+    const path = /^worktree (.+)$/m.exec(block)?.[1]?.trim();
+    if (!path) continue;
+    const branch = /^branch refs\/heads\/(.+)$/m.exec(block)?.[1]?.trim();
+    const base = path.replace(/\/+$/, '').split('/').pop() ?? '';
+    if (re.test(base) || (branch && re.test(branch))) return { path, branch };
+  }
+  return undefined;
+}
+
+/** Shell script: reuse or create the ticket worktree off the default branch. */
+export function ticketWorktreeScript(root: string, dir: string, branch: string): string {
+  const r = shellQuote(root);
+  const d = shellQuote(dir);
+  const b = shellQuote(branch);
+  return [
+    `if git -C ${d} rev-parse --is-inside-work-tree >/dev/null 2>&1; then exit 0; fi`,
+    `git -C ${r} fetch origin >/dev/null 2>&1 || true`,
+    `base=$(git -C ${r} symbolic-ref -q --short refs/remotes/origin/HEAD || echo HEAD)`,
+    `if git -C ${r} show-ref --verify --quiet ${shellQuote(`refs/heads/${branch}`)}; then`,
+    `  git -C ${r} worktree add ${d} ${b}`,
+    'else',
+    `  git -C ${r} worktree add -b ${b} ${d} "$base"`,
+    'fi',
+  ].join('\n');
+}
+
+/**
+ * `<agent> -p '<prompt>'` asking for a worktree slug for a ticket — like
+ * `nameAgentCmd`, one single-quoted prompt word.
+ */
+export function ticketNameAgentCmd(agent: string, key: string, summary: string): string {
+  return sh`${shellRaw(agent)} -p ${`reply with only a short kebab-case git branch slug (max 5 words) for ticket ${key}: ${summary}`}`;
+}
+
+/**
+ * Main checkouts a ticket can start in: repo-dir providers (axn-dev) plus the
+ * forge plugins' `repo-roots`, and the repos of open sessions that are not
+ * themselves linked worktrees.
+ */
+export async function ticketRepoCandidates(
+  host: Pick<Ctx, 'exec'>,
+  sessions: ShellSession[],
+  settings: PluginSettings,
+): Promise<string[]> {
+  const roots = [
+    ...parseRepoRoots(settings['glab-mr']?.repoRoots),
+    ...parseRepoRoots(settings['gh-pr']?.repoRoots),
+  ];
+  const found = await localCheckouts((c, cwd) => host.exec(c, cwd), roots).catch(() => []);
+  const paths = new Set<string>();
+  for (const c of found) if (c.isMain !== false) paths.add(normPath(c.path));
+  for (const s of sessions) {
+    const root = s.repo?.root;
+    if (root && !/\/worktrees\//.test(root)) paths.add(normPath(root));
+  }
+  return [...paths].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Reuse or create ticket `key`'s worktree under main checkout `root`. An
+ * existing one (any layout, see `findTicketWorktree`) wins; otherwise
+ * `<repo>-<KEY>-<slug>` on `wt/<KEY>-<slug>` off origin's default branch.
+ * The slug is the `nameAgent`'s answer when set, else the summary's.
+ */
+export async function prepareTicketWorktree(
+  host: Pick<Ctx, 'exec'>,
+  root: string,
+  ticket: { key: string; summary?: string },
+  opts: { worktreeRoot?: string; nameAgent?: string } = {},
+): Promise<{ dir: string; branch: string; reused: boolean }> {
+  const list = await host
+    .exec(`git -C ${shellQuote(root)} worktree list --porcelain`, root)
+    .catch(() => '');
+  const found = findTicketWorktree(String(list ?? ''), ticket.key);
+  if (found) return { dir: normPath(found.path), branch: found.branch ?? '', reused: true };
+  let slug = ticketSlug(ticket.summary);
+  const agent = opts.nameAgent?.trim();
+  if (agent) {
+    const suggestion = await host
+      .exec(ticketNameAgentCmd(agent, ticket.key, ticket.summary ?? ''), root)
+      .then((out) => ticketSlug(String(out ?? '').trim().split('\n')[0]))
+      .catch(() => '');
+    if (suggestion) slug = suggestion;
+  }
+  const name = ticketWorktreeName(ticket.key, slug);
+  const dir = worktreeDirFor(root, name, opts.worktreeRoot);
+  const branch = worktreeBranchFor(name);
+  await host.exec(ticketWorktreeScript(root, dir, branch), root);
+  return { dir, branch, reused: false };
+}
+
+/**
+ * The hover card's "Start worktree" on a ticket: pick a main checkout (the
+ * hovered session's repo first), reuse or create the ticket worktree and
+ * open — or select — a session there.
+ */
+async function startTicketWorktree(target: TicketTarget, tctx: TargetActionContext): Promise<void> {
+  const origin = tctx.api();
+  if (!origin) return;
+  const fail = (message: string) =>
+    origin.setBanner({ level: 'error', message: `${target.key}: ${message}` });
+  const own = (tctx.pluginSettings ?? {}) as WorktreesSettings;
+  let candidates = await ticketRepoCandidates(origin, tctx.sessions, tctx.settings);
+  const originRoot = origin.getSession().repo?.root;
+  if (originRoot) {
+    const main = normPath(await resolveMainCheckout(origin, originRoot));
+    candidates = [main, ...candidates.filter((c) => c !== main)];
+  }
+  if (candidates.length === 0) {
+    fail('no local repo found — open a session in the repo, or set repo-roots on glab-mr/gh-pr');
+    return;
+  }
+  const root =
+    candidates.length === 1
+      ? candidates[0]
+      : await pickFromList({
+          title: t`Start ${target.key} in…`,
+          placeholder: t`Repository`,
+          items: candidates.map((p) => ({ key: p, label: p.split('/').pop() ?? p, detail: p })),
+        });
+  if (!root) return;
+  const summary = target.summary ?? (await target.resolveSummary?.().catch(() => undefined));
+  let prepared: Awaited<ReturnType<typeof prepareTicketWorktree>>;
+  try {
+    prepared = await prepareTicketWorktree(origin, root, { key: target.key, summary }, own);
+  } catch (e) {
+    fail(`worktree failed: ${String(e).split('\n')[0].slice(0, 200)}`);
+    return;
+  }
+  const open = tctx.sessions.find(
+    (s) => normPath(s.repo?.root ?? s.cwd) === normPath(prepared.dir),
+  );
+  if (open) {
+    tctx.selectSession(open.id);
+    return;
+  }
+  pendingWorktrees.set(normPath(prepared.dir), { repoRoot: root, branch: prepared.branch });
+  origin.openSession(prepared.dir, `${target.key} ${summary ?? ''}`.trim().slice(0, 80));
 }
 
 function stateOf(ctx: Ctx): WorktreeState {
@@ -292,7 +499,7 @@ export const worktreesPlugin: SessionViewPlugin = {
       key: 'nameAgent',
       label: 'Worktree name agent',
       description:
-        'Agent command asked to suggest a worktree name for an MR (e.g. claude, devin — run as `<agent> -p <prompt>`). Empty derives it from the MR reference.',
+        'Agent command asked to suggest a worktree name for an MR or a ticket (e.g. claude, devin — run as `<agent> -p <prompt>`). Empty derives it from the MR reference or the ticket summary.',
       type: 'string',
       default: '',
     },
@@ -326,6 +533,19 @@ export const worktreesPlugin: SessionViewPlugin = {
       default: true,
     },
   ],
+
+  targetActions: (target, tctx) =>
+    target.kind === 'ticket'
+      ? [
+          {
+            id: 'start-worktree',
+            label: t`Start worktree`,
+            tip: t`Create or reuse this ticket's worktree and open a session in it`,
+            icon: <GitFork className="h-3 w-3" />,
+            run: () => startTicketWorktree(target, tctx),
+          },
+        ]
+      : [],
 
   onSessionOpen: (ctx) => {
     clearStaleIsolationBanner(ctx);
