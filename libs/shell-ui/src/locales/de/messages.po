@@ -180,7 +180,7 @@ msgstr "Zwischenablage-Schreibzugriffe von Programmen"
 msgid "Close"
 msgstr "Schließen"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3186
+#: libs/shell-ui/src/app/ShellApp.tsx:3187
 msgid "Close tab"
 msgstr "Tab schließen"
 
@@ -1220,7 +1220,7 @@ msgstr "Angemeldet als {0}"
 msgid "Start {0} in…"
 msgstr "{0} starten in…"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3503
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3495
 msgid "Start workflow…"
 msgstr "Workflow starten…"
 

@@ -10,7 +10,7 @@ import { RailItem } from '../RailItem';
 import { usePluginSettings } from '../PluginSettingsProvider';
 import { WorkspacePicker } from '../../WorkspacePicker';
 import { axnLog } from '../log';
-import { echoReply, promptArg, shellQuote, shellWord } from '../../shellQuote';
+import { bracketedPaste, echoReply, promptArg, shellQuote, shellWord } from '../../shellQuote';
 import { shellTokens } from '../shellCommandSupport';
 import { forgeOfRemote } from './forge';
 import { pickFromList } from '../pickerHost';
@@ -1514,15 +1514,7 @@ function affordanceKey(ctx: Ctx, def: WorkflowDef, state: string, checks?: Recor
  */
 const pendingChecks = new Map<string, { sessionId: string; state: string; name: string }>();
 
-/**
- * Wrap `text` in bracketed-paste markers for an agent's input. ESC (and the
- * 8-bit CSI) are dropped from the text first: a prompt — possibly from a
- * repo's `promptFile` — carrying `ESC[201~` would otherwise end the paste
- * early and the rest would arrive as raw keystrokes.
- */
-export function bracketedPaste(text: string): string {
-  return `\x1b[200~${text.replace(/[\x1b\x9b]/g, '')}\x1b[201~`;
-}
+export { bracketedPaste };
 
 /**
  * Execute the Run action for one named action. `shell` actions type the

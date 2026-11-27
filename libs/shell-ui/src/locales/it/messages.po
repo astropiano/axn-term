@@ -180,7 +180,7 @@ msgstr "Scritture negli appunti dai programmi"
 msgid "Close"
 msgstr "Chiudi"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3186
+#: libs/shell-ui/src/app/ShellApp.tsx:3187
 msgid "Close tab"
 msgstr "Chiudi scheda"
 
@@ -1220,7 +1220,7 @@ msgstr "Accesso effettuato come {0}"
 msgid "Start {0} in…"
 msgstr "Avvia {0} in…"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3503
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3495
 msgid "Start workflow…"
 msgstr "Avvia workflow…"
 

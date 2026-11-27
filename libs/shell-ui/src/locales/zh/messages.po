@@ -180,7 +180,7 @@ msgstr "程序写入剪贴板"
 msgid "Close"
 msgstr "关闭"
 
-#: libs/shell-ui/src/app/ShellApp.tsx:3186
+#: libs/shell-ui/src/app/ShellApp.tsx:3187
 msgid "Close tab"
 msgstr "关闭标签页"
 
@@ -1220,7 +1220,7 @@ msgstr "已登录为 {0}"
 msgid "Start {0} in…"
 msgstr "在…中开始 {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3503
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3495
 msgid "Start workflow…"
 msgstr "启动工作流…"
 

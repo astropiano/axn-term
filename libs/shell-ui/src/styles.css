@@ -502,3 +502,25 @@ svg.lucide {
   max-width: 100%;
   max-height: 100%;
 }
+
+/* Anchored diff comments — Monaco line markers in the git-inspect diff. */
+.axn-cm {
+  width: 3px !important;
+  margin-left: 3px;
+}
+
+.axn-cm-open {
+  background: var(--accent);
+}
+
+.axn-cm-deferred {
+  background: var(--orange);
+}
+
+.axn-cm-done {
+  background: var(--text-tertiary);
+}
+
+.axn-cm-stale {
+  opacity: 0.45;
+}
