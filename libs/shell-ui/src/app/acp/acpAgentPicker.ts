@@ -10,7 +10,7 @@ export const SUGGESTED_ACP_AGENTS: { label: string; argv: string }[] = [
   { label: 'Codex', argv: 'codex-acp' },
   { label: 'OpenCode', argv: 'opencode acp' },
   { label: 'Gemini CLI', argv: 'gemini --acp' },
-  { label: 'Mistral Vibe', argv: 'vibe acp' },
+  { label: 'Mistral Vibe', argv: 'vibe-acp' },
 ];
 
 /**
