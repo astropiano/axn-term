@@ -5,6 +5,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  mergedPrListCommand,
   currentPrOverview,
   decisionFromReviews,
   ghPrPlugin,
@@ -588,5 +589,13 @@ describe('refreshPrOverview on GitHub-specific answers', () => {
     const cmd = overviewCommand();
     expect(cmd).toContain('latestOpinionatedReviews(first: 30) { nodes { state author { login } } }');
     expect(cmd).not.toContain('states: APPROVED');
+  });
+});
+
+describe('mergedPrListCommand', () => {
+  it('lists the branch\'s merged PRs with their head commit, branch quoted', () => {
+    const cmd = mergedPrListCommand('feat/$(x)');
+    expect(cmd).toContain("--head 'feat/$(x)' --state merged");
+    expect(cmd).toContain('headRefOid');
   });
 });

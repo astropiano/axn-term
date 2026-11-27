@@ -15,6 +15,8 @@ import {
   glabMrPlugin,
   openThreads,
   countOpenThreads,
+  mergedMrListCommand,
+  normalizeRestDiscussions,
   myOpenThreads,
   myThreadsAnswered,
   summarizeOpenThreads,
@@ -617,5 +619,51 @@ describe('last comment', () => {
       at('2026-11-23T12:00:00Z'),
     );
     expect(tip.split('\n').pop()).toBe('Last comment by alice · 3h ago');
+  });
+});
+
+describe('normalizeRestDiscussions', () => {
+  // !76 in the wild: a fully resolved thread holding a system note.
+  const resolvedWithSystemNote = {
+    notes: [
+      { author: { username: 'bob' }, resolvable: true, resolved: true },
+      { author: { username: 'me' }, system: true, resolvable: false, resolved: null },
+      { author: { username: 'me' }, resolvable: true, resolved: true },
+      { author: { username: 'bob' }, resolvable: true, resolved: true },
+    ],
+  };
+
+  it('does not reopen a resolved thread because of a system note', () => {
+    const [d] = normalizeRestDiscussions([resolvedWithSystemNote]);
+    expect(d.resolved).toBe(true);
+    expect(summarizeOpenThreads({ discussions: [d] }, 'me')).toEqual({ waitingForMe: 0, waitingForOther: 0 });
+  });
+
+  it('agrees with countOpenThreads', () => {
+    const open = { notes: [{ author: { username: 'bob' }, resolvable: true, resolved: false }] };
+    const all = [resolvedWithSystemNote, open];
+    expect(normalizeRestDiscussions(all).filter((d) => d.resolvable && !d.resolved)).toHaveLength(
+      countOpenThreads(all),
+    );
+  });
+
+  it('ignores a trailing system note when deciding who spoke last', () => {
+    const [d] = normalizeRestDiscussions([
+      {
+        notes: [
+          { author: { username: 'bob' }, resolvable: true, resolved: false },
+          { author: { username: 'me' }, resolvable: true, resolved: false },
+          { author: { username: 'bob' }, system: true, resolvable: false, resolved: null },
+        ],
+      },
+    ]);
+    expect(summarizeOpenThreads({ discussions: [d] }, 'me')).toMatchObject({ waitingForOther: 1, waitingForMe: 0 });
+  });
+});
+
+describe('mergedMrListCommand', () => {
+  it('lists the branch\'s merged MRs, branch quoted', () => {
+    const cmd = mergedMrListCommand('feat/$(x)');
+    expect(cmd).toContain("mr list -s 'feat/$(x)' --merged -F json");
   });
 });
