@@ -36,6 +36,8 @@ export interface RepoCheckout {
   remote: string | null;
   /** The repo's main checkout (not a linked worktree), when known. */
   isMain?: boolean;
+  /** The path a provider named for the repo (e.g. axn-dev's `repos:` entry) — the user's "first" clone. */
+  preferred?: boolean;
 }
 
 export interface RepoDirsContext {
@@ -198,6 +200,7 @@ export function mergeCheckouts(...lists: RepoCheckout[][]): RepoCheckout[] {
         if (prev.branch === null && c.branch !== null) prev.branch = c.branch;
         if (prev.remote === null && c.remote !== null) prev.remote = c.remote;
         if (prev.isMain === undefined && c.isMain !== undefined) prev.isMain = c.isMain;
+        if (prev.preferred === undefined && c.preferred !== undefined) prev.preferred = c.preferred;
       }
     }
   }
@@ -217,6 +220,7 @@ function providedCheckouts(dirs: RepoDir[]): { known: RepoCheckout[]; probe: str
           branch: w.branch ?? null,
           remote: d.remote ?? null,
           ...(w.isMain !== undefined ? { isMain: w.isMain } : {}),
+          ...(normPath(w.path) === normPath(d.path) ? { preferred: true } : {}),
         });
       }
     } else {
@@ -296,9 +300,25 @@ export function remoteMatchesProject(remote: string | null | undefined, project:
   return !!path && path.toLowerCase() === project.replace(/^\/+|\/+$/g, '').toLowerCase();
 }
 
-/** Checkouts of `project`, main checkouts first. */
+/** Trailing number of a path's last segment (`ai-accelerator-10` → 10); Infinity when none. */
+function cloneNumber(path: string): number {
+  const m = /-(\d+)$/.exec(path.split('/').pop() ?? '');
+  return m ? Number(m[1]) : Infinity;
+}
+
+/**
+ * Checkouts of `project`, best first: the provider's named path (axn-dev's
+ * `repos:` entry), then main checkouts by trailing clone number
+ * (`p-2` before `p-10`) and name, then linked worktrees.
+ */
 export function checkoutsOf(checkouts: RepoCheckout[], project: string): RepoCheckout[] {
   return checkouts
     .filter((c) => remoteMatchesProject(c.remote, project))
-    .sort((a, b) => Number(b.isMain === true) - Number(a.isMain === true));
+    .sort(
+      (a, b) =>
+        Number(b.preferred === true) - Number(a.preferred === true) ||
+        Number(b.isMain === true) - Number(a.isMain === true) ||
+        cloneNumber(a.path) - cloneNumber(b.path) ||
+        a.path.localeCompare(b.path),
+    );
 }

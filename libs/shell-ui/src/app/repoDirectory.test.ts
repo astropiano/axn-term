@@ -138,6 +138,46 @@ describe('localCheckouts', () => {
     ).toEqual(['/main', '/wt']);
   });
 
+  it('orders clones: provider path, then clone number, then worktrees', () => {
+    const r = 'git@h:g/app.git';
+    const c = (path: string, extra = {}) => ({ path, branch: 'm', remote: r, ...extra });
+    const sorted = (list: ReturnType<typeof c>[]) => checkoutsOf(list, 'g/app').map((x) => x.path);
+    // numeric, not lexicographic: -2 before -10
+    expect(
+      sorted([c('/g/app-10', { isMain: true }), c('/g/app-2', { isMain: true }), c('/wt', {})]),
+    ).toEqual(['/g/app-2', '/g/app-10', '/wt']);
+    // a provider's named path beats a lower-numbered clone
+    expect(
+      sorted([c('/g/app-1', { isMain: true }), c('/g/app-7', { isMain: true, preferred: true })]),
+    ).toEqual(['/g/app-7', '/g/app-1']);
+    // a clone without a number sorts after numbered ones
+    expect(sorted([c('/g/app', { isMain: true }), c('/g/app-3', { isMain: true })])).toEqual([
+      '/g/app-3',
+      '/g/app',
+    ]);
+  });
+
+  it('marks the path a provider names as preferred', async () => {
+    setRepoDirProviders([
+      {
+        id: 'p',
+        repoDirs: async () => [
+          {
+            path: '/g/app-1',
+            remote: 'git@h:g/app.git',
+            worktrees: [
+              { path: '/g/app-1', branch: 'm', isMain: true },
+              { path: '/g/wt', branch: 'x', isMain: false },
+            ],
+          },
+        ],
+      },
+    ]);
+    const all = await localCheckouts(async () => '');
+    expect(all.find((x) => x.path === '/g/app-1')?.preferred).toBe(true);
+    expect(all.find((x) => x.path === '/g/wt')?.preferred).toBeUndefined();
+  });
+
   it('probes provider repos that list no worktrees', async () => {
     const { main, wt } = fixture();
     setRepoDirProviders([{ id: 'p', repoDirs: async () => [{ path: main }] }]);
