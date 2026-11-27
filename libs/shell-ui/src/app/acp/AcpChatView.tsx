@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { Circle, CircleCheck, CirclePlay, SendHorizontal, SlashSquare, Square } from 'lucide-react';
+import { IconButton } from '../IconButton';
 import { useSettings } from '../../SettingsProvider';
 import { resolveShellFont } from '../../themes';
 import type { SessionAttention, SessionStatus } from '../../types';
@@ -25,7 +27,11 @@ type Entry =
 /** `Omit` that distributes over the `Entry` union (plain Omit collapses it). */
 type EntryDraft = Entry extends infer T ? (T extends Entry ? Omit<T, 'id'> : never) : never;
 
-const PLAN_ICON = { pending: '○', in_progress: '▶', completed: '●' } as const;
+const PLAN_ICON = {
+  pending: <Circle className="h-3.5 w-3.5" />,
+  in_progress: <CirclePlay className="h-3.5 w-3.5" />,
+  completed: <CircleCheck className="h-3.5 w-3.5" />,
+} as const;
 const STATUS_LABEL = { pending: 'queued', in_progress: 'running', completed: 'done', failed: 'failed' } as const;
 
 function toolText(call: ToolCall): string {
@@ -78,6 +84,7 @@ export function AcpChatView({
   const [ready, setReady] = useState(false);
   const [agentCommands, setAgentCommands] = useState<AvailableCommand[]>([]);
   const clientRef = useRef<AcpClient | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(1);
   const streamId = useRef(0);
@@ -215,7 +222,7 @@ export function AcpChatView({
           switch (e.kind) {
             case 'user':
               return (
-                <div key={e.id} className="ml-8 rounded-md px-3 py-2" style={{ background: 'var(--accent)', color: 'var(--accent-fg, #fff)' }}>
+                <div key={e.id} className="ml-8 rounded-md px-3 py-2" style={{ background: 'var(--accent)', color: 'var(--text-inverted)' }}>
                   {e.text}
                 </div>
               );
@@ -229,7 +236,7 @@ export function AcpChatView({
               );
             case 'plan':
               return (
-                <div key={e.id} className="rounded border border-[var(--border,#8884)] p-2">
+                <div key={e.id} className="rounded border border-[var(--border)] p-2">
                   <div className="mb-1 font-medium text-[var(--text-secondary)]">Plan</div>
                   {e.entries.map((p, i) => (
                     <div key={i} className="flex gap-2">
@@ -246,7 +253,7 @@ export function AcpChatView({
             case 'tool': {
               const body = toolText(e.call);
               return (
-                <div key={e.id} className="rounded border border-[var(--border,#8884)] p-2">
+                <div key={e.id} className="rounded border border-[var(--border)] p-2">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{e.call.title}</span>
                     <span className={`text-[0.85em] ${e.call.status === 'failed' ? 'text-red-500' : 'text-[var(--text-secondary)]'}`}>
@@ -259,7 +266,7 @@ export function AcpChatView({
                     </div>
                   ))}
                   {body && (
-                    <pre className="mt-1 max-h-60 overflow-auto rounded bg-black/10 p-2 text-[0.85em]" style={{ fontFamily: 'var(--shell-font, monospace)' }}>
+                    <pre className="mt-1 max-h-60 overflow-auto rounded bg-[var(--surface)] p-2 text-[0.85em]" style={{ fontFamily: shellFont.family }}>
                       {body}
                     </pre>
                   )}
@@ -276,8 +283,8 @@ export function AcpChatView({
                         key={o.optionId}
                         disabled={!!e.answered}
                         onClick={() => respondOnce.current?.(o.optionId)}
-                        className="rounded border border-[var(--border,#8884)] px-2 py-1 text-[0.85em] disabled:opacity-50"
-                        style={e.answered === o.optionId ? { background: 'var(--accent)', color: 'var(--accent-fg, #fff)' } : undefined}
+                        className="rounded border border-[var(--border)] px-2 py-1 text-[0.85em] disabled:opacity-50"
+                        style={e.answered === o.optionId ? { background: 'var(--accent)', color: 'var(--text-inverted)' } : undefined}
                       >
                         {o.name}
                       </button>
@@ -299,7 +306,7 @@ export function AcpChatView({
         <div ref={endRef} />
       </div>
       {agentCommands.length > 0 && input.startsWith('/') && (
-        <div className="flex flex-wrap gap-1 border-t border-[var(--border,#8884)] px-2 pt-2">
+        <div className="flex flex-wrap gap-1 border-t border-[var(--border)] px-2 pt-2">
           {agentCommands
             .filter((c) => `/${c.name}`.startsWith(input.trim().split(/\s/)[0] || '/'))
             .map((c) => (
@@ -308,41 +315,57 @@ export function AcpChatView({
                 type="button"
                 data-tip={c.description}
                 onClick={() => setInput(`/${c.name} `)}
-                className="rounded border border-[var(--border,#8884)] px-1.5 py-0.5 text-[0.85em] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
+                className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[0.85em] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
               >
                 /{c.name}
               </button>
             ))}
         </div>
       )}
-      <div className="flex gap-2 border-t border-[var(--border,#8884)] p-2">
-        <textarea
-          value={input}
-          onChange={(ev) => setInput(ev.target.value)}
-          onKeyDown={(ev) => {
-            if (ev.key === 'Enter' && !ev.shiftKey) {
-              ev.preventDefault();
-              void submit();
-            }
-          }}
-          placeholder={ready ? 'Message the agent… (/ commands)' : 'connecting…'}
-          rows={2}
-          className="flex-1 resize-none rounded border border-[var(--border,#8884)] bg-transparent px-2 py-1 outline-none focus:border-[var(--accent)]"
-        />
-        {turn === 'running' ? (
-          <button onClick={() => clientRef.current?.cancel()} className="self-end rounded border border-[var(--border,#8884)] px-3 py-1">
-            Stop
-          </button>
-        ) : (
-          <button
-            onClick={() => void submit()}
-            disabled={!input.trim() || !ready}
-            className="self-end rounded px-3 py-1 disabled:opacity-50"
-            style={{ background: 'var(--accent)', color: 'var(--accent-fg, #fff)' }}
-          >
-            Send
-          </button>
-        )}
+      <div className="border-t border-[var(--border)] p-2">
+        <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-1.5 py-1 transition-colors focus-within:border-[var(--accent)]">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(ev) => setInput(ev.target.value)}
+            onKeyDown={(ev) => {
+              if (ev.key === 'Enter' && !ev.shiftKey) {
+                ev.preventDefault();
+                void submit();
+              }
+            }}
+            placeholder={ready ? 'Message the agent… (/ commands)' : 'connecting…'}
+            rows={2}
+            className="w-full resize-none bg-transparent px-1 py-0.5 outline-none placeholder:text-[var(--text-secondary)]"
+          />
+          <div className="flex items-center gap-1">
+            <IconButton
+              title="Agent commands"
+              size="sm"
+              onClick={() => {
+                setInput('/');
+                inputRef.current?.focus();
+              }}
+            >
+              <SlashSquare className="h-4 w-4" />
+            </IconButton>
+            <div className="flex-1" />
+            {turn === 'running' ? (
+              <IconButton title="Stop" size="sm" onClick={() => clientRef.current?.cancel()}>
+                <Square className="h-4 w-4" />
+              </IconButton>
+            ) : (
+              <IconButton
+                title="Send"
+                size="sm"
+                disabled={!input.trim() || !ready}
+                onClick={() => void submit()}
+              >
+                <SendHorizontal className="h-4 w-4" />
+              </IconButton>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

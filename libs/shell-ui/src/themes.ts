@@ -158,6 +158,15 @@ export interface AppSettings {
    */
   sessionDefaults?: { mainView?: 'shell' | 'agent'; acpAgent?: string };
   /**
+   * ACP agents for the "New agent session…" picker — name → command line
+   * (space-split argv), e.g. `Mistral Vibe: vibe-acp`. None ship by default;
+   * the workspace menu row appears only when at least one is configured (and
+   * the backend can spawn processes). Row and session icons come from
+   * `customIcons` keyed by the executable (`vibe-acp: <svg…>` or a Lucide
+   * name).
+   */
+  acpAgents?: Record<string, string>;
+  /**
    * Extra directories (absolute or `~/…`) the desktop file views — axn-edit,
    * axn-browse, axn-preview — may read and write, on top of `$HOME`. Applied
    * live when added; a removed root stays allowed until the app restarts.
