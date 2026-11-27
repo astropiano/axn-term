@@ -671,8 +671,6 @@ interface SessionContextMenuProps {
   /** Moves the session into a new window; absent hides the row. */
   onMoveToNewWindow?: () => void;
   onSubShell: () => void;
-  /** Opens the agent picker and starts a `mainView:'agent'` session; absent where no process backend exists. */
-  onNewAgentSession?: () => void;
   onBrowse: () => void;
   onIde: () => void;
   /** Copies the shell's live working directory; absent where it can't be read. */
@@ -695,7 +693,6 @@ function SessionContextMenu({
   onRequestMove,
   onMoveToNewWindow,
   onSubShell,
-  onNewAgentSession,
   onBrowse,
   onIde,
   onCopyPath,
@@ -880,19 +877,6 @@ function SessionContextMenu({
         <SquareTerminal className="h-3.5 w-3.5 shrink-0" />
         New sub-shell
       </button>
-      {onNewAgentSession && (
-        <button
-          type="button"
-          onClick={() => {
-            onNewAgentSession();
-            onClose();
-          }}
-          className={itemClass}
-        >
-          <Bot className="h-3.5 w-3.5 shrink-0" />
-          New agent session…
-        </button>
-      )}
       {onTurnIntoWorkspace && (
         <button
           type="button"
@@ -1062,7 +1046,6 @@ export function SessionItem({
   onOpenIde,
   onOpenTab,
   onAddSession,
-  onNewAgentSession,
   pluginData,
   mergePluginData,
   isDragging,
@@ -1103,8 +1086,6 @@ export function SessionItem({
     agent?: AgentCli,
   ) => string | undefined;
   onAddSession: (workspaceId?: string, cwd?: string, name?: string) => void;
-  /** Starts an agent (`mainView:'agent'`) session with the picked argv; absent where no process backend exists. */
-  onNewAgentSession?: (acpCommand: string[]) => void;
   onTurnIntoWorkspace: (sessionId: string) => void;
   updateSession: (sessionId: string, patch: Partial<ShellSession>) => void;
   mergePluginState: (sessionId: string, stateKey: string, patch: Record<string, unknown>) => void;
@@ -1633,14 +1614,6 @@ export function SessionItem({
           onMoveToNewWindow={onMoveToNewWindow}
           onCloseSession={onCloseSession}
           onSubShell={() => onOpenSubShell(session.id)}
-          onNewAgentSession={
-            onNewAgentSession
-              ? () =>
-                  void pickAcpAgent().then(
-                    (argv) => argv && onNewAgentSession(argv),
-                  )
-              : undefined
-          }
           onTurnIntoWorkspace={
             // Only offered when the session actually has sub-shell tabs.
             (session.editors ?? []).some((e) => e.kind === 'shell')
@@ -2421,12 +2394,6 @@ export function SessionPanel({
                         onOpenTab={onOpenTab}
                         onOpenSubShell={onOpenSubShell}
                         onAddSession={onAddSession}
-                        onNewAgentSession={
-                          backend.spawnProcess && onNewAgentSession
-                            ? (argv) =>
-                                onNewAgentSession(session.workspaceId, session.cwd, argv)
-                            : undefined
-                        }
                         onTurnIntoWorkspace={onTurnIntoWorkspace}
                         pluginData={pluginData}
                         mergePluginData={mergePluginData}

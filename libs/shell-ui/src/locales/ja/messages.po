@@ -18,7 +18,7 @@ msgstr "実行中の{1} {0} 件が終了されます"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} がメインチェックアウトで実行中 — worktree に隔離しますか？"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2271
+#: libs/shell-ui/src/app/SessionPanel.tsx:2244
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} 件待機中"
 
@@ -412,7 +412,7 @@ msgstr "編集"
 msgid "Edit icon"
 msgstr "アイコンを編集"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:859
+#: libs/shell-ui/src/app/SessionPanel.tsx:856
 msgid "Edit summary…"
 msgstr "要約を編集…"
 
@@ -458,7 +458,7 @@ msgstr "エクスポート…"
 msgid "Exported."
 msgstr "エクスポートしました。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:843
+#: libs/shell-ui/src/app/SessionPanel.tsx:840
 msgid "F2 · double-click"
 msgstr "F2 · ダブルクリック"
 
@@ -471,7 +471,7 @@ msgstr "失敗"
 #~ msgid "Failed: {0}"
 #~ msgstr "\\u5931\\u6557\\uff1a{0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:841
+#: libs/shell-ui/src/app/SessionPanel.tsx:838
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "より速く: 選択中のセッションで F2、または名前をダブルクリック"
 
@@ -648,11 +648,11 @@ msgstr "実行ファイル名またはプラグイン ID を Lucide アイコン
 msgid "Move “{sessionName}” to workspace"
 msgstr "「{sessionName}」をワークスペースへ移動"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:991
+#: libs/shell-ui/src/app/SessionPanel.tsx:975
 msgid "Move to new window"
 msgstr "新しいウィンドウへ移動"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:975
+#: libs/shell-ui/src/app/SessionPanel.tsx:959
 msgid "Move to workspace…"
 msgstr "ワークスペースへ移動…"
 
@@ -660,7 +660,7 @@ msgstr "ワークスペースへ移動…"
 msgid "needs attention"
 msgstr "要対応"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1542
+#: libs/shell-ui/src/app/SessionPanel.tsx:1523
 msgid "Needs you"
 msgstr "要対応"
 
@@ -668,7 +668,7 @@ msgstr "要対応"
 msgid "New name for {name}"
 msgstr "{name} の新しい名前"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2468
+#: libs/shell-ui/src/app/SessionPanel.tsx:2435
 msgid "New session"
 msgstr "新しいセッション"
 
@@ -676,7 +676,7 @@ msgstr "新しいセッション"
 msgid "New session button"
 msgstr "新規セッションボタン"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2592
+#: libs/shell-ui/src/app/SessionPanel.tsx:2559
 msgid "New session in folder…"
 msgstr "フォルダーで新しいセッション…"
 
@@ -821,7 +821,7 @@ msgstr "開く"
 msgid "Open {title}"
 msgstr "{title} を開く"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2572
+#: libs/shell-ui/src/app/SessionPanel.tsx:2539
 msgid "Open a saved workspace set file"
 msgstr "保存したワークスペースセットファイルを開く"
 
@@ -856,11 +856,11 @@ msgstr "ログフォルダを開く…"
 msgid "Open preview in a tab"
 msgstr "タブでプレビューを開く"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2580
+#: libs/shell-ui/src/app/SessionPanel.tsx:2547
 msgid "Open workspace set from file…"
 msgstr "ファイルからワークスペースセットを開く…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2236
+#: libs/shell-ui/src/app/SessionPanel.tsx:2209
 msgid "Open…"
 msgstr "開く…"
 
@@ -906,7 +906,7 @@ msgstr "権限:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "同じアカウントでサインインしたスマートフォンとブラウザーが接続できます"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2587
+#: libs/shell-ui/src/app/SessionPanel.tsx:2554
 msgid "Pick a folder — the new session starts in it"
 msgstr "フォルダーを選択 — 新しいセッションはそこで開始"
 
@@ -1018,7 +1018,7 @@ msgstr "worktree を削除"
 msgid "Rename {name}"
 msgstr "{name} の名前を変更"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1482
+#: libs/shell-ui/src/app/SessionPanel.tsx:1463
 msgid "Rename session"
 msgstr "セッション名を変更"
 
@@ -1045,7 +1045,7 @@ msgstr "{tag} の色をリセット"
 msgid "Reset to derived colour ({0})"
 msgstr "派生色に戻す ({0})"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:806
+#: libs/shell-ui/src/app/SessionPanel.tsx:803
 msgid "Reset to process name"
 msgstr "プロセス名に戻す"
 
@@ -1101,7 +1101,7 @@ msgstr "シェルタブで実行"
 msgid "Run the login in a shell, then check again."
 msgstr "シェルでログインを実行してから、再確認してください。"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2531
+#: libs/shell-ui/src/app/SessionPanel.tsx:2498
 msgid "Running"
 msgstr "実行中"
 
@@ -1115,7 +1115,7 @@ msgstr "サンドボックス — 権限なし（シェル、ファイル、タ�
 msgid "Save"
 msgstr "保存"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2232
+#: libs/shell-ui/src/app/SessionPanel.tsx:2205
 msgid "Save workspace set"
 msgstr "ワークスペースセットを保存"
 
@@ -1161,8 +1161,8 @@ msgstr "サーバーアドレス"
 #~ msgid "Server URL"
 #~ msgstr "サーバーURL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1518
-#: libs/shell-ui/src/app/SessionPanel.tsx:1520
+#: libs/shell-ui/src/app/SessionPanel.tsx:1499
+#: libs/shell-ui/src/app/SessionPanel.tsx:1501
 msgid "Session actions"
 msgstr "セッションの操作"
 
@@ -1194,7 +1194,7 @@ msgstr "セッションの要約"
 msgid "Session: {0}"
 msgstr "セッション：{0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2526
+#: libs/shell-ui/src/app/SessionPanel.tsx:2493
 msgid "Sessions"
 msgstr "セッション"
 
@@ -1228,11 +1228,11 @@ msgstr "シェル"
 msgid "Shell font"
 msgstr "シェルフォント"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2264
+#: libs/shell-ui/src/app/SessionPanel.tsx:2237
 msgid "Show all sessions"
 msgstr "すべてのセッションを表示"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2264
+#: libs/shell-ui/src/app/SessionPanel.tsx:2237
 msgid "Show only sessions that need you"
 msgstr "対応が必要なセッションのみ表示"
 

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSettings } from '../../SettingsProvider';
+import { resolveShellFont } from '../../themes';
 import type { SessionAttention, SessionStatus } from '../../types';
 import type { AvailableCommand, PermissionRequest, PlanEntry, ToolCall } from './types';
 import { AcpClient, type AcpHandlers, type AcpPipe } from './acpClient';
@@ -68,6 +70,8 @@ export function AcpChatView({
    */
   onAxnCommand?: (line: string) => Promise<string | false | undefined>;
 }) {
+  const { settings } = useSettings();
+  const shellFont = resolveShellFont(settings);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState('');
   const [turn, setTurn] = useState<'idle' | 'running' | 'blocked'>('idle');
@@ -205,7 +209,7 @@ export function AcpChatView({
   };
 
   return (
-    <div className="flex h-full flex-col text-sm" style={{ fontFamily: 'inherit' }}>
+    <div className="flex h-full flex-col" style={{ fontFamily: 'inherit', fontSize: shellFont.size }}>
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
         {entries.map((e) => {
           switch (e.kind) {
@@ -245,17 +249,17 @@ export function AcpChatView({
                 <div key={e.id} className="rounded border border-[var(--border,#8884)] p-2">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{e.call.title}</span>
-                    <span className={`text-xs ${e.call.status === 'failed' ? 'text-red-500' : 'text-[var(--text-secondary)]'}`}>
+                    <span className={`text-[0.85em] ${e.call.status === 'failed' ? 'text-red-500' : 'text-[var(--text-secondary)]'}`}>
                       {STATUS_LABEL[e.call.status ?? 'pending']}
                     </span>
                   </div>
                   {e.call.locations?.map((l, i) => (
-                    <div key={i} className="text-xs text-[var(--text-secondary)]">
+                    <div key={i} className="text-[0.85em] text-[var(--text-secondary)]">
                       {l.path}{l.line !== undefined ? `:${l.line}` : ''}
                     </div>
                   ))}
                   {body && (
-                    <pre className="mt-1 max-h-60 overflow-auto rounded bg-black/10 p-2 text-xs" style={{ fontFamily: 'var(--shell-font, monospace)' }}>
+                    <pre className="mt-1 max-h-60 overflow-auto rounded bg-black/10 p-2 text-[0.85em]" style={{ fontFamily: 'var(--shell-font, monospace)' }}>
                       {body}
                     </pre>
                   )}
@@ -272,7 +276,7 @@ export function AcpChatView({
                         key={o.optionId}
                         disabled={!!e.answered}
                         onClick={() => respondOnce.current?.(o.optionId)}
-                        className="rounded border border-[var(--border,#8884)] px-2 py-1 text-xs disabled:opacity-50"
+                        className="rounded border border-[var(--border,#8884)] px-2 py-1 text-[0.85em] disabled:opacity-50"
                         style={e.answered === o.optionId ? { background: 'var(--accent)', color: 'var(--accent-fg, #fff)' } : undefined}
                       >
                         {o.name}
@@ -283,7 +287,7 @@ export function AcpChatView({
               );
             case 'system':
               return (
-                <div key={e.id} className="text-xs text-[var(--text-secondary)]">
+                <div key={e.id} className="text-[0.85em] text-[var(--text-secondary)]">
                   {e.text}
                 </div>
               );
@@ -304,7 +308,7 @@ export function AcpChatView({
                 type="button"
                 data-tip={c.description}
                 onClick={() => setInput(`/${c.name} `)}
-                className="rounded border border-[var(--border,#8884)] px-1.5 py-0.5 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
+                className="rounded border border-[var(--border,#8884)] px-1.5 py-0.5 text-[0.85em] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
               >
                 /{c.name}
               </button>
