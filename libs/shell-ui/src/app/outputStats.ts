@@ -57,7 +57,11 @@ function start(): void {
     if (late > 0) {
       stats.lagSumMs += late;
       if (late > stats.lagMaxMs) stats.lagMaxMs = late;
-      if (late > 50) stats.lagOver50 += 1;
+      if (late > 50) {
+        stats.lagOver50 += 1;
+        // each long stall as its own trace mark, to line up with what the app was doing
+        perfMark('stall', String(Math.round(late)));
+      }
     }
   }, 20);
   setInterval(() => {

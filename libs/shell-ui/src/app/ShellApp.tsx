@@ -1057,6 +1057,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     )
     .join('\u0000');
   useEffect(() => {
+    perfMark('buffers_effect_start');
     const retained: string[] = [];
     const offs: (() => void)[] = [];
     const live = new Set<string>();
@@ -1157,6 +1158,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       if (!live.has(id)) dropSessionBuffer(id);
     }
     syncRetainedPtys(retained);
+    perfMark('buffers_effect_end');
     return () => {
       for (const off of offs) safely('session output listener', off);
     };
@@ -1702,6 +1704,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // this parent effect); whichever claims it fires handleSessionReady once
   // via the notified flag.
   useEffect(() => {
+    perfMark('spawn_effect_start', String(sessionPtyKey.split('\u0000').filter(Boolean).length));
     const handles = sessionPtyKey
       .split('\u0000')
       .filter(Boolean)
@@ -1725,6 +1728,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         });
         return handle;
       });
+    perfMark('spawn_effect_end');
     return () => handles.forEach((h) => h?.release());
   }, [backend, sessionPtyKey, handleSessionReady, settings.defaultShell]);
 
