@@ -39,6 +39,13 @@ pub fn acp_spawn(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
+    // GUI launches inherit launchd's minimal PATH — agent binaries installed
+    // per-user (`~/.local/bin/vibe-acp`, Homebrew, npm globals) would not
+    // resolve. Reuse the login-shell PATH captured for plugin_exec.
+    #[cfg(unix)]
+    if let Some(path) = crate::exec::login_shell_path() {
+        cmd.env("PATH", path);
+    }
     if let Some(dir) = cwd.as_deref() {
         cmd.current_dir(dir);
     }
