@@ -58,21 +58,134 @@ export function stripAgentTitlePrefix(title: string, agent: string): string {
   return title.replace(re, '').trim();
 }
 
+// What an agent shows before the conversation has a name of its own.
+const GENERIC_AGENT_TITLES = new Set([
+  'claude',
+  'claude code',
+  'devin',
+  'codex',
+  'opencode',
+  'agy',
+  'antigravity',
+  'gemini',
+  'vibe',
+  'mistral vibe',
+]);
+
 /**
- * The conversation's display label at record time: the process-reported
- * terminal title (`autoName` — the agent's `/rename`/topic line) wins, the
- * user's custom session name is the fallback. The generic default name is
- * not a label worth persisting.
+ * A title an agent set, reduced to the conversation's name: the status glyph
+ * agents animate in front of it (`✳`/`◐`/braille spinners) and their own
+ * `<cli>:` prefix are dropped; the generic default ("Claude Code") and an
+ * empty title — what an agent sets when it exits — are no name at all.
  */
-function sessionDisplayTitle(
+export function cleanAgentTitle(raw: string | undefined, agent: string): string | undefined {
+  if (!raw) return undefined;
+  const title = stripAgentTitlePrefix(raw.replace(/^[\p{So}\p{Cf}\s]+/u, '').trim(), agent);
+  if (!title || GENERIC_AGENT_TITLES.has(title.toLowerCase())) return undefined;
+  // The shell's own title (`user@host: ~/dir`, a bare path) — what arrives in
+  // the moments after the agent exits, while the foreground poll still says
+  // the agent runs. Never a conversation name.
+  if (/^[\w.+-]+@[\w.-]+:/.test(title) || /^[/~]/.test(title)) return undefined;
+  return title;
+}
+
+/** The last non-empty OSC 0/2 window title in a chunk of terminal output. */
+export function lastOscTitle(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  let last: string | undefined;
+  for (const m of text.matchAll(/\x1b\][02];([^\x07\x1b]*)(?:\x07|\x1b\\)/g)) {
+    if (m[1]) last = m[1];
+  }
+  return last;
+}
+
+/**
+ * Remember the conversation's name WHILE the agent runs. By exit the agent
+ * has cleared its terminal title (Claude Code sets an empty one) and the shell
+ * has put its own back, so the name has to be caught on the way: call this
+ * from the agent plugin's `onOutput` while its process is foreground. The
+ * title comes straight from the chunk's OSC sequence when it carries one,
+ * else from the session's `autoName`. Only a changed name touches state.
+ */
+export function noteAgentTitle(
   ctx: SessionViewContext & PluginApi,
   agent: string,
+  text?: string,
+): void {
+  const session = ctx.getSession?.() ?? ctx.session;
+  const title =
+    cleanAgentTitle(lastOscTitle(text), agent) ?? cleanAgentTitle(session?.autoName, agent);
+  if (!title) return;
+  const seen = (ctx.pluginState as { seenTitle?: unknown } | undefined)?.seenTitle;
+  if (seen === title) return;
+  ctx.updatePluginState({ seenTitle: title });
+}
+
+/**
+ * The label to store for a conversation being recorded now: an explicit one,
+ * the name seen while the agent ran, the one an earlier record of the same
+ * conversation had, then — only while the agent is still foreground, so
+ * `autoName` is still its title and not the shell's — the terminal title, and
+ * finally the user's custom session name.
+ */
+function recordTitle(
+  ctx: SessionViewContext & PluginApi,
+  agent: string,
+  previous: AgentLastSession | undefined,
 ): string | undefined {
   const session = ctx.getSession?.() ?? ctx.session;
-  const raw = session?.autoName ?? session?.customName;
-  if (!raw) return undefined;
-  const title = stripAgentTitlePrefix(raw, agent);
-  return title || undefined;
+  const seen = (ctx.pluginState as { seenTitle?: unknown } | undefined)?.seenTitle;
+  return (
+    (typeof seen === 'string' && seen ? seen : undefined) ??
+    previous?.title ??
+    (session?.process || session?.agentInput ? cleanAgentTitle(session?.autoName, agent) : undefined) ??
+    cleanAgentTitle(session?.customName, agent)
+  );
+}
+
+/** How many conversations a plugin keeps for the right-click list. */
+export const AGENT_HISTORY_MAX = 5;
+
+/** Identity of a conversation: its resume id, else where and how it resumes. */
+function historyKey(e: Pick<AgentLastSession, 'name' | 'cwd' | 'command'>): string {
+  return e.name ? `id:${e.name}` : `cmd:${e.cwd ?? ''}\u0000${e.command}`;
+}
+
+/** Newest-first history with `entry` upserted (the same conversation moves to the front). */
+export function upsertAgentHistory(
+  history: AgentLastSession[],
+  entry: AgentLastSession,
+  max = AGENT_HISTORY_MAX,
+): AgentLastSession[] {
+  const key = historyKey(entry);
+  return [entry, ...history.filter((e) => historyKey(e) !== key)].slice(0, max);
+}
+
+function parseRecord(l: unknown): AgentLastSession | undefined {
+  if (!l || typeof l !== 'object' || Array.isArray(l)) return undefined;
+  const r = l as Partial<AgentLastSession>;
+  if (typeof r.command !== 'string' || !r.command) return undefined;
+  return {
+    name: typeof r.name === 'string' && r.name ? r.name : undefined,
+    title: typeof r.title === 'string' && r.title ? r.title : undefined,
+    cwd: typeof r.cwd === 'string' && r.cwd ? r.cwd : undefined,
+    command: r.command,
+    at: typeof r.at === 'number' ? r.at : 0,
+  };
+}
+
+/**
+ * The plugin's remembered conversations, newest first: its `history` list
+ * plus `last` (records written before the list existed are only in `last`).
+ */
+export function agentHistory(ctx: SessionViewContext & PluginApi): AgentLastSession[] {
+  const state = ctx.pluginState as { history?: unknown } | undefined;
+  const listed = Array.isArray(state?.history)
+    ? state.history.flatMap((r) => parseRecord(r) ?? [])
+    : [];
+  const last = lastAgentSession(ctx);
+  const merged = last ? upsertAgentHistory(listed, last, Infinity) : listed;
+  return merged.sort((a, b) => b.at - a.at).slice(0, AGENT_HISTORY_MAX);
 }
 
 // Every agent's newest last-session record FOR A SESSION — keyed
@@ -122,17 +235,7 @@ export function clearAgentLasts(): void {
 export function lastAgentSession(
   ctx: SessionViewContext & PluginApi,
 ): AgentLastSession | undefined {
-  const last = (ctx.pluginState as { last?: unknown } | undefined)?.last;
-  if (!last || typeof last !== 'object' || Array.isArray(last)) return undefined;
-  const l = last as AgentLastSession;
-  if (typeof l.command !== 'string' || !l.command) return undefined;
-  return {
-    name: typeof l.name === 'string' && l.name ? l.name : undefined,
-    title: typeof l.title === 'string' && l.title ? l.title : undefined,
-    cwd: typeof l.cwd === 'string' && l.cwd ? l.cwd : undefined,
-    command: l.command,
-    at: typeof l.at === 'number' ? l.at : 0,
-  };
+  return parseRecord((ctx.pluginState as { last?: unknown } | undefined)?.last);
 }
 
 /**
@@ -146,7 +249,9 @@ export function rememberLastAgentSession(
   last: Omit<AgentLastSession, 'at'>,
 ): void {
   const current = lastAgentSession(ctx);
-  const title = last.title ?? sessionDisplayTitle(ctx, agent);
+  const history = agentHistory(ctx);
+  const previous = history.find((e) => historyKey(e) === historyKey(last));
+  const title = last.title ?? recordTitle(ctx, agent, previous);
   const unchanged =
     current !== undefined &&
     current.name === last.name &&
@@ -158,7 +263,13 @@ export function rememberLastAgentSession(
   const stamped: AgentLastSession = { ...last, title, at: unchanged ? current.at : Date.now() };
   registerAgentLast(ctx.getSession().id, agent, stamped);
   if (unchanged) return;
-  ctx.updatePluginState({ last: stamped });
+  // The name seen during the run belongs to this record now — the next run
+  // starts without one.
+  ctx.updatePluginState({
+    last: stamped,
+    history: upsertAgentHistory(history, stamped),
+    seenTitle: undefined,
+  });
   // Retire the legacy app-level record so it stops seeding other sessions.
   ctx.updateAppState({ last: undefined });
 }
@@ -176,7 +287,13 @@ export function forgetLastAgentSession(
   const current = lastAgentSession(ctx);
   if (!current || (name && current.name !== name)) return;
   unregisterAgentLast(ctx.getSession().id, agent);
-  ctx.updatePluginState({ last: undefined });
+  const key = historyKey(current);
+  // The conversation is gone — it leaves the right-click list too; the
+  // newest of the others becomes the last again.
+  const rest = agentHistory(ctx).filter((e) => historyKey(e) !== key);
+  const [next] = rest;
+  if (next) registerAgentLast(ctx.getSession().id, agent, next);
+  ctx.updatePluginState({ last: next, history: rest });
   ctx.updateAppState({ last: undefined });
 }
 

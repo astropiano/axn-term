@@ -18,13 +18,21 @@ msgstr "실행 중인 {1} {0}개가 종료됩니다"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent}이(가) 메인 체크아웃에서 실행 중 — 워크트리로 격리할까요?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2362
+#: libs/shell-ui/src/app/SessionPanel.tsx:2271
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount}개 대기 중"
 
 #: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:126
 msgid "{cli} is installed"
 msgstr "{cli} 설치됨"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:25
+msgid "{days}d ago"
+msgstr "{days}일 전"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:23
+msgid "{h}h ago"
+msgstr "{h}시간 전"
 
 #: libs/shell-ui/src/app/session-plugins/TagColorInput.tsx:72
 msgid "{label} (hex)"
@@ -34,7 +42,11 @@ msgstr "{label} (16진수)"
 msgid "{label}: theme {slot}"
 msgstr "{label}: 테마 {slot}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1259
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:21
+msgid "{min}m ago"
+msgstr "{min}분 전"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:1268
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "Lucide 아이콘 이름(예: <0>GitFork</0>) 또는 인라인 SVG 태그(예: <1>{SVG_HINT_EXAMPLE}</1>)"
 
@@ -42,8 +54,8 @@ msgstr "Lucide 아이콘 이름(예: <0>GitFork</0>) 또는 인라인 SVG 태그
 #~ msgid "Account"
 #~ msgstr "계정"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1284
-#: libs/shell-ui/src/app/SettingsModal.tsx:1286
+#: libs/shell-ui/src/app/SettingsModal.tsx:1293
+#: libs/shell-ui/src/app/SettingsModal.tsx:1295
 msgid "Add icon"
 msgstr "아이콘 추가"
 
@@ -71,7 +83,7 @@ msgstr "에이전트"
 msgid "All"
 msgstr "전체"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1088
+#: libs/shell-ui/src/app/SettingsModal.tsx:1097
 msgid "Also used as the session icon while this process is foreground."
 msgstr "이 프로세스가 포그라운드에 있는 동안 세션 아이콘으로도 사용됩니다."
 
@@ -135,7 +147,7 @@ msgstr "기본 제공 글꼴"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1270
+#: libs/shell-ui/src/app/SettingsModal.tsx:1279
 #: libs/shell-ui/src/app/TagModal.tsx:185
 msgid "Cancel"
 msgstr "취소"
@@ -197,7 +209,7 @@ msgstr "탭 닫기"
 msgid "Close this view"
 msgstr "이 보기 닫기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:578
+#: libs/shell-ui/src/app/SessionPanel.tsx:576
 msgid "Collapse"
 msgstr "접기"
 
@@ -353,7 +365,7 @@ msgid "Delete {name}"
 msgstr "{name} 삭제"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:621
+#: libs/shell-ui/src/app/SessionPanel.tsx:619
 msgid "Delete workspace"
 msgstr "워크스페이스 삭제"
 
@@ -386,11 +398,11 @@ msgstr "각 보기는 레일에 고유한 항목을 갖습니다. URL을 입력�
 msgid "Edit"
 msgstr "편집"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1213
+#: libs/shell-ui/src/app/SettingsModal.tsx:1222
 msgid "Edit icon"
 msgstr "아이콘 편집"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:861
+#: libs/shell-ui/src/app/SessionPanel.tsx:859
 msgid "Edit summary…"
 msgstr "요약 편집…"
 
@@ -420,7 +432,7 @@ msgstr "세션 목록 끝"
 #~ msgid "Enter code {0} in the browser to finish sign-in."
 #~ msgstr "브라우저에서 코드 {0}을(를) 입력하여 로그인을 완료하세요."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:578
+#: libs/shell-ui/src/app/SessionPanel.tsx:576
 msgid "Expand"
 msgstr "펼치기"
 
@@ -436,7 +448,7 @@ msgstr "보내기…"
 msgid "Exported."
 msgstr "보냈습니다."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:845
+#: libs/shell-ui/src/app/SessionPanel.tsx:843
 msgid "F2 · double-click"
 msgstr "F2 · 두 번 클릭"
 
@@ -449,7 +461,7 @@ msgstr "실패"
 #~ msgid "Failed: {0}"
 #~ msgstr "\\uc2e4\\ud328: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:843
+#: libs/shell-ui/src/app/SessionPanel.tsx:841
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "더 빠르게: 선택한 세션에서 F2 또는 이름을 두 번 클릭"
 
@@ -469,7 +481,7 @@ msgstr "태그로 필터: {tag}"
 msgid "Filter plugins…"
 msgstr "플러그인 필터…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:269
+#: libs/shell-ui/src/app/SessionPanel.tsx:267
 msgid "Filter sessions…"
 msgstr "세션 필터…"
 
@@ -606,7 +618,7 @@ msgstr "불러오는 중…"
 msgid "Log level"
 msgstr "로그 레벨"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1068
+#: libs/shell-ui/src/app/SettingsModal.tsx:1077
 msgid "Logo"
 msgstr "로고"
 
@@ -626,11 +638,11 @@ msgstr "실행 파일 이름이나 플러그인 ID를 Lucide 아이콘(예: Bot,
 msgid "Move “{sessionName}” to workspace"
 msgstr "“{sessionName}”을(를) 워크스페이스로 이동"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:993
+#: libs/shell-ui/src/app/SessionPanel.tsx:991
 msgid "Move to new window"
 msgstr "새 창으로 이동"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:977
+#: libs/shell-ui/src/app/SessionPanel.tsx:975
 msgid "Move to workspace…"
 msgstr "워크스페이스로 이동…"
 
@@ -638,7 +650,7 @@ msgstr "워크스페이스로 이동…"
 msgid "needs attention"
 msgstr "확인 필요"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1633
+#: libs/shell-ui/src/app/SessionPanel.tsx:1542
 msgid "Needs you"
 msgstr "확인 필요"
 
@@ -646,7 +658,7 @@ msgstr "확인 필요"
 msgid "New name for {name}"
 msgstr "{name}의 새 이름"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2559
+#: libs/shell-ui/src/app/SessionPanel.tsx:2468
 msgid "New session"
 msgstr "새 세션"
 
@@ -654,11 +666,11 @@ msgstr "새 세션"
 msgid "New session button"
 msgstr "새 세션 버튼"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2683
+#: libs/shell-ui/src/app/SessionPanel.tsx:2592
 msgid "New session in folder…"
 msgstr "폴더에서 새 세션…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:607
+#: libs/shell-ui/src/app/SessionPanel.tsx:605
 msgid "New session in workspace"
 msgstr "워크스페이스에서 새 세션"
 
@@ -676,7 +688,7 @@ msgstr "“{0}”의 새 세션은 이 폴더에서 시작합니다. 비워 두�
 msgid "New tag colour"
 msgstr "새 태그 색상"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:289
+#: libs/shell-ui/src/app/SessionPanel.tsx:287
 msgid "New workspace"
 msgstr "새 워크스페이스"
 
@@ -696,7 +708,7 @@ msgstr "새 워크트리 세션"
 msgid "no clients"
 msgstr "클라이언트 없음"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1223
+#: libs/shell-ui/src/app/SettingsModal.tsx:1232
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "설정된 아이콘이 없습니다 — 모든 세션에 기본 터미널 아이콘이 표시됩니다."
 
@@ -761,6 +773,10 @@ msgstr "로그인되지 않음"
 msgid "not yet"
 msgstr "아직 아님"
 
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:20
+msgid "now"
+msgstr "방금"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:674
 msgid "Off"
 msgstr "끄기"
@@ -797,7 +813,7 @@ msgstr "열기"
 msgid "Open {title}"
 msgstr "{title} 열기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2663
+#: libs/shell-ui/src/app/SessionPanel.tsx:2572
 msgid "Open a saved workspace set file"
 msgstr "저장된 워크스페이스 세트 파일 열기"
 
@@ -832,11 +848,11 @@ msgstr "로그 폴더 열기…"
 msgid "Open preview in a tab"
 msgstr "탭에서 미리보기 열기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2671
+#: libs/shell-ui/src/app/SessionPanel.tsx:2580
 msgid "Open workspace set from file…"
 msgstr "파일에서 워크스페이스 세트 열기…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2327
+#: libs/shell-ui/src/app/SessionPanel.tsx:2236
 msgid "Open…"
 msgstr "열기…"
 
@@ -882,7 +898,7 @@ msgstr "권한:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "같은 계정으로 로그인한 휴대폰과 브라우저가 연결할 수 있습니다"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2678
+#: libs/shell-ui/src/app/SessionPanel.tsx:2587
 msgid "Pick a folder — the new session starts in it"
 msgstr "폴더 선택 — 새 세션이 여기서 시작됩니다"
 
@@ -899,7 +915,7 @@ msgstr "미리보기"
 msgid "Preview unavailable"
 msgstr "미리보기를 사용할 수 없음"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1232
+#: libs/shell-ui/src/app/SettingsModal.tsx:1241
 msgid "Process"
 msgstr "프로세스"
 
@@ -982,7 +998,7 @@ msgstr "원격 접근"
 msgid "Remove"
 msgstr "제거"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1216
+#: libs/shell-ui/src/app/SettingsModal.tsx:1225
 msgid "Remove icon"
 msgstr "아이콘 제거"
 
@@ -994,7 +1010,7 @@ msgstr "워크트리 삭제"
 msgid "Rename {name}"
 msgstr "{name} 이름 바꾸기"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1573
+#: libs/shell-ui/src/app/SessionPanel.tsx:1482
 msgid "Rename session"
 msgstr "세션 이름 바꾸기"
 
@@ -1021,18 +1037,33 @@ msgstr "{tag} 색상 초기화"
 msgid "Reset to derived colour ({0})"
 msgstr "파생 색상으로 되돌리기 ({0})"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:808
+#: libs/shell-ui/src/app/SessionPanel.tsx:806
 msgid "Reset to process name"
 msgstr "프로세스 이름으로 재설정"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:75
+msgid "Resume"
+msgstr "이어가기"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:72
+#~ msgid "Resume '{name}'"
+#~ msgstr "'{name}' 이어가기"
 
 #~ msgid "Resume {0} session{1}"
 #~ msgstr "{0} 세션{1} 재개"
 
 #. placeholder {0}: name ? ` '${name}'` : ''
-#: libs/shell-ui/src/app/session-plugins/agentResume.ts:262
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:38
+#: libs/shell-ui/src/app/session-plugins/agentResume.ts:379
 msgid "Resume {agent} session{0}"
 msgstr "{agent} 세션 재개{0}"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:75
+msgid "Resume {quoted}"
+msgstr "{quoted} 이어가기"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:81
+msgid "Resume an earlier {agent} session"
+msgstr "이전 {agent} 세션 이어가기"
 
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:766
 msgid "Resume viewport"
@@ -1062,7 +1093,7 @@ msgstr "셸 탭에서 실행"
 msgid "Run the login in a shell, then check again."
 msgstr "셸에서 로그인을 실행한 다음 다시 확인하세요."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2622
+#: libs/shell-ui/src/app/SessionPanel.tsx:2531
 msgid "Running"
 msgstr "실행 중"
 
@@ -1072,11 +1103,11 @@ msgstr "샌드박스 — 권한 없음 (셸, 파일, 터미널 접근 불가)"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1278
+#: libs/shell-ui/src/app/SettingsModal.tsx:1287
 msgid "Save"
 msgstr "저장"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2323
+#: libs/shell-ui/src/app/SessionPanel.tsx:2232
 msgid "Save workspace set"
 msgstr "워크스페이스 세트 저장"
 
@@ -1122,8 +1153,8 @@ msgstr "서버 주소"
 #~ msgid "Server URL"
 #~ msgstr "서버 URL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1609
-#: libs/shell-ui/src/app/SessionPanel.tsx:1611
+#: libs/shell-ui/src/app/SessionPanel.tsx:1518
+#: libs/shell-ui/src/app/SessionPanel.tsx:1520
 msgid "Session actions"
 msgstr "세션 작업"
 
@@ -1155,7 +1186,7 @@ msgstr "세션 요약"
 msgid "Session: {0}"
 msgstr "세션: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2617
+#: libs/shell-ui/src/app/SessionPanel.tsx:2526
 msgid "Sessions"
 msgstr "세션"
 
@@ -1189,11 +1220,11 @@ msgstr "셸"
 msgid "Shell font"
 msgstr "셸 글꼴"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2355
+#: libs/shell-ui/src/app/SessionPanel.tsx:2264
 msgid "Show all sessions"
 msgstr "모든 세션 표시"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2355
+#: libs/shell-ui/src/app/SessionPanel.tsx:2264
 msgid "Show only sessions that need you"
 msgstr "확인이 필요한 세션만 표시"
 

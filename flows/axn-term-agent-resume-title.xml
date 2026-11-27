@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - real claude resume record carries the conversation name"
+        description="Real claude in an axn-term session: an empty conversation (named with /rename, then /exit) leaves no resume record; a conversation with one tiny haiku prompt does, and the record (last + history) carries the /rename name although claude clears its terminal title on exit.">
+    <tags>
+      <tag>axn-term</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="claude-title" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Create a temp state dir (real claude, no fake binary)">
+        <assert that="contains" value="state dir prepared" description="The test harness is ready"/>
+      </step>
+
+      <step adapter="axn-term" action="start" description="Launch axn-term with the temp state dir">
+        <assert that="contains" value="app started" description="The app started"/>
+      </step>
+
+      <step adapter="axn-term" action="runClaudeEmpty" description="Run real claude, /rename the empty conversation, wait for the plugin to see the name">
+        <assert that="contains" value="claude titled:" description="The name was seen while claude ran"/>
+      </step>
+
+      <step adapter="axn-term" action="exitClaude" description="/exit the empty conversation — nothing may be recorded">
+        <assert that="contains" value="nothing recorded" description="An empty conversation leaves no resume record"/>
+      </step>
+
+      <step adapter="axn-term" action="runClaudeConversation" description="Run real claude (haiku), /rename, send one tiny prompt, wait for the answer">
+        <assert that="contains" value="with a conversation" description="A conversation with content exists"/>
+      </step>
+
+      <step adapter="axn-term" action="exitClaude" description="/exit — the resume record must exist">
+        <assert that="contains" value="resume record exists" description="claude ended and the record exists"/>
+      </step>
+
+      <step adapter="axn-term" action="verifyClaudeTitle" description="The resume record and history carry the name and the conversation id">
+        <assert that="contains" value="resume record carries" description="Record carries the conversation name"/>
+      </step>
+
+      <step adapter="axn-term" action="verifyResumeButton" description="The ended session shows the Resume button with the conversation name">
+        <assert that="contains" value="resume button shows: Resume claude session" description="The button's gate holds and its label carries the name"/>
+      </step>
+
+      <step adapter="axn-term" action="close" description="Close axn-term (state saved)">
+        <assert that="contains" value="app closed" description="The app closed"/>
+      </step>
+
+      <step adapter="axn-term" action="verifyClaudeTitle" description="The name survives in the saved state">
+        <assert that="contains" value="resume record carries" description="Persisted record carries the name"/>
+      </step>
+    </steps>
+  </flow>
+</flows>

@@ -27,6 +27,27 @@ export function collectIconBag(settings: Pick<
   };
 }
 
+/**
+ * The bag key a plugin's icon lives under: its `iconKey` — the process name
+ * its sessions run as, where that differs from the plugin id (antigravity →
+ * `agy`) — else its id. One key, so the Logo field, the Session-icons row and
+ * the session rows all edit the same entry.
+ */
+export function pluginIconKey(plugin: { id: string; iconKey?: string }): string {
+  return plugin.iconKey ?? plugin.id;
+}
+
+/**
+ * A plugin's configured icon: its own key, else — for a plugin whose key is
+ * not its id — an entry left under the id by an earlier version.
+ */
+export function pluginIconOverride(
+  bag: IconBag,
+  plugin: { id: string; iconKey?: string },
+): string | undefined {
+  return bag[pluginIconKey(plugin)] ?? (plugin.iconKey ? bag[plugin.id] : undefined);
+}
+
 /** Single lookup point — a configured icon or the caller's fallback. */
 export function resolveIcon(bag: IconBag, key: string, fallback: string): string {
   return bag[key] ?? fallback;
@@ -40,6 +61,8 @@ export function resolveIcon(bag: IconBag, key: string, fallback: string): string
  */
 export interface IconPlugin {
   id: string;
+  /** Bag key when it is not the id — see `pluginIconKey`. */
+  iconKey?: string;
   logo?: string;
   processPattern?: RegExp;
 }
@@ -74,7 +97,7 @@ export function resolveProcessIcon(
   const own = bag[process.toLowerCase()];
   if (own !== undefined) return own;
   const plugin = iconPlugins.find((p) => p.logo !== undefined && p.processPattern?.test(process));
-  if (plugin) return resolveIcon(bag, plugin.id, plugin.logo ?? fallback);
+  if (plugin) return pluginIconOverride(bag, plugin) ?? plugin.logo ?? fallback;
   return fallback;
 }
 

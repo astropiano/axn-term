@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Fragment, type CSSProperties, type ReactNode } from 'react';
-import { useIconBag, resolveIcon, resolveProcessIcon, type IconBag } from './iconModel';
+import { useIconBag, resolveProcessIcon } from './iconModel';
 import { ContextMenu, menuItemClass } from '../ContextMenu';
 import { broadcastSet, useBroadcastMarked, useBroadcastSet } from './broadcastSet';
-import { Plus, Save, FolderOpen, FolderCog, FolderPlus, Search, ChevronRight, ChevronDown, ChevronUp, Trash2, Bot, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText, PanelLeft, Radio, Check, AlertTriangle, MoreHorizontal } from 'lucide-react';
+import { Plus, Save, FolderOpen, FolderCog, FolderPlus, Search, Bot, ChevronRight, ChevronDown, ChevronUp, Trash2, SquareTerminal, Copy, Pencil, BrushCleaning, LayoutGrid, X, MoveRight, AppWindow, FileText, PanelLeft, Radio, Check, AlertTriangle, MoreHorizontal } from 'lucide-react';
 import { Trans, useLingui } from '@lingui/react/macro';
-import dynamicIconImports from 'lucide-react/dynamicIconImports';
 import { useSessionBackend, useShellPlatform, useShellServices } from '../services';
 import { pluginSessionFields } from './session-plugins/plugin';
 import { CORE_FIELDS, parseCardLayout, resolveCardLayout, type FieldMeta } from './sessionCardLayout';
@@ -26,7 +25,6 @@ import {
   toggleExpandedGroup,
 } from './panelStatus';
 import { orderRailPlugins } from './railOrder';
-import { sanitizeSvgIcon, svgIconContainStyle } from './sanitizeSvg';
 import { useContextMenuTrigger } from '../useContextMenuTrigger';
 import type { MenuPosition } from '../useContextMenuTrigger';
 import type { AgentCli, AttentionLevel, ShellSession, Workspace } from '../types';
@@ -1020,97 +1018,8 @@ function SessionContextMenu({
   );
 }
 
-function isSvgString(value: string): boolean {
-  return value.trim().toLowerCase().startsWith('<svg');
-}
-
-function toKebabCase(name: string): string {
-  return name
-    .replace(/([a-z])([A-Z])/g, '$1-$2')
-    .replace(/[\s_]+/g, '-')
-    .toLowerCase();
-}
-
-/** Render a sessionIcons value: a Lucide icon name or an inline SVG tag. */
-export function SessionIconGlyph({
-  value,
-  className = 'h-4 w-4 shrink-0',
-}: {
-  value: string;
-  className?: string;
-}) {
-  const [DynamicIcon, setDynamicIcon] = useState<React.ComponentType<{ className?: string }> | null>(null);
-
-  useEffect(() => {
-    if (isSvgString(value)) {
-      setDynamicIcon(null);
-      return;
-    }
-
-    const lower = value.toLowerCase();
-    if (lower === 'bot') {
-      setDynamicIcon(() => Bot);
-      return;
-    }
-    if (lower === 'square-terminal' || lower === 'terminal-squared' || lower === 'squareterminal') {
-      setDynamicIcon(() => SquareTerminal);
-      return;
-    }
-
-    const key = toKebabCase(value);
-    const loader = (dynamicIconImports as unknown as Record<string, () => Promise<{ default: React.ComponentType<{ className?: string }> }>>)[key];
-    if (!loader) {
-      setDynamicIcon(() => SquareTerminal);
-      return;
-    }
-
-    let cancelled = false;
-    loader()
-      .then((mod) => {
-        if (!cancelled) setDynamicIcon(() => mod.default);
-      })
-      .catch(() => {
-        if (!cancelled) setDynamicIcon(() => SquareTerminal);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [value]);
-
-  const svg = useMemo(() => (isSvgString(value) ? sanitizeSvgIcon(value) : null), [value]);
-
-  if (svg !== null) {
-    return <span className={className} style={svgIconContainStyle} dangerouslySetInnerHTML={{ __html: svg }} />;
-  }
-
-  const IconComponent = DynamicIcon ?? SquareTerminal;
-  return <IconComponent className={className} />;
-}
-
-export function resolvePluginIcon(plugin: { id: string; logo?: string }, bag: IconBag): string {
-  // Declaring `logo` is the has-an-icon capability: without it a plugin
-  // shows the generic Puzzle and the bag is not consulted.
-  if (plugin.logo === undefined) return 'Puzzle';
-  return resolveIcon(bag, plugin.id, plugin.logo);
-}
-
-/** A plugin's logo: `pluginIcons` override, else the declared `logo`, else a generic Puzzle. */
-export function PluginIcon({
-  plugin,
-  className = 'h-4 w-4 shrink-0',
-}: {
-  plugin: { id: string; logo?: string };
-  className?: string;
-}) {
-  const bag = useIconBag();
-  return (
-    <SessionIconGlyph
-      value={resolvePluginIcon(plugin, bag)}
-      className={className}
-    />
-  );
-}
+export { SessionIconGlyph, resolvePluginIcon, PluginIcon } from './iconGlyph';
+import { SessionIconGlyph, PluginIcon } from './iconGlyph';
 
 export function SessionIcon({
   process,

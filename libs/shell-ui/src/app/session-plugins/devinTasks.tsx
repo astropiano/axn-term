@@ -8,6 +8,7 @@ import { registerAgentLauncher } from './agentRegistry';
 import {
   agentResumeMenuItem,
   forgetLastAgentSession,
+  noteAgentTitle,
   rememberLastAgentSession,
 } from './agentResume';
 import { agentResumePanel } from './agentResumePanel';
@@ -779,7 +780,7 @@ export const devinPlugin: SessionViewPlugin = {
       zone: 'selected',
       value: (ctx) => (
         <>
-          {agentResumePanel(ctx, 'devin')}
+          {agentResumePanel(ctx, 'devin', devinPlugin)}
           <DevinTasks ctx={ctx} />
         </>
       ),
@@ -868,6 +869,7 @@ export const devinPlugin: SessionViewPlugin = {
     const patch: DevinPluginState = {};
     const live = ctx.getSession();
     const isActive = isDevinSession(live);
+    if (isActive) noteAgentTitle(ctx, 'devin', text);
 
     // Track where the current devin process started in the retained output.
     // The marker lets onProcessEnd/onClose search only the output produced

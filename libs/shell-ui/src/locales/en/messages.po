@@ -18,13 +18,21 @@ msgstr "{0} running {1} will be terminated"
 msgid "{agent} is running in the main checkout — isolate it in a worktree?"
 msgstr "{agent} is running in the main checkout — isolate it in a worktree?"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2362
+#: libs/shell-ui/src/app/SessionPanel.tsx:2271
 msgid "{attentionCount} waiting"
 msgstr "{attentionCount} waiting"
 
 #: libs/shell-ui/src/app/session-plugins/forgeSetup.tsx:126
 msgid "{cli} is installed"
 msgstr "{cli} is installed"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:25
+msgid "{days}d ago"
+msgstr "{days}d ago"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:23
+msgid "{h}h ago"
+msgstr "{h}h ago"
 
 #: libs/shell-ui/src/app/session-plugins/TagColorInput.tsx:72
 msgid "{label} (hex)"
@@ -34,7 +42,11 @@ msgstr "{label} (hex)"
 msgid "{label}: theme {slot}"
 msgstr "{label}: theme {slot}"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1259
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:21
+msgid "{min}m ago"
+msgstr "{min}m ago"
+
+#: libs/shell-ui/src/app/SettingsModal.tsx:1268
 msgid "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 msgstr "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{SVG_HINT_EXAMPLE}</1>"
 
@@ -42,8 +54,8 @@ msgstr "A Lucide icon name (e.g. <0>GitFork</0>) or an inline SVG tag, e.g. <1>{
 #~ msgid "Account"
 #~ msgstr "Account"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1284
-#: libs/shell-ui/src/app/SettingsModal.tsx:1286
+#: libs/shell-ui/src/app/SettingsModal.tsx:1293
+#: libs/shell-ui/src/app/SettingsModal.tsx:1295
 msgid "Add icon"
 msgstr "Add icon"
 
@@ -71,7 +83,7 @@ msgstr "Agent"
 msgid "All"
 msgstr "All"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1088
+#: libs/shell-ui/src/app/SettingsModal.tsx:1097
 msgid "Also used as the session icon while this process is foreground."
 msgstr "Also used as the session icon while this process is foreground."
 
@@ -135,7 +147,7 @@ msgstr "Built-in font"
 #: libs/shell-ui/src/app/InvalidDefaultFolderModal.tsx:52
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:120
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:68
-#: libs/shell-ui/src/app/SettingsModal.tsx:1270
+#: libs/shell-ui/src/app/SettingsModal.tsx:1279
 #: libs/shell-ui/src/app/TagModal.tsx:185
 msgid "Cancel"
 msgstr "Cancel"
@@ -197,7 +209,7 @@ msgstr "Close tab"
 msgid "Close this view"
 msgstr "Close this view"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:578
+#: libs/shell-ui/src/app/SessionPanel.tsx:576
 msgid "Collapse"
 msgstr "Collapse"
 
@@ -353,7 +365,7 @@ msgid "Delete {name}"
 msgstr "Delete {name}"
 
 #: libs/shell-ui/src/app/DeleteWorkspaceModal.tsx:84
-#: libs/shell-ui/src/app/SessionPanel.tsx:621
+#: libs/shell-ui/src/app/SessionPanel.tsx:619
 msgid "Delete workspace"
 msgstr "Delete workspace"
 
@@ -386,11 +398,11 @@ msgstr "Each view gets its own rail item. Give a URL, or a command that prints o
 msgid "Edit"
 msgstr "Edit"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1213
+#: libs/shell-ui/src/app/SettingsModal.tsx:1222
 msgid "Edit icon"
 msgstr "Edit icon"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:861
+#: libs/shell-ui/src/app/SessionPanel.tsx:859
 msgid "Edit summary…"
 msgstr "Edit summary…"
 
@@ -420,7 +432,7 @@ msgstr "End of session list"
 #~ msgid "Enter code {0} in the browser to finish sign-in."
 #~ msgstr "Enter code {0} in the browser to finish sign-in."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:578
+#: libs/shell-ui/src/app/SessionPanel.tsx:576
 msgid "Expand"
 msgstr "Expand"
 
@@ -436,7 +448,7 @@ msgstr "Export…"
 msgid "Exported."
 msgstr "Exported."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:845
+#: libs/shell-ui/src/app/SessionPanel.tsx:843
 msgid "F2 · double-click"
 msgstr "F2 · double-click"
 
@@ -449,7 +461,7 @@ msgstr "failed"
 #~ msgid "Failed: {0}"
 #~ msgstr "Failed: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:843
+#: libs/shell-ui/src/app/SessionPanel.tsx:841
 msgid "Faster: F2 on the selected session, or double-click its name"
 msgstr "Faster: F2 on the selected session, or double-click its name"
 
@@ -469,7 +481,7 @@ msgstr "Filter by tag: {tag}"
 msgid "Filter plugins…"
 msgstr "Filter plugins…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:269
+#: libs/shell-ui/src/app/SessionPanel.tsx:267
 msgid "Filter sessions…"
 msgstr "Filter sessions…"
 
@@ -606,7 +618,7 @@ msgstr "Loading…"
 msgid "Log level"
 msgstr "Log level"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1068
+#: libs/shell-ui/src/app/SettingsModal.tsx:1077
 msgid "Logo"
 msgstr "Logo"
 
@@ -626,11 +638,11 @@ msgstr "Map executable names or plugin ids to a Lucide icon (e.g., Bot, SquareTe
 msgid "Move “{sessionName}” to workspace"
 msgstr "Move “{sessionName}” to workspace"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:993
+#: libs/shell-ui/src/app/SessionPanel.tsx:991
 msgid "Move to new window"
 msgstr "Move to new window"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:977
+#: libs/shell-ui/src/app/SessionPanel.tsx:975
 msgid "Move to workspace…"
 msgstr "Move to workspace…"
 
@@ -638,7 +650,7 @@ msgstr "Move to workspace…"
 msgid "needs attention"
 msgstr "needs attention"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1633
+#: libs/shell-ui/src/app/SessionPanel.tsx:1542
 msgid "Needs you"
 msgstr "Needs you"
 
@@ -646,7 +658,7 @@ msgstr "Needs you"
 msgid "New name for {name}"
 msgstr "New name for {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2559
+#: libs/shell-ui/src/app/SessionPanel.tsx:2468
 msgid "New session"
 msgstr "New session"
 
@@ -654,11 +666,11 @@ msgstr "New session"
 msgid "New session button"
 msgstr "New session button"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2683
+#: libs/shell-ui/src/app/SessionPanel.tsx:2592
 msgid "New session in folder…"
 msgstr "New session in folder…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:607
+#: libs/shell-ui/src/app/SessionPanel.tsx:605
 msgid "New session in workspace"
 msgstr "New session in workspace"
 
@@ -676,7 +688,7 @@ msgstr "New sessions in “{0}” start in this folder. Leave empty for your hom
 msgid "New tag colour"
 msgstr "New tag colour"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:289
+#: libs/shell-ui/src/app/SessionPanel.tsx:287
 msgid "New workspace"
 msgstr "New workspace"
 
@@ -696,7 +708,7 @@ msgstr "New worktree session"
 msgid "no clients"
 msgstr "no clients"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1223
+#: libs/shell-ui/src/app/SettingsModal.tsx:1232
 msgid "No icons configured — every session shows the default terminal icon."
 msgstr "No icons configured — every session shows the default terminal icon."
 
@@ -761,6 +773,10 @@ msgstr "Not signed in"
 msgid "not yet"
 msgstr "not yet"
 
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:20
+msgid "now"
+msgstr "now"
+
 #: libs/shell-ui/src/app/SettingsModal.tsx:674
 msgid "Off"
 msgstr "Off"
@@ -797,7 +813,7 @@ msgstr "Open"
 msgid "Open {title}"
 msgstr "Open {title}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2663
+#: libs/shell-ui/src/app/SessionPanel.tsx:2572
 msgid "Open a saved workspace set file"
 msgstr "Open a saved workspace set file"
 
@@ -832,11 +848,11 @@ msgstr "Open log folder…"
 msgid "Open preview in a tab"
 msgstr "Open preview in a tab"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2671
+#: libs/shell-ui/src/app/SessionPanel.tsx:2580
 msgid "Open workspace set from file…"
 msgstr "Open workspace set from file…"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2327
+#: libs/shell-ui/src/app/SessionPanel.tsx:2236
 msgid "Open…"
 msgstr "Open…"
 
@@ -882,7 +898,7 @@ msgstr "permissions:"
 msgid "phones and browsers signed in as the same account can attach"
 msgstr "phones and browsers signed in as the same account can attach"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2678
+#: libs/shell-ui/src/app/SessionPanel.tsx:2587
 msgid "Pick a folder — the new session starts in it"
 msgstr "Pick a folder — the new session starts in it"
 
@@ -899,7 +915,7 @@ msgstr "Preview"
 msgid "Preview unavailable"
 msgstr "Preview unavailable"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1232
+#: libs/shell-ui/src/app/SettingsModal.tsx:1241
 msgid "Process"
 msgstr "Process"
 
@@ -982,7 +998,7 @@ msgstr "Remote access"
 msgid "Remove"
 msgstr "Remove"
 
-#: libs/shell-ui/src/app/SettingsModal.tsx:1216
+#: libs/shell-ui/src/app/SettingsModal.tsx:1225
 msgid "Remove icon"
 msgstr "Remove icon"
 
@@ -994,7 +1010,7 @@ msgstr "Remove worktree"
 msgid "Rename {name}"
 msgstr "Rename {name}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1573
+#: libs/shell-ui/src/app/SessionPanel.tsx:1482
 msgid "Rename session"
 msgstr "Rename session"
 
@@ -1021,19 +1037,34 @@ msgstr "Reset colour of {tag}"
 msgid "Reset to derived colour ({0})"
 msgstr "Reset to derived colour ({0})"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:808
+#: libs/shell-ui/src/app/SessionPanel.tsx:806
 msgid "Reset to process name"
 msgstr "Reset to process name"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:75
+msgid "Resume"
+msgstr "Resume"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:72
+#~ msgid "Resume '{name}'"
+#~ msgstr "Resume '{name}'"
 
 #: libs/shell-ui/src/app/SessionPanel.tsx:
 #~ msgid "Resume {0} session{1}"
 #~ msgstr "Resume {0} session{1}"
 
 #. placeholder {0}: name ? ` '${name}'` : ''
-#: libs/shell-ui/src/app/session-plugins/agentResume.ts:262
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:38
+#: libs/shell-ui/src/app/session-plugins/agentResume.ts:379
 msgid "Resume {agent} session{0}"
 msgstr "Resume {agent} session{0}"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:75
+msgid "Resume {quoted}"
+msgstr "Resume {quoted}"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:81
+msgid "Resume an earlier {agent} session"
+msgstr "Resume an earlier {agent} session"
 
 #: libs/shell-ui/src/app/session-plugins/remoteLink.tsx:766
 msgid "Resume viewport"
@@ -1063,7 +1094,7 @@ msgstr "Run in a shell tab"
 msgid "Run the login in a shell, then check again."
 msgstr "Run the login in a shell, then check again."
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2622
+#: libs/shell-ui/src/app/SessionPanel.tsx:2531
 msgid "Running"
 msgstr "Running"
 
@@ -1073,11 +1104,11 @@ msgstr "sandboxed — no permissions (no shell, files or terminal access)"
 
 #: libs/shell-ui/src/app/EditSessionSummaryModal.tsx:123
 #: libs/shell-ui/src/app/SetDefaultFolderModal.tsx:75
-#: libs/shell-ui/src/app/SettingsModal.tsx:1278
+#: libs/shell-ui/src/app/SettingsModal.tsx:1287
 msgid "Save"
 msgstr "Save"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2323
+#: libs/shell-ui/src/app/SessionPanel.tsx:2232
 msgid "Save workspace set"
 msgstr "Save workspace set"
 
@@ -1123,8 +1154,8 @@ msgstr "Server address"
 #~ msgid "Server URL"
 #~ msgstr "Server URL"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:1609
-#: libs/shell-ui/src/app/SessionPanel.tsx:1611
+#: libs/shell-ui/src/app/SessionPanel.tsx:1518
+#: libs/shell-ui/src/app/SessionPanel.tsx:1520
 msgid "Session actions"
 msgstr "Session actions"
 
@@ -1156,7 +1187,7 @@ msgstr "Session summary"
 msgid "Session: {0}"
 msgstr "Session: {0}"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2617
+#: libs/shell-ui/src/app/SessionPanel.tsx:2526
 msgid "Sessions"
 msgstr "Sessions"
 
@@ -1190,11 +1221,11 @@ msgstr "Shell"
 msgid "Shell font"
 msgstr "Shell font"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2355
+#: libs/shell-ui/src/app/SessionPanel.tsx:2264
 msgid "Show all sessions"
 msgstr "Show all sessions"
 
-#: libs/shell-ui/src/app/SessionPanel.tsx:2355
+#: libs/shell-ui/src/app/SessionPanel.tsx:2264
 msgid "Show only sessions that need you"
 msgstr "Show only sessions that need you"
 

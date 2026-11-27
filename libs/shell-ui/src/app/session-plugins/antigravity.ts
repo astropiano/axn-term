@@ -2,7 +2,7 @@ import type { SessionViewContext, PluginApi, SessionViewPlugin } from './plugin'
 import { axnLog } from '../log';
 import { antigravityHookSpec } from './antigravityHooks';
 import { registerAgentLauncher } from './agentRegistry';
-import { agentResumeMenuItem, rememberLastAgentSession } from './agentResume';
+import { agentResumeMenuItem, noteAgentTitle, rememberLastAgentSession } from './agentResume';
 import { agentResumePanel } from './agentResumePanel';
 import { promptArg, shellQuote, shellWord } from '../../shellQuote';
 
@@ -92,6 +92,8 @@ export const antigravityPlugin: SessionViewPlugin = {
   id: 'antigravity',
   title: 'antigravity',
   logo: 'Bot',
+  // its sessions run as `agy` — one icon entry for the plugin and the process
+  iconKey: 'agy',
   version: '0.1.0',
   stateKey: 'antigravity',
   settingsKey: 'antigravity',
@@ -149,6 +151,7 @@ export const antigravityPlugin: SessionViewPlugin = {
 
   onOutput: (ctx, text) => {
     if (!isAgyProcess(ctx.session.process)) return;
+    noteAgentTitle(ctx, 'antigravity', text);
     const state = getState(ctx);
     if (!state.agySeen) {
       ctx.updatePluginState({ agySeen: true, agyCwd: ctx.getSession().cwd });
@@ -184,7 +187,7 @@ export const antigravityPlugin: SessionViewPlugin = {
       label: 'Resume Antigravity',
       kind: 'block',
       zone: 'selected',
-      value: (ctx) => agentResumePanel(ctx, 'antigravity'),
+      value: (ctx) => agentResumePanel(ctx, 'antigravity', antigravityPlugin),
     },
   ],
   // A submitted command starts new shell work — a terminal badge left by a

@@ -465,6 +465,21 @@ describe('parseClaudeResumeHint', () => {
       .toEqual({ id: 'abc-1', worktree: 'feat-x' });
   });
 
+  it('accepts the launch flags claude echoes in the hint', () => {
+    expect(parseClaudeResumeHint('Resume this session with:\nclaude --model haiku --resume abc-1\n'))
+      .toEqual({ id: 'abc-1' });
+    expect(parseClaudeResumeHint('Resume this session with:\nclaude --dangerously-skip-permissions --model opus -r abc-2\n'))
+      .toEqual({ id: 'abc-2' });
+    expect(
+      parseClaudeResumeHint('Resume this session with:\nclaude --model haiku --worktree "feat-x" --resume abc-3\n'),
+    ).toEqual({ id: 'abc-3', worktree: 'feat-x' });
+  });
+
+  it('does not take an id from a line that is not the hint', () => {
+    expect(parseClaudeResumeHint('claude --model haiku --resume abc-1\n')).toBeUndefined();
+    expect(parseClaudeResumeHint('Resume this session with:\nclaude --model haiku\n')).toBeUndefined();
+  });
+
   it('takes the newest hint and ignores an incomplete line', () => {
     const out = 'Resume this session with:\nclaude --resume old-1\n…\nResume this session with:\nclaude --resume new-2\n';
     expect(parseClaudeResumeHint(out)).toEqual({ id: 'new-2' });
