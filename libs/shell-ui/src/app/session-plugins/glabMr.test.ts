@@ -13,6 +13,8 @@ import {
   refreshMrOverview,
   resetMrOverview,
   glabMrPlugin,
+  extractTicketFromTitle,
+  glabMrIdentifiers,
   openThreads,
   countOpenThreads,
   mergedMrListCommand,
@@ -63,6 +65,27 @@ function mr(partial: Partial<GlabMrItem> = {}): GlabMrItem {
     ...partial,
   };
 }
+
+describe('ticket identifiers', () => {
+  it('extracts a capture group and normalizes it', () => {
+    expect(extractTicketFromTitle('[mgnl-42] improve search', '([A-Z]+-\\d+)')).toBe('MGNL-42');
+    expect(extractTicketFromTitle('unrelated', '([A-Z]+-\\d+)')).toBeUndefined();
+    expect(extractTicketFromTitle('MGNL-42', '[')).toBeUndefined();
+  });
+
+  it('publishes unique ticket identifiers from MR titles', () => {
+    expect(
+      glabMrIdentifiers({
+        session: {} as never,
+        pluginSettings: { ticketRegex: '([A-Z]+-\\d+)' },
+        pluginState: { mrs: [mr({ title: 'MGNL-1 first' }), mr({ title: 'mgnl-1 second' }), mr({ title: 'AIACC-2' })] },
+      }),
+    ).toEqual([
+      { value: 'MGNL-1', source: 'glab-mr', label: 'MR' },
+      { value: 'AIACC-2', source: 'glab-mr', label: 'MR' },
+    ]);
+  });
+});
 
 describe('openThreads', () => {
   it('counts only unresolved resolvable discussions', () => {

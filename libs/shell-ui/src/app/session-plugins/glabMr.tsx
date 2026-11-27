@@ -15,7 +15,13 @@ import {
   AlertTriangle,
   Check,
 } from 'lucide-react';
-import type { PluginApi, SessionViewContext, SessionViewPlugin } from './plugin';
+import type {
+  PluginApi,
+  SessionIdentifier,
+  SessionIdentifierContext,
+  SessionViewContext,
+  SessionViewPlugin,
+} from './plugin';
 import type { ShellSession, SessionAttention} from '../../types';
 import {
   createMrPeopleCache,
@@ -183,6 +189,53 @@ export function summarizeOpenThreads(
     }
   }
   return summary;
+}
+
+/**
+ * Try to extract a ticket key from an MR title using a configured regex pattern.
+ * If the pattern defines a capture group (e.g. `([A-Z]+-\\d+)`), the first group
+ * is returned; otherwise the entire match is used. Returns uppercase-normalized
+ * ticket key or undefined if not matched or pattern is invalid.
+ */
+export function extractTicketFromTitle(
+  title: string | undefined,
+  pattern: unknown,
+): string | undefined {
+  if (!title || typeof pattern !== 'string') return undefined;
+  const trimmed = pattern.trim();
+  if (!trimmed) return undefined;
+  try {
+    const re = new RegExp(trimmed, 'i');
+    const m = re.exec(title);
+    if (!m) return undefined;
+    const raw = (m[1] ?? m[0]).trim();
+    return raw ? raw.toUpperCase() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Publishes ticket keys spotted in the session's merge request titles via ticketRegex. */
+export function glabMrIdentifiers(ctx: SessionIdentifierContext): SessionIdentifier[] {
+  const settings = ctx.pluginSettings as { ticketRegex?: string } | undefined;
+  if (!settings?.ticketRegex) return [];
+  const mrs = (ctx.pluginState as { mrs?: SessionMr[] } | undefined)?.mrs;
+  if (!Array.isArray(mrs) || mrs.length === 0) return [];
+
+  const out: SessionIdentifier[] = [];
+  const seen = new Set<string>();
+  for (const mr of mrs) {
+    const ticket = extractTicketFromTitle(mr.title, settings.ticketRegex);
+    if (ticket && !seen.has(ticket)) {
+      seen.add(ticket);
+      out.push({
+        value: ticket,
+        source: 'glab-mr',
+        label: 'MR',
+      });
+    }
+  }
+  return out;
 }
 
 /**
@@ -1738,7 +1791,15 @@ export const glabMrPlugin: SessionViewPlugin = {
   title: 'GitLab merge requests',
   logo: 'GitMerge',
   version: '0.1.0',
+  sessionIdentifiers: glabMrIdentifiers,
   settings: [
+    {
+      key: 'ticketRegex',
+      label: 'Ticket regex',
+      description:
+        'Regex for spotting ticket keys in merge request titles (e.g. `[A-Z][A-Z0-9_]+-\\d+`). When set, spotted tickets are advertised as session identifiers.',
+      type: 'string',
+    },
     {
       key: 'showInPanel',
       label: 'Show merge requests in the session panel',

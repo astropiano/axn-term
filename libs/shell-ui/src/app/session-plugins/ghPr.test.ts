@@ -17,6 +17,7 @@ import {
   resetPrOverview,
   rollupStatus,
   normalizePr,
+  ghPrIdentifiers,
   threadsCommand,
   type GhPrItem,
   type RawPrListItem,
@@ -59,6 +60,21 @@ function pr(partial: Partial<GhPrItem> = {}): GhPrItem {
     ...partial,
   };
 }
+
+describe('ticket identifiers', () => {
+  it('publishes unique ticket identifiers from PR titles', () => {
+    expect(
+      ghPrIdentifiers({
+        session: {} as never,
+        pluginSettings: { ticketRegex: '([A-Z]+-\\d+)' },
+        pluginState: { prs: [{ title: 'AIACC-7 first' }, { title: 'aiacc-7 second' }, { title: 'MGNL-8' }] },
+      }),
+    ).toEqual([
+      { value: 'AIACC-7', source: 'gh-pr', label: 'PR' },
+      { value: 'MGNL-8', source: 'gh-pr', label: 'PR' },
+    ]);
+  });
+});
 
 describe('rollupStatus', () => {
   it('maps the GraphQL rollup enum', () => {

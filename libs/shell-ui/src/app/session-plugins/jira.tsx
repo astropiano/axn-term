@@ -171,6 +171,8 @@ export function findIssueKeys(text: string | undefined, projectKeys: string[]): 
 
 /** What a session offers for ticket derivation (see `sessionTicketKeys`). */
 export interface SessionTicketSources {
+  /** Advertised session identifiers (e.g. from MR/PR plugins). */
+  identifiers?: string[];
   /** Titles of the session's MRs/PRs (glab-mr / gh-pr per-session state). */
   mrTitles: string[];
   branch?: string | null;
@@ -180,12 +182,15 @@ export interface SessionTicketSources {
 }
 
 /**
- * Ticket keys of a session, tried in order: its MR/PR titles, then the
- * branch, then the session name (custom, else terminal-reported), then the
- * cwd's folder name — the first source yielding any key wins (it may yield
- * several), so a stale name never adds noise to a branch.
+ * Ticket keys of a session, tried in order: advertised identifiers (e.g. from
+ * MR/PR plugins), its MR/PR titles, then the branch, then the session name
+ * (custom, else terminal-reported), then the cwd's folder name — the first
+ * source yielding any key wins (it may yield several), so a stale name never
+ * adds noise to a branch.
  */
 export function sessionTicketKeys(src: SessionTicketSources, projectKeys: string[]): string[] {
+  const fromIdentifiers = [...new Set((src.identifiers ?? []).flatMap((id) => findIssueKeys(id, projectKeys)))];
+  if (fromIdentifiers.length) return fromIdentifiers;
   const fromTitles = [...new Set(src.mrTitles.flatMap((t) => findIssueKeys(t, projectKeys)))];
   if (fromTitles.length) return fromTitles;
   const fromBranch = findIssueKeys(src.branch ?? undefined, projectKeys);
@@ -542,11 +547,13 @@ function SessionTicketKeys({ keys }: { keys: string[] }) {
 function ticketKeysForSession(
   session: ShellSession,
   settings: unknown,
+  otherIdentifiers?: SessionIdentifier[],
 ): string[] {
   const result = jiraConfig(settings as PluginSettingsSection | undefined);
   if (!result.ok) return [];
   return sessionTicketKeys(
     {
+      identifiers: otherIdentifiers?.map((id) => id.value),
       mrTitles: sessionMrTitles(session.pluginState as Record<string, unknown> | undefined),
       branch: session.repo?.branch,
       name: session.name?.trim() || session.autoName,
@@ -557,11 +564,15 @@ function ticketKeysForSession(
 }
 
 function ticketsOf(ctx: SessionViewContext & PluginApi): string[] {
-  return ticketKeysForSession(ctx.session, ctx.pluginSettings);
+  return ticketKeysForSession(ctx.session, ctx.pluginSettings, ctx.getSessionIdentifiers());
 }
 
 function jiraIdentifiers(ctx: SessionIdentifierContext): SessionIdentifier[] {
-  return ticketKeysForSession(ctx.session, ctx.pluginSettings).map((value) => ({
+  return ticketKeysForSession(
+    ctx.session,
+    ctx.pluginSettings,
+    ctx.getOtherIdentifiers?.(),
+  ).map((value) => ({
     value,
     source: 'jira',
     label: 'Jira',
@@ -572,11 +583,13 @@ function jiraIdentifiers(ctx: SessionIdentifierContext): SessionIdentifier[] {
 export function sessionTicketGroups(
   sessions: ShellSession[],
   projectKeys: string[],
+  getIdentifiers?: (s: ShellSession) => SessionIdentifier[],
 ): { key: string; sessions: ShellSession[] }[] {
   const groups = new Map<string, ShellSession[]>();
   for (const s of sessions) {
     const keys = sessionTicketKeys(
       {
+        identifiers: getIdentifiers?.(s).map((id) => id.value),
         mrTitles: sessionMrTitles(s.pluginState as Record<string, unknown> | undefined),
         branch: s.repo?.branch,
         name: s.name?.trim() || s.autoName,
@@ -590,8 +603,12 @@ export function sessionTicketGroups(
 }
 
 /** Distinct ticket keys across the live sessions, in first-seen order. */
-export function sessionsTicketKeys(sessions: ShellSession[], projectKeys: string[]): string[] {
-  return sessionTicketGroups(sessions, projectKeys).map((g) => g.key);
+export function sessionsTicketKeys(
+  sessions: ShellSession[],
+  projectKeys: string[],
+  getIdentifiers?: (s: ShellSession) => SessionIdentifier[],
+): string[] {
+  return sessionTicketGroups(sessions, projectKeys, getIdentifiers).map((g) => g.key);
 }
 
 function JiraRail({
