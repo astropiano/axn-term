@@ -40,6 +40,10 @@
         <assert that="contains" value="resume record carries" description="Record carries the conversation name"/>
       </step>
 
+      <step adapter="axn-term" action="verifyResumeButton" description="The ended session shows the Resume button with the conversation name">
+        <assert that="contains" value="resume button shows: Resume claude session" description="The button's gate holds and its label carries the name"/>
+      </step>
+
       <step adapter="axn-term" action="close" description="Close axn-term (state saved)">
         <assert that="contains" value="app closed" description="The app closed"/>
       </step>

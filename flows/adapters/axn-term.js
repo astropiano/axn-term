@@ -1968,16 +1968,14 @@ async function runClaudeTitled(env, withPrompt) {
       await writeToSession(env, id, "Reply with exactly: ok");
       await sleep(1000);
       await writeToSession(env, id, "\r");
-      // claude animates its title glyph while it works (◐…) and shows ✳ when
-      // idle again: wait for a busy title, then an idle one.
-      const titles = (out) => [...out.matchAll(/\x1b\]0;([^\x07\x1b]*)(?:\x07|\x1b\\)/g)].map((m) => m[1]);
+      // The answer can arrive within a second, faster than any busy title
+      // could be polled — wait for claude's own "<verb> for 0s · done" line.
+      const plain = (out) =>
+        out.replace(/\x1b\[[0-9;?<>]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
       const done = Date.now() + 90000;
-      let busy = false;
       for (;;) {
         if (Date.now() > done) throw new Error("claude never finished answering");
-        const t = titles(await fresh()).filter(Boolean).pop() ?? "";
-        if (t && !t.startsWith("✳")) busy = true;
-        else if (busy && t.startsWith("✳")) break;
+        if (/\bfor\s+[0-9ms ]+·\s*done\b/.test(plain(await fresh()))) break;
         await sleep(1000);
       }
     }
@@ -2545,6 +2543,32 @@ export async function run(step, env) {
         throw new Error(`claude exit: ${error.message}; ${logTail(env)}`);
       }
       return expectRecord ? "claude exited, resume record exists" : "claude exited, nothing recorded";
+    }
+
+    // The Resume button the panel shows is computed from state: an idle
+    // session (no process, no agent input) sitting in the folder the
+    // conversation ran in, with this agent's record the newest. Mirror that
+    // gate, report the label, and keep a screenshot where the OS allows one.
+    case "verifyResumeButton": {
+      const title = env.AXN_TERM_CLAUDE_TITLE;
+      const s = (readStateFile(env).windows ?? [])
+        .flatMap((w) => w.sessions ?? [])
+        .find((x) => x.id === env.AXN_TERM_SESSION_ID);
+      const last = s?.pluginState?.claude?.last;
+      const norm = (p) => (p ?? "").replace(/\/+$/, "");
+      if (s?.process || s?.agentInput) throw new Error(`session is not idle: process=${s?.process} agentInput=${s?.agentInput}`);
+      if (!last) throw new Error("no resume record — no button");
+      // The app compares the two strings as they are (trailing slash aside).
+      if (norm(last.cwd) !== norm(s.cwd)) {
+        throw new Error(`record folder ${last.cwd} differs from the session's ${s.cwd} — the button would be hidden`);
+      }
+      if (last.title !== title) throw new Error(`button label would use '${last.title}', expected '${title}'`);
+      let shot = "";
+      if (process.platform === "darwin") {
+        const file = join(env.AXN_TERM_STATE_DIR, "resume-button.png");
+        try { execFileSync("screencapture", ["-x", file]); shot = `; screenshot ${file}`; } catch { /* no screen access */ }
+      }
+      return `resume button shows: Resume claude session '${last.title}'${shot}`;
     }
 
     // The saved resume record carries the name given while claude ran, the
