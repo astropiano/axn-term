@@ -207,6 +207,38 @@ export function cpuByKind(rootPid) {
   return o;
 }
 
+/** CPU seconds of the shells (and their children) the app hosts — the cost of starting them. */
+export function shellCpu(rootPid) {
+  if (IS_DARWIN) {
+    const rows = psTable();
+    const kids = new Map();
+    for (const r of rows) {
+      if (!kids.has(r.ppid)) kids.set(r.ppid, []);
+      kids.get(r.ppid).push(r);
+    }
+    let total = 0;
+    const walk = (pid) => {
+      for (const c of kids.get(pid) ?? []) {
+        total += c.cpu;
+        walk(c.pid);
+      }
+    };
+    walk(rootPid);
+    return total;
+  }
+  const all = [];
+  for (const d of readdirSync("/proc")) if (/^\d+$/.test(d)) { const st = readStat(+d); if (st) all.push(st); }
+  const kids = new Map();
+  for (const p of all) {
+    if (!kids.has(p.ppid)) kids.set(p.ppid, []);
+    kids.get(p.ppid).push(p);
+  }
+  let total = 0;
+  const walk = (pid) => { for (const c of kids.get(pid) ?? []) { if (SHELLISH.has(c.comm)) total += c.cpu; walk(c.pid); } };
+  walk(rootPid);
+  return total;
+}
+
 export const sumCpu = (o) => Object.values(o).reduce((a, b) => a + b, 0);
 
 /** Resident memory in MB for the app and its WebKit helpers. */
@@ -283,25 +315,43 @@ function restoreState(stateDir, sessions, select) {
   return target.id;
 }
 
+let loopsPerMs;
+/** How many iterations of a `while ((i<N)); do ((i++)); done` loop /bin/bash runs per ms of CPU. */
+function bashLoopsPerMs() {
+  if (loopsPerMs) return loopsPerMs;
+  const n = 300000;
+  const t = now();
+  execFileSync("/bin/bash", ["--noprofile", "--norc", "-c", `i=0; while ((i<${n})); do ((i++)); done`]);
+  loopsPerMs = n / Math.max(1, now() - t - 8); // minus the process start
+  return loopsPerMs;
+}
+
 /**
  * Launch the app and wait for its first prompt. Returns timing marks (ms
  * from spawn): health (Rust up, control server listening), window (webview
  * window exists), shell (selected session's PTY spawned), prompt (its first
  * prompt reached Rust), allShells (every restored session spawned).
  */
-export async function launch({ restore = 0, select = "first", trace = false, bannerKb = 0 } = {}) {
+export async function launch({ restore = 0, select = "first", trace = false, bannerKb = 0, rcCpuMs = 0 } = {}) {
   const runsDir = join(tmpdir(), "axn-term-perf");
   mkdirSync(runsDir, { recursive: true });
   const stateDir = mkdtempSync(join(runsDir, "s-"));
   const binDir = join(stateDir, "bin");
   mkdirSync(binDir);
   // Plain bash with a fixed prompt: keeps the user's dotfiles out of timings.
-  if (bannerKb > 0) {
+  if (bannerKb > 0 || rcCpuMs > 0) {
     // A shell that prints `bannerKb` KB of coloured lines before its first
     // prompt — what a restored session's start-up looks like (rc output, a
     // resumed agent redrawing its history).
+    // `rcCpuMs`: CPU burnt in the rc before the first prompt (what a heavy
+    // .zshrc — nvm, completions, prompt themes — costs every login shell).
+    const burn = rcCpuMs > 0
+      ? `i=0; while ((i < ${Math.round(rcCpuMs * bashLoopsPerMs())})); do ((i++)); done\n`
+      : "";
     writeFileSync(join(binDir, "rc"),
-      `yes "$(printf '\\033[32mok\\033[0m  compiled src/module/file.ts in 12ms \\033[2m(cached)\\033[0m')" | head -n ${Math.ceil((bannerKb * 1024) / 70)}\n`);
+      burn + (bannerKb > 0
+        ? `yes "$(printf '\\033[32mok\\033[0m  compiled src/module/file.ts in 12ms \\033[2m(cached)\\033[0m')" | head -n ${Math.ceil((bannerKb * 1024) / 70)}\n`
+        : ""));
     writeFileSync(join(binDir, "axn-login-shell"),
       `#!/bin/sh\nexec env PS1='AXNREADY$ ' /bin/bash --noprofile --rcfile "${join(binDir, "rc")}" "$@"\n`, { mode: 0o755 });
   } else {

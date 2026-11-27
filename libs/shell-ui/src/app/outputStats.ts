@@ -27,6 +27,8 @@ interface Stats {
   lagMaxMs: number;
   lagSumMs: number;
   lagOver50: number;
+  /** timer ticks skipped because the page was hidden (throttled) */
+  hiddenTicks: number;
 }
 
 const stats: Stats = {
@@ -39,6 +41,7 @@ const stats: Stats = {
   lagMaxMs: 0,
   lagSumMs: 0,
   lagOver50: 0,
+  hiddenTicks: 0,
 };
 
 const enabled = () => !!(globalThis as { __AXN_PERF__?: unknown }).__AXN_PERF__;
@@ -54,6 +57,12 @@ function start(): void {
     const t = performance.now();
     const late = t - last - 20;
     last = t;
+    // A hidden/occluded page gets its timers throttled to 1 Hz by the engine —
+    // that is not a stall, and would drown the real ones.
+    if (document.visibilityState === 'hidden') {
+      stats.hiddenTicks += 1;
+      return;
+    }
     if (late > 0) {
       stats.lagSumMs += late;
       if (late > stats.lagMaxMs) stats.lagMaxMs = late;

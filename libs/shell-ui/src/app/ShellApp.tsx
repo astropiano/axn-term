@@ -43,6 +43,7 @@ import {
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
 import { timeOutput } from './outputStats';
 import { setPtyPaused } from './ptyPause';
+import { createRestoreQueue } from './restoreQueue';
 import { dropSessionBuffer, keepPtyAlive, setBufferPriority, writeSessionBuffer, serializeTerminal, sessionBufferIds, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf, trackSessionBuffer } from '../terminalRegistry';
 import { acquirePty, syncRetainedPtys } from '../ptyLifetime';
 import { foregroundStatusPatch } from '../foregroundStatus';
@@ -153,6 +154,8 @@ import { resolveStatusDisplay, type StatusDisplay } from './panelStatus';
 const SMALL_SCREEN_QUERY = '(max-width: 639px)';
 /** How often batched terminal output reaches session state and plugins. */
 const OUTPUT_FLUSH_INTERVAL_MS = 50;
+/** Sessions whose shells start at once while a window restores. */
+const RESTORE_CONCURRENCY = 3;
 
 
 
@@ -1082,6 +1085,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       offs.push(
         backend.onOutput(ptyId, (bytes) =>
           timeOutput('headless', bytes.length, () => {
+            firstOutputWaitersRef.current.get(sessionId)?.(); // a restoring shell is up
             writeSessionBuffer(sessionId, bytes);
             const [complete, tail] = splitAnsiTail(
               pending + decoder.decode(bytes, { stream: true }),
@@ -1703,34 +1707,88 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // own acquire can still claim the spawn first (child effects run before
   // this parent effect); whichever claims it fires handleSessionReady once
   // via the notified flag.
+  //
+  // A window's sessions start a few at a time, the selected one first
+  // (restoreQueue.ts): all together their login shells saturate every core and
+  // the one the user is looking at gets its prompt last. The leases are taken
+  // at once; only the spawn itself waits its turn.
+  const restoreQueueRef = useRef(createRestoreQueue({ concurrency: RESTORE_CONCURRENCY }));
+  const queuedForRestoreRef = useRef(new Set<string>());
+  const firstOutputWaitersRef = useRef(new Map<string, () => void>());
+  const spawnHandlesRef = useRef(new Map<string, ReturnType<typeof acquirePty>>());
   useEffect(() => {
-    perfMark('spawn_effect_start', String(sessionPtyKey.split('\u0000').filter(Boolean).length));
-    const handles = sessionPtyKey
+    const queue = restoreQueueRef.current;
+    const queued = queuedForRestoreRef.current;
+    const pairs = sessionPtyKey
       .split('\u0000')
       .filter(Boolean)
       .map((pair) => {
         const [sessionId, rest] = pair.split('=');
-        const [ptyId] = rest.split(':');
-        const session = sessionsRef.current.find((s) => s.id === sessionId);
-        if (!session) return undefined;
-        const handle = acquirePty(backend, ptyId, () =>
-          backend.createSession(ptyId, {
-            shell: settings.defaultShell?.trim() || undefined,
-            cwd: session.cwd,
-            // No view exists to fit — the backend default size; a mounted
-            // view's post-spawn resize corrects it once it attaches.
-            cols: 80,
-            rows: 24,
-          }),
-        );
-        void handle.start().then((spawned: boolean) => {
-          if (spawned) handleSessionReady(session);
-        });
-        return handle;
+        return { sessionId, ptyId: rest.split(':')[0] };
       });
+    perfMark('spawn_effect_start', String(pairs.length));
+    // the selected session first, the rest in panel order
+    const selectedId = selectedSessionIdRef.current;
+    pairs.sort((x, y) => Number(y.sessionId === selectedId) - Number(x.sessionId === selectedId));
+    // a session that went away before its turn is forgotten
+    const live = new Set(pairs.map((p) => p.sessionId));
+    for (const id of [...queued]) {
+      if (!live.has(id)) {
+        queue.cancel(id);
+        queued.delete(id);
+        spawnHandlesRef.current.delete(id);
+      }
+    }
+    const handles = pairs.map(({ sessionId, ptyId }) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return undefined;
+      const handle = acquirePty(backend, ptyId, () =>
+        backend.createSession(ptyId, {
+          shell: settings.defaultShell?.trim() || undefined,
+          cwd: session.cwd,
+          // No view exists to fit — the backend default size; a mounted
+          // view's post-spawn resize corrects it once it attaches.
+          cols: 80,
+          rows: 24,
+        }),
+      );
+      spawnHandlesRef.current.set(sessionId, handle);
+      if (!queued.has(sessionId)) {
+        queued.add(sessionId);
+        queue.enqueue(sessionId, async () => {
+          const current = spawnHandlesRef.current.get(sessionId);
+          if (!current) return undefined;
+          // The first output is the signal that this shell is up (its rc has
+          // run) and the next one may start; the session's headless buffer
+          // subscription reports it (`firstOutputWaitersRef`).
+          const waiters = firstOutputWaitersRef.current;
+          const firstOutput = new Promise<void>((resolve) => waiters.set(sessionId, resolve));
+          let spawned = false;
+          try {
+            spawned = await current.start();
+          } catch {
+            spawned = false;
+          }
+          if (!spawned) {
+            waiters.delete(sessionId);
+            return undefined; // already running (a mounted view claimed it) or failed
+          }
+          const live = sessionsRef.current.find((s) => s.id === sessionId);
+          if (live) handleSessionReady(live);
+          return { ready: firstOutput.finally(() => waiters.delete(sessionId)) };
+        });
+      }
+      return handle;
+    });
     perfMark('spawn_effect_end');
     return () => handles.forEach((h) => h?.release());
   }, [backend, sessionPtyKey, handleSessionReady, settings.defaultShell]);
+
+  // Switching to a session that is still waiting its turn: its view spawns it
+  // on mount; this only moves it to the front for the ones nobody asked for.
+  useEffect(() => {
+    if (selectedSessionId) restoreQueueRef.current.prioritize(selectedSessionId);
+  }, [selectedSessionId]);
 
   // Fire plugin.onProcessEnd when a session's foreground process stops matching
   // the plugin's processPattern (e.g. devin exits and the shell takes over).

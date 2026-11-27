@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import {
   REPO, binaryPath, close, cpuByKind, dataDir, fileSize, idleCpu, launch, median, meta, metric,
-  now, percentile, readTrace, rssMb, runCount, sleep, sumCpu, waitForOutput, waitIdle, write,
+  now, percentile, readTrace, rssMb, runCount, shellCpu, sleep, sumCpu, waitForOutput, waitIdle, write,
 } from "../perf/lib.mjs";
 
 const args = (step) => step.args ?? {};
@@ -420,10 +420,11 @@ async function restoreStorm(step) {
   const a = args(step);
   const sessions = Number(a.sessions ?? 12);
   const banner = Number(a.banner ?? 256);
+  const rcMs = Number(a.rc ?? 0);
   const runs = runCount(step, 3);
-  const col = { queue: [], idle: [], cpu: [], web: [], main: [], rss: [], lagMax: [], lagOver50: [], lagSum: [], headless: [], visible: [], flush: [], bytes: [], first: [] };
+  const col = { shells: [], lastShell: [], queue: [], idle: [], cpu: [], web: [], main: [], rss: [], lagMax: [], lagOver50: [], lagSum: [], headless: [], visible: [], flush: [], bytes: [], first: [] };
   for (let i = 0; i < runs; i++) {
-    const app = await launch({ restore: sessions, select: "first", trace: true, bannerKb: banner });
+    const app = await launch({ restore: sessions, select: "first", trace: true, bannerKb: banner, rcCpuMs: rcMs });
     try {
       let peak = rssMb(app.pid);
       const t0 = app.t0;
@@ -443,8 +444,18 @@ async function restoreStorm(step) {
         if (quiet >= 4) { idleAt = ct - t0 - 1000; break; }
       }
       const cpu = cpuByKind(app.pid);
+      if (process.env.AXN_PERF_TIMELINE) {
+        // what the app was doing when each stall hit: every mark, relative to spawn
+        const lines = readTrace(app)
+          .filter((e) => e.name !== "output_stats")
+          .map((e) => `t+${String(Math.round(e.epochMs - app.spawnEpoch)).padStart(6)} ms  ${e.name.padEnd(22)} ${e.detail ?? ""}`);
+        writeFileSync(process.env.AXN_PERF_TIMELINE, lines.join("\n") + "\n");
+      }
       const stats = readTrace(app).filter((e) => e.name === "output_stats").pop();
       const o = stats?.detail ? JSON.parse(stats.detail) : {};
+      const firsts = readTrace(app).filter((e) => e.name === "pty_first_output").map((e) => e.epochMs - app.spawnEpoch);
+      col.lastShell.push(firsts.length >= sessions ? Math.max(...firsts) : null);
+      col.shells.push(shellCpu(app.pid));
       col.queue.push(o.queuePeakKb);
       col.idle.push(idleAt);
       col.cpu.push(sumCpu(cpu));
@@ -463,8 +474,10 @@ async function restoreStorm(step) {
       await close(app);
     }
   }
-  const p = `restore.${sessions}x${banner}kb`;
+  const p = `restore.${sessions}x${banner}kb${rcMs ? `_rc${rcMs}` : ""}`;
   metric(`${p}.first_prompt_ms`, { samples: col.first, unit: "ms", digits: 0, description: "selected session's first prompt, from spawn" });
+  metric(`${p}.last_shell_ms`, { samples: col.lastShell, unit: "ms", digits: 0, description: "spawn → the last restored session's first output (all shells up)" });
+  metric(`${p}.shell_cpu_s`, { samples: col.shells, unit: "s", digits: 1, better: "none", description: "CPU the hosted shells burnt starting up" });
   metric(`${p}.idle_ms`, { samples: col.idle, unit: "ms", digits: 0, description: "spawn → the app is quiet again (CPU < 5 % for 1 s)" });
   metric(`${p}.cpu_s`, { samples: col.cpu, unit: "s", digits: 1, description: "CPU seconds, app + WebKit, for the whole restore" });
   metric(`${p}.cpu_web_s`, { samples: col.web, unit: "s", digits: 1, description: "CPU in the WebKit content process (xterm, plugins, React)" });
