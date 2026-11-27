@@ -167,7 +167,7 @@ it('keeps a name given to addSession when the terminal reports its own title', a
   });
   const byId = (id: string) => hook.sessions.find((s) => s.id === id)!;
   expect(byId(named).name).toBe('!753 fix the thing');
-  expect(byId(named).autoName).toBe('me@host:/repo/worktrees/repo-mr-753');
+  expect(byId(named).autoName).toBe('/repo/worktrees/repo-mr-753');
   // Without a chosen name the terminal title still names the session.
-  expect(byId(plain).name).toBe('me@host:/tmp');
+  expect(byId(plain).name).toBe('/tmp');
 });
