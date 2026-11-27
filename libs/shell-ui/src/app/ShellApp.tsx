@@ -1717,7 +1717,15 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // (restoreQueue.ts): all together their login shells saturate every core and
   // the one the user is looking at gets its prompt last. The leases are taken
   // at once; only the spawn itself waits its turn.
-  const restoreQueueRef = useRef(createRestoreQueue({ concurrency: RESTORE_CONCURRENCY, readyTimeoutMs: RESTORE_SLOT_TIMEOUT_MS }));
+  const restoreConcurrencyRef = useRef(settings.restoreConcurrency);
+  restoreConcurrencyRef.current = settings.restoreConcurrency;
+  const restoreQueueRef = useRef(createRestoreQueue({
+      concurrency: () => {
+        const c = restoreConcurrencyRef.current;
+        return c === undefined ? RESTORE_CONCURRENCY : c <= 0 ? Number.MAX_SAFE_INTEGER : c;
+      },
+      readyTimeoutMs: RESTORE_SLOT_TIMEOUT_MS,
+    }));
   const queuedForRestoreRef = useRef(new Set<string>());
   const firstOutputWaitersRef = useRef(new Map<string, () => void>());
   const spawnHandlesRef = useRef(new Map<string, ReturnType<typeof acquirePty>>());

@@ -332,7 +332,7 @@ function bashLoopsPerMs() {
  * window exists), shell (selected session's PTY spawned), prompt (its first
  * prompt reached Rust), allShells (every restored session spawned).
  */
-export async function launch({ restore = 0, select = "first", trace = false, bannerKb = 0, rcCpuMs = 0 } = {}) {
+export async function launch({ restore = 0, select = "first", trace = false, bannerKb = 0, rcCpuMs = 0, config = "" } = {}) {
   const runsDir = join(tmpdir(), "axn-term-perf");
   mkdirSync(runsDir, { recursive: true });
   const stateDir = mkdtempSync(join(runsDir, "s-"));
@@ -358,6 +358,7 @@ export async function launch({ restore = 0, select = "first", trace = false, ban
     writeFileSync(join(binDir, "axn-login-shell"),
       `#!/bin/sh\nexec env PS1='AXNREADY$ ' /bin/bash --noprofile --norc "$@"\n`, { mode: 0o755 });
   }
+  if (config) writeFileSync(join(stateDir, "config.yaml"), config);
   const target = restore > 0 ? restoreState(stateDir, restore, select) : undefined;
   const traceFile = trace ? join(stateDir, "perf-trace.jsonl") : undefined;
 

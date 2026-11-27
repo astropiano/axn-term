@@ -469,10 +469,11 @@ async function restoreStorm(step) {
   const sessions = Number(a.sessions ?? 12);
   const banner = Number(a.banner ?? 256);
   const rcMs = Number(a.rc ?? 0);
+  const concurrency = a.concurrency === undefined ? undefined : Number(a.concurrency);
   const runs = runCount(step, 3);
   const col = { shells: [], lastShell: [], queue: [], idle: [], cpu: [], web: [], main: [], rss: [], lagMax: [], lagOver50: [], lagSum: [], headless: [], visible: [], flush: [], bytes: [], first: [] };
   for (let i = 0; i < runs; i++) {
-    const app = await launch({ restore: sessions, select: "first", trace: true, bannerKb: banner, rcCpuMs: rcMs });
+    const app = await launch({ restore: sessions, select: "first", trace: true, bannerKb: banner, rcCpuMs: rcMs, config: concurrency === undefined ? "" : `restoreConcurrency: ${concurrency}\n` });
     try {
       let peak = rssMb(app.pid);
       const t0 = app.t0;
@@ -522,7 +523,7 @@ async function restoreStorm(step) {
       await close(app);
     }
   }
-  const p = `restore.${sessions}x${banner}kb${rcMs ? `_rc${rcMs}` : ""}`;
+  const p = `restore.${sessions}x${banner}kb${rcMs ? `_rc${rcMs}` : ""}${concurrency === undefined ? "" : `_c${concurrency}`}`;
   metric(`${p}.first_prompt_ms`, { samples: col.first, unit: "ms", digits: 0, description: "selected session's first prompt, from spawn" });
   metric(`${p}.last_shell_ms`, { samples: col.lastShell, unit: "ms", digits: 0, description: "spawn → the last restored session's first output (all shells up)" });
   metric(`${p}.shell_cpu_s`, { samples: col.shells, unit: "s", digits: 1, better: "none", description: "CPU the hosted shells burnt starting up" });

@@ -26,6 +26,25 @@ describe('createRestoreQueue', () => {
     expect(q.stats()).toMatchObject({ queued: 0 });
   });
 
+  it('reads the concurrency again when a slot frees (a setting change reaches the waiting sessions)', async () => {
+    let limit = 1;
+    const q = createRestoreQueue({ concurrency: () => limit });
+    const readies = new Map<string, () => void>();
+    const started: string[] = [];
+    for (const id of ['a', 'b', 'c', 'd']) {
+      q.enqueue(id, async () => {
+        started.push(id);
+        return { ready: new Promise<void>((r) => readies.set(id, r)) };
+      });
+    }
+    await flush();
+    expect(started).toEqual(['a']);
+    limit = 3;
+    readies.get('a')!();
+    await flush();
+    expect(started).toEqual(['a', 'b', 'c', 'd']);
+  });
+
   it('a session with nothing to wait for settles at once', async () => {
     const q = createRestoreQueue({ concurrency: 1 });
     const started: string[] = [];

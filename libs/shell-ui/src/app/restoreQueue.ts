@@ -16,7 +16,8 @@
  */
 
 export interface RestoreQueueOptions {
-  concurrency?: number;
+  /** Sessions starting at once — a function so a setting change applies to the sessions still waiting. */
+  concurrency?: number | (() => number);
   readyTimeoutMs?: number;
   setTimeoutFn?: (fn: () => void, ms: number) => unknown;
   clearTimeoutFn?: (handle: unknown) => void;
@@ -38,7 +39,10 @@ export interface RestoreQueue {
 }
 
 export function createRestoreQueue(options: RestoreQueueOptions = {}): RestoreQueue {
-  const concurrency = Math.max(1, options.concurrency ?? 3);
+  const limit = () => {
+    const c = typeof options.concurrency === 'function' ? options.concurrency() : options.concurrency;
+    return Math.max(1, c ?? 3);
+  };
   const readyTimeoutMs = options.readyTimeoutMs ?? 4000;
   const setT = options.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
   const clearT = options.clearTimeoutFn ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
@@ -48,7 +52,7 @@ export function createRestoreQueue(options: RestoreQueueOptions = {}): RestoreQu
   let done = 0;
 
   function pump(): void {
-    while (running < concurrency && waiting.length > 0) {
+    while (running < limit() && waiting.length > 0) {
       const job = waiting.shift()!;
       running += 1;
       let settled = false;
