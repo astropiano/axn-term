@@ -963,6 +963,17 @@ function findShellTab(env) {
   throw new Error("no agent shell tab in state.json");
 }
 
+/** The persisted agent-first session (mainView 'agent') from state.json. */
+function findAcpSession(env) {
+  const state = readStateFile(env);
+  for (const w of state.windows ?? []) {
+    for (const s of w.sessions ?? []) {
+      if (s.mainView === "agent") return s;
+    }
+  }
+  throw new Error("no agent session in state.json");
+}
+
 /** Poll state.json until `predicate(state)` holds. */
 async function waitForState(env, predicate, timeoutMs = 30000) {
   const start = Date.now();
@@ -2704,6 +2715,50 @@ export async function run(step, env) {
         await sleep(500);
       }
       throw new Error(`remote auth never reached ${want}: ${JSON.stringify(last)} ${logTail(env)}`);
+    }
+
+    // Hidden command `axn-acp-session <agent>` through the frontend command
+    // dispatch, then wait until state.json shows a session pinned to the
+    // agent main view (an agent-first session has no PTY — it never appears
+    // in GET /sessions, only in the persisted window state).
+    case "runAcpSession": {
+      const shellId = env.AXN_TERM_SESSION_ID;
+      if (!shellId) throw new Error("no shell session — run 'start' first");
+      const agentArgv = env.AXN_ACP_COMMAND ?? "vibe-acp";
+      await sendCommand(env, shellId, `axn-acp-session ${agentArgv}`);
+      await waitForState(env, (state) =>
+        (state.windows ?? []).flatMap((w) => w.sessions ?? [])
+          .some((s) => s.mainView === "agent"));
+      const session = findAcpSession(env);
+      env.AXN_ACP_SESSION_ID = session.id;
+      assertNoErrorBoundary(env, "acp session open");
+      return `acp session opened: ${session.id} (${(session.acpCommand ?? []).join(" ")})`;
+    }
+
+    // The frontend's acpClient must complete initialize + session/new against
+    // the real agent before it assigns session.acpSessionId (kept for
+    // `session/load` on remount) — so its appearance in state.json proves
+    // the whole spawnProcess → NDJSON handshake round-trip worked.
+    case "verifyAcpHandshake": {
+      const want = env.AXN_ACP_SESSION_ID;
+      await waitForState(env, (state) => {
+        const s = (state.windows ?? []).flatMap((w) => w.sessions ?? [])
+          .find((x) => x.mainView === "agent" && (!want || x.id === want));
+        return s?.acpSessionId ? s : false;
+      }, 60000);
+      const session = findAcpSession(env);
+      assertNoErrorBoundary(env, "acp handshake");
+      return `acp handshake done: ${session.acpSessionId}`;
+    }
+
+    // Post-close: the agent session (and its ACP id for session/load on
+    // remount) survived into the saved window state.
+    case "verifyAcpPersisted": {
+      const session = findAcpSession(env);
+      if (!session.acpSessionId) {
+        throw new Error(`agent session ${session.id} has no acpSessionId in saved state`);
+      }
+      return `acp session persisted: ${session.acpSessionId}`;
     }
 
     default:

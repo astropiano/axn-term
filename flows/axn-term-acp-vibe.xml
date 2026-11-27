@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flows>
+  <flow name="axn-term - ACP agent session via vibe-acp"
+        description="Real Mistral Vibe over ACP: the axn-acp-session hidden command opens an agent-first session (mainView 'agent', no PTY), the frontend acpClient drives initialize + session/new over the agent's stdio, and the assigned acpSessionId lands in state.json for session/load on remount. Requires the mistral-vibe tool installed and authenticated (vibe-acp on PATH).">
+    <tags>
+      <tag>axn-term</tag>
+    </tags>
+    <setup>
+      <env>
+        <var name="AXN_TERM_BINARY" value="target/release/axn-term" />
+        <var name="AXN_TERM_TEST_VARIANT" value="acp-vibe" />
+      </env>
+    </setup>
+    <steps>
+      <step adapter="axn-term" action="prepare" description="Create a temp state dir">
+        <assert that="contains" value="state dir prepared" description="The test harness is ready"/>
+      </step>
+
+      <step adapter="axn-term" action="start" description="Launch axn-term with the temp state dir">
+        <assert that="contains" value="app started" description="The app started"/>
+      </step>
+
+      <step adapter="axn-term" action="runAcpSession" description="Run axn-acp-session vibe-acp in the shell session — an agent-first session must appear in the window state">
+        <assert that="contains" value="acp session opened" description="An agent session was created"/>
+      </step>
+
+      <step adapter="axn-term" action="verifyAcpHandshake" description="acpSessionId appears — initialize + session/new completed against real vibe-acp">
+        <assert that="contains" value="acp handshake done" description="The ACP handshake completed"/>
+      </step>
+
+      <step adapter="axn-term" action="close" description="Close axn-term (state saved)">
+        <assert that="contains" value="app closed" description="The app closed"/>
+      </step>
+
+      <step adapter="axn-term" action="verifyAcpPersisted" description="The agent session and its ACP id survive in the saved state">
+        <assert that="contains" value="acp session persisted" description="Persisted state carries the agent session"/>
+      </step>
+    </steps>
+  </flow>
+</flows>

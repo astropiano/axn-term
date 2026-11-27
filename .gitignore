@@ -54,3 +54,6 @@ scenarios/**/certs/
 
 # Local worktrees
 worktrees/
+
+# axn-dev local tooling (knowledge corpus, machine state)
+.axn-dev/

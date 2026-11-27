@@ -10,6 +10,8 @@ export interface PickerItem {
   detail?: string;
   /** Rows sharing a group render under one header, in first-seen order. */
   group?: string;
+  /** Leading glyph — replaces the check/spacer slot. */
+  icon?: ReactNode;
   /** Shown but not pickable — e.g. the session's current workspace. */
   disabled?: boolean;
   /** Short trailing marker, e.g. "current". */
@@ -138,11 +140,11 @@ export function SearchPickerModal({
                     active === i ? 'bg-[var(--surface-hover)]' : ''
                   } ${item.disabled ? 'cursor-default text-[var(--text-secondary)]' : 'text-[var(--text-primary)]'}`}
                 >
-                  {item.disabled ? (
+                  {item.icon ?? (item.disabled ? (
                     <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                   ) : (
                     <span className="h-3.5 w-3.5 shrink-0" />
-                  )}
+                  ))}
                   <span className="min-w-0 truncate">{item.label}</span>
                   {item.detail && (
                     <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-secondary)]">

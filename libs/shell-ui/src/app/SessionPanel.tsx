@@ -525,6 +525,7 @@ function WorkspaceHeader({
 }) {
   const { t } = useLingui();
   const { settings } = useSettings();
+  const iconBag = useIconBag();
   const { editing, input, startEdit } = useEditableName(workspace.name, onRename);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition>({ x: 0, y: 0 });
@@ -643,7 +644,7 @@ function WorkspaceHeader({
           onNewAgentSession={
             onNewAgentSession
               ? () =>
-                  void pickAcpAgent().then(
+                  void pickAcpAgent(settings.acpAgents ?? {}, iconBag).then(
                     (argv) => argv && onNewAgentSession(argv),
                   )
               : undefined
@@ -671,8 +672,6 @@ interface SessionContextMenuProps {
   /** Moves the session into a new window; absent hides the row. */
   onMoveToNewWindow?: () => void;
   onSubShell: () => void;
-  /** Opens the agent picker and starts a `mainView:'agent'` session; absent where no process backend exists. */
-  onNewAgentSession?: () => void;
   onBrowse: () => void;
   onIde: () => void;
   /** Copies the shell's live working directory; absent where it can't be read. */
@@ -695,7 +694,6 @@ function SessionContextMenu({
   onRequestMove,
   onMoveToNewWindow,
   onSubShell,
-  onNewAgentSession,
   onBrowse,
   onIde,
   onCopyPath,
@@ -880,19 +878,6 @@ function SessionContextMenu({
         <SquareTerminal className="h-3.5 w-3.5 shrink-0" />
         New sub-shell
       </button>
-      {onNewAgentSession && (
-        <button
-          type="button"
-          onClick={() => {
-            onNewAgentSession();
-            onClose();
-          }}
-          className={itemClass}
-        >
-          <Bot className="h-3.5 w-3.5 shrink-0" />
-          New agent session…
-        </button>
-      )}
       {onTurnIntoWorkspace && (
         <button
           type="button"
@@ -1023,15 +1008,22 @@ import { SessionIconGlyph, PluginIcon } from './iconGlyph';
 
 export function SessionIcon({
   process,
+  acpCommand,
   className = 'h-4 w-4 shrink-0',
 }: {
   process?: string;
+  /** Agent argv for ACP sessions — its executable looks up the icon bag. */
+  acpCommand?: string[];
   className?: string;
 }) {
   const bag = useIconBag();
   return (
     <SessionIconGlyph
-      value={resolveProcessIcon(process, bag)}
+      value={resolveProcessIcon(
+        acpCommand?.[0] ?? process,
+        bag,
+        acpCommand ? 'Bot' : 'SquareTerminal',
+      )}
       className={className}
     />
   );
@@ -1062,7 +1054,6 @@ export function SessionItem({
   onOpenIde,
   onOpenTab,
   onAddSession,
-  onNewAgentSession,
   pluginData,
   mergePluginData,
   isDragging,
@@ -1103,8 +1094,6 @@ export function SessionItem({
     agent?: AgentCli,
   ) => string | undefined;
   onAddSession: (workspaceId?: string, cwd?: string, name?: string) => void;
-  /** Starts an agent (`mainView:'agent'`) session with the picked argv; absent where no process backend exists. */
-  onNewAgentSession?: (acpCommand: string[]) => void;
   onTurnIntoWorkspace: (sessionId: string) => void;
   updateSession: (sessionId: string, patch: Partial<ShellSession>) => void;
   mergePluginState: (sessionId: string, stateKey: string, patch: Record<string, unknown>) => void;
@@ -1471,7 +1460,7 @@ export function SessionItem({
               />
             )}
             <span className="relative flex">
-              <SessionIcon process={session.process} className="h-3.5 w-3.5 shrink-0" />
+              <SessionIcon process={session.process} acpCommand={session.acpCommand} className="h-3.5 w-3.5 shrink-0" />
             </span>
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
@@ -1633,14 +1622,6 @@ export function SessionItem({
           onMoveToNewWindow={onMoveToNewWindow}
           onCloseSession={onCloseSession}
           onSubShell={() => onOpenSubShell(session.id)}
-          onNewAgentSession={
-            onNewAgentSession
-              ? () =>
-                  void pickAcpAgent().then(
-                    (argv) => argv && onNewAgentSession(argv),
-                  )
-              : undefined
-          }
           onTurnIntoWorkspace={
             // Only offered when the session actually has sub-shell tabs.
             (session.editors ?? []).some((e) => e.kind === 'shell')
@@ -2371,7 +2352,7 @@ export function SessionPanel({
                   }
                   hasSession={representativeSession(workspace) !== undefined}
                   onNewAgentSession={
-                    backend.spawnProcess && onNewAgentSession
+                    backend.spawnProcess && onNewAgentSession && Object.keys(settings.acpAgents ?? {}).length > 0
                       ? (argv) => onNewAgentSession(workspace.id, workspace.defaultFolder, argv)
                       : undefined
                   }
@@ -2421,12 +2402,6 @@ export function SessionPanel({
                         onOpenTab={onOpenTab}
                         onOpenSubShell={onOpenSubShell}
                         onAddSession={onAddSession}
-                        onNewAgentSession={
-                          backend.spawnProcess && onNewAgentSession
-                            ? (argv) =>
-                                onNewAgentSession(session.workspaceId, session.cwd, argv)
-                            : undefined
-                        }
                         onTurnIntoWorkspace={onTurnIntoWorkspace}
                         pluginData={pluginData}
                         mergePluginData={mergePluginData}
