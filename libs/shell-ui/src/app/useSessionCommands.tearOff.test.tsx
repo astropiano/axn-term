@@ -39,6 +39,7 @@ async function mount(sessions: ShellSession[], tearOffSession?: SessionCommandDe
     buildPluginApi: vi.fn() as unknown as SessionCommandDeps['buildPluginApi'],
     openSession: vi.fn(),
     openSubShell: vi.fn(),
+    openAcpTab: vi.fn(),
     addWorkspace: vi.fn(() => 'ws-2'),
     moveSessionToWorkspace: vi.fn(),
     moveWorkspace: vi.fn(),

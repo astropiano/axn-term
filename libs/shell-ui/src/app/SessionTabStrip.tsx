@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLingui } from '@lingui/react/macro';
-import { Eye, FileText, Folder, GitBranch, SquareTerminal, Terminal, X , PanelLeft} from 'lucide-react';
-import type { EditorTab } from '../types';
+import { Bot, Eye, FileText, Folder, GitBranch, SquareTerminal, Terminal, X , PanelLeft} from 'lucide-react';
+import type { EditorTab, SessionMainView } from '../types';
 import { defaultTabLabel } from './subshellPromote';
 import { useSettings } from '../SettingsProvider';
 import { tabStripTabClasses } from './tabStyles';
@@ -16,6 +16,8 @@ import { TabStrip } from './TabStrip';
 export function SessionTabStrip({
   editors,
   activeTab,
+  mainView,
+  mainLabel,
   onSelect,
   onTabMenu,
   onReorder,
@@ -23,6 +25,10 @@ export function SessionTabStrip({
 }: {
   editors: EditorTab[];
   activeTab: string;
+  /** The pinned leftmost tab's view — 'agent' shows the agent chat instead of the shell. */
+  mainView?: SessionMainView;
+  /** Label for the pinned agent tab (the agent command); absent falls back to 'agent'. */
+  mainLabel?: string;
   onSelect: (tabId: string) => void;
   onTabMenu: (tab: EditorTab, x: number, y: number) => void;
   onReorder: (dragId: string, targetId: string) => void;
@@ -41,13 +47,17 @@ export function SessionTabStrip({
         type="button"
         data-tab-id="shell"
         onClick={() => onSelect('shell')}
-        data-tip={t`Shell`}
+        data-tip={mainView === 'agent' ? t`Agent` : t`Shell`}
         className={`relative flex shrink-0 items-center gap-1.5 px-2.5 text-xs transition-colors duration-[var(--dur-1)] ${tabStripTabClasses(
           activeTab === 'shell',
         )}`}
       >
-        <SquareTerminal className="h-3.5 w-3.5" />
-        {t`Shell`}
+        {mainView === 'agent' ? (
+          <Bot className="h-3.5 w-3.5" />
+        ) : (
+          <SquareTerminal className="h-3.5 w-3.5" />
+        )}
+        {mainView === 'agent' ? (mainLabel ?? t`agent`) : t`Shell`}
       </button>
       {editors.map((ed) => (
         <div
@@ -109,18 +119,22 @@ export function SessionTabStrip({
               <Eye className="h-3.5 w-3.5" />
             ) : ed.kind === 'git' ? (
               <GitBranch className="h-3.5 w-3.5" />
+            ) : ed.kind === 'acp' ? (
+              <Bot className="h-3.5 w-3.5" />
             ) : (
               <FileText className="h-3.5 w-3.5" />
             )}
             <span className="max-w-40 truncate">
               {ed.kind === 'shell'
                 ? (ed.label ?? defaultTabLabel(ed))
-                : ed.path.split('/').pop() || ed.path}
+                : ed.kind === 'acp'
+                  ? (ed.label ?? ed.acpCommand?.[0] ?? 'agent')
+                  : ed.path.split('/').pop() || ed.path}
             </span>
             {ed.dirty && (
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--orange)]" />
             )}
-            {ed.kind === 'shell' && (ed.tasks?.length ?? 0) > 0 && (
+            {(ed.kind === 'shell' || ed.kind === 'acp') && (ed.tasks?.length ?? 0) > 0 && (
             <span
               data-tip={ed.tasks!.map((t) => `${t.done ? '✓' : '•'} ${t.title}`).join('\n')}
               className="text-[11px] tabular-nums text-[var(--text-secondary)]"
@@ -128,7 +142,7 @@ export function SessionTabStrip({
               {ed.tasks!.filter((t) => t.done).length}/{ed.tasks!.length}
             </span>
           )}
-          {ed.kind === 'shell' && ed.hookStatus && ed.hookStatus !== 'idle' && (
+          {(ed.kind === 'shell' || ed.kind === 'acp') && ed.hookStatus && ed.hookStatus !== 'idle' && (
               <span
                 data-tip={ed.hookAttention?.message ?? ed.hookStatus}
                 className={`h-1.5 w-1.5 rounded-full ${

@@ -22,6 +22,12 @@ export interface AgentPersona {
   name: string;
   /** CLI binary invoked on launch (`claude`, `devin`, `codex`, …). */
   cli: string;
+  /**
+   * ACP launch line (space-split argv, e.g. "claude-agent-acp") — when set,
+   * launching this persona opens a `mainView:'agent'` session instead of
+   * typing a command into a new shell.
+   */
+  acp?: string;
   /** `--model <model>` on the launch line. */
   model?: string;
   /** Extra CLI args appended verbatim, e.g. "--permission-mode accept-edits". */
@@ -83,6 +89,7 @@ export function parsePersonas(raw: unknown): AgentPersona[] {
       instructions: str(s.instructions),
       instructionsFile: str(s.instructionsFile),
       description: str(s.description),
+      acp: str(s.acp),
     });
   }
   return out;

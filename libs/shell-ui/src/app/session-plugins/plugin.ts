@@ -179,10 +179,18 @@ export interface PluginApi extends PluginViewApi {
    * workspace other than this session's own; `background` spawns it without
    * selecting it or dismissing a covering plugin view (the
    * `axn-session --background` behaviour — the user's focus stays put).
+   * `opts.mainView: 'agent'` + `opts.acpCommand` makes the new session an
+   * agent (ACP) chat instead of a shell session.
    * The PTY spawns when the session's terminal mounts, so `writeToSession`
    * into it only works once `onSessionOpen` has fired for the new session.
    */
-  openSession: (cwd?: string, name?: string, workspaceId?: string, background?: boolean) => void;
+  openSession: (
+    cwd?: string,
+    name?: string,
+    workspaceId?: string,
+    background?: boolean,
+    opts?: { mainView?: 'shell' | 'agent'; acpCommand?: string[] },
+  ) => void;
   /**
    * The workspace this session belongs to — carries `defaultFolder`, the
    * workspace's anchor directory set from its context menu.
@@ -1083,7 +1091,13 @@ export interface PluginApiDeps {
     label?: string,
     agent?: AgentCli,
   ) => string | undefined;
-  openSession: (workspaceId: string, cwd?: string, name?: string, background?: boolean) => void;
+  openSession: (
+    workspaceId: string,
+    cwd?: string,
+    name?: string,
+    background?: boolean,
+    opts?: { mainView?: 'shell' | 'agent'; acpCommand?: string[] },
+  ) => void;
   getWorkspaces?: () => Workspace[];
   pluginData: Record<string, unknown>;
   mergePluginData: (key: string, patch: Record<string, unknown>) => void;
@@ -1188,8 +1202,8 @@ export function createPluginApi(
     openBrowser,
     openTab,
     openSubShell,
-    openSession: (cwd, name, workspaceId, background) =>
-      deps.openSession(workspaceId ?? session.workspaceId, cwd, name, background),
+    openSession: (cwd, name, workspaceId, background, opts) =>
+      deps.openSession(workspaceId ?? session.workspaceId, cwd, name, background, opts),
     getWorkspace: () =>
       deps.getWorkspaces?.().find((w) => w.id === session.workspaceId),
     getWorkspaces: () => deps.getWorkspaces?.() ?? [],

@@ -1,5 +1,5 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { mkdir, watch, writeTextFile } from '@tauri-apps/plugin-fs';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -14,6 +14,7 @@ import type {
   FsResult,
   MemoryStats,
   PathStat,
+  ProcessPipe,
   PtySpawnOptions,
   SessionBackend,
   ShellServices,
@@ -249,6 +250,42 @@ export class TauriBackend implements SessionBackend {
 
   getMemoryStats(): Promise<MemoryStats> {
     return invoke<MemoryStats>('get_memory_stats');
+  }
+
+  /**
+   * Spawn a line-piped child via the desktop's `acp_*` commands:
+   * `acp_spawn` returns an id, `acp-event-<id>` carries
+   * `{type:'line'|'exit'}` payloads, `acp_write`/`acp_close` drive stdin
+   * and the child's lifetime.
+   */
+  async spawnProcess(command: string, args: string[], cwd?: string): Promise<ProcessPipe> {
+    const id = await invoke<string>('acp_spawn', { command, args, cwd });
+    let onLine: ((line: string) => void) | undefined;
+    let onExit: ((code: number | null) => void) | undefined;
+    const unlisten: Promise<UnlistenFn> = listen<{
+      type?: string;
+      line?: string;
+      code?: number | null;
+    }>(`acp-event-${id}`, (e) => {
+      const p = e.payload;
+      if (p?.type === 'line' && typeof p.line === 'string') onLine?.(p.line);
+      else if (p?.type === 'exit') onExit?.(p.code ?? null);
+    });
+    return {
+      write: (line) => {
+        void invoke('acp_write', { id, line }).catch(() => {});
+      },
+      onLine: (cb) => {
+        onLine = cb;
+      },
+      onExit: (cb) => {
+        onExit = cb;
+      },
+      close: () => {
+        void invoke('acp_close', { id }).catch(() => {});
+        void unlisten.then((u) => u()).catch(() => {});
+      },
+    };
   }
 
   /** True when the path exists (host filesystem). */
