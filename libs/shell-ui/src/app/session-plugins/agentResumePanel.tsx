@@ -44,6 +44,8 @@ function ResumeButton({
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const name = agentLastLabel(last);
+  // quotes stay out of the message: ICU treats a single quote as an escape
+  const quoted = `'${name}'`;
   const entries = agentHistory(ctx);
   return (
     <div className="mb-2">
@@ -56,12 +58,12 @@ function ResumeButton({
           e.stopPropagation();
           setMenu({ x: e.clientX, y: e.clientY });
         }}
-        data-tip={last.command}
+        data-tip={`${agent}: ${last.command}`}
         className="flex max-w-full items-center gap-1.5 rounded border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--accent)] hover:bg-[var(--bg)]"
       >
         <Play className="h-2.5 w-2.5 shrink-0" />
         <span className="truncate">
-          {i18n._(t`Resume ${agent} session${name ? ` '${name}'` : ''}`)}
+          {name ? i18n._(t`Resume ${quoted}`) : i18n._(t`Resume`)}
         </span>
       </button>
       {menu && (

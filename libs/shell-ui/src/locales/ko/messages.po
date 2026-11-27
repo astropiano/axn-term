@@ -1025,16 +1025,27 @@ msgstr "파생 색상으로 되돌리기 ({0})"
 msgid "Reset to process name"
 msgstr "프로세스 이름으로 재설정"
 
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:66
+msgid "Resume"
+msgstr "이어가기"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:72
+#~ msgid "Resume '{name}'"
+#~ msgstr "'{name}' 이어가기"
+
 #~ msgid "Resume {0} session{1}"
 #~ msgstr "{0} 세션{1} 재개"
 
 #. placeholder {0}: name ? ` '${name}'` : ''
 #: libs/shell-ui/src/app/session-plugins/agentResume.ts:379
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:64
 msgid "Resume {agent} session{0}"
 msgstr "{agent} 세션 재개{0}"
 
-#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:70
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:66
+msgid "Resume {quoted}"
+msgstr "{quoted} 이어가기"
+
+#: libs/shell-ui/src/app/session-plugins/agentResumePanel.tsx:72
 msgid "Resume an earlier {agent} session"
 msgstr "이전 {agent} 세션 이어가기"
 
