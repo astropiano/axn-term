@@ -28,7 +28,13 @@ import {
 } from './mrActions';
 import { MR_ROLES, type MrRole } from './forge';
 import { normalizeReviewAgent } from '../gitReview';
-import { checkoutsOf, localCheckouts, parseRepoRoots, remoteMatchesProject } from '../repoDirectory';
+import {
+  checkoutsOf,
+  localCheckouts,
+  parseRepoRoots,
+  remoteMatchesProject,
+  type RepoCheckout,
+} from '../repoDirectory';
 import { ticketListKey, useTicketLists, type Ticket } from './ticketSources';
 import type { PluginSettings } from '../pluginSettings';
 import { shellServices } from '../../services';
@@ -194,6 +200,14 @@ export interface WorkflowDef {
   vars?: WorkflowVarSpec[];
   /** Optional allowlist: state -> states it may move to. Absent = free movement. */
   transitions?: Record<string, string[]>;
+  /**
+   * Which clone an MR review hangs its worktree off. `first` (default): the
+   * best clone of the MR's project from repo discovery — the axn-dev
+   * `repos:` entry, else the lowest-numbered main checkout. `session`: the
+   * clicking session's clone, as before. Either falls back to the other
+   * when it finds nothing.
+   */
+  clone?: 'first' | 'session';
   /** Runnable actions per state — several named actions may share one state. */
   steps: Record<string, WorkflowAction[]>;
   /**
@@ -460,6 +474,7 @@ export function parseWorkflows(settings: unknown): WorkflowDef[] {
         return vars.length > 0 ? vars : undefined;
       })(),
       transitions: Object.keys(transitions).length > 0 ? transitions : undefined,
+      clone: w.clone === 'session' ? 'session' : undefined,
       tickets: parseWorkflowTickets(w.tickets, states),
       steps,
       descriptions: Object.keys(descriptions).length > 0 ? descriptions : undefined,
@@ -2159,17 +2174,24 @@ export async function startMrReview(
   // misleading 'couldn't find remote ref' error. The any-repo fallback is
   // for project-less refs (session MR rows, bare `!N`), where the repo is
   // implied by the session the row lives on.
-  const sess = mrReviewSession(env, project);
+  // Default: the project's best known clone, not whichever session was last
+  // selected (that picked ai-accelerator-10 over the first clone). The git
+  // work runs through any session — every command names the repo explicitly
+  // with `git -C`. `clone: session` restores the clicking session's clone.
+  let clone: RepoCheckout | undefined;
+  if (def.clone !== 'session' && project && env.checkouts) {
+    clone = checkoutsOf(await env.checkouts().catch(() => []), project)[0];
+  }
+  const sess = clone ? undefined : mrReviewSession(env, project);
   const api = sess ? env.apiFor(sess.id) : undefined;
   let root = sess?.repo?.root;
   let remote = sess?.repo?.remote;
   let host = root ? api : undefined;
   if (!root && project && env.checkouts) {
-    // No session inside the repo: a local clone known to repo discovery
-    // (repo-dir providers such as axn-dev + the forge plugin's repo-roots).
-    // The git work runs through any session — every command names the repo
-    // explicitly with `git -C`.
-    const clone = checkoutsOf(await env.checkouts().catch(() => []), project)[0];
+    // No session inside the repo (or `clone: session` found none): a local
+    // clone known to repo discovery (repo-dir providers such as axn-dev +
+    // the forge plugin's repo-roots).
+    clone ??= checkoutsOf(await env.checkouts().catch(() => []), project)[0];
     host = env.sessions.map((s) => env.apiFor(s.id)).find(Boolean);
     if (clone && host) {
       root = clone.path;

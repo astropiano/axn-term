@@ -1740,6 +1740,49 @@ describe('startMrReview', () => {
     expect(h.opened).toEqual([{ cwd: '/clones/worktrees/p-mr-114', name: '!114 opt-in worktree sessions' }]);
   });
 
+  it('hangs the review off the first clone, not the selected session', async () => {
+    // Selected session sits in /repo (think ai-accelerator-10); discovery
+    // knows the preferred first clone /clones/p-1.
+    const h = makeCtx({ session: repoSession(), settings, execImpl: async () => '' });
+    const env: MrRowEnv = {
+      ...envFor(h),
+      selectedSessionId: 'repo-1',
+      checkouts: async () => [
+        { path: '/repo', branch: 'develop', remote: 'git@gitlab.com:g/p.git', isMain: true },
+        { path: '/clones/p-1', branch: 'develop', remote: 'git@gitlab.com:g/p.git', isMain: true, preferred: true },
+      ],
+    };
+    expect(await startMrReview(MR, def(), env)).toBeUndefined();
+    const calls = h.execCalls.map((c) => c.command);
+    expect(calls.some((c) => c.includes("git -C '/clones/p-1' fetch origin 'merge-requests/114/head'"))).toBe(true);
+    expect(calls.some((c) => c.includes("git -C '/repo' fetch"))).toBe(false);
+    expect(h.opened).toEqual([{ cwd: '/clones/worktrees/p-1-mr-114', name: '!114 opt-in worktree sessions' }]);
+  });
+
+  it('`clone: session` keeps the clicking session\'s clone', async () => {
+    const h = makeCtx({ session: repoSession(), settings, execImpl: async () => '' });
+    const sessionDef = parseWorkflows({
+      workflows: { 'mr-review': { ...settings.workflows['mr-review'], clone: 'session' } },
+    })[0];
+    expect(sessionDef.clone).toBe('session');
+    const env: MrRowEnv = {
+      ...envFor(h),
+      selectedSessionId: 'repo-1',
+      checkouts: async () => [
+        { path: '/clones/p-1', branch: 'develop', remote: 'git@gitlab.com:g/p.git', isMain: true, preferred: true },
+      ],
+    };
+    expect(await startMrReview(MR, sessionDef, env)).toBeUndefined();
+    expect(h.execCalls.some((c) => c.command.includes("git -C '/repo' fetch origin 'merge-requests/114/head'"))).toBe(true);
+  });
+
+  it('falls back to the session when discovery finds no clone', async () => {
+    const h = makeCtx({ session: repoSession(), settings, execImpl: async () => '' });
+    const env: MrRowEnv = { ...envFor(h), selectedSessionId: 'repo-1', checkouts: async () => [] };
+    expect(await startMrReview(MR, def(), env)).toBeUndefined();
+    expect(h.execCalls.some((c) => c.command.includes("git -C '/repo' fetch origin 'merge-requests/114/head'"))).toBe(true);
+  });
+
   it('names the missing clone when discovery finds none', async () => {
     const h = makeCtx({ session: makeSession({ id: 'x' }), settings, execImpl: async () => '' });
     const err = await startMrReview(MR, def(), { ...envFor(h), checkouts: async () => [] });
