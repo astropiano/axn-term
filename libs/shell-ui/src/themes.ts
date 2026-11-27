@@ -141,6 +141,13 @@ export interface AppSettings {
    * the visible terminal the user is in, `off` ignores them all.
    */
   terminalClipboardWrites?: 'focused' | 'off';
+  /**
+   * How many sessions start at once while a window restores (default: half
+   * the cores, 2 to 6): the selected one first, the next released when a
+   * started one has settled.
+   * `0` starts them all at once, as before.
+   */
+  restoreConcurrency?: number;
   /** UI language — one of the locales bundled in libs/shell-ui (`en`, `ko`). */
   language?: 'system' | 'en' | 'ko' | 'de' | 'fr' | 'it' | 'nl' | 'zh' | 'ja';
   /**

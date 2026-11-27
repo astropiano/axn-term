@@ -38,7 +38,9 @@ import {
   type TargetAction,
   type TextTarget,
 } from './app/textTargets';
+import { setPtyPaused } from './app/ptyPause';
 import { perfMark } from './perf';
+import { timeOutput } from './app/outputStats';
 
 import '@xterm/xterm/css/xterm.css';
 
@@ -507,8 +509,8 @@ export function ShellTerminal({
     // own PTY id.
     const ptyId = session.mainPtyId ?? session.id;
     const flow = createFlowControl(
-      () => backend.pause?.(ptyId),
-      () => backend.resume?.(ptyId),
+      () => setPtyPaused(backend, ptyId, 'view', true),
+      () => setPtyPaused(backend, ptyId, 'view', false),
     );
     const shell = settings.defaultShell?.trim() || undefined;
     const pty = acquirePty(backend, ptyId, () => {
@@ -546,7 +548,7 @@ export function ShellTerminal({
         // guard injects a link-closer into the parser once the leak is big
         // enough to be certain it wasn't a merely long legitimate link.
         const osc8Guard = createOsc8LeakGuard(() => term.write(OSC8_CLOSE));
-        unlisten = backend.onOutput(ptyId, (bytes) => {
+        unlisten = backend.onOutput(ptyId, (bytes) => timeOutput('visible', bytes.length, () => {
           if (firstOutput) {
             firstOutput = false;
             const done = flow.track(bytes.length);
@@ -563,7 +565,7 @@ export function ShellTerminal({
           // Text retention and plugin onOutput hooks are fed by a
           // session-level subscription in ShellApp — they must not depend
           // on any mounted view.
-        });
+        }));
         if (!active) return;
 
         // Spawn the PTY at the terminal's real size instead of the 80x24

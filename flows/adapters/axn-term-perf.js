@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import {
   REPO, binaryPath, close, cpuByKind, dataDir, fileSize, idleCpu, launch, median, meta, metric,
-  now, percentile, readTrace, rssMb, runCount, sleep, sumCpu, waitForOutput, waitIdle, write,
+  now, percentile, readTrace, rssMb, runCount, shellCpu, sleep, sumCpu, waitForOutput, waitIdle, write,
 } from "../perf/lib.mjs";
 
 const args = (step) => step.args ?? {};
@@ -408,6 +408,142 @@ async function sessionSwitch(step) {
   }
 }
 
+// ---------- restore + switch: selecting a session that is still waiting ----------
+//
+// Right after the first prompt, select the session that is restored last and
+// time how long until its shell prints. With everything started at once it is
+// already up (or racing the others); with the restore queue it must start on
+// the spot, ahead of the sessions still waiting their turn.
+
+async function restoreSwitch(step) {
+  const a = args(step);
+  const sessions = Number(a.sessions ?? 24);
+  const rcMs = Number(a.rc ?? 400);
+  const runs = runCount(step, 3);
+  const upIn = [];
+  const waited = [];
+  for (let i = 0; i < runs; i++) {
+    const app = await launch({ restore: sessions, select: "first", trace: true, rcCpuMs: rcMs });
+    try {
+      const state = JSON.parse(readFileSync(join(app.stateDir, "state.json"), "utf8"));
+      const ids = state.windows[0].sessions.map((s) => s.id);
+      const target = ids[ids.length - 1];
+      const first = (id) => readTrace(app).find((e) => e.name === "pty_first_output" && e.detail === id);
+      const tSelect = Date.now();
+      const alreadyUp = !!first(target) && first(target).epochMs <= tSelect;
+      await app.rc(`/sessions/${app.sid}/command`, {
+        method: "POST",
+        body: JSON.stringify({ line: `axn-session select ${target}` }),
+      });
+      const deadline = tSelect + 60000;
+      let up;
+      while (Date.now() < deadline && up === undefined) {
+        const ev = first(target);
+        if (ev) up = Math.max(0, ev.epochMs - tSelect);
+        else await sleep(20);
+      }
+      if (up === undefined) throw new Error(`the last session never printed within 60 s`);
+      upIn.push(Math.round(up));
+      waited.push(alreadyUp ? 0 : 1);
+    } finally {
+      await close(app);
+    }
+  }
+  const p = `restore_switch.${sessions}_rc${rcMs}`;
+  metric(`${p}.select_to_prompt_ms`, { samples: upIn, unit: "ms", digits: 0, description: "select the last-restored session right after the first prompt → its shell printed (0 = it was already up)" });
+  metric(`${p}.was_waiting`, { samples: waited, unit: "runs", digits: 0, better: "none", description: "1 when the session had not started yet at the select (the case this measures)" });
+  meta({ sessions, rcMs, runs, upIn, waited });
+  return `restore switch measured (${sessions} sessions, rc ${rcMs} ms)`;
+}
+
+// ---------- restore storm: what a restore costs the system ----------
+//
+// Restores `sessions` sessions whose shells each print `banner` KB before
+// their first prompt, and measures until the app is quiet again: wall time,
+// CPU (app + WebKit), peak memory, and — from the app's own `output_stats`
+// trace mark — the main-thread time spent in the output handlers and how late
+// a 20 ms timer fired (the freeze a user feels).
+
+async function restoreStorm(step) {
+  const a = args(step);
+  const sessions = Number(a.sessions ?? 12);
+  const banner = Number(a.banner ?? 256);
+  const rcMs = Number(a.rc ?? 0);
+  const concurrency = a.concurrency === undefined ? undefined : Number(a.concurrency);
+  const runs = runCount(step, 3);
+  const col = { shells: [], lastShell: [], queue: [], idle: [], cpu: [], web: [], main: [], rss: [], lagMax: [], lagOver50: [], lagSum: [], headless: [], visible: [], flush: [], bytes: [], first: [] };
+  for (let i = 0; i < runs; i++) {
+    const app = await launch({ restore: sessions, select: "first", trace: true, bannerKb: banner, rcCpuMs: rcMs, config: concurrency === undefined ? "" : `restoreConcurrency: ${concurrency}\n` });
+    try {
+      let peak = rssMb(app.pid);
+      const t0 = app.t0;
+      let prev = sumCpu(cpuByKind(app.pid));
+      let prevT = now();
+      let quiet = 0;
+      let idleAt = null;
+      while (now() - t0 < 120000) {
+        await sleep(250);
+        peak = Math.max(peak, rssMb(app.pid));
+        const c = sumCpu(cpuByKind(app.pid));
+        const ct = now();
+        const pct = ((c - prev) / ((ct - prevT) / 1000)) * 100;
+        prev = c;
+        prevT = ct;
+        quiet = pct < 5 ? quiet + 1 : 0;
+        if (quiet >= 4) { idleAt = ct - t0 - 1000; break; }
+      }
+      const cpu = cpuByKind(app.pid);
+      if (process.env.AXN_PERF_TIMELINE) {
+        // what the app was doing when each stall hit: every mark, relative to spawn
+        const lines = readTrace(app)
+          .filter((e) => e.name !== "output_stats")
+          .map((e) => `t+${String(Math.round(e.epochMs - app.spawnEpoch)).padStart(6)} ms  ${e.name.padEnd(22)} ${e.detail ?? ""}`);
+        writeFileSync(process.env.AXN_PERF_TIMELINE, lines.join("\n") + "\n");
+      }
+      const stats = readTrace(app).filter((e) => e.name === "output_stats").pop();
+      const o = stats?.detail ? JSON.parse(stats.detail) : {};
+      const firsts = readTrace(app).filter((e) => e.name === "pty_first_output").map((e) => e.epochMs - app.spawnEpoch);
+      col.lastShell.push(firsts.length >= sessions ? Math.max(...firsts) : null);
+      col.shells.push(shellCpu(app.pid));
+      col.queue.push(o.queuePeakKb);
+      col.idle.push(idleAt);
+      col.cpu.push(sumCpu(cpu));
+      col.web.push(cpu.web);
+      col.main.push(cpu.main);
+      col.rss.push(peak);
+      col.first.push(app.marks.prompt);
+      col.lagMax.push(o.lagMaxMs);
+      col.lagOver50.push(o.lagOver50);
+      col.lagSum.push(o.lagSumMs);
+      col.headless.push(o.headlessMs);
+      col.visible.push(o.visibleMs);
+      col.flush.push(o.flushMs);
+      col.bytes.push(o.bytes != null ? o.bytes / 1048576 : null);
+    } finally {
+      await close(app);
+    }
+  }
+  const p = `restore.${sessions}x${banner}kb${rcMs ? `_rc${rcMs}` : ""}${concurrency === undefined ? "" : `_c${concurrency}`}`;
+  metric(`${p}.first_prompt_ms`, { samples: col.first, unit: "ms", digits: 0, description: "selected session's first prompt, from spawn" });
+  metric(`${p}.last_shell_ms`, { samples: col.lastShell, unit: "ms", digits: 0, description: "spawn → the last restored session's first output (all shells up)" });
+  metric(`${p}.shell_cpu_s`, { samples: col.shells, unit: "s", digits: 1, better: "none", description: "CPU the hosted shells burnt starting up" });
+  metric(`${p}.idle_ms`, { samples: col.idle, unit: "ms", digits: 0, description: "spawn → the app is quiet again (CPU < 5 % for 1 s)" });
+  metric(`${p}.cpu_s`, { samples: col.cpu, unit: "s", digits: 1, description: "CPU seconds, app + WebKit, for the whole restore" });
+  metric(`${p}.cpu_web_s`, { samples: col.web, unit: "s", digits: 1, description: "CPU in the WebKit content process (xterm, plugins, React)" });
+  metric(`${p}.cpu_main_s`, { samples: col.main, unit: "s", digits: 1, description: "CPU in the app process (Rust readers, IPC)" });
+  metric(`${p}.rss_peak_mb`, { samples: col.rss, unit: "MB", digits: 0, description: "peak resident memory, app + WebKit" });
+  metric(`${p}.lag_max_ms`, { samples: col.lagMax, unit: "ms", digits: 0, description: "longest main-thread stall (20 ms timer fired this late)" });
+  metric(`${p}.lag_sum_ms`, { samples: col.lagSum, unit: "ms", digits: 0, description: "total main-thread stall time" });
+  metric(`${p}.lag_over50`, { samples: col.lagOver50, unit: "stalls", digits: 0, description: "stalls longer than 50 ms" });
+  metric(`${p}.headless_ms`, { samples: col.headless, unit: "ms", digits: 0, description: "sync time in the headless-buffer chunk handlers" });
+  metric(`${p}.visible_ms`, { samples: col.visible, unit: "ms", digits: 0, description: "sync time in the mounted terminal's chunk handler" });
+  metric(`${p}.flush_ms`, { samples: col.flush, unit: "ms", digits: 0, description: "batched plugin/state flush time" });
+  metric(`${p}.queue_peak_kb`, { samples: col.queue, unit: "KB", digits: 0, better: "none", description: "most output waiting in the headless-buffer queues at once" });
+  metric(`${p}.output_mb`, { samples: col.bytes, unit: "MB", digits: 1, better: "none", description: "bytes the frontend received" });
+  meta({ sessions, banner, runs });
+  return `restore storm measured (${sessions} sessions × ${banner} KB)`;
+}
+
 export async function run(step) {
   const action = args(step).action ?? "help";
   switch (action) {
@@ -419,8 +555,10 @@ export async function run(step) {
     case "echo": return echo(step);
     case "output": return output(step);
     case "switch": return sessionSwitch(step);
+    case "restoreStorm": return restoreStorm(step);
+    case "restoreSwitch": return restoreSwitch(step);
     default:
-      throw new Error(`unknown action '${action}' — static | startup | phases | throughput | interrupt | echo | output | switch`);
+      throw new Error(`unknown action '${action}' — static | startup | phases | throughput | interrupt | echo | output | switch | restoreStorm | restoreSwitch`);
   }
 }
 

@@ -19,6 +19,7 @@ import { RestoringOverlay } from './RestoringOverlay';
 import { TooltipHost } from './Tooltip';
 import {
   clearSessionRestoring,
+  isSessionRestoring,
   setSessionRestoring,
   useRestoring,
 } from './restoring';
@@ -41,7 +42,10 @@ import {
   isPluginEnabled,
 } from './session-plugins';
 import { useSettings, CONFIG_ATTENTION_SOURCE } from '../SettingsProvider';
-import { dropSessionBuffer, keepPtyAlive, serializeTerminal, sessionBufferIds, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf, trackSessionBuffer } from '../terminalRegistry';
+import { timeOutput } from './outputStats';
+import { setPtyPaused } from './ptyPause';
+import { createRestoreQueue, createSettleSignal, defaultRestoreConcurrency } from './restoreQueue';
+import { dropSessionBuffer, keepPtyAlive, setBufferPriority, writeSessionBuffer, serializeTerminal, sessionBufferIds, setPendingReplay, stashTerminalReplays, takePtyKeepAlive, terminalAt, terminalIdOf, trackSessionBuffer } from '../terminalRegistry';
 import { acquirePty, syncRetainedPtys } from '../ptyLifetime';
 import { foregroundStatusPatch } from '../foregroundStatus';
 import { agentInputPluginFor } from './session-plugins/agentHookBridge';
@@ -151,6 +155,14 @@ import { resolveStatusDisplay, type StatusDisplay } from './panelStatus';
 const SMALL_SCREEN_QUERY = '(max-width: 639px)';
 /** How often batched terminal output reaches session state and plugins. */
 const OUTPUT_FLUSH_INTERVAL_MS = 50;
+/** Sessions whose shells start at once while a window restores. */
+const RESTORE_CONCURRENCY = defaultRestoreConcurrency(
+  typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency,
+);
+/** Output quiet for this long (and no plugin restore running) = a restored session has settled. */
+const RESTORE_QUIET_MS = 500;
+/** …but never hold a restore slot longer than this. */
+const RESTORE_SLOT_TIMEOUT_MS = 10_000;
 
 
 
@@ -633,6 +645,9 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   selectedWorkspaceIdRef.current = selectedWorkspaceId;
   sessionsRef.current = sessions;
   selectedSessionIdRef.current = selectedSessionId;
+  useEffect(() => {
+    setBufferPriority(selectedSessionId ?? undefined);
+  }, [selectedSessionId]);
   workspacesRef.current = workspaces;
   selectedSessionRef.current = selectedSession;
   pluginTabsRef.current = pluginTabs;
@@ -992,7 +1007,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // per-chunk updates re-rendered the whole app thousands of times a second
   // during bursts (`cat` of a big file, build logs). The terminal itself
   // writes every chunk immediately; only the text copy for plugins waits.
-  const flushSessionOutput = useCallback(() => {
+  const flushSessionOutput = useCallback(() => timeOutput('flush', 0, () => {
     if (outputFlushTimerRef.current !== null) {
       clearTimeout(outputFlushTimerRef.current);
       outputFlushTimerRef.current = null;
@@ -1017,7 +1032,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
         if (plugin.hookSpec) maybeWireHookSpec(plugin, ctx);
       }
     }
-  }, [appendSessionOutput, buildPluginApi]);
+  }), [appendSessionOutput, buildPluginApi]);
   flushSessionOutputRef.current = flushSessionOutput;
 
   const handleSessionOutput = useCallback((sessionId: string, text: string) => {
@@ -1052,6 +1067,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
     )
     .join('\u0000');
   useEffect(() => {
+    perfMark('buffers_effect_start');
     const retained: string[] = [];
     const offs: (() => void)[] = [];
     const live = new Set<string>();
@@ -1064,22 +1080,28 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       // The headless buffer keeps the session's screen current while no
       // view is mounted — plugins read it via getScreenLines, a remount
       // serializes it for the repaint.
-      const buffer = trackSessionBuffer(sessionId);
+      trackSessionBuffer(sessionId, {
+        pause: () => setPtyPaused(backend, ptyId, 'buffer', true),
+        resume: () => setPtyPaused(backend, ptyId, 'buffer', false),
+      });
       const decoder = new TextDecoder();
       // PTY chunks split escape sequences mid-way — hold back a trailing
       // incomplete sequence so stripAnsi never leaks `7;file://` /
       // `2;ls` fragments into retained output and plugin hooks.
       let pending = '';
       offs.push(
-        backend.onOutput(ptyId, (bytes) => {
-          buffer.write(bytes);
-          const [complete, tail] = splitAnsiTail(
-            pending + decoder.decode(bytes, { stream: true }),
-          );
-          pending = tail;
-          const text = stripAnsi(complete);
-          if (text) handleSessionOutput(sessionId, text);
-        }),
+        backend.onOutput(ptyId, (bytes) =>
+          timeOutput('headless', bytes.length, () => {
+            firstOutputWaitersRef.current.get(sessionId)?.(); // a restoring shell is up
+            writeSessionBuffer(sessionId, bytes);
+            const [complete, tail] = splitAnsiTail(
+              pending + decoder.decode(bytes, { stream: true }),
+            );
+            pending = tail;
+            const text = stripAnsi(complete);
+            if (text) handleSessionOutput(sessionId, text);
+          }),
+        ),
       );
 
       // cwd + foreground-process polling used to ride each session's
@@ -1147,6 +1169,7 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
       if (!live.has(id)) dropSessionBuffer(id);
     }
     syncRetainedPtys(retained);
+    perfMark('buffers_effect_end');
     return () => {
       for (const off of offs) safely('session output listener', off);
     };
@@ -1691,32 +1714,104 @@ function ShellAppInner({ backend, services, platform, fileReader, tasksWsUrl }: 
   // own acquire can still claim the spawn first (child effects run before
   // this parent effect); whichever claims it fires handleSessionReady once
   // via the notified flag.
+  //
+  // A window's sessions start a few at a time, the selected one first
+  // (restoreQueue.ts): all together their login shells saturate every core and
+  // the one the user is looking at gets its prompt last. The leases are taken
+  // at once; only the spawn itself waits its turn.
+  const restoreConcurrencyRef = useRef(settings.restoreConcurrency);
+  restoreConcurrencyRef.current = settings.restoreConcurrency;
+  const restoreQueueRef = useRef(createRestoreQueue({
+      concurrency: () => {
+        const c = restoreConcurrencyRef.current;
+        return c === undefined ? RESTORE_CONCURRENCY : c <= 0 ? Number.MAX_SAFE_INTEGER : c;
+      },
+      readyTimeoutMs: RESTORE_SLOT_TIMEOUT_MS,
+    }));
+  const queuedForRestoreRef = useRef(new Set<string>());
+  const firstOutputWaitersRef = useRef(new Map<string, () => void>());
+  const spawnHandlesRef = useRef(new Map<string, ReturnType<typeof acquirePty>>());
   useEffect(() => {
-    const handles = sessionPtyKey
+    const queue = restoreQueueRef.current;
+    const queued = queuedForRestoreRef.current;
+    const pairs = sessionPtyKey
       .split('\u0000')
       .filter(Boolean)
       .map((pair) => {
         const [sessionId, rest] = pair.split('=');
-        const [ptyId] = rest.split(':');
-        const session = sessionsRef.current.find((s) => s.id === sessionId);
-        if (!session) return undefined;
-        const handle = acquirePty(backend, ptyId, () =>
-          backend.createSession(ptyId, {
-            shell: settings.defaultShell?.trim() || undefined,
-            cwd: session.cwd,
-            // No view exists to fit — the backend default size; a mounted
-            // view's post-spawn resize corrects it once it attaches.
-            cols: 80,
-            rows: 24,
-          }),
-        );
-        void handle.start().then((spawned: boolean) => {
-          if (spawned) handleSessionReady(session);
-        });
-        return handle;
+        return { sessionId, ptyId: rest.split(':')[0] };
       });
+    perfMark('spawn_effect_start', String(pairs.length));
+    // the selected session first, the rest in panel order
+    const selectedId = selectedSessionIdRef.current;
+    pairs.sort((x, y) => Number(y.sessionId === selectedId) - Number(x.sessionId === selectedId));
+    // a session that went away before its turn is forgotten
+    const live = new Set(pairs.map((p) => p.sessionId));
+    for (const id of [...queued]) {
+      if (!live.has(id)) {
+        queue.cancel(id);
+        queued.delete(id);
+        spawnHandlesRef.current.delete(id);
+      }
+    }
+    const handles = pairs.map(({ sessionId, ptyId }) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return undefined;
+      const handle = acquirePty(backend, ptyId, () =>
+        backend.createSession(ptyId, {
+          shell: settings.defaultShell?.trim() || undefined,
+          cwd: session.cwd,
+          // No view exists to fit — the backend default size; a mounted
+          // view's post-spawn resize corrects it once it attaches.
+          cols: 80,
+          rows: 24,
+        }),
+      );
+      spawnHandlesRef.current.set(sessionId, handle);
+      if (!queued.has(sessionId)) {
+        queued.add(sessionId);
+        queue.enqueue(sessionId, async () => {
+          const current = spawnHandlesRef.current.get(sessionId);
+          if (!current) return undefined;
+          // The slot is free once the session has settled: its first output has
+          // come (the rc ran), the output has been quiet for a moment and no
+          // plugin restore (`devin -r`, `claude --resume`) is still running on
+          // it — that agent start-up is the heavy part and begins only after the
+          // prompt. The session's headless buffer subscription reports each
+          // output (`firstOutputWaitersRef`).
+          const waiters = firstOutputWaitersRef.current;
+          const signal = createSettleSignal({
+            quietMs: RESTORE_QUIET_MS,
+            isBusy: () => isSessionRestoring(sessionId),
+          });
+          waiters.set(sessionId, signal.touch);
+          const firstOutput = signal.settled;
+          let spawned = false;
+          try {
+            spawned = await current.start();
+          } catch {
+            spawned = false;
+          }
+          if (!spawned) {
+            waiters.delete(sessionId);
+            return undefined; // already running (a mounted view claimed it) or failed
+          }
+          const live = sessionsRef.current.find((s) => s.id === sessionId);
+          if (live) handleSessionReady(live);
+          return { ready: firstOutput.finally(() => waiters.delete(sessionId)) };
+        });
+      }
+      return handle;
+    });
+    perfMark('spawn_effect_end');
     return () => handles.forEach((h) => h?.release());
   }, [backend, sessionPtyKey, handleSessionReady, settings.defaultShell]);
+
+  // Switching to a session that is still waiting its turn: its view spawns it
+  // on mount; this only moves it to the front for the ones nobody asked for.
+  useEffect(() => {
+    if (selectedSessionId) restoreQueueRef.current.prioritize(selectedSessionId);
+  }, [selectedSessionId]);
 
   // Fire plugin.onProcessEnd when a session's foreground process stops matching
   // the plugin's processPattern (e.g. devin exits and the shell takes over).

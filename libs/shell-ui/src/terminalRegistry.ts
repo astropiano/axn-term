@@ -1,5 +1,6 @@
 import { Terminal } from '@xterm/xterm';
 import { SerializeAddon } from '@xterm/addon-serialize';
+import { createOutputScheduler } from './app/outputScheduler';
 
 /**
  * Live xterm instances keyed by session id. ShellTerminal registers itself so
@@ -34,10 +35,48 @@ export function takePtyKeepAlive(ptyId: string): boolean {
  */
 const screenBuffers = new Map<string, Terminal>();
 
-export function trackSessionBuffer(id: string): Terminal {
+/** Backpressure for a session's PTY while its buffer queue is long. */
+export interface BufferBackpressure {
+  pause(): void;
+  resume(): void;
+}
+const bufferBackpressure = new Map<string, BufferBackpressure>();
+
+/**
+ * Paces the writes into the headless buffers (see outputScheduler.ts): a
+ * restore starts every shell at once, and N terminals parsing together starve
+ * the main thread — the scheduler lets a couple parse at a time, the selected
+ * session first, and writes straight through when nothing is contended.
+ */
+const bufferScheduler = createOutputScheduler({
+  pause: (id) => bufferBackpressure.get(id)?.pause(),
+  resume: (id) => bufferBackpressure.get(id)?.resume(),
+});
+
+export function trackSessionBuffer(id: string, backpressure?: BufferBackpressure): Terminal {
   let term = screenBuffers.get(id);
-  if (!term) screenBuffers.set(id, (term = new Terminal({ allowProposedApi: true })));
+  if (!term) {
+    const created = new Terminal({ allowProposedApi: true });
+    screenBuffers.set(id, (term = created));
+    bufferScheduler.register(id, { write: (data, done) => created.write(data, done) });
+  }
+  if (backpressure) bufferBackpressure.set(id, backpressure);
   return term;
+}
+
+/** Feed PTY output to the session's headless buffer (paced — see above). */
+export function writeSessionBuffer(id: string, bytes: Uint8Array): void {
+  bufferScheduler.push(id, bytes);
+}
+
+/** The session on screen: its buffer is fed first when output is queued. */
+export function setBufferPriority(id: string | undefined): void {
+  bufferScheduler.setPriority(id);
+}
+
+/** Queue state of the headless buffers — for the perf trace. */
+export function bufferQueueStats() {
+  return bufferScheduler.stats();
 }
 
 /**
@@ -51,6 +90,8 @@ export function resizeSessionBuffer(id: string, cols: number, rows: number): voi
 }
 
 export function dropSessionBuffer(id: string): void {
+  bufferScheduler.unregister(id);
+  bufferBackpressure.delete(id);
   screenBuffers.get(id)?.dispose();
   screenBuffers.delete(id);
 }
@@ -70,6 +111,7 @@ export function sessionBufferIds(): string[] {
 export function serializeTerminal(id: string): string | undefined {
   const term = terminals.get(id) ?? screenBuffers.get(id);
   if (!term) return undefined;
+  if (!terminals.has(id)) bufferScheduler.drain(id); // what is queued belongs in the snapshot
   try {
     const addon = new SerializeAddon();
     term.loadAddon(addon);
@@ -174,6 +216,7 @@ export function terminalIdOf(term: Terminal): string | undefined {
 export function getScreenLines(sessionId: string): string[] {
   const term = terminals.get(sessionId) ?? screenBuffers.get(sessionId);
   if (!term) return [];
+  if (!terminals.has(sessionId)) bufferScheduler.drain(sessionId);
   const buffer = term.buffer.active;
   const lines: string[] = [];
   for (let row = 0; row < term.rows; row++) {

@@ -45,6 +45,11 @@ export function clearSessionRestoring(sessionId: string): void {
   emit();
 }
 
+/** Whether any plugin has a restore overlay raised on the session right now. */
+export function isSessionRestoring(sessionId: string): boolean {
+  return restoring[sessionId] !== undefined;
+}
+
 const EMPTY: Record<string, string> = {};
 
 /** The restore labels currently raised on a session (pluginId -> label). */

@@ -122,3 +122,26 @@ latency through xterm is not covered.
 `output.frontend_saved_ms`: 3 MB of output plus a marker must reach the
 frontend's session output (saved to state.json, 2 s debounce). Fails the flow
 when the output pipeline drops data.
+
+### `restore.<N>x<banner>kb_rc<ms>[_c<k>].*` — restoring many sessions
+
+Action `restoreStorm`: N restored sessions whose shells print `banner` KB and
+burn `rc` ms of CPU before their first prompt (a heavy `.zshrc`), optionally
+with `restoreConcurrency: k`. Run it with `AXN_TERM_BINARY` pointing at each
+build you want to compare (copy the `.app` aside per build).
+
+| Metric | Meaning | Moved by |
+|---|---|---|
+| `first_prompt_ms` | selected session's first prompt, from spawn | the restore queue (`app/restoreQueue.ts`) — the visible shell no longer competes with all the others |
+| `last_shell_ms` | the last restored session's first output | the price of starting in steps (`restoreConcurrency`) |
+| `shell_cpu_s` | CPU the hosted shells burnt starting up | informational: the work is the same, only when it happens changes |
+| `cpu_s`, `cpu_web_s`, `cpu_main_s` | app + WebKit / content process / app process CPU for the restore | per-session mount cost, polls, output handling |
+| `lag_*`, `headless_ms`, `visible_ms`, `flush_ms`, `queue_peak_kb` | main-thread stall time (hidden pages ignored — the engine throttles their timers to 1 Hz), time in the output handlers, peak output waiting in the headless-buffer queues | `app/outputScheduler.ts` |
+
+Action `restoreSwitch` (`restore_switch.*.select_to_prompt_ms`): right after the
+first prompt, select the session restored last and time its first output — a
+session still waiting must start on the spot, not behind the queue.
+
+On macOS the lib samples with `ps` and attributes the WebKit helpers that
+appeared after the app started to it — keep other WebKit apps quiet during a
+run, and keep the machine otherwise idle (shell CPU is competing for cores).

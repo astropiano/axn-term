@@ -120,6 +120,26 @@
     </steps>
   </flow>
 
+  <flow name="axn-term perf - restore storm"
+        description="12 restored sessions whose shells each print 256 KB before their first prompt: wall time until the app is quiet, CPU, peak memory and the main-thread stalls the output handlers cause.">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="restoreStorm" sessions="12" banner="256" runs="3" description="Restore 12 chatty sessions three times">
+        <assert that="contains" value="restore storm measured" description="The restore storm was measured"/>
+      </step>
+    </steps>
+  </flow>
+
+  <flow name="axn-term perf - restore, select a waiting session"
+        description="24 restored sessions with a heavy shell rc: right after the first prompt select the session that is restored last and time its first output. With the restore queue it must start on the spot, not wait for the sessions ahead of it.">
+    <tags><tag>axn-term</tag><tag>perf</tag></tags>
+    <steps>
+      <step adapter="axn-term-perf" action="restoreSwitch" sessions="24" rc="400" runs="3" description="Select the last-restored session during the restore">
+        <assert that="contains" value="restore switch measured" description="The switch was measured"/>
+      </step>
+    </steps>
+  </flow>
+
   <flow name="axn-term perf - output reaches the frontend"
         description="Correctness guard for the output pipeline: 3 MB of output followed by a marker must arrive in the frontend's session output.">
     <tags><tag>axn-term</tag><tag>perf</tag></tags>
