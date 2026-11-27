@@ -208,6 +208,12 @@ export interface WorkflowDef {
    * `description` key inside a named-actions map.
    */
   descriptions?: Record<string, string>;
+  /**
+   * Workspace (by name, case-insensitive) the review button opens its session in,
+   * ahead of the clicking session's workspace. An unknown name falls back to
+   * the usual choice.
+   */
+  workspace?: string;
 }
 
 export interface WorkflowTickets {
@@ -457,6 +463,7 @@ export function parseWorkflows(settings: unknown): WorkflowDef[] {
       tickets: parseWorkflowTickets(w.tickets, states),
       steps,
       descriptions: Object.keys(descriptions).length > 0 ? descriptions : undefined,
+      workspace: typeof w.workspace === 'string' && w.workspace.trim() ? w.workspace.trim() : undefined,
     });
   }
   return defs;
@@ -2431,7 +2438,11 @@ export function backlogTickets(
 export function mrReviewLaunch(
   env: MrRowEnv,
   mr: MrRef,
+  def?: Pick<WorkflowDef, 'workspace'>,
 ): { kind: 'launch'; workspaceId?: string } | { kind: 'pick' } {
+  const pinned = def?.workspace?.toLowerCase();
+  const home = pinned && (env.workspaces ?? []).find((w) => w.name.trim().toLowerCase() === pinned);
+  if (home) return { kind: 'launch', workspaceId: home.id };
   // The first workspace hosting the repo used to win, so reviews landed in
   // whichever workspace happened to hold some clone of it (VectorDB rather
   // than the one being worked in) — where nobody looked for them.
@@ -2538,7 +2549,7 @@ function MrReviewButton({ mr, env }: MrActionProps) {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            const target = mrReviewLaunch(env, mr);
+            const target = mrReviewLaunch(env, mr, def);
             if (target.kind === 'launch') {
               launch(def, target.workspaceId);
             } else {

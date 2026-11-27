@@ -1199,7 +1199,7 @@ msgstr "Connecté"
 msgid "Signed in as {0}"
 msgstr "Connecté en tant que {0}"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3518
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3529
 msgid "Start workflow…"
 msgstr "Démarrer le workflow…"
 

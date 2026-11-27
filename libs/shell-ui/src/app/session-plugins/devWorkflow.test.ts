@@ -1855,6 +1855,38 @@ describe('startMrReview', () => {
     expect(mrReviewLaunch(env, MR)).toEqual({ kind: 'launch', workspaceId: 'ws-b' });
   });
 
+  it('mrReviewLaunch opens in the workflow-pinned workspace ahead of the clicking session', () => {
+    const env: MrRowEnv = {
+      sessions: [{ id: 's1', workspaceId: 'ws-a' } as ShellSession],
+      selectedSessionId: 's1',
+      workspaces: [
+        { id: 'ws-a', name: 'a' },
+        { id: 'ws-b', name: 'MR Reviews' },
+      ],
+      apiFor: () => undefined,
+      selectSession: () => {},
+    };
+    expect(mrReviewLaunch(env, MR, { workspace: 'mr reviews' })).toEqual({
+      kind: 'launch',
+      workspaceId: 'ws-b',
+    });
+    // an unknown name changes nothing: the clicking session's workspace still wins
+    expect(mrReviewLaunch(env, MR, { workspace: 'gone' })).toEqual({
+      kind: 'launch',
+      workspaceId: 'ws-a',
+    });
+    expect(mrReviewLaunch(env, MR)).toEqual({ kind: 'launch', workspaceId: 'ws-a' });
+  });
+
+  it('parseWorkflows reads a trimmed workspace and drops a blank one', () => {
+    const base = { states: ['a'], steps: { a: 'echo' } };
+    const [pinned, blank] = parseWorkflows({
+      workflows: { p: { ...base, workspace: '  MR Reviews ' }, b: { ...base, workspace: '  ' } },
+    });
+    expect(pinned.workspace).toBe('MR Reviews');
+    expect(blank.workspace).toBeUndefined();
+  });
+
   it('mrReviewLaunch picks a workspace only when none matches', () => {
     const env: MrRowEnv = {
       sessions: [],

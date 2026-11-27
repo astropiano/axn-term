@@ -1201,7 +1201,7 @@ msgstr "로그인됨"
 msgid "Signed in as {0}"
 msgstr "{0}(으)로 로그인됨"
 
-#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3518
+#: libs/shell-ui/src/app/session-plugins/devWorkflow.tsx:3529
 msgid "Start workflow…"
 msgstr "워크플로 시작…"
 
